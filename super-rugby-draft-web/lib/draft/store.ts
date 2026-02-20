@@ -17,6 +17,10 @@ type DraftState = {
   hydrateRostersFromDb: (leagueId: string) => Promise<void>;
   persistRosterToDb: (leagueId: string, teamId: string) => Promise<void>;
 
+    // ✅ Hydration guard
+  hydratedLeagueIds: Record<string, true>;
+  isHydratingLeagueId: string | null;
+
   // Draft config
   roundsPerTeam: number;
 
@@ -261,7 +265,8 @@ export const useDraftStore = create<DraftState>()(
 
       watchlist: {},
       rosters: {},
-
+      hydratedLeagueIds: {},
+      isHydratingLeagueId: null,
 
       totalPicks: () => {
         const { teams, roundsPerTeam } = get();
@@ -320,8 +325,18 @@ export const useDraftStore = create<DraftState>()(
         });
       },
       // ✅ Pull all rosters for a league from Supabase → load into Zustand
-      hydrateRostersFromDb: async (leagueId: string) => {
+            hydrateRostersFromDb: async (leagueId: string) => {
         if (!leagueId) return;
+
+        const s = get();
+
+        // ✅ already hydrated this league in this session
+        if (s.hydratedLeagueIds?.[leagueId]) return;
+
+        // ✅ prevent concurrent hydrations
+        if (s.isHydratingLeagueId && s.isHydratingLeagueId !== leagueId) return;
+
+        set((prev) => ({ ...prev, isHydratingLeagueId: leagueId }));
 
         try {
           const res = await fetchRosters(leagueId);
@@ -330,30 +345,34 @@ export const useDraftStore = create<DraftState>()(
             return;
           }
 
-          const rows = (res.data ?? []) as Array<{
+          const rows = (Array.isArray(res.data) ? res.data : []) as Array<{
             league_id: string;
             team_id: string;
             data: TeamRosterState;
             updated_at?: string;
           }>;
 
-          set((s) => {
-            const next = { ...s.rosters };
+          set((prev) => {
+            const next = { ...prev.rosters };
 
-            // Apply DB rosters
             for (const r of rows) {
               if (r?.team_id && r?.data) next[r.team_id] = r.data;
             }
 
-            // Ensure every current team has a roster object
-            for (const t of s.teams) {
+            for (const t of prev.teams) {
               if (!next[t.id]) next[t.id] = makeEmptyRoster();
             }
 
-            return { ...s, rosters: next };
+            return {
+              ...prev,
+              rosters: next,
+              hydratedLeagueIds: { ...(prev.hydratedLeagueIds ?? {}), [leagueId]: true },
+              isHydratingLeagueId: null,
+            };
           });
         } catch (e) {
           console.log("hydrateRostersFromDb exception:", e);
+          set((prev) => ({ ...prev, isHydratingLeagueId: null }));
         }
       },
 
@@ -719,39 +738,7 @@ get().persistRosterToDb(leagueId, teamId);
   // For now that's fine because we don't want to reorder mid-draft anyway.
   get().ensurePicksLength();
 
-    // ✅ Pull rosters from Supabase for this league and merge into local store
-  const activeLeagueId = useLeagueStore.getState().activeLeagueId;
-  if (!activeLeagueId) return;
 
-  (async () => {
-    try {
-      const res = await fetchRosters(activeLeagueId);
-      if (!res?.ok) return;
-
-      const rows = Array.isArray(res.data) ? res.data : [];
-      const incoming: Record<string, TeamRosterState> = {};
-
-      for (const row of rows) {
-        const teamId = row?.team_id;
-        const data = row?.data;
-        if (!teamId) continue;
-
-        // Only accept shape we expect
-        if (isTeamRosterState(data)) incoming[teamId] = data;
-      }
-
-      // Merge into store (don’t wipe local if Supabase empty)
-      set((prev) => ({
-        ...prev,
-        rosters: {
-          ...prev.rosters,
-          ...incoming,
-        },
-      }));
-    } catch (e) {
-      console.log("fetchRosters failed", e);
-    }
-  })();
 },
 
 
