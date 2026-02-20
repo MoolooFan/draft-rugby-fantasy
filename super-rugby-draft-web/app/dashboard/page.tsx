@@ -78,11 +78,14 @@ useEffect(() => {
   return () => clearInterval(t);
 }, [activeLeagueId, maybeAutoStartDraft]);
 
-// ✅ Pull latest rosters from Supabase whenever you enter/switch leagues
 useEffect(() => {
   if (!activeLeagueId) return;
-  useDraftStore.getState().loadRostersFromDb(activeLeagueId);
+
+  // ✅ Pull rosters from Supabase into Zustand when league becomes active
+  void useDraftStore.getState().hydrateRostersFromDb(activeLeagueId);
 }, [activeLeagueId]);
+
+
 
 const dashState: DashboardState = useMemo(() => {
   if (!activeLeague) return "noLeague";

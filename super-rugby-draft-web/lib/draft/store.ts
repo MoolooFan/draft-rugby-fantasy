@@ -13,6 +13,10 @@ type DraftState = {
   teams: Team[];
   isDraftOrderSet: boolean;
 
+    // ✅ Supabase persistence
+  hydrateRostersFromDb: (leagueId: string) => Promise<void>;
+  persistRosterToDb: (leagueId: string, teamId: string) => Promise<void>;
+
   // Draft config
   roundsPerTeam: number;
 
@@ -38,9 +42,7 @@ type DraftState = {
 
   // Rosters
   rosters: Record<string, TeamRosterState>;
-  // ✅ Supabase roster sync
-  loadRostersFromDb: (leagueId: string) => Promise<void>;
-  persistRosterToDb: (teamId: string) => Promise<void>;
+
   // Derived helpers
   totalPicks: () => number;
   draftOrderTeamIds: () => string[];
@@ -260,37 +262,6 @@ export const useDraftStore = create<DraftState>()(
       watchlist: {},
       rosters: {},
 
-            // ✅ Load all rosters for a league from Supabase
-      loadRostersFromDb: async (leagueId: string) => {
-        const json = await fetchRosters(leagueId);
-        if (!json?.ok) {
-          console.warn("loadRostersFromDb failed", json?.error);
-          return;
-        }
-
-        const next: Record<string, TeamRosterState> = {};
-        for (const row of json.data ?? []) {
-          next[row.team_id] = row.data;
-        }
-
-        set((s) => ({
-          ...s,
-          rosters: { ...s.rosters, ...next },
-        }));
-      },
-
-      // ✅ Save ONE team roster to Supabase
-      persistRosterToDb: async (teamId: string) => {
-        const leagueState: any = useLeagueStore.getState();
-        const leagueId = leagueState.activeLeagueId ?? leagueState.activeLeague?.id;
-        if (!leagueId) return;
-
-        const roster = (get() as any).rosters?.[teamId];
-        if (!roster) return;
-
-        const json = await saveRoster(leagueId, teamId, roster);
-        if (!json?.ok) console.warn("persistRosterToDb failed", json?.error);
-      },
 
       totalPicks: () => {
         const { teams, roundsPerTeam } = get();
@@ -348,7 +319,60 @@ export const useDraftStore = create<DraftState>()(
           };
         });
       },
+      // ✅ Pull all rosters for a league from Supabase → load into Zustand
+      hydrateRostersFromDb: async (leagueId: string) => {
+        if (!leagueId) return;
 
+        try {
+          const res = await fetchRosters(leagueId);
+          if (!res?.ok) {
+            console.log("hydrateRostersFromDb failed:", res?.error ?? res);
+            return;
+          }
+
+          const rows = (res.data ?? []) as Array<{
+            league_id: string;
+            team_id: string;
+            data: TeamRosterState;
+            updated_at?: string;
+          }>;
+
+          set((s) => {
+            const next = { ...s.rosters };
+
+            // Apply DB rosters
+            for (const r of rows) {
+              if (r?.team_id && r?.data) next[r.team_id] = r.data;
+            }
+
+            // Ensure every current team has a roster object
+            for (const t of s.teams) {
+              if (!next[t.id]) next[t.id] = makeEmptyRoster();
+            }
+
+            return { ...s, rosters: next };
+          });
+        } catch (e) {
+          console.log("hydrateRostersFromDb exception:", e);
+        }
+      },
+
+      // ✅ Save one team roster to Supabase
+      persistRosterToDb: async (leagueId: string, teamId: string) => {
+        if (!leagueId || !teamId) return;
+
+        try {
+          const roster = get().rosters[teamId];
+          if (!roster) return;
+
+          const res = await saveRoster(leagueId, teamId, roster);
+          if (!res?.ok) {
+            console.log("persistRosterToDb failed:", res?.error ?? res);
+          }
+        } catch (e) {
+          console.log("persistRosterToDb exception:", e);
+        }
+      },
             rehydratePlayersFromPool: (allPlayers) => {
         const byId = new Map(allPlayers.map((p) => [p.id, p]));
 
@@ -422,11 +446,12 @@ addPlayerToRoster: (teamId, player) => {
 
   // ✅ persist to Supabase (fire-and-forget)
   const leagueId = useLeagueStore.getState().activeLeagueId;
-  if (leagueId && nextRoster) {
-    saveRoster(leagueId, teamId, nextRoster).catch((e) =>
-      console.log("saveRoster failed", e)
-    );
-  }
+if (leagueId && nextRoster) {
+  // write the roster we just computed (no need to re-read from state)
+  saveRoster(leagueId, teamId, nextRoster).catch((e) =>
+    console.log("saveRoster failed", e)
+  );
+}
 },
 
 applyRosterMove: ({ teamId, addPlayer, dropPlayerId }) => {
@@ -475,14 +500,11 @@ applyRosterMove: ({ teamId, addPlayer, dropPlayerId }) => {
   });
 
   // ✅ persist if we succeeded
-  const leagueId = useLeagueStore.getState().activeLeagueId;
-  if (success && leagueId && nextRoster) {
-    saveRoster(leagueId, teamId, nextRoster).catch((e) =>
-      console.log("saveRoster failed", e)
-    );
-  }
-
-  return success;
+const leagueId = useLeagueStore.getState().activeLeagueId;
+if (success && leagueId) {
+  get().persistRosterToDb(leagueId, teamId);
+}
+return success;
 },
 
       confirmDraft: (player) => {
@@ -541,7 +563,7 @@ const picked: Player = { ...player, secondaryPosAbbrev: player.secondaryPosAbbre
         if (!wrote) return;
 
         s.addPlayerToRoster(teamId, picked);
-
+get().persistRosterToDb(leagueId, teamId);
 
         const teamName = owner?.name ?? "TBC";
         set((prev) => ({
@@ -612,7 +634,7 @@ const picked: Player = { ...best, secondaryPosAbbrev: best.secondaryPosAbbrev ??
 
 
         s.addPlayerToRoster(teamId, picked);
-
+get().persistRosterToDb(leagueId, teamId);
 
         const teamName = owner?.name ?? "TBC";
         set((prev) => ({
