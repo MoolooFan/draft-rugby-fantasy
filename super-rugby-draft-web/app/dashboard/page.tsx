@@ -7,7 +7,7 @@ import { PlayerCardModal } from "@/components/PlayerCardModal";
 import { AppMenu } from "@/components/AppMenu";
 import { useLeagueStore } from "@/lib/league/store";
 import type { League } from "@/lib/league/types";
-
+import { useDraftStore } from "@/lib/draft/store";
 
 type ActiveMenu =
   | "Dashboard"
@@ -77,6 +77,12 @@ useEffect(() => {
 
   return () => clearInterval(t);
 }, [activeLeagueId, maybeAutoStartDraft]);
+
+// ✅ Pull latest rosters from Supabase whenever you enter/switch leagues
+useEffect(() => {
+  if (!activeLeagueId) return;
+  useDraftStore.getState().loadRostersFromDb(activeLeagueId);
+}, [activeLeagueId]);
 
 const dashState: DashboardState = useMemo(() => {
   if (!activeLeague) return "noLeague";

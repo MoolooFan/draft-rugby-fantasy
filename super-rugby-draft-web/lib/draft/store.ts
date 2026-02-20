@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 import type { DraftPhase, Player, Team, TeamRosterState } from "./types";
 import { getSlotCaps, getWcCap } from "./constants";
 import { useLeagueStore } from "@/lib/league/store";
+import { fetchRosters, saveRoster } from "@/lib/rosters/api";
 
 type DraftState = {
   phase: DraftPhase;
@@ -37,7 +38,9 @@ type DraftState = {
 
   // Rosters
   rosters: Record<string, TeamRosterState>;
-
+  // ✅ Supabase roster sync
+  loadRostersFromDb: (leagueId: string) => Promise<void>;
+  persistRosterToDb: (teamId: string) => Promise<void>;
   // Derived helpers
   totalPicks: () => number;
   draftOrderTeamIds: () => string[];
@@ -253,6 +256,38 @@ export const useDraftStore = create<DraftState>()(
       watchlist: {},
       rosters: {},
 
+            // ✅ Load all rosters for a league from Supabase
+      loadRostersFromDb: async (leagueId: string) => {
+        const json = await fetchRosters(leagueId);
+        if (!json?.ok) {
+          console.warn("loadRostersFromDb failed", json?.error);
+          return;
+        }
+
+        const next: Record<string, TeamRosterState> = {};
+        for (const row of json.data ?? []) {
+          next[row.team_id] = row.data;
+        }
+
+        set((s) => ({
+          ...s,
+          rosters: { ...s.rosters, ...next },
+        }));
+      },
+
+      // ✅ Save ONE team roster to Supabase
+      persistRosterToDb: async (teamId: string) => {
+        const leagueState: any = useLeagueStore.getState();
+        const leagueId = leagueState.activeLeagueId ?? leagueState.activeLeague?.id;
+        if (!leagueId) return;
+
+        const roster = (get() as any).rosters?.[teamId];
+        if (!roster) return;
+
+        const json = await saveRoster(leagueId, teamId, roster);
+        if (!json?.ok) console.warn("persistRosterToDb failed", json?.error);
+      },
+
       totalPicks: () => {
         const { teams, roundsPerTeam } = get();
         return Math.max(teams.length * roundsPerTeam, 40);
@@ -378,6 +413,7 @@ export const useDraftStore = create<DraftState>()(
       },
     };
   });
+    get().persistRosterToDb(teamId);
 },
 
 applyRosterMove: ({ teamId, addPlayer, dropPlayerId }) => {
@@ -424,9 +460,9 @@ nextPlayers.push(addPlayer);
     };
   });
 
+  if (success) get().persistRosterToDb(teamId);
   return success;
 },
-
 
       confirmDraft: (player) => {
         const s = get();
