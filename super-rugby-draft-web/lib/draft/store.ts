@@ -233,6 +233,10 @@ function rebalanceRoster(
   return { slots, wildcards };
 }
 
+function isTeamRosterState(x: any): x is TeamRosterState {
+  return x && typeof x === "object" && ("slots" in x) && ("wildcards" in x);
+}
+
 export const useDraftStore = create<DraftState>()(
   persist(
     (set, get) => ({
@@ -386,11 +390,11 @@ export const useDraftStore = create<DraftState>()(
   return rebalanceRoster(candidate, slotCaps, wcCap) != null;
 },
 
-
-
-      addPlayerToRoster: (teamId, player) => {
+addPlayerToRoster: (teamId, player) => {
   const slotCaps = getSlotCaps();
   const wcCap = getWcCap();
+
+  let nextRoster: TeamRosterState | null = null;
 
   set((s) => {
     const current = s.rosters[teamId] ?? makeEmptyRoster();
@@ -402,18 +406,27 @@ export const useDraftStore = create<DraftState>()(
     const balanced = rebalanceRoster([...currentPlayers, player], slotCaps, wcCap);
     if (!balanced) return s; // should not happen if guarded
 
+    nextRoster = {
+      slots: balanced.slots,
+      wildcards: balanced.wildcards,
+    };
+
     return {
       ...s,
       rosters: {
         ...s.rosters,
-        [teamId]: {
-          slots: balanced.slots,
-          wildcards: balanced.wildcards,
-        },
+        [teamId]: nextRoster!,
       },
     };
   });
-    get().persistRosterToDb(teamId);
+
+  // ✅ persist to Supabase (fire-and-forget)
+  const leagueId = useLeagueStore.getState().activeLeagueId;
+  if (leagueId && nextRoster) {
+    saveRoster(leagueId, teamId, nextRoster).catch((e) =>
+      console.log("saveRoster failed", e)
+    );
+  }
 },
 
 applyRosterMove: ({ teamId, addPlayer, dropPlayerId }) => {
@@ -423,6 +436,7 @@ applyRosterMove: ({ teamId, addPlayer, dropPlayerId }) => {
   const wcCap = getWcCap();
 
   let success = false;
+  let nextRoster: TeamRosterState | null = null;
 
   set((s) => {
     const current = s.rosters[teamId] ?? makeEmptyRoster();
@@ -432,19 +446,22 @@ applyRosterMove: ({ teamId, addPlayer, dropPlayerId }) => {
     for (const arr of Object.values(current.slots ?? {})) currentPlayers.push(...(arr as any[]));
     currentPlayers.push(...(current.wildcards ?? []));
 
-// ✅ SAFE removal (do not hard fail if drop isn't found)
-const nextPlayers = currentPlayers.filter((p) => p?.id !== dropPlayerId);
+    // remove dropped
+    const nextPlayers = currentPlayers.filter((p) => p?.id !== dropPlayerId);
 
-// guard: don’t allow duplicates
-if (nextPlayers.some((p) => p?.id === addPlayer?.id)) return s;
+    // guard: don’t allow duplicates
+    if (nextPlayers.some((p) => p?.id === addPlayer?.id)) return s;
 
-// add incoming
-nextPlayers.push(addPlayer);
+    // add incoming
+    nextPlayers.push(addPlayer);
 
-
-    // rebalance into slots + WC
     const balanced = rebalanceRoster(nextPlayers, slotCaps, wcCap);
-    if (!balanced) return s; // illegal move (would break roster structure)
+    if (!balanced) return s;
+
+    nextRoster = {
+      slots: balanced.slots,
+      wildcards: balanced.wildcards,
+    };
 
     success = true;
 
@@ -452,15 +469,19 @@ nextPlayers.push(addPlayer);
       ...s,
       rosters: {
         ...s.rosters,
-        [teamId]: {
-          slots: balanced.slots,
-          wildcards: balanced.wildcards,
-        },
+        [teamId]: nextRoster!,
       },
     };
   });
 
-  if (success) get().persistRosterToDb(teamId);
+  // ✅ persist if we succeeded
+  const leagueId = useLeagueStore.getState().activeLeagueId;
+  if (success && leagueId && nextRoster) {
+    saveRoster(leagueId, teamId, nextRoster).catch((e) =>
+      console.log("saveRoster failed", e)
+    );
+  }
+
   return success;
 },
 
@@ -675,7 +696,42 @@ const picked: Player = { ...best, secondaryPosAbbrev: best.secondaryPosAbbrev ??
   // which uses current teams order, so historical owner labels could shift if you reorder mid-draft.
   // For now that's fine because we don't want to reorder mid-draft anyway.
   get().ensurePicksLength();
+
+    // ✅ Pull rosters from Supabase for this league and merge into local store
+  const activeLeagueId = useLeagueStore.getState().activeLeagueId;
+  if (!activeLeagueId) return;
+
+  (async () => {
+    try {
+      const res = await fetchRosters(activeLeagueId);
+      if (!res?.ok) return;
+
+      const rows = Array.isArray(res.data) ? res.data : [];
+      const incoming: Record<string, TeamRosterState> = {};
+
+      for (const row of rows) {
+        const teamId = row?.team_id;
+        const data = row?.data;
+        if (!teamId) continue;
+
+        // Only accept shape we expect
+        if (isTeamRosterState(data)) incoming[teamId] = data;
+      }
+
+      // Merge into store (don’t wipe local if Supabase empty)
+      set((prev) => ({
+        ...prev,
+        rosters: {
+          ...prev.rosters,
+          ...incoming,
+        },
+      }));
+    } catch (e) {
+      console.log("fetchRosters failed", e);
+    }
+  })();
 },
+
 
     }),
     {

@@ -26,10 +26,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Missing leagueId/teamId/data" }, { status: 400 });
   }
 
-  const { error } = await supabaseServer
+    const { error } = await supabaseServer
     .from("rosters")
     .upsert(
-      { league_id: leagueId, team_id: teamId, data, updated_at: new Date().toISOString() },
+      {
+        league_id: leagueId,
+        team_id: teamId,
+        data,
+        updated_at: new Date().toISOString(),
+      },
       { onConflict: "league_id,team_id" }
     );
 
