@@ -184,7 +184,7 @@ function isFixtureComplete(f: AnyFixture) {
 
 function getSelectionDeadlineMs(firstKickoffMs: number) {
   // 2 hours before
-  return firstKickoffMs - 2 * 60 * 60 * 1000;
+  return firstKickoffMs - 0 * 60 * 60 * 1000;
 }
 
 function pad2(n: number) {

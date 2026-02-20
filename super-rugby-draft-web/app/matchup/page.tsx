@@ -240,7 +240,7 @@ function isFixtureComplete(f: AnyFixture) {
 }
 
 function getSelectionDeadlineMs(firstKickoffMs: number) {
-  return firstKickoffMs - 2 * 60 * 60 * 1000;
+  return firstKickoffMs - 0 * 60 * 60 * 1000;
 }
 
 
