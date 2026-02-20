@@ -403,7 +403,7 @@ function shortName(p: { firstName?: string; lastName?: string } | null | undefin
 // -----------------------
 // Page
 // -----------------------
-export default function ProposeTradePage() {
+export default function TradeProposePageInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
