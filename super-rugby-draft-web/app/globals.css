@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* 
+  Global reset / base styles.
+  We keep this minimal because layouts and backgrounds
+  are handled per-page (dashboard, auth, etc.)
+*/
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  background: transparent;
+  color: inherit;
+}
+
+/* Prevent horizontal scroll on mobile */
+* {
+  box-sizing: border-box;
+}

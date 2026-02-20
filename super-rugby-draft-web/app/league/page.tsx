@@ -1,0 +1,1539 @@
+"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { getActiveUser } from "@/lib/session";
+import { useLeagueStore } from "@/lib/league/store";
+import type { PlayoffFormat } from "@/lib/league/types";
+import { buildLeagueSchedule } from "@/lib/league/schedule";
+import { AppMenu } from "@/components/AppMenu";
+import { usePlayersStore } from "@/lib/players/store";
+
+type LeagueTab = "Standings" | "Fixtures" | "Results";
+type Modal =
+  | null
+  | { type: "join" }
+  | { type: "create" }
+  | { type: "settings" };
+
+  type FixtureRow = {
+  weekNo: number;
+
+  home: string;
+  away: string;
+
+  // ✅ optional IDs so we can calculate BYE points accurately
+  homeTeamId?: string | null;
+  awayTeamId?: string | null;
+
+  homeScore: number | null;
+  awayScore: number | null;
+};
+
+
+type FixtureWeek = {
+  weekNo: number;
+  rows: FixtureRow[];
+};
+
+// ---------- Live scoring helpers (same logic as Matchup page) ----------
+type SlotId =
+  | "prop1" | "hooker1" | "prop2"
+  | "lock1" | "lock2"
+  | "looseforward1" | "looseforward2" | "looseforward3"
+  | "halfback1" | "flyhalf1"
+  | "centre1" | "centre2"
+  | "outsideback1" | "outsideback2" | "outsideback3"
+  | "bench1" | "bench2" | "bench3" | "bench4" | "bench5";
+
+type PlayerLite = {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  teamCode?: string;
+  posAbbrev?: string;
+  secondaryPosAbbrev?: string | null;
+  posName?: string;
+  secondaryPosName?: string | null;
+};
+
+type Lineup = Record<SlotId, PlayerLite | null>;
+
+type LockedSnapshot = {
+  week: number;
+  teamId: string;
+  lockedAtMs: number;
+  lineup: Lineup;
+  captainId: string | null;
+  viceId: string | null;
+};
+
+const STARTER_SLOTS: SlotId[] = [
+  "prop1","hooker1","prop2",
+  "lock1","lock2",
+  "looseforward1","looseforward2","looseforward3",
+  "halfback1","flyhalf1",
+  "centre1","centre2",
+  "outsideback1","outsideback2","outsideback3",
+];
+
+const CAP_MULT = 2;
+
+function normaliseId(x: any) {
+  return String(x ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function pickValue(row: any, candidates: string[]) {
+  if (!row || typeof row !== "object") return null;
+  const norm = (s: string) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const keyMap = new Map<string, string>();
+  for (const k of Object.keys(row)) keyMap.set(norm(k), k);
+  for (const c of candidates) {
+    const k = keyMap.get(norm(c));
+    if (k != null) {
+      const v = (row as any)[k];
+      if (v !== undefined && v !== null && v !== "") return v;
+    }
+  }
+  return null;
+}
+
+function rowPlayerId(row: any) {
+  return pickValue(row, ["playerId", "Player ID", "player_id", "id"]);
+}
+
+function rowRound(row: any) {
+  const v = pickValue(row, ["round", "Round", "week", "Week"]);
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+// Sheet already contains POINTS per column → sum them
+function calcFantasyPoints(row: any): number {
+  const toNumber = (v: any) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const POINT_COLUMNS = [
+    "Minutes played","Tries","Try Assists","Linebreaks","Linebreak assists","Defenders beaten",
+    "Carries (m)","Offloads","Tackles","Missed tackles","Turnover Forced","Interceptions",
+    "50:22 Kicks","Penalties Conceded","Errors","Lineouts won","Lineout steals","Lineout errors",
+    "Scrums won outright","Conversions","Conversions missed","Penalty scored","Penalty missed",
+    "Drop goal scored","Drop goal missed","Yellow cards","Red cards",
+  ];
+
+  let pts = 0;
+  for (const col of POINT_COLUMNS) pts += toNumber(pickValue(row, [col]));
+  return pts;
+}
+
+function matchupSnapshotKey(leagueId: string | null, week: number, teamId: string | null) {
+  return `mu_snapshot_${leagueId ?? "no-league"}_wk${week}_${teamId ?? "no-team"}`;
+}
+
+function finalizedLineupKey(leagueId: string | null, week: number, teamId: string | null) {
+  return `mu_final_${leagueId ?? "no-league"}_wk${week}_${teamId ?? "no-team"}`;
+}
+
+function effectiveCaptainId(
+  lineup: Lineup | null,
+  captainId: string | null,
+  viceId: string | null,
+  pointsForPlayer: (p: PlayerLite | null) => number
+) {
+  if (!lineup) return null;
+
+  const cap = Object.values(lineup).find((x) => x?.id === captainId) ?? null;
+  const vice = Object.values(lineup).find((x) => x?.id === viceId) ?? null;
+
+  const capPts = cap ? pointsForPlayer(cap) : 0;
+  if (cap && capPts > 0) return cap.id;
+
+  const vicePts = vice ? pointsForPlayer(vice) : 0;
+  if (vice && vicePts > 0) return vice.id;
+
+  return captainId;
+}
+
+
+function toDatetimeLocal(ts: number) {
+  const d = new Date(ts);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Accepts "YYYY-MM-DDTHH:mm" from <input type="datetime-local" />
+// Returns ms timestamp or null if invalid/empty
+function parseDatetimeLocal(value: string) {
+  if (!value) return null;
+  const ts = new Date(value).getTime();
+  return Number.isFinite(ts) ? ts : null;
+}
+
+export default function LeaguePage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const user = getActiveUser();
+    if (!user) router.replace("/");
+  }, [router]);
+
+    // ---- Live sheet feed (MUST be inside component) ----
+  const livePlayersLoaded = usePlayersStore((s) => s.loaded);
+  const refreshLivePlayers = usePlayersStore((s) => s.refresh);
+  const sheetPlayers = usePlayersStore((s) => s.players);
+  const roundRows = usePlayersStore((s) => s.roundRows);
+
+  useEffect(() => {
+    if (!livePlayersLoaded) refreshLivePlayers();
+  }, [livePlayersLoaded, refreshLivePlayers]);
+
+  // Map draftId/playerId → sheet row lookup (handles mismatched ids)
+  const sheetPlayerById = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const p of sheetPlayers ?? []) {
+      const draftLikeId =
+        pickValue(p, ["id", "draftId", "draft_id", "Draft ID", "playerKey"]) ?? null;
+      const sheetPid =
+        pickValue(p, ["playerId", "player_id", "player id", "Player ID", "id"]) ?? null;
+
+      if (draftLikeId != null) m.set(normaliseId(draftLikeId), p);
+      if (sheetPid != null) m.set(normaliseId(sheetPid), p);
+    }
+    return m;
+  }, [sheetPlayers]);
+
+  function getPlayerSheetId(p: PlayerLite | null) {
+    if (!p) return null;
+    const sheetPlayer = sheetPlayerById.get(normaliseId(p.id));
+    const sheetPid =
+      pickValue(sheetPlayer, ["playerId", "player_id", "player id", "Player ID", "id"]) ?? null;
+    return sheetPid != null ? normaliseId(sheetPid) : normaliseId(p.id);
+  }
+
+  // Build: weekNo -> (playerId -> points)
+  const pointsByWeek = useMemo(() => {
+    const byWeek = new Map<number, Map<string, number>>();
+    for (const row of roundRows ?? []) {
+      const w = rowRound(row);
+      if (!w) continue;
+      const pidRaw = rowPlayerId(row);
+      if (!pidRaw) continue;
+
+      const pid = normaliseId(pidRaw);
+      const pts = calcFantasyPoints(row);
+
+      if (!byWeek.has(w)) byWeek.set(w, new Map());
+      byWeek.get(w)!.set(pid, pts);
+    }
+    return byWeek;
+  }, [roundRows]);
+
+  function pointsForPlayerWeek(weekNo: number, p: PlayerLite | null) {
+    const pid = getPlayerSheetId(p);
+    if (!pid) return 0;
+    return pointsByWeek.get(weekNo)?.get(pid) ?? 0;
+  }
+
+  const leagues = useLeagueStore((s) => s.leagues);
+const activeLeagueId = useLeagueStore((s) => s.activeLeagueId);
+
+
+
+const league = useMemo(() => {
+  return leagues.find((l) => l.id === activeLeagueId) ?? null;
+}, [leagues, activeLeagueId]);
+
+
+
+  const setActiveLeague = useLeagueStore((s) => s.setActiveLeague);
+  const getIsCreator = useLeagueStore((s) => s.isActiveLeagueCreator);
+const isCreator = getIsCreator();
+
+
+
+  const updateLeagueSettings = useLeagueStore((s) => s.updateLeagueSettings);
+  const setDraftOrder = useLeagueStore((s) => s.setDraftOrder);
+  const joinLeagueByCode = useLeagueStore((s) => s.joinLeagueByCode);
+  const createLeague = useLeagueStore((s) => s.createLeague);
+
+  const [tab, setTab] = useState<LeagueTab>("Standings");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [modal, setModal] = useState<Modal>(null);
+
+
+
+  const leagueName = league?.name ?? "League";
+  const leagueCode = league?.code ?? "—";
+
+type StandingRow = {
+  rank: number;
+  teamId: string;
+  teamName: string;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  pf: number;
+  pa: number;
+  pd: number;
+  pts: number;
+  movement: "same" | "up" | "down";
+};
+
+  const weeks = league?.totalWeeks ?? 16;
+  const currentWeek = league?.currentWeek ?? 1;
+
+function buildStandingsFromResults(uptoWeekInclusive: number): Omit<StandingRow, "rank" | "movement">[] {
+  const teams = league?.teams ?? [];
+  const base = new Map<string, Omit<StandingRow, "rank" | "movement">>();
+
+  for (const t of teams) {
+    base.set(t.id, {
+      teamId: t.id,
+      teamName: t.name,
+      played: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      pf: 0,
+      pa: 0,
+      pd: 0,
+      pts: 0,
+    });
+  }
+
+  const raw: any[] = buildLeagueSchedule({
+    teams,
+    totalWeeks: weeks,
+    currentWeek,
+    playoffFormat: league?.playoffFormat ?? "none",
+  }) as any[];
+
+  const rows = Array.isArray(raw) ? raw : [];
+
+  for (const m of rows) {
+    const w = Number(m.weekNo);
+    if (!w || w > uptoWeekInclusive) continue;
+
+    const homeId = m.homeTeamId ?? null;
+    const awayId = m.awayTeamId ?? null;
+
+    // BYE (one side null)
+    if (!homeId || !awayId) {
+      const realId = homeId ?? awayId;
+      if (!realId) continue;
+      const score = teamWeekScore(league?.id ?? null, realId, w);
+      if (score == null) continue; // not actually played yet
+
+      const r = base.get(realId);
+      if (!r) continue;
+
+      r.played += 1;
+      r.wins += 1;
+      r.pf += score;
+      r.pa += 0;
+      r.pd = r.pf - r.pa;
+      r.pts += 4;
+      continue;
+    }
+
+    const hs = teamWeekScore(league?.id ?? null, homeId, w);
+const as = teamWeekScore(league?.id ?? null, awayId, w);
+    if (hs == null || as == null) continue; // not actually played yet
+
+    const home = base.get(homeId);
+    const away = base.get(awayId);
+    if (!home || !away) continue;
+
+    home.played += 1;
+    away.played += 1;
+
+    home.pf += hs; home.pa += as;
+    away.pf += as; away.pa += hs;
+
+    if (hs > as) {
+      home.wins += 1; home.pts += 4;
+      away.losses += 1;
+    } else if (as > hs) {
+      away.wins += 1; away.pts += 4;
+      home.losses += 1;
+    } else {
+      home.draws += 1; away.draws += 1;
+      home.pts += 2; away.pts += 2;
+    }
+
+    home.pd = home.pf - home.pa;
+    away.pd = away.pf - away.pa;
+  }
+
+  return Array.from(base.values());
+}
+
+const standings = useMemo<StandingRow[]>(() => {
+  const totalWeeks = league?.totalWeeks ?? 16;
+  const playedNow = Math.max(0, Math.min(totalWeeks, (league?.currentWeek ?? 1) - 1));
+  const playedPrev = Math.max(0, Math.min(totalWeeks, (league?.currentWeek ?? 1) - 2));
+
+  const curr = buildStandingsFromResults(playedNow);
+  const prev = buildStandingsFromResults(playedPrev);
+
+  const sortRows = (arr: any[]) =>
+    arr.slice().sort((a, b) => b.pts - a.pts || b.pd - a.pd || b.pf - a.pf);
+
+  const currSorted = sortRows(curr);
+  const prevSorted = sortRows(prev);
+
+  const prevRankById = new Map(prevSorted.map((r, i) => [r.teamId, i + 1]));
+
+  return currSorted.map((r, i) => {
+    const rank = i + 1;
+    const prevRank = prevRankById.get(r.teamId);
+
+    let movement: "same" | "up" | "down" = "same";
+    if (prevRank != null) {
+      if (rank < prevRank) movement = "up";
+      else if (rank > prevRank) movement = "down";
+    }
+
+    return { rank, ...r, movement };
+  });
+}, [league?.id, league?.teams, league?.currentWeek, league?.totalWeeks, league?.playoffFormat, weeks, currentWeek, pointsByWeek]);
+
+function readSnapshot(leagueId: string | null, teamId: string | null, weekNo: number): LockedSnapshot | null {
+  if (typeof window === "undefined") return null;
+  if (!teamId) return null;
+  const raw = window.localStorage.getItem(matchupSnapshotKey(leagueId, weekNo, teamId));
+  if (!raw) return null;
+  try { return JSON.parse(raw) as LockedSnapshot; } catch { return null; }
+}
+
+function readFinalLineup(leagueId: string | null, teamId: string | null, weekNo: number): Lineup | null {
+  if (typeof window === "undefined") return null;
+  if (!teamId) return null;
+  const raw = window.localStorage.getItem(finalizedLineupKey(leagueId, weekNo, teamId));
+  if (!raw) return null;
+  try { return JSON.parse(raw) as Lineup; } catch { return null; }
+}
+
+function teamWeekScore(leagueId: string | null, teamId: string | null, weekNo: number): number | null {
+  const snap = readSnapshot(leagueId, teamId, weekNo);
+  if (!snap) return null;
+
+  const lineup = readFinalLineup(leagueId, teamId, weekNo) ?? snap.lineup;
+  const pointsFor = (p: PlayerLite | null) => pointsForPlayerWeek(weekNo, p);
+
+  const effC = effectiveCaptainId(lineup, snap.captainId, snap.viceId, pointsFor);
+
+  let sum = 0;
+  for (const slot of STARTER_SLOTS) {
+    const p = lineup[slot];
+    if (!p?.id) continue;
+    const base = pointsFor(p);
+    sum += (p.id === effC ? base * CAP_MULT : base);
+  }
+  return sum;
+}
+
+
+
+  // ------- fixtures/results (generated placeholder) -------
+
+    const teamNameById = (id: string | null | undefined) => {
+    if (!id) return "BYE";
+    return league?.teams.find((t) => t.id === id)?.name ?? "TBC";
+  };
+
+    const fixtures = useMemo<FixtureWeek[]>(() => {
+
+    const teams = league?.teams ?? [];
+    if (teams.length < 2) return [];
+
+    const raw: any = buildLeagueSchedule({
+      teams,
+      totalWeeks: weeks,
+      currentWeek,
+      playoffFormat: league?.playoffFormat ?? "none",
+    });
+
+    // ---- Normalise to: [{ weekNo, rows: [{ home, away, homeScore, awayScore }] }] ----
+
+    // Case A: already grouped
+    if (Array.isArray(raw) && raw.length > 0 && "rows" in raw[0]) {
+  return raw.map((w: any) => ({
+    weekNo: Number(w.weekNo),
+    rows: (w.rows ?? []).map((r: any) => ({
+      weekNo: Number(w.weekNo),
+      home: typeof r.home === "string" ? r.home : teamNameById(r.homeTeamId),
+      away: typeof r.away === "string" ? r.away : teamNameById(r.awayTeamId),
+      homeTeamId: r.homeTeamId ?? null,
+      awayTeamId: r.awayTeamId ?? null,
+      homeScore: r.homeTeamId ? teamWeekScore(league?.id ?? null, r.homeTeamId, Number(w.weekNo)) : null,
+awayScore: r.awayTeamId ? teamWeekScore(league?.id ?? null, r.awayTeamId, Number(w.weekNo)) : null,
+    })),
+  }));
+}
+
+    // Case B: flat list of matches with weekNo
+    if (Array.isArray(raw)) {
+      return Array.from({ length: weeks }).map((_, wIdx) => {
+        const weekNo = wIdx + 1;
+
+        const weekRows = raw
+          .filter((r: any) => Number(r.weekNo) === weekNo)
+          .map((r: any) => ({
+            weekNo,
+            home: typeof r.home === "string" ? r.home : teamNameById(r.homeTeamId),
+            away: typeof r.away === "string" ? r.away : teamNameById(r.awayTeamId),
+            homeTeamId: r.homeTeamId ?? null,
+awayTeamId: r.awayTeamId ?? null,
+            homeScore: r.homeTeamId ? teamWeekScore(league?.id ?? null, r.homeTeamId, weekNo) : null,
+awayScore: r.awayTeamId ? teamWeekScore(league?.id ?? null, r.awayTeamId, weekNo) : null,
+          }));
+
+        return { weekNo, rows: weekRows };
+      });
+    }
+
+    // Fallback
+    return [];
+ }, [league?.id, league?.teams, league?.playoffFormat, weeks, currentWeek, pointsByWeek]);
+
+
+
+
+  // ------- styles (match your vibe) -------
+  const card35: React.CSSProperties = {
+    borderRadius: 18,
+    background: "rgba(255,255,255,0.35)",
+    backdropFilter: "blur(10px)",
+    boxShadow: "0 12px 30px rgba(0,0,0,0.18)",
+  };
+
+  const tabBarStyle: React.CSSProperties = {
+    marginTop: 10,
+    borderRadius: 10,
+    overflow: "hidden",
+    border: "1px solid rgba(255,255,255,0.18)",
+  };
+
+  const tabBtn = (active: boolean): React.CSSProperties => ({
+    height: 30,
+    border: "none",
+    background: active ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.10)",
+    color: "white",
+    fontSize: 11,
+    fontWeight: 900,
+    cursor: "pointer",
+  });
+
+  const listBox: React.CSSProperties = {
+    marginTop: 10,
+    borderRadius: 12,
+    background: "rgba(255,255,255,0.92)",
+    border: "1px solid rgba(0,0,0,0.08)",
+    overflow: "hidden",
+    color: "#0f172a",
+  };
+
+  function Hamburger() {
+    return (
+      <button
+        onClick={() => setMenuOpen(true)}
+        aria-label="Open menu"
+        style={{
+          background: "transparent",
+          border: "none",
+          padding: 0,
+          margin: 0,
+          color: "white",
+          fontSize: 36,
+          fontWeight: 900,
+          lineHeight: "36px",
+          cursor: "pointer",
+        }}
+      >
+        ☰
+      </button>
+    );
+  }
+
+  function Header() {
+    return (
+      <div style={{ ...card35, padding: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Hamburger />
+        </div>
+
+        <div style={{ marginTop: 8, fontSize: 18, fontWeight: 900 }}>{leagueName}</div>
+      </div>
+    );
+  }
+
+  function Tabs() {
+    const tabs: LeagueTab[] = ["Standings", "Fixtures", "Results"];
+    return (
+      <div style={tabBarStyle}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)" }}>
+          {tabs.map((t) => (
+            <button key={t} onClick={() => setTab(t)} style={tabBtn(t === tab)}>
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function MovementCircle({ movement }: { movement: "same" | "up" | "down" }) {
+    const isUp = movement === "up";
+    const isDown = movement === "down";
+    const isSame = movement === "same";
+    const bg = isUp ? "#22C55E" : isDown ? "#EF4444" : "rgba(0,0,0,0.12)";
+    const symbol = isUp ? "▲" : isDown ? "▼" : "=";
+
+    return (
+      <span
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: 999,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: bg,
+          color: "white",
+          fontWeight: 900,
+          fontSize: isSame ? 12 : 10,
+          lineHeight: "12px",
+        }}
+      >
+        {symbol}
+      </span>
+    );
+  }
+
+  function StandingsTab() {
+    // horizontally scrollable table
+    return (
+      <>
+        <div style={listBox}>
+          <div style={{ padding: "10px 10px", overflowX: "auto" }}>
+            <div style={{ minWidth: 560 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "44px 1fr 40px 40px 40px 40px 50px 50px 50px 10px",
+
+                  gap: 8,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  opacity: 0.7,
+                  paddingBottom: 8,
+                }}
+              >
+                <div>Rk</div>
+                <div>Team</div>
+                <div>P</div>
+                <div>W</div>
+                <div>D</div>
+                <div>L</div>
+                <div>PF</div>
+                <div>PA</div>
+                <div>PD</div>
+                <div style={{ textAlign: "right" }}>Pts</div>
+              </div>
+
+              {standings.map((r) => (
+                <div
+                  key={r.rank}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "44px 1fr 40px 40px 40px 40px 50px 50px 50px 10px",
+
+                    gap: 8,
+                    alignItems: "center",
+                    padding: "10px 0",
+                    borderTop: "1px solid rgba(0,0,0,0.08)",
+                    fontSize: 12,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 14, textAlign: "right", fontWeight: 900 }}>{r.rank}</span>
+                    <MovementCircle movement={r.movement} />
+                  </div>
+                  <div style={{ fontWeight: 500 }}>{r.teamName}</div>
+                  <div>{r.played}</div>
+                  <div>{r.wins}</div>
+                  <div>{r.draws}</div>
+                  <div>{r.losses}</div>
+                  <div>{r.pf}</div>
+                  <div>{r.pa}</div>
+                  <div>{r.pd}</div>
+                  <div style={{ textAlign: "right", fontWeight: 900 }}>{r.pts}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 18, textAlign: "center", fontSize: 12, fontWeight: 800, opacity: 0.9 }}>
+          League Code: {leagueCode}
+        </div>
+
+        <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+          <button
+            onClick={() => setModal({ type: "join" })}
+            style={pillButton("linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))")}
+          >
+            Join League
+          </button>
+
+          <button
+            onClick={() => setModal({ type: "create" })}
+            style={pillButton("linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))")}
+          >
+            Create New League
+          </button>
+
+          <button
+            onClick={() => setModal({ type: "settings" })}
+            style={outlinePillButton()}
+          >
+            League Settings
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  function FixturesTab() {
+    const future = fixtures.filter((w) => w.weekNo >= currentWeek);
+    return (
+      <div style={listBox}>
+        {future.map((w: FixtureWeek, idx) => (
+
+          <div key={w.weekNo} style={{ borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)" }}>
+            <div style={{ padding: "2px 10px", fontSize: 10, fontWeight: 500, opacity: 0.65, textAlign: "center" }}>
+              Week {w.weekNo}
+            </div>
+
+            {w.rows.map((r, i) => {
+  const isHomeBye = r.home === "BYE";
+  const isAwayBye = r.away === "BYE";
+  const isBye = isHomeBye || isAwayBye;
+
+  const realTeam = isHomeBye ? r.away : r.home;
+
+  return (
+    <div
+      key={`${w.weekNo}-${i}`}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1fr auto 1fr",
+        gap: 10,
+        padding: "7px 10px",
+        borderTop: "1px solid rgba(0,0,0,0.08)",
+        fontSize: 12,
+        fontWeight: 500,
+        alignItems: "center",
+        opacity: isBye ? 0.9 : 1,
+      }}
+    >
+      <div style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {isHomeBye ? realTeam : r.home}
+      </div>
+
+      <div style={{ opacity: 0.8, fontWeight: 700 }}>
+        {isBye ? "BYE" : "v"}
+      </div>
+
+      <div style={{ textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {isAwayBye ? realTeam : r.away}
+      </div>
+    </div>
+  );
+})}
+
+
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  function ResultsTab() {
+    const past = fixtures
+  .filter((w) => w.weekNo < currentWeek)
+  .slice()
+  .reverse();
+
+    return (
+      <div style={listBox}>
+        {past.map((w, idx) => (
+          <div key={w.weekNo} style={{ borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)" }}>
+            <div style={{ padding: "2px 10px", fontSize: 10, fontWeight: 500, opacity: 0.65, textAlign: "center" }}>
+              Week {w.weekNo}
+            </div>
+
+            {w.rows.map((r, i) => {
+  const isHomeBye = r.home === "BYE";
+  const isAwayBye = r.away === "BYE";
+  const isBye = isHomeBye || isAwayBye;
+
+  const realTeamName = isHomeBye ? r.away : r.home;
+  const realTeamId =
+    isHomeBye ? (r.awayTeamId ?? realTeamName) : (r.homeTeamId ?? realTeamName);
+
+  const byePoints = isBye ? teamWeekScore(league?.id ?? null, realTeamId, w.weekNo) : null;
+
+  return (
+    <div
+      key={`${w.weekNo}-${i}`}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1fr auto 1fr",
+        gap: 10,
+        padding: "7px 10px",
+        borderTop: "1px solid rgba(0,0,0,0.08)",
+        fontSize: 12,
+        fontWeight: 500,
+        alignItems: "center",
+      }}
+    >
+      {/* Left */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr auto",
+          alignItems: "center",
+          gap: 10,
+          minWidth: 0,
+        }}
+      >
+        <div style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {isHomeBye ? realTeamName : r.home}
+        </div>
+
+        <div style={{ fontWeight: 900, textAlign: "right", minWidth: 22, opacity: isBye && isHomeBye ? 1 : 1 }}>
+          {isBye
+            ? (isHomeBye ? byePoints : "—")
+            : (r.homeScore ?? "—")}
+        </div>
+      </div>
+
+      {/* Middle */}
+      <div style={{ opacity: 0.8, fontWeight: 700 }}>
+        {isBye ? "BYE" : "v"}
+      </div>
+
+      {/* Right */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "auto 1fr",
+          alignItems: "center",
+          gap: 10,
+          minWidth: 0,
+        }}
+      >
+        <div style={{ fontWeight: 900, textAlign: "left", minWidth: 22 }}>
+          {isBye
+            ? (isAwayBye ? byePoints : "—")
+            : (r.awayScore ?? "—")}
+        </div>
+
+        <div style={{ textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {isAwayBye ? realTeamName : r.away}
+        </div>
+      </div>
+    </div>
+  );
+})}
+
+
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+
+  function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+    return (
+      <div style={{ position: "fixed", inset: 0, zIndex: 10000 }}>
+        <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)" }} onClick={onClose} />
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+            width: "92%",
+            maxWidth: 420,
+          }}
+        >
+          {children}
+        </div>
+      </div>
+    );
+  }
+
+function JoinLeagueModal() {
+  const [code, setCode] = useState("");
+  const [teamName, setTeamName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <ModalOverlay onClose={() => setModal(null)}>
+      <div
+        style={{
+          borderRadius: 14,
+          background: "linear-gradient(to bottom, #0f172a, #2563eb)",
+          padding: 14,
+          color: "white",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
+          position: "relative",
+        }}
+      >
+        <button
+          onClick={() => setModal(null)}
+          aria-label="Close"
+          style={{
+            position: "absolute",
+            right: 10,
+            top: 10,
+            background: "transparent",
+            border: "none",
+            color: "white",
+            fontSize: 20,
+            fontWeight: 900,
+            cursor: "pointer",
+          }}
+        >
+          ×
+        </button>
+
+        <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 12 }}>Join League</div>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            style={inputStyle()}
+            placeholder="League Code"
+          />
+
+          <input
+            value={teamName}
+            onChange={(e) => setTeamName(e.target.value)}
+            style={inputStyle()}
+            placeholder="Team Name"
+          />
+
+
+          {error && (
+            <div style={{ marginTop: 4, color: "#FCA5A5", fontSize: 12, fontWeight: 800 }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
+            <button
+              onClick={() => {
+                const res = joinLeagueByCode({
+  code,
+  teamName,
+});
+
+
+                if (!res.ok) setError(res.error);
+                else setModal(null);
+              }}
+              style={{ ...saveButton(), height: 36, padding: "0 18px" }}
+            >
+              Join
+            </button>
+          </div>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
+}
+
+
+
+  function CreateLeagueModal() {
+  const [name, setName] = useState("");
+  const [teamName, setTeamName] = useState("");
+
+  const [draftLocal, setDraftLocal] = useState(() => {
+  // default: today + 1 hour
+  const now = Date.now();
+  return toDatetimeLocal(now + 60 * 60 * 1000);
+});
+
+  const [playoffs, setPlayoffs] = useState<PlayoffFormat>("final4");
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <ModalOverlay onClose={() => setModal(null)}>
+      <div
+        style={{
+          borderRadius: 14,
+          background: "linear-gradient(to bottom, #0f172a, #2563eb)",
+          padding: 14,
+          color: "white",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
+          position: "relative",
+        }}
+      >
+        <button
+          onClick={() => setModal(null)}
+          aria-label="Close"
+          style={{
+            position: "absolute",
+            right: 10,
+            top: 10,
+            background: "transparent",
+            border: "none",
+            color: "white",
+            fontSize: 20,
+            fontWeight: 900,
+            cursor: "pointer",
+          }}
+        >
+          ×
+        </button>
+
+        <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 12 }}>Create League</div>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            style={inputStyle()}
+            placeholder="League Name"
+          />
+
+          <input
+            value={teamName}
+            onChange={(e) => setTeamName(e.target.value)}
+            style={inputStyle()}
+            placeholder="Your Team Name"
+          />
+
+
+          <select
+            value={playoffs}
+            onChange={(e) => setPlayoffs(e.target.value as PlayoffFormat)}
+            style={selectStyle()}
+          >
+            <option value="none">None</option>
+            <option value="final2">2 Teams (Final only)</option>
+            <option value="final3">3 Teams (Qualifying Final)</option>
+            <option value="final4">4 Teams (Semi + Final)</option>
+          </select>
+
+          <input
+  type="datetime-local"
+  value={draftLocal}
+  onChange={(e) => setDraftLocal(e.target.value)}
+  style={inputStyle()}
+/>
+
+
+          <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, lineHeight: "14px" }}>
+            League Commissioner can change/set draft order in league settings prior to the draft
+          </div>
+
+          {error && <div style={{ color: "#FCA5A5", fontSize: 12, fontWeight: 800 }}>{error}</div>}
+
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
+            <button
+              onClick={() => {
+                const draftAt = parseDatetimeLocal(draftLocal);
+
+const res = createLeague({
+  name,
+  teamName,
+  playoffFormat: playoffs,
+  draftDateTimeText: draftLocal, // store the raw datetime-local string
+  draftAt, // ✅ new
+});
+
+
+                if (!res.ok) setError(res.error);
+                else setModal(null);
+              }}
+              style={{ ...saveButton(), height: 36, padding: "0 18px" }}
+            >
+              Create
+            </button>
+          </div>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
+}
+
+
+
+  function LeagueSettingsModal() {
+    if (!league) return null;
+
+    const [name, setName] = useState(league.name);
+    const [draftLocal, setDraftLocal] = useState(
+  league.draftDateTimeText || (league.draftAt ? toDatetimeLocal(league.draftAt) : "")
+);
+const [startRound, setStartRound] = useState<number>(league.startRound ?? 1);
+    const [playoffs, setPlayoffs] = useState<PlayoffFormat>(league.playoffFormat);
+const REAL_REGULAR_ROUNDS = league.realRegularSeasonRounds ?? 16;
+const computedTotalWeeks = Math.max(1, REAL_REGULAR_ROUNDS - startRound + 1);
+
+    const readOnly = !isCreator;
+
+    // Draft order (editable)
+const [draftOrderIds, setDraftOrderIds] = useState<string[]>(() =>
+  league.teams.map((t) => t.id)
+);
+
+// If the active league changes while modal open, reset draft order list
+useEffect(() => {
+  setDraftOrderIds(league.teams.map((t) => t.id));
+}, [league.id, league.teams]);
+
+function moveTeam(fromIdx: number, toIdx: number) {
+  setDraftOrderIds((prev) => {
+    if (toIdx < 0 || toIdx >= prev.length) return prev;
+    const next = [...prev];
+    const [item] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, item);
+    return next;
+  });
+}
+
+
+
+    return (
+      <ModalOverlay onClose={() => setModal(null)}>
+        <div
+          style={{
+            borderRadius: 14,
+            background: "linear-gradient(to bottom, #0f172a, #2563eb)",
+            padding: 14,
+            color: "white",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
+            position: "relative",
+          }}
+        >
+          <button
+            onClick={() => setModal(null)}
+            aria-label="Close"
+            style={{
+              position: "absolute",
+              right: 10,
+              top: 10,
+              background: "transparent",
+              border: "none",
+              color: "white",
+              fontSize: 20,
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            ×
+          </button>
+
+          <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 12 }}>League Settings</div>
+
+          <Field label="Change League Name">
+  <input
+    disabled={readOnly}
+    value={name}
+    onChange={(e) => setName(e.target.value)}
+    style={inputStyle(readOnly)}
+  />
+</Field>
+
+<Field label="Change Playoff Format">
+  <select
+    disabled={readOnly}
+    value={playoffs}
+    onChange={(e) => setPlayoffs(e.target.value as PlayoffFormat)}
+    style={selectStyle(readOnly)}
+  >
+    <option value="none">None</option>
+    <option value="final2">2 Teams (Final only)</option>
+    <option value="final3">3 Teams (Qualifying Final)</option>
+    <option value="final4">4 Teams (Semi + Final)</option>
+  </select>
+</Field>
+
+<Field label="Start Round (Real Super Rugby Round)">
+  <input
+    disabled={readOnly}
+    type="number"
+    min={1}
+    max={REAL_REGULAR_ROUNDS}
+    value={startRound}
+    onChange={(e) => setStartRound(Number(e.target.value || 1))}
+    style={inputStyle(readOnly)}
+  />
+  <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, marginTop: 6 }}>
+    Fantasy regular season weeks: {computedTotalWeeks} (of {REAL_REGULAR_ROUNDS})
+  </div>
+</Field>
+
+<Field label="Change Draft Date & Time">
+  <input
+    disabled={readOnly}
+    type="datetime-local"
+    value={draftLocal}
+    onChange={(e) => setDraftLocal(e.target.value)}
+    style={inputStyle(readOnly)}
+  />
+</Field>
+
+
+
+
+          <div style={{ marginTop: 10, fontSize: 12, fontWeight: 900, opacity: 0.9 }}>
+            Draft Order
+          </div>
+
+          <div
+            style={{
+              marginTop: 8,
+              borderRadius: 10,
+              overflow: "hidden",
+              background: "rgba(255,255,255,0.92)",
+              color: "#0f172a",
+              border: "1px solid rgba(0,0,0,0.10)",
+            }}
+          >
+            {draftOrderIds.map((teamId, idx) => {
+  const t = league.teams.find((x) => x.id === teamId);
+  if (!t) return null;
+
+  const upDisabled = readOnly || idx === 0;
+  const downDisabled = readOnly || idx === draftOrderIds.length - 1;
+
+  return (
+    <div
+      key={t.id}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "26px 1fr auto",
+        gap: 10,
+        padding: "10px 10px",
+        borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)",
+        fontSize: 12,
+        fontWeight: 700,
+        alignItems: "center",
+      }}
+    >
+      <div style={{ opacity: 0.7 }}>{idx + 1}</div>
+
+      <div>{t.name}</div>
+
+      {/* Up/Down controls */}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          disabled={upDisabled}
+          onClick={() => moveTeam(idx, idx - 1)}
+          style={{
+            height: 28,
+            width: 34,
+            borderRadius: 10,
+            border: "none",
+            background: "#E2E8F0",
+            color: "#0f172a",
+            fontWeight: 900,
+            cursor: upDisabled ? "not-allowed" : "pointer",
+            opacity: upDisabled ? 0.45 : 1,
+          }}
+          aria-label="Move team up"
+        >
+          ▲
+        </button>
+
+        <button
+          disabled={downDisabled}
+          onClick={() => moveTeam(idx, idx + 1)}
+          style={{
+            height: 28,
+            width: 34,
+            borderRadius: 10,
+            border: "none",
+            background: "#E2E8F0",
+            color: "#0f172a",
+            fontWeight: 900,
+            cursor: downDisabled ? "not-allowed" : "pointer",
+            opacity: downDisabled ? 0.45 : 1,
+          }}
+          aria-label="Move team down"
+        >
+          ▼
+        </button>
+      </div>
+    </div>
+  );
+})}
+
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+            <button
+              disabled={readOnly}
+              onClick={() => {
+                const draftAt = parseDatetimeLocal(draftLocal);
+
+updateLeagueSettings(league.id, {
+  name,
+  playoffFormat: playoffs,
+  draftDateTimeText: draftLocal,
+  draftAt,
+  startRound,
+  totalWeeks: computedTotalWeeks,
+});
+
+
+                setDraftOrder(league.id, draftOrderIds);
+
+                setModal(null);
+              }}
+              style={{
+                ...saveButton(),
+                opacity: readOnly ? 0.45 : 1,
+                cursor: readOnly ? "not-allowed" : "pointer",
+              }}
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </ModalOverlay>
+    );
+  }
+
+  function ModalCard({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+    return (
+      <div
+        style={{
+          borderRadius: 14,
+          background: "rgba(255,255,255,0.20)",
+          border: "1px solid rgba(255,255,255,0.16)",
+          backdropFilter: "blur(12px)",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
+          overflow: "hidden",
+          color: "white",
+        }}
+      >
+        <div style={{ padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontWeight: 900, fontSize: 12 }}>{title}</div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "white",
+              fontSize: 20,
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            ×
+          </button>
+        </div>
+        <div style={{ padding: 12, display: "grid", gap: 10 }}>{children}</div>
+      </div>
+    );
+  }
+
+  function Field({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+      <div style={{ display: "grid", gap: 6 }}>
+        <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.9 }}>{label}</div>
+        {children}
+      </div>
+    );
+  }
+
+  function pillButton(bg: string): React.CSSProperties {
+    return {
+      height: 40,
+      width: "100%",
+      borderRadius: 999,
+      background: bg,
+      color: "white",
+      fontSize: 13,
+      fontWeight: 800,
+      border: "2px solid rgba(255,255,255,0.85)",
+      boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)",
+      cursor: "pointer",
+    };
+  }
+
+  function outlinePillButton(): React.CSSProperties {
+    return {
+      height: 36,
+      width: "100%",
+      borderRadius: 999,
+      background: "rgba(255,255,255,0.12)",
+      color: "white",
+      fontSize: 12,
+      fontWeight: 800,
+      border: "2px solid rgba(255,255,255,0.85)",
+      cursor: "pointer",
+    };
+  }
+
+  function menuItem(active: boolean): React.CSSProperties {
+    return {
+      textAlign: "left",
+      padding: "10px 12px",
+      borderRadius: 10,
+      background: active ? "rgba(255,255,255,0.25)" : "transparent",
+      border: "none",
+      color: "white",
+      fontSize: 14,
+      fontWeight: active ? 800 : 600,
+      cursor: "pointer",
+    };
+  }
+
+  function inputStyle(disabled = false): React.CSSProperties {
+  return {
+    width: "100%",
+    height: 36,
+    borderRadius: 10,
+    border: "1px solid rgba(0,0,0,0.18)",
+    padding: "0 10px",
+    fontSize: 13,
+    fontWeight: 800,
+    outline: "none",
+    background: disabled ? "rgba(255,255,255,0.75)" : "#FFFFFF",
+    color: "#0f172a",
+    opacity: disabled ? 0.75 : 1,
+  };
+}
+
+
+  function selectStyle(disabled = false): React.CSSProperties {
+  return {
+    width: "100%",
+    height: 36,
+    borderRadius: 10,
+    border: "1px solid rgba(0,0,0,0.18)",
+    padding: "0 10px",
+    fontSize: 13,
+    fontWeight: 800,
+    outline: "none",
+    background: disabled ? "rgba(255,255,255,0.75)" : "#FFFFFF",
+    color: "#0f172a",
+    opacity: disabled ? 0.75 : 1,
+  };
+}
+
+
+  function saveButton(): React.CSSProperties {
+    return {
+      height: 34,
+      borderRadius: 999,
+      padding: "0 18px",
+      background: "#22C55E",
+      border: "none",
+      color: "white",
+      fontWeight: 900,
+      fontSize: 12,
+      cursor: "pointer",
+    };
+  }
+
+  if (!league) {
+    return (
+      <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
+        <GradientBg />
+        <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px" }}>
+          <Header />
+          <div style={{ marginTop: 12, ...card35, padding: 14 }}>
+            <div style={{ fontWeight: 900 }}>No active league</div>
+            <div style={{ opacity: 0.85, marginTop: 6 }}>Create or join a league to continue.</div>
+            <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+              <button onClick={() => setModal({ type: "join" })} style={pillButton("#1e3a8a")}>Join League</button>
+              <button onClick={() => setModal({ type: "create" })} style={pillButton("#2563eb")}>Create New League</button>
+            </div>
+          </div>
+        </div>
+
+        <AppMenu
+  open={menuOpen}
+  onClose={() => setMenuOpen(false)}
+  leagues={leagues}
+  activeLeagueId={activeLeagueId}
+  setActiveLeague={setActiveLeague}
+  activeItem="League"
+/>
+
+
+        {modal?.type === "join" && <JoinLeagueModal />}
+        {modal?.type === "create" && <CreateLeagueModal />}
+      </main>
+    );
+  }
+
+  return (
+    <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
+      <GradientBg />
+
+      <div
+        style={{
+          maxWidth: 420,
+          margin: "0 auto",
+          padding: "16px 18px",
+          paddingBottom: "calc(18px + env(safe-area-inset-bottom))",
+        }}
+      >
+        <Header />
+        <Tabs />
+
+        {tab === "Standings" && <StandingsTab />}
+        {tab === "Fixtures" && <FixturesTab />}
+        {tab === "Results" && <ResultsTab />}
+      </div>
+
+      <AppMenu
+  open={menuOpen}
+  onClose={() => setMenuOpen(false)}
+  leagues={leagues}
+  activeLeagueId={activeLeagueId}
+  setActiveLeague={setActiveLeague}
+  activeItem="League"
+/>
+
+
+
+      {modal?.type === "join" && <JoinLeagueModal />}
+      {modal?.type === "create" && <CreateLeagueModal />}
+      {modal?.type === "settings" && <LeagueSettingsModal />}
+    </main>
+  );
+}
+
+function GradientBg() {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: -1,
+        background:
+          "linear-gradient(to bottom, rgb(15, 23, 42), rgb(13, 148, 136), rgb(16, 185, 129))",
+      }}
+    />
+  );
+}
