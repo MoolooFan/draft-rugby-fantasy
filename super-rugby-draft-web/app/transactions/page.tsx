@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 
@@ -522,7 +522,7 @@ const Filters = React.memo(function Filters({
   );
 });
 
-export default function TransactionsPage() {
+function TransactionsPageInner() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -3621,5 +3621,12 @@ const url =
 <ConfirmAcceptTradeModal />
 
     </main>
+  );
+}
+export default function Page() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100svh", width: "100%" }} />}>
+      <TransactionsPageInner />
+    </Suspense>
   );
 }
