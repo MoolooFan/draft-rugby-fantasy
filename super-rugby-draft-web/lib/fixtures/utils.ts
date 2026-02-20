@@ -22,7 +22,7 @@ export function getWeekFirstKickoffMs(fixtures: Fixture[], week: number) {
 }
 
 export function getSelectionLockMs(firstKickoffMs: number) {
-  return firstKickoffMs - 2 * 60 * 60 * 1000; // 2 hours before
+  return firstKickoffMs - 0 * 60 * 60 * 1000; // 2 hours before
 }
 
 export function getCurrentWeek(fixtures: Fixture[], nowMs: number) {
