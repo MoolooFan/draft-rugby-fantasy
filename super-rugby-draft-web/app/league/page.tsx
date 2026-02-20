@@ -941,15 +941,12 @@ function JoinLeagueModal() {
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
             <button
-              onClick={() => {
-                const res = joinLeagueByCode({
-  code,
-  teamName,
-});
+              
+                onClick={async () => {
+  const res = await joinLeagueByCode({ code, teamName });
+  if (!res.ok) setError(res.error);
+  else setModal(null);
 
-
-                if (!res.ok) setError(res.error);
-                else setModal(null);
               }}
               style={{ ...saveButton(), height: 36, padding: "0 18px" }}
             >
@@ -1052,21 +1049,20 @@ function JoinLeagueModal() {
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
             <button
-              onClick={() => {
-                const draftAt = parseDatetimeLocal(draftLocal);
+              onClick={async () => {
+  const draftAt = parseDatetimeLocal(draftLocal);
 
-const res = createLeague({
-  name,
-  teamName,
-  playoffFormat: playoffs,
-  draftDateTimeText: draftLocal, // store the raw datetime-local string
-  draftAt, // ✅ new
-});
+  const res = await createLeague({
+    name,
+    teamName,
+    playoffFormat: playoffs,
+    draftDateTimeText: draftLocal,
+    draftAt,
+  });
 
-
-                if (!res.ok) setError(res.error);
-                else setModal(null);
-              }}
+  if (!res.ok) setError(res.error);
+  else setModal(null);
+}}
               style={{ ...saveButton(), height: 36, padding: "0 18px" }}
             >
               Create

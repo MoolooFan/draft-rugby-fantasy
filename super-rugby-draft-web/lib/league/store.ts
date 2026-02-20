@@ -27,21 +27,22 @@ type LeagueState = {
 
   completeDraft: (leagueId: string) => void;
 
-  createLeague: (params: {
-    name: string;
-    teamName: string;
-    playoffFormat: PlayoffFormat;
-    draftDateTimeText: string; // still used for display
-    draftAt?: number | null; // new: used for logic
-  }) => { ok: true } | { ok: false; error: string };
+createLeague: (params: {
+  name: string;
+  teamName: string;
+  playoffFormat: PlayoffFormat;
+  draftDateTimeText: string;
+  draftAt?: number | null;
+}) => Promise<{ ok: true } | { ok: false; error: string }>;
+
+joinLeagueByCode: (params: {
+  code: string;
+  teamName: string;
+}) => Promise<{ ok: true } | { ok: false; error: string }>;
 
   setCurrentWeek: (leagueId: string, week: number) => void;
   advanceWeek: (leagueId: string) => void;
 
-  joinLeagueByCode: (params: {
-    code: string;
-    teamName: string;
-  }) => { ok: true } | { ok: false; error: string };
 
   updateLeagueSettings: (
     leagueId: string,
@@ -162,95 +163,70 @@ export const useLeagueStore = create<LeagueState>()(
         }));
       },
 
-      createLeague: ({ name, teamName, playoffFormat, draftDateTimeText, draftAt }) => {
-        const userId = getActiveUserId();
-        if (!userId) return { ok: false, error: "Not signed in." };
+      createLeague: async ({ name, teamName, playoffFormat, draftDateTimeText, draftAt }) => {
+  const userId = getActiveUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
-        const leagueId = uid("l");
-        const code = makeCode();
+  try {
+    const res = await fetch("/api/leagues/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, teamName, playoffFormat, draftDateTimeText, draftAt }),
+    });
 
-        const profile = getActiveUserProfile();
-        if (!profile) return { ok: false, error: "Not signed in." };
+    const json = await res.json().catch(() => null);
 
-        const team: LeagueTeam = {
-          id: uid("t"),
-          name: teamName.trim() || "Your Team",
-          initials: "YT",
-          userId: normalizeUserId(profile.username),
-          userInitials: getUserInitialsFromProfile(profile),
-        };
+    if (!res.ok || !json?.ok) {
+      return { ok: false, error: json?.error ?? "Failed to create league." };
+    }
 
-        const cleanDraftText = (draftDateTimeText ?? "").trim();
-        const computedDraftAt = typeof draftAt !== "undefined" ? draftAt : parseDraftAt(cleanDraftText);
-        const REAL_REGULAR_ROUNDS = 16; // <-- set this to the real season regular rounds
-        const startRound = 1; // default: league starts at real round 1
-        const totalWeeks = Math.max(1, REAL_REGULAR_ROUNDS - startRound + 1);
+    // ✅ Expect API to return a full league object
+    const league: League = json.league;
 
-        const league: League = {
-          id: leagueId,
-          name: name.trim() || "New League",
-          code,
-          createdByUserId: userId, // already normalized
-          teams: [team],
-          draftDateTimeText: cleanDraftText || "TBC",
-          draftAt: computedDraftAt,
-          draftStatus: "scheduled",
+    set((s) => ({
+      leagues: [league, ...s.leagues.filter((l) => l.id !== league.id)],
+      activeLeagueId: league.id,
+    }));
 
-          playoffFormat,
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: "Failed to create league." };
+  }
+},
 
-          realRegularSeasonRounds: REAL_REGULAR_ROUNDS,
-          startRound,
+      joinLeagueByCode: async ({ code, teamName }) => {
+  const userId = getActiveUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
-          totalWeeks,
-          currentWeek: 1,
-        };
+  const cleanCode = code.trim().toUpperCase();
+  if (!cleanCode) return { ok: false, error: "Enter a league code." };
 
-        set((s) => ({
-          leagues: [league, ...s.leagues],
-          activeLeagueId: leagueId,
-        }));
+  try {
+    const res = await fetch("/api/leagues/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: cleanCode, teamName }),
+    });
 
-        return { ok: true };
-      },
+    const json = await res.json().catch(() => null);
 
-      joinLeagueByCode: ({ code, teamName }) => {
-        const userId = getActiveUserId();
-        if (!userId) return { ok: false, error: "Not signed in." };
+    if (!res.ok || !json?.ok) {
+      return { ok: false, error: json?.error ?? "Failed to join league." };
+    }
 
-        const cleanCode = code.trim().toUpperCase();
-        if (!cleanCode) return { ok: false, error: "Enter a league code." };
+    // ✅ Expect API returns a full league object (recommended)
+    const league: League = json.league;
 
-        const league = get().leagues.find((l) => l.code.toUpperCase() === cleanCode);
-        if (!league) return { ok: false, error: "League not found." };
+    set((s) => ({
+      leagues: [league, ...s.leagues.filter((l) => l.id !== league.id)],
+      activeLeagueId: league.id,
+    }));
 
-        if (league.teams.some((t) => t.userId === userId)) {
-          return { ok: false, error: "You’re already in this league." };
-        }
-
-        if (league.teams.length >= 10) {
-          return { ok: false, error: "This league is full (10 teams)." };
-        }
-
-        const profile = getActiveUserProfile();
-        if (!profile) return { ok: false, error: "Not signed in." };
-
-        const newTeam: LeagueTeam = {
-          id: uid("t"),
-          name: teamName.trim() || "New Team",
-          initials: "NT",
-          userId: normalizeUserId(profile.username),
-          userInitials: getUserInitialsFromProfile(profile),
-        };
-
-        set((s) => ({
-          leagues: s.leagues.map((l) =>
-            l.id === league.id ? { ...l, teams: [...l.teams, newTeam] } : l
-          ),
-          activeLeagueId: league.id,
-        }));
-
-        return { ok: true };
-      },
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: "Failed to join league." };
+  }
+},
 
       updateLeagueSettings: (leagueId, patch) => {
         set((s) => ({
