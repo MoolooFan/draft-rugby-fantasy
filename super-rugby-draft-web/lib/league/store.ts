@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { League, LeagueTeam, PlayoffFormat } from "./types";
 import { getActiveUserProfile, getUserInitialsFromProfile } from "@/lib/session";
-
+import { supabase } from "@/lib/supabase/client";
 function normalizeUserId(u: string) {
   return u.trim().toLowerCase();
 }
@@ -17,7 +17,8 @@ type LeagueState = {
   leagues: League[];
   activeLeagueId: string | null;
   maybeAutoStartDraft: (leagueId: string) => void;
-
+refreshLeague: (leagueId: string) => Promise<void>;
+startLeagueRealtime: (leagueId: string) => () => void;
   // helpers
   activeLeague: () => League | null;
   isActiveLeagueCreator: () => boolean;
@@ -88,42 +89,68 @@ function parseDraftAt(input: string): number | null {
   return t;
 }
 
+async function syncMyTeamToSupabase(league: League) {
+  const activeUserId = getActiveUserId();
+  if (!activeUserId) return;
+
+  const myTeam = league.teams.find((t) => normalizeUserId(t.userId ?? "") === activeUserId);
+  if (!myTeam) return;
+
+  // Create/Upsert team row in Supabase
+  await fetch("/api/teams", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      teamId: myTeam.id,
+      leagueId: league.id,
+      name: myTeam.name,
+      initials: myTeam.userInitials ?? myTeam.initials ?? null,
+    }),
+  }).catch(() => {});
+}
+
 export const useLeagueStore = create<LeagueState>()(
   persist(
     (set, get) => ({
-      leagues: [
-        {
-          id: "l-1",
-          name: "The Diddy Dunk League",
-          code: "4HX62",
+      leagues: [],
+activeLeagueId: null,
+refreshLeague: async (leagueId) => {
+  try {
+    const res = await fetch(`/api/leagues/get?leagueId=${encodeURIComponent(leagueId)}`);
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json?.ok || !json?.league) return;
 
-          // ✅ IMPORTANT: createdByUserId must match your real session userId (normalized username)
-          createdByUserId: "dev",
+    const league: League = json.league;
 
-          teams: [
-            { id: "t-1", name: "Stouty’s Studs", initials: "ES", userId: "dev", userInitials: "ES" },
-            { id: "t-2", name: "Hughie’s Hornets", initials: "JH", userId: "hugh", userInitials: "JH" },
-            { id: "t-3", name: "Diddy Dunkers", initials: "JB", userId: "diddy", userInitials: "JB" },
-            { id: "t-4", name: "Team 4", initials: "ZO", userId: "user4", userInitials: "ZO" },
-            { id: "t-5", name: "Team 5", initials: "SS", userId: "user5", userInitials: "SS" },
-            { id: "t-6", name: "Team 6", initials: "CL", userId: "user6", userInitials: "CL" },
-          ],
+    set((s) => ({
+      leagues: [league, ...s.leagues.filter((l) => l.id !== league.id)],
+    }));
+  } catch {}
+},
+startLeagueRealtime: (leagueId: string) => {
+  // Subscribe to changes on the teams table for this league
+  const channel = supabase
+    .channel(`teams:${leagueId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "teams",
+        filter: `league_id=eq.${leagueId}`,
+      },
+      async () => {
+        // When ANY team changes, refresh the league object from your API
+        await get().refreshLeague(leagueId);
+      }
+    )
+    .subscribe();
 
-          draftDateTimeText: "2026-02-09T18:30",
-          draftAt: parseDraftAt("2026-02-09T18:30"),
-          draftStatus: "scheduled",
-
-          playoffFormat: "final4",
-
-          realRegularSeasonRounds: 15,
-          startRound: 1,
-
-          totalWeeks: 15,
-          currentWeek: 1,
-        },
-      ],
-      activeLeagueId: "l-1",
-
+  // Return cleanup function so pages can unsubscribe on unmount
+  return () => {
+    supabase.removeChannel(channel);
+  };
+},
       activeLeague: () => {
         const s = get();
         return s.leagues.find((l) => l.id === s.activeLeagueId) ?? null;
@@ -184,11 +211,13 @@ export const useLeagueStore = create<LeagueState>()(
     const league: League = json.league;
 
     set((s) => ({
-      leagues: [league, ...s.leagues.filter((l) => l.id !== league.id)],
-      activeLeagueId: league.id,
-    }));
+  leagues: [league, ...s.leagues.filter((l) => l.id !== league.id)],
+  activeLeagueId: league.id,
+}));
 
-    return { ok: true };
+await syncMyTeamToSupabase(league);
+
+return { ok: true };
   } catch (e) {
     return { ok: false, error: "Failed to create league." };
   }
@@ -221,7 +250,7 @@ export const useLeagueStore = create<LeagueState>()(
       leagues: [league, ...s.leagues.filter((l) => l.id !== league.id)],
       activeLeagueId: league.id,
     }));
-
+await syncMyTeamToSupabase(league);
     return { ok: true };
   } catch (e) {
     return { ok: false, error: "Failed to join league." };
@@ -229,35 +258,52 @@ export const useLeagueStore = create<LeagueState>()(
 },
 
       updateLeagueSettings: (leagueId, patch) => {
-        set((s) => ({
-          leagues: s.leagues.map((l) => {
-            if (l.id !== leagueId) return l;
+  // 1) optimistic local update (keep your existing logic)
+  set((s) => ({
+    leagues: s.leagues.map((l) => {
+      if (l.id !== leagueId) return l;
 
-            const draftLocked = l.draftStatus === "live" || l.draftStatus === "complete";
-            if (draftLocked) {
-              // ignore draft time edits after draft begins/finishes
-              const { draftAt, draftDateTimeText, ...rest } = patch;
-              return { ...l, ...rest };
-            }
+      const draftLocked = l.draftStatus === "live" || l.draftStatus === "complete";
+      if (draftLocked) {
+        const { draftAt, draftDateTimeText, ...rest } = patch;
+        return { ...l, ...rest };
+      }
 
-            const next = { ...l, ...patch };
+      const next = { ...l, ...patch };
 
-            if (typeof patch.startRound === "number") {
-              const rr = next.realRegularSeasonRounds ?? 16;
-              const sr = Math.max(1, Math.min(rr, patch.startRound));
-              const newTotalWeeks = Math.max(1, rr - sr + 1);
+      if (typeof patch.startRound === "number") {
+        const rr = next.realRegularSeasonRounds ?? 16;
+        const sr = Math.max(1, Math.min(rr, patch.startRound));
+        const newTotalWeeks = Math.max(1, rr - sr + 1);
 
-              next.startRound = sr;
-              next.totalWeeks = newTotalWeeks;
+        next.startRound = sr;
+        next.totalWeeks = newTotalWeeks;
+        next.currentWeek = Math.max(1, Math.min(newTotalWeeks, next.currentWeek ?? 1));
+      }
 
-              // keep currentWeek valid
-              next.currentWeek = Math.max(1, Math.min(newTotalWeeks, next.currentWeek ?? 1));
-            }
+      return next;
+    }),
+  }));
 
-            return next;
-          }),
-        }));
-      },
+  // 2) persist to server (fire and forget), then pull source-of-truth
+  (async () => {
+    try {
+      const res = await fetch("/api/leagues/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leagueId, patch }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        console.log("updateLeagueSettings server failed:", json?.error ?? res.statusText);
+        return;
+      }
+      await get().refreshLeague(leagueId);
+    } catch (e) {
+      console.log("updateLeagueSettings exception:", e);
+    }
+  })();
+},
 
       setCurrentWeek: (leagueId, week) =>
         set((state) => ({
@@ -279,26 +325,42 @@ export const useLeagueStore = create<LeagueState>()(
         })),
 
       setDraftOrder: (leagueId, orderedTeamIds) => {
-        set((s) => ({
-          leagues: s.leagues.map((l) => {
-            if (l.id !== leagueId) return l;
+  // 1) optimistic local reorder (keep your existing behavior)
+  set((s) => ({
+    leagues: s.leagues.map((l) => {
+      if (l.id !== leagueId) return l;
+      if (l.draftStatus === "live" || l.draftStatus === "complete") return l;
 
-            // lock draft order once draft is live/complete
-            if (l.draftStatus === "live" || l.draftStatus === "complete") return l;
+      const byId = new Map(l.teams.map((t) => [t.id, t]));
+      const reordered = orderedTeamIds.map((id) => byId.get(id)).filter(Boolean) as LeagueTeam[];
+      const leftovers = l.teams.filter((t) => !orderedTeamIds.includes(t.id));
 
-            const byId = new Map(l.teams.map((t) => [t.id, t]));
-            const reordered = orderedTeamIds
-              .map((id) => byId.get(id))
-              .filter(Boolean) as LeagueTeam[];
+      return { ...l, teams: [...reordered, ...leftovers] };
+    }),
+  }));
 
-            const leftovers = l.teams.filter((t) => !orderedTeamIds.includes(t.id));
-            return { ...l, teams: [...reordered, ...leftovers] };
-          }),
-        }));
-      },
+  // 2) persist to server + refresh league from source-of-truth
+  (async () => {
+    try {
+      const res = await fetch("/api/leagues/setDraftOrder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leagueId, orderedTeamIds }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        console.log("setDraftOrder server failed:", json?.error ?? res.statusText);
+        return;
+      }
+      await get().refreshLeague(leagueId);
+    } catch (e) {
+      console.log("setDraftOrder exception:", e);
+    }
+  })();
+},
     }),
     {
-      name: "sr-leagues-v2",
+      name: "sr-leagues-v3",
       partialize: (s) => ({
         leagues: s.leagues,
         activeLeagueId: s.activeLeagueId,

@@ -3,11 +3,21 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { DraftPhase, Player, Team, TeamRosterState } from "./types";
 import { getSlotCaps, getWcCap } from "./constants";
-import { useLeagueStore } from "@/lib/league/store";
+
 import { fetchRosters, saveRoster } from "@/lib/rosters/api";
 
 type DraftState = {
   phase: DraftPhase;
+
+    // ✅ Persist hydration guard (prevents Next hydration mismatch)
+  hasHydrated: boolean;
+  setHasHydrated: (v: boolean) => void;
+
+  canApplyRosterMove: (input: {
+  teamId: string;
+  addPlayer: Player;
+  dropPlayerId: string;
+}) => boolean;
 
   // League teams + order
   teams: Team[];
@@ -16,6 +26,12 @@ type DraftState = {
     // ✅ Supabase persistence
   hydrateRostersFromDb: (leagueId: string) => Promise<void>;
   persistRosterToDb: (leagueId: string, teamId: string) => Promise<void>;
+
+    // ✅ Draft sync from Supabase
+  refreshFromServer: (leagueId: string) => Promise<void>;
+
+    // ✅ Player index for mapping player_id -> Player
+  playersById: Record<string, Player>;
 
     // ✅ Hydration guard
   hydratedLeagueIds: Record<string, true>;
@@ -54,20 +70,30 @@ type DraftState = {
 
   // Roster rules
   canTeamDraftPlayer: (teamId: string, player: Player) => boolean;
-  addPlayerToRoster: (teamId: string, player: Player) => void;
+  addPlayerToRoster: (teamId: string, player: Player, leagueId?: string) => void;
 
   // ✅ Free agent / waiver roster mutation
   applyRosterMove: (input: {
-    teamId: string;
-    addPlayer: Player;        // the incoming FA
-    dropPlayerId: string;     // the outgoing player id
-  }) => boolean;              // returns success/failure
+  teamId: string;
+  addPlayer: Player;
+  dropPlayerId: string;
+  leagueId?: string;
+}) => boolean;
 
     // Draft actions
   ensurePicksLength: () => void;
   rehydratePlayersFromPool: (allPlayers: Player[]) => void;
-  confirmDraft: (player: Player) => void;
-  autoDraft: (allPlayers: Player[]) => void;
+  confirmDraft: (
+  player: Player,
+  leagueId?: string,
+  onDraftComplete?: (leagueId: string) => void
+) => Promise<void>;
+
+autoDraft: (
+  allPlayers: Player[],
+  leagueId?: string,
+  onDraftComplete?: (leagueId: string) => void
+) => Promise<void>;
 
 
   // Info helpers
@@ -86,6 +112,8 @@ type DraftState = {
   // ✅ League sync
   syncFromLeague: (leagueTeams: Team[], isDraftOrderSet?: boolean) => void;
 };
+
+
 
 function makeEmptyRoster(): TeamRosterState {
   const slotCaps = getSlotCaps();
@@ -108,23 +136,16 @@ function sameIdOrder(a: Team[], b: Team[]) {
 }
 
 
-function finalizeLeagueDraftIfComplete(pickNo: number, total: number) {
+function finalizeLeagueDraftIfComplete(
+  pickNo: number,
+  total: number,
+  leagueId: string | undefined,
+  onDraftComplete?: (leagueId: string) => void
+) {
   if (pickNo !== total) return;
-
-  const leagueState = useLeagueStore.getState();
-  const activeLeagueId = leagueState.activeLeagueId;
-  if (!activeLeagueId) return;
-
-  // Prefer your dedicated action if it exists (your handover says completeDraft exists)
-  if (typeof leagueState.completeDraft === "function") {
-    leagueState.completeDraft(activeLeagueId);
-    return;
-  }
-
-  // Fallback: updateLeagueSettings (older code path)
-  leagueState.updateLeagueSettings?.(activeLeagueId, {
-    draftStatus: "complete",
-  });
+  if (!leagueId) return;
+  if (leagueId === "local") return;
+  onDraftComplete?.(leagueId);
 }
 type Pos = string;
 
@@ -243,12 +264,105 @@ function isTeamRosterState(x: any): x is TeamRosterState {
   return x && typeof x === "object" && ("slots" in x) && ("wildcards" in x);
 }
 
+function normId(x: any) {
+  return String(x ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+
 export const useDraftStore = create<DraftState>()(
   persist(
     (set, get) => ({
+      refreshFromServer: async (leagueId: string) => {
+  if (!leagueId) return;
+
+  try {
+    const res = await fetch(`/api/draft/get?leagueId=${encodeURIComponent(leagueId)}`, {
+  cache: "no-store",
+});
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json?.ok) return;
+
+    const stateRow = json.state;   // draft_state row (or null)
+    const pickRows = json.picks;   // array of draft_picks rows
+
+    set({
+  draftPicks: (pickRows ?? []).map((r: any) => ({
+    id: String(r.id),
+    leagueId: String(r.league_id),
+    week: Number(r.week ?? 1),
+    teamId: String(r.team_id),
+    playerId: String(r.player_id),
+    pickNumber: Number(r.pick_number),
+    round: Number(r.round),
+    createdAtMs: new Date(r.created_at).getTime(),
+  })),
+});
+
+    // Ensure picks array is correct length before inserting into it
+    get().ensurePicksLength();
+
+    // 1) draft_state -> phase/pickIndex/isDraftOrderSet
+    if (stateRow) {
+      set({
+        phase: stateRow.phase === "live" ? "liveDraft" : "preDraft",
+        pickIndex: Number(stateRow.pick_index ?? 1),
+        isDraftOrderSet: !!stateRow.is_draft_order_set,
+      });
+    }
+// ✅ Apply server draft order by reordering teams array
+// Requires draft_state.draft_order_team_ids (text[]) to exist
+if (stateRow?.draft_order_team_ids && Array.isArray(stateRow.draft_order_team_ids)) {
+  const order = stateRow.draft_order_team_ids
+    .map((x: any) => String(x ?? "").trim())
+    .filter(Boolean);
+
+  if (order.length) {
+    set((prev) => {
+      const byId = new Map(prev.teams.map((t) => [t.id, t]));
+      const ordered: Team[] = [];
+
+      // add teams in server order
+      for (const id of order) {
+        const t = byId.get(id);
+        if (t) ordered.push(t);
+      }
+
+      // append any teams not in server list (safety)
+      for (const t of prev.teams) {
+        if (!order.includes(t.id)) ordered.push(t);
+      }
+
+      return { ...prev, teams: ordered };
+    });
+  }
+}
+    // 2) draft_picks -> picks[]
+    set((s) => {
+      const next = [...s.picks];
+
+      for (const r of pickRows ?? []) {
+        const pickNo = Number(r.pick_number);
+        if (!Number.isFinite(pickNo) || pickNo <= 0) continue;
+
+        const pid = String(r.player_id ?? "");
+        const player =
+  s.playersById?.[pid] ??
+  ({ id: pid } as Player); // placeholder, will be hydrated later
+
+next[pickNo - 1] = player;
+      }
+
+      return { ...s, picks: next };
+    });
+  } catch (e) {
+    console.log("refreshFromServer error", e);
+  }
+},
+hasHydrated: false,
+setHasHydrated: (v) => set({ hasHydrated: v }),
       phase: "preDraft",
       draftPicks: [],
-
+      playersById: {},
       // Default teams (will be overwritten once you sync from league)
       teams: [
         { id: "t-1", name: "Stouty’s Studs", initials: "ES" },
@@ -393,25 +507,27 @@ export const useDraftStore = create<DraftState>()(
         }
       },
             rehydratePlayersFromPool: (allPlayers) => {
-        const byId = new Map(allPlayers.map((p) => [p.id, p]));
+  const byId = new Map(allPlayers.map((p) => [p.id, p]));
+  const byIdObj: Record<string, Player> = {};
+  for (const p of allPlayers) byIdObj[p.id] = p;
 
-        set((s) => {
-          const nextPicks = s.picks.map((p) => (p ? (byId.get(p.id) ?? p) : null));
+  set((s) => {
+    const nextPicks = s.picks.map((p) => (p ? (byId.get(p.id) ?? p) : null));
 
-          const nextRosters: Record<string, TeamRosterState> = {};
-          for (const [teamId, r] of Object.entries(s.rosters)) {
-            const nextSlots: Record<string, Player[]> = {};
-            for (const [pos, arr] of Object.entries(r.slots ?? {})) {
-              nextSlots[pos] = (arr as Player[]).map((p) => byId.get(p.id) ?? p);
-            }
-            const nextWc = (r.wildcards ?? []).map((p) => byId.get(p.id) ?? p);
+    const nextRosters: Record<string, TeamRosterState> = {};
+    for (const [teamId, r] of Object.entries(s.rosters)) {
+      const nextSlots: Record<string, Player[]> = {};
+      for (const [pos, arr] of Object.entries(r.slots ?? {})) {
+        nextSlots[pos] = (arr as Player[]).map((p) => byId.get(p.id) ?? p);
+      }
+      const nextWc = (r.wildcards ?? []).map((p) => byId.get(p.id) ?? p);
 
-            nextRosters[teamId] = { slots: nextSlots, wildcards: nextWc };
-          }
+      nextRosters[teamId] = { slots: nextSlots, wildcards: nextWc };
+    }
 
-          return { ...s, picks: nextPicks, rosters: nextRosters };
-        });
-      },
+    return { ...s, picks: nextPicks, rosters: nextRosters, playersById: byIdObj };
+  });
+},
 
       canTeamDraftPlayer: (teamId, player) => {
   const slotCaps = getSlotCaps();
@@ -425,6 +541,7 @@ export const useDraftStore = create<DraftState>()(
     currentPlayers.push(...(r.wildcards ?? []));
   }
 
+
   // already drafted by this team? (optional safeguard)
   if (currentPlayers.some((p) => p?.id === player?.id)) return false;
 
@@ -433,7 +550,7 @@ export const useDraftStore = create<DraftState>()(
   return rebalanceRoster(candidate, slotCaps, wcCap) != null;
 },
 
-addPlayerToRoster: (teamId, player) => {
+addPlayerToRoster: (teamId, player, leagueId) => {
   const slotCaps = getSlotCaps();
   const wcCap = getWcCap();
 
@@ -463,17 +580,46 @@ addPlayerToRoster: (teamId, player) => {
     };
   });
 
-  // ✅ persist to Supabase (fire-and-forget)
-  const leagueId = useLeagueStore.getState().activeLeagueId;
-if (leagueId && nextRoster) {
-  // write the roster we just computed (no need to re-read from state)
+// ✅ persist to Supabase (fire-and-forget)
+if (leagueId && leagueId !== "local" && nextRoster) {
   saveRoster(leagueId, teamId, nextRoster).catch((e) =>
     console.log("saveRoster failed", e)
   );
 }
 },
 
-applyRosterMove: ({ teamId, addPlayer, dropPlayerId }) => {
+
+
+canApplyRosterMove: ({ teamId, addPlayer, dropPlayerId }) => {
+  const slotCaps = getSlotCaps();
+  const wcCap = getWcCap();
+
+  const current = get().rosters[teamId] ?? makeEmptyRoster();
+
+  const currentPlayers: any[] = [];
+  for (const arr of Object.values(current.slots ?? {})) currentPlayers.push(...(arr as any[]));
+  currentPlayers.push(...(current.wildcards ?? []));
+
+  // must be able to find the drop player in roster
+  const dropNorm = normId(dropPlayerId);
+  const dropIdx = currentPlayers.findIndex((p) => normId(p?.id) === dropNorm);
+  if (dropIdx < 0) return false;
+
+  // remove dropped
+  const nextPlayers = currentPlayers.slice();
+  nextPlayers.splice(dropIdx, 1);
+
+  // prevent duplicates
+  if (nextPlayers.some((p) => normId(p?.id) === normId(addPlayer?.id))) return false;
+
+  // add incoming
+  nextPlayers.push(addPlayer);
+
+  // check roster feasibility AFTER drop+add
+  return rebalanceRoster(nextPlayers, slotCaps, wcCap) != null;
+},
+
+applyRosterMove: ({ teamId, addPlayer, dropPlayerId, leagueId }) => {
   console.log("APPLY MOVE", { teamId, addPlayerId: addPlayer?.id, dropPlayerId });
 
   const slotCaps = getSlotCaps();
@@ -487,11 +633,24 @@ applyRosterMove: ({ teamId, addPlayer, dropPlayerId }) => {
 
     // flatten current roster to a player list
     const currentPlayers: any[] = [];
+    
     for (const arr of Object.values(current.slots ?? {})) currentPlayers.push(...(arr as any[]));
     currentPlayers.push(...(current.wildcards ?? []));
 
     // remove dropped
-    const nextPlayers = currentPlayers.filter((p) => p?.id !== dropPlayerId);
+    const dropNorm = String(dropPlayerId ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+const nextPlayers = currentPlayers.filter((p) => {
+  const pid = String(p?.id ?? "");
+  const pidNorm = pid.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return pid !== dropPlayerId && pidNorm !== dropNorm;
+});
+
+const dropped = currentPlayers.length !== nextPlayers.length;
+if (!dropped) {
+  console.log("applyRosterMove: dropPlayerId not found in roster", { dropPlayerId });
+  return s;
+}
 
     // guard: don’t allow duplicates
     if (nextPlayers.some((p) => p?.id === addPlayer?.id)) return s;
@@ -519,14 +678,13 @@ applyRosterMove: ({ teamId, addPlayer, dropPlayerId }) => {
   });
 
   // ✅ persist if we succeeded
-const leagueId = useLeagueStore.getState().activeLeagueId;
-if (success && leagueId) {
+if (success && leagueId && leagueId !== "local") {
   get().persistRosterToDb(leagueId, teamId);
 }
 return success;
 },
 
-      confirmDraft: (player) => {
+      confirmDraft: async (player, leagueId, onDraftComplete) => {
         const s = get();
         if (s.phase !== "liveDraft") return;
 
@@ -542,13 +700,55 @@ return success;
         const teamId = owner?.id;
         if (!teamId) return;
 
-                const leagueId = useLeagueStore.getState().activeLeagueId ?? "local";
+                const lid = leagueId ?? "local";
         const nowMs = Date.now();
         const nTeams = s.teams.length || 1;
         const round = Math.floor((pickNo - 1) / nTeams) + 1;
 
         if (!s.canTeamDraftPlayer(teamId, player)) return;
 const picked: Player = { ...player, secondaryPosAbbrev: player.secondaryPosAbbrev ?? "" } as Player;
+
+// ✅ SERVER MODE: write pick to Supabase via API, then refresh local state from server
+if (lid !== "local") {
+  try {
+    const res = await fetch("/api/draft/pick", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        leagueId: lid,
+        teamId,
+        playerId: picked.id,
+        pickNumber: pickNo,
+        round,
+      }),
+    });
+
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json?.ok) {
+      console.log("confirmDraft server pick failed:", json?.error ?? res.statusText);
+      return;
+    }
+
+    // Update roster locally + persist roster
+    s.addPlayerToRoster(teamId, picked, lid);
+   
+
+    // Pull latest draft_state + draft_picks (source of truth)
+    await get().refreshFromServer(lid);
+
+    const teamName = owner?.name ?? "TBC";
+    set((prev) => ({
+      ...prev,
+      latestPickText: `${teamName} took ${picked.firstName[0]}. ${picked.lastName} with the ${ordinal(pickNo)} Pick`,
+    }));
+
+    finalizeLeagueDraftIfComplete(pickNo, total, lid, onDraftComplete);
+    return; // IMPORTANT: stop here, don’t run the local-only code below
+  } catch (e) {
+    console.log("confirmDraft server pick exception:", e);
+    return;
+  }
+}
 
         // Write the pick (track if it was actually written)
         let wrote = false;
@@ -564,7 +764,7 @@ const picked: Player = { ...player, secondaryPosAbbrev: player.secondaryPosAbbre
           if (!alreadyLogged) {
             nextDraftPicks.push({
               id: `dp_${pickNo}_${nowMs}`,
-              leagueId,
+              leagueId: lid,
               week: 1, // keep 1 for drafts, or change if you have a league week concept
               teamId,
               playerId: picked.id,
@@ -581,8 +781,8 @@ const picked: Player = { ...player, secondaryPosAbbrev: player.secondaryPosAbbre
 
         if (!wrote) return;
 
-        s.addPlayerToRoster(teamId, picked);
-get().persistRosterToDb(leagueId, teamId);
+        s.addPlayerToRoster(teamId, picked, lid);
+if (lid !== "local") get().persistRosterToDb(lid, teamId);
 
         const teamName = owner?.name ?? "TBC";
         set((prev) => ({
@@ -593,10 +793,10 @@ get().persistRosterToDb(leagueId, teamId);
           pickIndex: Math.min(prev.pickIndex + 1, total),
         }));
 
-        finalizeLeagueDraftIfComplete(pickNo, total);
+        finalizeLeagueDraftIfComplete(pickNo, total, lid, onDraftComplete);
       },
 
-      autoDraft: (allPlayers) => {
+      autoDraft: async (allPlayers, leagueId, onDraftComplete) => {
         const s = get();
         s.ensurePicksLength();
 
@@ -623,10 +823,52 @@ get().persistRosterToDb(leagueId, teamId);
 const picked: Player = { ...best, secondaryPosAbbrev: best.secondaryPosAbbrev ?? "" } as Player;
 
         const pickNo = s.pickIndex;
-        const leagueId = useLeagueStore.getState().activeLeagueId ?? "local";
+        const lid = leagueId ?? "local";
         const nowMs = Date.now();
         const nTeams = s.teams.length || 1;
         const round = Math.floor((pickNo - 1) / nTeams) + 1;
+
+        // ✅ SERVER MODE: write pick to Supabase via API, then refresh local state from server
+if (lid !== "local") {
+  try {
+    const res = await fetch("/api/draft/pick", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        leagueId: lid,
+        teamId,
+        playerId: picked.id,
+        pickNumber: pickNo,
+        round,
+      }),
+    });
+
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json?.ok) {
+      console.log("autoDraft server pick failed:", json?.error ?? res.statusText);
+      return;
+    }
+
+    // Update roster locally + persist roster
+    s.addPlayerToRoster(teamId, picked, lid);
+
+
+    // Pull latest draft_state + draft_picks (source of truth)
+    await get().refreshFromServer(lid);
+
+    const teamName = owner?.name ?? "TBC";
+    set((prev) => ({
+      ...prev,
+      latestPickText: `${teamName} auto-drafted ${picked.firstName[0]}. ${picked.lastName} with the ${ordinal(pickNo)} Pick`,
+    }));
+
+    finalizeLeagueDraftIfComplete(pickNo, total, lid, onDraftComplete);
+    return; // IMPORTANT: stop here, don’t run the local-only code below
+  } catch (e) {
+    console.log("autoDraft server pick exception:", e);
+    return;
+  }
+}
 
                 set((prev) => {
           const nextPicks = [...prev.picks];
@@ -638,7 +880,7 @@ const picked: Player = { ...best, secondaryPosAbbrev: best.secondaryPosAbbrev ??
           if (!alreadyLogged) {
             nextDraftPicks.push({
               id: `dp_${pickNo}_${nowMs}`,
-              leagueId,
+              leagueId: lid,
               week: 1,
               teamId,
               playerId: picked.id,
@@ -652,8 +894,9 @@ const picked: Player = { ...best, secondaryPosAbbrev: best.secondaryPosAbbrev ??
         });
 
 
-        s.addPlayerToRoster(teamId, picked);
-get().persistRosterToDb(leagueId, teamId);
+        s.addPlayerToRoster(teamId, picked, lid);
+
+if (lid !== "local") get().persistRosterToDb(lid, teamId);
 
         const teamName = owner?.name ?? "TBC";
         set((prev) => ({
@@ -664,7 +907,7 @@ get().persistRosterToDb(leagueId, teamId);
           pickIndex: Math.min(prev.pickIndex + 1, total),
         }));
 
-        finalizeLeagueDraftIfComplete(pickNo, total);
+        finalizeLeagueDraftIfComplete(pickNo, total, lid, onDraftComplete);
       },
 
       isDrafted: (playerId) => get().picks.some((p) => p?.id === playerId),
@@ -701,62 +944,38 @@ get().persistRosterToDb(leagueId, teamId);
         get().ensurePicksLength();
       },
 
-      // ✅ Sync league → draft store
-      syncFromLeague: (leagueTeams, isOrderSet = true) => {
-  const s = get();
-
-  const setChanged = !sameIdSet(s.teams, leagueTeams);
-
-
-  if (setChanged) {
-    // Different teams (new league / join/leave) => safest reset of draft runtime
-    set((prev) => ({
-      ...prev,
-      teams: leagueTeams,
-      isDraftOrderSet: isOrderSet,
-      pickIndex: 1,
-      picks: [],
-       draftPicks: [],   // ✅ add
-      rosters: {},
-      latestPickText: "No picks yet.",
-      // watchlist intentionally kept
-    }));
-    get().ensurePicksLength();
-    return;
-  }
-
-  // Same team IDs (even if ordering changed) => DO NOT wipe picks/rosters
+      
+// ✅ League sync
+syncFromLeague: (leagueTeams, isOrderSet = true) => {
+  // For future drafts: NEVER wipe picks/rosters here.
+  // Supabase is the source of truth (refreshFromServer + hydrateRostersFromDb).
   set((prev) => ({
     ...prev,
-    teams: leagueTeams, // this updates order + names/initials
+    teams: leagueTeams,
     isDraftOrderSet: isOrderSet,
   }));
 
-  // If order changed and draft is already in progress, picks stay as-is.
-  // Note: displayed "owner" for previous picks is derived from ownerForPickSnake(),
-  // which uses current teams order, so historical owner labels could shift if you reorder mid-draft.
-  // For now that's fine because we don't want to reorder mid-draft anyway.
+  // keep arrays sized correctly as team count changes
   get().ensurePicksLength();
-
-
 },
 
 
     }),
     {
-      name: "sr-draft-store-v2",
+      name: "sr-draft-store-v4",
       partialize: (s) => ({
-        phase: s.phase,
-        teams: s.teams,
-        isDraftOrderSet: s.isDraftOrderSet,
-        roundsPerTeam: s.roundsPerTeam,
-        pickIndex: s.pickIndex,
-        picks: s.picks,
-        draftPicks: s.draftPicks,   // ✅ ADD THIS
-        latestPickText: s.latestPickText,
-        watchlist: s.watchlist,
-        rosters: s.rosters,
-      }),
+  // ✅ Only persist "preferences" or harmless UI state
+  watchlist: s.watchlist,
+
+  // Optional: keep this text if you want, but it can also be removed
+  latestPickText: s.latestPickText,
+
+  // Optional: if you want roundsPerTeam to persist as a preference
+  roundsPerTeam: s.roundsPerTeam,
+}),
+            onRehydrateStorage: () => (state, error) => {
+        if (!error) state?.setHasHydrated(true);
+      },
     }
   )
 );

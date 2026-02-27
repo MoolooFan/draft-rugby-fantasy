@@ -13,7 +13,7 @@ function sign(value: string) {
 export async function getServerUsername(): Promise<string | null> {
   const jar = await cookies();
 
-  const username = jar.get(COOKIE)?.value ?? "";
+    const username = (jar.get(COOKIE)?.value ?? "").trim().toLowerCase();
   const sig = jar.get(SIG)?.value ?? "";
 
   if (!username || !sig) return null;

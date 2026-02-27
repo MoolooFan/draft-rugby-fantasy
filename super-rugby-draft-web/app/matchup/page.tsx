@@ -13,10 +13,12 @@ import fixturesData from "@/data/fixtures-2026.json";
 import type { Fixture } from "@/lib/fixtures/types";
 
 import { AppMenu } from "@/components/AppMenu";
+import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib/league/week";
 
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 import { PointsBreakdownModal } from "@/components/PointsBreakdownModal";
 import { usePlayersStore } from "@/lib/players/store";
+import { useRequireSession } from "@/lib/session/useRequireSession";
 // =========================
 // Jersey assets (Matchup page uses ANGLED if available)
 // Files live in: /public/images/jerseys
@@ -234,14 +236,18 @@ function toMs(x: any): number {
 }
 
 function isFixtureComplete(f: AnyFixture) {
-  if ((f.status ?? "").toLowerCase() === "complete") return true;
+  const s = (f.status ?? "").toLowerCase();
+
+  // your fixtures-2026.json uses "final"
+  if (s === "final" || s === "complete") return true;
+
+  // still treat it as complete if both scores exist
   if (f.homeScore != null && f.awayScore != null) return true;
+
   return false;
 }
 
-function getSelectionDeadlineMs(firstKickoffMs: number) {
-  return firstKickoffMs - 0 * 60 * 60 * 1000;
-}
+
 
 
 
@@ -274,12 +280,10 @@ function useNowTick(ms = 1000) {
 }
 
 export default function MatchupPage() {
+  useRequireSession();
   const router = useRouter();
 
-  useEffect(() => {
-    const u = getActiveUser();
-    if (!u) router.replace("/");
-  }, [router]);
+
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [cardOpen, setCardOpen] = useState(false);
@@ -331,17 +335,21 @@ const getLivePlayerById = useDraftStore((s) => (s as any).getLivePlayerById ?? n
 
   const nowMs = useNowTick(10_000);
 
-const weekNo = activeLeague?.currentWeek ?? 1;
+const weekNo = activeLeague?.currentWeek ?? 1; // fantasy week
+const startRound = activeLeague?.startRound ?? 1;
+const realRound = useMemo(() => fantasyWeekToRealRound(startRound, weekNo), [startRound, weekNo]);
 
 const deadlineMs = useMemo(() => {
-  const wk = normalizedFixtures.filter((f) => f.week === weekNo);
+  const wk = normalizedFixtures.filter((f) => f.week === realRound);
   if (!wk.length) return 0;
 
   const firstKickoff = Math.min(...wk.map((f) => (f as any).kickoffMs));
   if (!Number.isFinite(firstKickoff) || firstKickoff <= 0) return 0;
 
-  return getSelectionDeadlineMs(firstKickoff);
-}, [normalizedFixtures, weekNo]);
+  return selectionDeadlineFromFirstKickoff(firstKickoff);
+}, [normalizedFixtures, realRound]);
+
+
 
 const deadlineLocked = deadlineMs ? nowMs >= deadlineMs : false;
   // --- Live sheet data (must be inside component) ---
@@ -384,7 +392,7 @@ const weekPointsByPlayerId = useMemo(() => {
   const m = new Map<string, number>();
 
   for (const row of roundRows ?? []) {
-    if (rowRound(row) !== weekNo) continue;
+    if (rowRound(row) !== realRound) continue; // ✅ REAL round
 
     const pidRaw = rowPlayerId(row);
     if (!pidRaw) continue;
@@ -394,7 +402,7 @@ const weekPointsByPlayerId = useMemo(() => {
   }
 
   return m;
-}, [roundRows, weekNo]);
+}, [roundRows, realRound]);
 
 function pointsForPlayer(p: Player | null) {
   const pid = getPlayerSheetId(p);
@@ -568,14 +576,18 @@ const rightName = nameByTeamId(rightTeamId);
 
 
   // --- Read locked snapshots for both teams (or blank) ---
-  const leagueId = activeLeague?.id ?? null;
+const leagueId = activeLeague?.id ?? null;
+const hasLeagueId = !!leagueId; // ✅ safeguard
 
   function readFinalized(teamId: string | null) {
   if (typeof window === "undefined") return null;
+  if (!hasLeagueId) return null;        // ✅ ADD
   if (!teamId) return null;
+
   const key = finalizedLineupKey(leagueId, weekNo, teamId);
   const raw = window.localStorage.getItem(key);
   if (!raw) return null;
+
   try {
     return JSON.parse(raw) as Lineup;
   } catch {
@@ -584,17 +596,20 @@ const rightName = nameByTeamId(rightTeamId);
 }
 
   const readSnapshot = (teamId: string | null): LockedSnapshot | null => {
-    if (typeof window === "undefined") return null;
-    if (!teamId) return null;
-    const key = matchupSnapshotKey(leagueId, weekNo, teamId);
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw) as LockedSnapshot;
-    } catch {
-      return null;
-    }
-  };
+  if (typeof window === "undefined") return null;
+  if (!hasLeagueId) return null;        // ✅ ADD
+  if (!teamId) return null;
+
+  const key = matchupSnapshotKey(leagueId, weekNo, teamId);
+  const raw = window.localStorage.getItem(key);
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw) as LockedSnapshot;
+  } catch {
+    return null;
+  }
+};
 
   const leftSnap = useMemo(() => readSnapshot(leftTeamId), [leagueId, weekNo, leftTeamId, deadlineLocked]);
 const rightSnap = useMemo(() => readSnapshot(rightTeamId), [leagueId, weekNo, rightTeamId, deadlineLocked]);
@@ -613,9 +628,9 @@ const rightC = rightBlank ? null : rightSnap!.captainId;
 const rightV = rightBlank ? null : rightSnap!.viceId;
 
 const srWeekComplete = useMemo(() => {
-  const wk = normalizedFixtures.filter((f) => f.week === weekNo);
+  const wk = normalizedFixtures.filter((f) => f.week === realRound);
   return wk.length ? wk.every(isFixtureComplete) : false;
-}, [normalizedFixtures, weekNo]);
+}, [normalizedFixtures, realRound]);
 
 // Captain multiplier (for display + totals)
 const CAP_MULT = 2;
@@ -697,6 +712,7 @@ useEffect(() => {
 useEffect(() => {
   if (typeof window === "undefined") return;
   if (!srWeekComplete) return;
+   if (!hasLeagueId) return;             // ✅ ADD
 
   // Only finalize if we have real locked lineups
   if (!leftBase || !rightBase) return;
@@ -766,7 +782,7 @@ function streakText(s: Streak) {
     const t = (p.teamCode ?? "").toLowerCase();
     const f = normalizedFixtures.find(
   (x) =>
-    x.week === weekNo &&
+    x.week === realRound &&
     ((x.homeTeam ?? "").toLowerCase().includes(t) || (x.awayTeam ?? "").toLowerCase().includes(t))
 );
 
@@ -983,7 +999,7 @@ function openPointsBreakdown(p: Player, owned: boolean, side: "left" | "right") 
 
           
           <div style={{ marginTop: 10, fontSize: 16, fontWeight: 950, opacity: 0.95 }}>
-  Week {weekNo}
+  Week {weekNo} • Round {realRound}
 </div>
 
         </div>

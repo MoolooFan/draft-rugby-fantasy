@@ -1,10 +1,9 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { getActiveUser } from "@/lib/session";
+import { useRequireSession } from "@/lib/session/useRequireSession";
+import { getActiveTimezone } from "@/lib/session";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
-
 import type { Fixture } from "@/lib/fixtures/types";
 
 import { AppMenu } from "@/components/AppMenu";
@@ -282,26 +281,15 @@ function teamLogoSrc(teamCodeOrName: string | null | undefined) {
 }
 
 export default function FixturesPage() {
-  const router = useRouter();
-
-  // Route protection
-  useEffect(() => {
-    const user = getActiveUser();
-    if (!user) router.replace("/");
-  }, [router]);
+useRequireSession();
 
   // Menu + leagues (for AppMenu)
   const [menuOpen, setMenuOpen] = useState(false);
   const leagues = useLeagueStore((s) => s.leagues);
   const activeLeague = useLeagueStore((s) => s.activeLeague());
   const setActiveLeague = useLeagueStore((s) => s.setActiveLeague);
-
-  // User timezone (set during create account)
-  // Assumption: getActiveUser() returns something like { timezone?: "Australia/Sydney" }
-  const userTz = useMemo(() => {
-    const u: any = getActiveUser();
-    return u?.timezone || u?.timeZone || u?.tz || undefined;
-  }, []);
+// User timezone (saved in session)
+const userTz = useMemo(() => getActiveTimezone(), []);
 
   const [fixtures, setFixtures] = useState<AnyFixture[]>([]);
 const [loading, setLoading] = useState(true);

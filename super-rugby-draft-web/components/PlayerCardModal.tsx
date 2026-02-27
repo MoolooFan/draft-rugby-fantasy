@@ -96,7 +96,7 @@ const TEAM_CHIP_BORDER_WIDTH = 3;
 // DEV TOGGLES (easy remove)
 // =========================
 const DEV_SEED_PLAYER_TX = true; // <- set false (or delete) to remove the demo seeding
-
+const ENABLE_TRADES = false; // 🔒 design-only: keep button, block navigation
 /**
  * =========================
  * POSITION THEMES
@@ -1140,7 +1140,14 @@ const teamLabelFull =
 
     <button
       key={a.label}
-      onClick={a.onClick}
+      onClick={() => {
+  const isTradeAction = a.label.toLowerCase().includes("trade");
+
+  // 🔒 trades disabled => do nothing (design stays)
+  if (isTradeAction && !ENABLE_TRADES) return;
+
+  a.onClick();
+}}
       style={{
         height: 40,
         borderRadius: 12,

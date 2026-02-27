@@ -60,23 +60,20 @@ export type FreeAgentTransfer = {
   leagueId: string;
   week: number;
   teamId: string;
-
   addPlayerId: string;
   dropPlayerId: string | null;
-
-
-  status: FreeAgentTransferStatus;
-
+  status: "PROCESSED" | "FAILED" | "PENDING";
+  decidedReason?: string; // ✅ ADD THIS
   createdAtMs: number;
   updatedAtMs: number;
 };
 
 export type DropLock = {
-  playerId: string;
   leagueId: string;
   week: number;
+  playerId: string;
   lockedUntilMs: number;
-  droppedByTeamId: string;
-  droppedAtMs: number;
-  reason: "WAIVER_PROCESSING" | "FREE_AGENCY_DROP";
+  droppedByTeamId?: string;
+  droppedAtMs?: number;
+  reason?: string;
 };

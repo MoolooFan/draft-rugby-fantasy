@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server";
 
 const COOKIE = "sr_user";
 const SIG = "sr_sig";
@@ -12,26 +12,72 @@ function sign(value: string) {
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
-  const username = String(body?.username ?? "").trim();
 
-  if (!username || username.length < 2) {
+  const action = String(body?.action ?? "signin").trim(); // "signin" | "create"
+  const usernameRaw = String(body?.username ?? "").trim();
+
+  if (!usernameRaw || usernameRaw.length < 2) {
     return NextResponse.json({ ok: false, error: "Username required" }, { status: 400 });
   }
 
-  // ✅ claim global-unique username
-  const { error } = await supabaseServer
-    .from("users")
-    .insert({ username });
+  const username_norm = usernameRaw.trim().toLowerCase();
 
-  if (error) {
-    // supabase returns conflict-ish error if username exists
-    return NextResponse.json({ ok: false, error: "Username already taken" }, { status: 409 });
+  // 1) If action === "signin", user MUST already exist
+  if (action === "signin") {
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .select("id, username, username_norm")
+      .eq("username_norm", username_norm)
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json({ ok: false, error: "Failed to sign in" }, { status: 500 });
+    }
+    if (!data) {
+      return NextResponse.json({ ok: false, error: "Account not found. Please create an account first." }, { status: 404 });
+    }
+
+    const sig = sign(username_norm);
+    const res = NextResponse.json({ ok: true, username: username_norm });
+
+    res.cookies.set(COOKIE, username_norm, { httpOnly: true, sameSite: "lax", path: "/" });
+    res.cookies.set(SIG, sig, { httpOnly: true, sameSite: "lax", path: "/" });
+
+    return res;
   }
 
-  const sig = sign(username);
+  // 2) action === "create" => create if doesn't exist, error if taken
+  if (action === "create") {
+    const { data: existing, error: checkErr } = await supabaseAdmin
+      .from("users")
+      .select("id")
+      .eq("username_norm", username_norm)
+      .maybeSingle();
 
-  const res = NextResponse.json({ ok: true, username });
-  res.cookies.set(COOKIE, username, { httpOnly: true, sameSite: "lax", path: "/" });
-  res.cookies.set(SIG, sig, { httpOnly: true, sameSite: "lax", path: "/" });
-  return res;
+    if (checkErr) {
+      return NextResponse.json({ ok: false, error: "Failed to create account" }, { status: 500 });
+    }
+    if (existing) {
+      return NextResponse.json({ ok: false, error: "That username is already taken." }, { status: 409 });
+    }
+
+    const { error: insertErr } = await supabaseAdmin
+      .from("users")
+      .insert({ username: usernameRaw, username_norm });
+
+    if (insertErr) {
+      return NextResponse.json({ ok: false, error: "Failed to create account" }, { status: 500 });
+    }
+
+    const sig = sign(username_norm);
+    const res = NextResponse.json({ ok: true, username: username_norm });
+
+    res.cookies.set(COOKIE, username_norm, { httpOnly: true, sameSite: "lax", path: "/" });
+    res.cookies.set(SIG, sig, { httpOnly: true, sameSite: "lax", path: "/" });
+
+    return res;
+  }
+
+  // unknown action
+  return NextResponse.json({ ok: false, error: "Invalid action" }, { status: 400 });
 }

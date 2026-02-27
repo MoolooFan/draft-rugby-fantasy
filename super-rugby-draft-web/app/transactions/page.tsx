@@ -3,21 +3,22 @@
 import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-
 import { AppMenu } from "@/components/AppMenu";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 
 import { TEAM_OPTIONS, POSITION_OPTIONS } from "@/lib/constants";
-import { getActiveUser, getActiveUsername, getActiveTimezone } from "@/lib/session";
+import { getActiveUsername, getActiveTimezone } from "@/lib/session";
+import { useRequireSession } from "@/lib/session/useRequireSession";
+
 import { useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
+import { useTransactionsStore } from "@/lib/transactions/store";
+import { usePlayersStore } from "@/lib/players/store";
+
+import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 
 import playersData from "@/data/players.json";
 import fixturesData from "@/data/fixtures-2026.json";
-
-import { useTransactionsStore } from "@/lib/transactions/store";
-import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
-import { usePlayersStore } from "@/lib/players/store";
 
 // -----------------------
 // Types (match your player shape)
@@ -129,7 +130,7 @@ function isFixtureComplete(f: AnyFixture) {
 }
 
 function getSelectionDeadlineMs(firstKickoffMs: number) {
-  return firstKickoffMs - 0 * 60 * 60 * 1000; // 2h before first kickoff
+  return firstKickoffMs - 0 * 60 * 60 * 1000; // 1h before first kickoff
 }
 
 function getWeekFirstKickoffMs(fixtures: AnyFixture[], week: number) {
@@ -247,6 +248,12 @@ function getInitials(name: string | null | undefined) {
   const first = parts[0]?.[0] ?? "?";
   const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : "";
   return (first + last).toUpperCase();
+}
+
+function initialsForTeamId(teamId: string, activeLeague: any) {
+  const t = activeLeague?.teams?.find((x: any) => x.id === teamId);
+  const base = t?.userInitials || t?.userId || t?.name || teamId;
+  return getInitials(String(base));
 }
 
 type FiltersProps = {
@@ -522,21 +529,63 @@ const Filters = React.memo(function Filters({
   );
 });
 
+function extractRosterIdsClient(data: any): string[] {
+  // Accept a bunch of possible shapes:
+  // - { playerIds: ["p1","p2"] }
+  // - { slots: { HO: ["p1"], PR: [{id:"p2"}], ... }, wildcards: [...] }
+  // - ["p1","p2"] (rare but possible)
+
+  const ids: string[] = [];
+
+  const pushItem = (x: any) => {
+    if (!x) return;
+    if (typeof x === "string" || typeof x === "number") {
+      ids.push(String(x));
+      return;
+    }
+    if (typeof x === "object") {
+      // common shapes
+      if (x.id != null) ids.push(String(x.id));
+      else if (x.playerId != null) ids.push(String(x.playerId));
+    }
+  };
+
+  // If roster is literally an array of ids
+  if (Array.isArray(data)) {
+    data.forEach(pushItem);
+    return ids;
+  }
+
+  if (Array.isArray(data?.playerIds)) {
+    data.playerIds.forEach(pushItem);
+    return ids;
+  }
+
+  // slots
+  const slots = data?.slots ?? {};
+  for (const arr of Object.values(slots)) {
+    if (!Array.isArray(arr)) continue;
+    arr.forEach(pushItem);
+  }
+
+  // wildcards
+  const wildcards = data?.wildcards ?? [];
+  if (Array.isArray(wildcards)) wildcards.forEach(pushItem);
+
+  return ids;
+}
+
 function TransactionsPageInner() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const ENABLE_TRADES = false;
 
   const returnTo = useMemo(() => {
     const qs = searchParams?.toString?.() ?? "";
     return qs ? `${pathname}?${qs}` : pathname;
   }, [pathname, searchParams]);
 
-  // Route protection
-  useEffect(() => {
-    const u = getActiveUser();
-    if (!u) router.replace("/");
-  }, [router]);
 
   // Menu + league
   const [menuOpen, setMenuOpen] = useState(false);
@@ -567,19 +616,15 @@ const watchlist = useMemo(() => watchlistRaw ?? EMPTY_OBJ, [watchlistRaw]);
 
   const toggleWatchlist = useDraftStore((s) => (s as any).toggleWatchlist ?? (() => {}));
 
-// Transactions store (stable API)
-const claims = useTransactionsStore((s) => s.claims);
-const trades = useTransactionsStore((s) => s.trades);
-const dropLocks = useTransactionsStore((s) => s.dropLocks);
-const freeAgentTransfers = useTransactionsStore((s) => s.freeAgentTransfers);
+  // Transactions store (local fallback data)
+const claims = useTransactionsStore((s: any) => s.claims ?? []);
+const trades = useTransactionsStore((s: any) => s.trades ?? []);
+const dropLocks = useTransactionsStore((s: any) => s.dropLocks ?? []);
 
-const addClaim = useTransactionsStore((s) => s.addClaim);
-const removeClaim = useTransactionsStore((s) => s.removeClaim);
-const cleanupExpiredDropLocks = useTransactionsStore((s) => s.cleanupExpiredDropLocks);
-const declinePendingTradesAtDeadline = useTransactionsStore((s) => s.declinePendingTradesAtDeadline);
-const processWaiversForWeek = useTransactionsStore((s) => s.processWaiversForWeek);
-
-const addFreeAgentTransfer = useTransactionsStore((s) => s.addFreeAgentTransfer);
+// this name varies in your codebase; keep it tolerant:
+const freeAgentTransfers = useTransactionsStore(
+  (s: any) => s.freeAgentTransfers ?? s.freeAgents ?? s.freeAgencyTransfers ?? []
+);
 
 // -----------------------
 // Live Players (Google Sheet) hydration
@@ -595,22 +640,21 @@ useEffect(() => {
 }, [livePlayersLoaded, refreshLivePlayers]);
 
 
-// ✅ Optional trade actions (guarded)
-const acceptTradeProposal = useTransactionsStore((s) => (s as any).acceptTradeProposal);
-const declineTradeProposal = useTransactionsStore((s) => (s as any).declineTradeProposal);
-const cancelTradeProposal = useTransactionsStore((s) => (s as any).cancelTradeProposal);
-
 
   // Your team ID in league (prefer matching team.userId to active username)
   const yourLeagueTeamId = useMemo(() => {
-    const l = activeLeague;
-    if (!l) return null;
-    if (userId) {
-      const t = l.teams.find((x: any) => x.userId === userId);
-      if (t) return t.id;
-    }
-    return l.teams[0]?.id ?? null;
-  }, [activeLeague, userId]);
+  const l = activeLeague;
+  if (!l) return null;
+
+  const teams = Array.isArray((l as any).teams) ? (l as any).teams : [];
+
+  if (userId) {
+    const t = teams.find((x: any) => x.userId === userId);
+    if (t) return t.id;
+  }
+
+  return teams[0]?.id ?? null;
+}, [activeLeague, userId]);
 
   // Draft team ID (align to league team if possible)
   const yourDraftTeamId = useMemo(() => {
@@ -624,6 +668,14 @@ const cancelTradeProposal = useTransactionsStore((s) => (s as any).cancelTradePr
     if (!yourDraftTeamId) return "Your Team";
     return draftTeams.find((t: any) => t.id === yourDraftTeamId)?.name ?? "Your Team";
   }, [draftTeams, yourDraftTeamId]);
+
+    // Players (normalize teamCode like Draft Room)
+  const allPlayers: Player[] = useMemo(() => {
+    return (playersData as Player[]).map((p) => ({
+      ...p,
+      teamCode: normalizeTeamCode(p.teamCode),
+    }));
+  }, []);
 
   // Fixtures + week logic (matches Team Selection)
   const fixtures = useMemo(
@@ -706,70 +758,119 @@ const deadlineText = useMemo(() => {
   // -----------------------
   // Drop-lock cleanup (GUARDED to prevent render loops)
   // -----------------------
-  const hasExpiredDropLocks = useMemo(() => {
-    if (!activeLeague?.id) return false;
-    return dropLocks.some((l: any) => l.leagueId === activeLeague.id && l.lockedUntilMs <= nowMs);
-  }, [dropLocks, activeLeague?.id, nowMs]);
 
-  useEffect(() => {
-    if (!activeLeague?.id) return;
-    if (!hasExpiredDropLocks) return;
-    cleanupExpiredDropLocks(nowMs);
-  }, [cleanupExpiredDropLocks, nowMs, activeLeague?.id, hasExpiredDropLocks]);
+
+const hasExpiredDropLocks = useMemo(() => {
+  if (!activeLeague?.id) return false;
+  return (dropLocks as any[]).some(
+    (l: any) => l.leagueId === activeLeague.id && l.lockedUntilMs <= nowMs
+  );
+}, [dropLocks, activeLeague?.id, nowMs]);
+
+useEffect(() => {
+  if (!activeLeague?.id) return;
+  if (!hasExpiredDropLocks) return;
+
+  (async () => {
+    await fetch("/api/drop-locks/cleanup", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ leagueId: activeLeague.id, nowMs }),
+    });
+
+    await refreshTransactionsForLeague(activeLeague.id);
+  })();
+}, [activeLeague?.id, hasExpiredDropLocks, nowMs]);
 
   // Auto-decline pending trades at the live week selection deadline (one-time write)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!activeLeague?.id) return;
-    if (!liveWeekDeadlineMs) return;
-    if (nowMs < liveWeekDeadlineMs) return;
-
-    const key = `tx_autodecline_${activeLeague.id}_wk${liveWeek}`;
-    if (window.localStorage.getItem(key)) return;
-
-    declinePendingTradesAtDeadline(activeLeague.id, "Auto-declined at team selection deadline", Date.now());
-    window.localStorage.setItem(key, "1");
-  }, [activeLeague?.id, liveWeekDeadlineMs, nowMs, liveWeek, declinePendingTradesAtDeadline]);
-
-  // Auto-process waivers at the waiver deadline (one-time per league+week)
 useEffect(() => {
+  if (!ENABLE_TRADES) return;
   if (typeof window === "undefined") return;
+  if (!activeLeague?.id) return;
+  if (!liveWeekDeadlineMs) return;
+  if (nowMs < liveWeekDeadlineMs) return;
+
+  const key = `tx_autodecline_${activeLeague.id}_wk${liveWeek}`;
+  if (window.localStorage.getItem(key)) return;
+
+  (async () => {
+    await fetch(`/api/trades/decline-expired`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        leagueId: activeLeague.id,
+        deadlineMs: liveWeekDeadlineMs,
+        reason: "Auto-declined at team selection deadline",
+      }),
+    });
+
+    await refreshTransactionsForLeague(activeLeague.id);
+    window.localStorage.setItem(key, "1");
+  })();
+}, [ENABLE_TRADES, activeLeague?.id, liveWeekDeadlineMs, nowMs, liveWeek]);
+
+// Auto-process waivers globally (idempotent via DB guard)
+useEffect(() => {
   if (!activeLeague?.id) return;
   if (!waiverDeadlineMs) return;
   if (nowMs < waiverDeadlineMs) return;
 
-  const key = `tx_autowaivers_${activeLeague.id}_wk${selectionWeek}`;
-  if (window.localStorage.getItem(key)) return;
+  (async () => {
+    await fetch(`/api/waivers/process`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        leagueId: activeLeague.id,
+        week: selectionWeek,
+      }),
+    });
 
-  processWaiversForWeek(activeLeague.id, selectionWeek, Date.now());
-  window.localStorage.setItem(key, "1");
-}, [activeLeague?.id, waiverDeadlineMs, nowMs, selectionWeek, processWaiversForWeek]);
+    await refreshTransactionsForLeague(activeLeague.id);
 
+    // refresh rosters
+    const res = await fetch(`/api/rosters?leagueId=${encodeURIComponent(activeLeague.id)}`, { cache: "no-store" });
+    const json = await res.json().catch(() => null);
+
+    if (res.ok && json?.ok) {
+      const next: Record<string, any> = {};
+      for (const row of json.data ?? []) {
+        if (!row?.team_id) continue;
+        next[row.team_id] = row.data ?? {};
+      }
+      setLeagueRosters(next);
+      setLeagueRostersLoaded(true);
+    }
+  })();
+}, [activeLeague?.id, waiverDeadlineMs, nowMs, selectionWeek]);
+
+const [leagueRosters, setLeagueRosters] = useState<Record<string, any>>({});
+const [leagueRostersLoaded, setLeagueRostersLoaded] = useState(false);
+const [txLoaded, setTxLoaded] = useState(false);
+const [txClaims, setTxClaims] = useState<any[]>([]);
+const [txTrades, setTxTrades] = useState<any[]>([]);
+const [txDropLocks, setTxDropLocks] = useState<any[]>([]);
+const [txFreeAgents, setTxFreeAgents] = useState<any[]>([]);
+
+// ✅ single source of truth for ownership checks
+const rostersForOwnership = useMemo(() => {
+  // prefer server rosters when loaded, fallback to local draft store
+  if (leagueRostersLoaded && leagueRosters && Object.keys(leagueRosters).length) return leagueRosters;
+  return rosters ?? {};
+}, [leagueRostersLoaded, leagueRosters, rosters]);
 
   // -----------------------
   // Ownership map (playerId -> ownerTeamId)
   // -----------------------
-  const ownerByPlayerId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const [teamId, roster] of Object.entries(rosters ?? {})) {
-      const r: any = roster as any;
-      const seen = new Set<string>();
+const ownerByPlayerId = useMemo(() => {
+  const map = new Map<string, string>();
+  const source = rostersForOwnership;
 
-      for (const arr of Object.values(r?.slots ?? {})) {
-        for (const p of (arr as any[]) ?? []) {
-          if (!p?.id || seen.has(p.id)) continue;
-          seen.add(p.id);
-          map.set(p.id, teamId);
-        }
-      }
-      for (const p of (r?.wildcards ?? []) as any[]) {
-        if (!p?.id || seen.has(p.id)) continue;
-        seen.add(p.id);
-        map.set(p.id, teamId);
-      }
-    }
-    return map;
-  }, [rosters]);
+  for (const [teamId, roster] of Object.entries(source ?? {})) {
+    const ids = extractRosterIdsClient(roster);
+    for (const pid of ids) map.set(pid, teamId);
+  }
+  return map;
+}, [rostersForOwnership]);
 
   const isPlayerOwned = (playerId: string) => ownerByPlayerId.has(playerId);
 
@@ -791,6 +892,7 @@ useEffect(() => {
   const [modalPlayer, setModalPlayer] = useState<
   (Player & { status?: any; weeklyStatus?: any }) | null
 >(null);
+
 // -----------------------
 // Confirm Accept Trade Modal State
 // -----------------------
@@ -806,6 +908,57 @@ function openAcceptConfirm(trade: any) {
 }
 
 
+useEffect(() => {
+  const leagueId = String(activeLeague?.id ?? "");
+if (!leagueId) return;
+
+  let cancelled = false;
+
+  async function load() {
+    try {
+      setLeagueRostersLoaded(false);
+
+      const res = await fetch(`/api/rosters?leagueId=${encodeURIComponent(leagueId)}`, {
+        cache: "no-store",
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || !json?.ok) {
+        console.warn("Failed to load league rosters", json?.error ?? res.statusText);
+        if (!cancelled) {
+          setLeagueRosters({});
+          setLeagueRostersLoaded(true);
+        }
+        return;
+      }
+
+      // Expect rows like: [{ team_id, data, updated_at }, ...]
+      const next: Record<string, any> = {};
+      for (const row of json.data ?? []) {
+        if (!row?.team_id) continue;
+        next[row.team_id] = row.data ?? {};
+      }
+
+      if (!cancelled) {
+        setLeagueRosters(next);
+        setLeagueRostersLoaded(true);
+      }
+    } catch (e) {
+      console.warn("Failed to load league rosters", e);
+      if (!cancelled) {
+        setLeagueRosters({});
+        setLeagueRostersLoaded(true);
+      }
+    }
+  }
+
+  load();
+  return () => {
+    cancelled = true;
+  };
+}, [activeLeague?.id]);
+
 function closeConfirm() {
   setConfirmOpen(false);
   setConfirmTrade(null);
@@ -820,12 +973,9 @@ function confirmAcceptTrade() {
     return;
   }
 
-  if (typeof acceptTradeProposal !== "function") return;
 
-  acceptTradeProposal(confirmTrade.id, Date.now(), selectionDeadlineMs);
-
-
-  closeConfirm();
+apiAcceptTrade(confirmTrade.id);
+closeConfirm();
 }
 
 
@@ -1118,48 +1268,53 @@ const [infoMode, setInfoMode] = useState<InfoMode>("DRAFT_RANK");
   }
 
   // Your current roster players (unique by id)
-  const yourRosterPlayers: Player[] = useMemo(() => {
-    if (!yourDraftTeamId) return [];
-    const r: any = (rosters as any)?.[yourDraftTeamId];
-    if (!r) return [];
+const yourRosterPlayers: Player[] = useMemo(() => {
+  if (!yourDraftTeamId) return [];
+  const source = rostersForOwnership as any;
+  const r: any = source?.[yourDraftTeamId];
+  if (!r) return [];
 
-    const list: Player[] = [];
-    const seen = new Set<string>();
+  const ids = extractRosterIdsClient(r);
+  const seen = new Set<string>();
+  const list: Player[] = [];
 
-    for (const arr of Object.values(r?.slots ?? {})) {
-      for (const p of (arr as any[]) ?? []) {
-        if (!p?.id || seen.has(p.id)) continue;
-        seen.add(p.id);
-        list.push(p as Player);
-      }
-    }
-    for (const p of (r?.wildcards ?? []) as any[]) {
-      if (!p?.id || seen.has(p.id)) continue;
-      seen.add(p.id);
-      list.push(p as Player);
-    }
+  for (const id of ids) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const p = allPlayers.find((x) => x.id === id);
+    if (p) list.push(p);
+  }
 
-    return list;
-  }, [rosters, yourDraftTeamId]);
+  return list;
+}, [rostersForOwnership, yourDraftTeamId, allPlayers]);
 
   // Given an addPlayer, compute droppable players that keep roster valid after swap
   const droppableCandidates: Player[] = useMemo(() => {
     if (!proposedAddPlayer) return [];
     const addP = proposedAddPlayer;
 
-    // If no roster (or roster incomplete), allow dropping anyone we have.
-    if (!yourRosterPlayers.length) return [];
+    // If roster is empty, there is nothing to drop
+if (!yourRosterPlayers.length) return [];
 
-    const candidates: Player[] = [];
+// If roster is NOT full / not at least the fixed slots count, don't enforce restrictions.
+// This prevents "no valid drop options" when the roster hasn't matured yet.
+const FIXED_SLOT_COUNT = REQUIRED_POS_SLOTS.length; // 15
+const rosterTooSmallForValidation = yourRosterPlayers.length < FIXED_SLOT_COUNT;
 
-    for (const dropP of yourRosterPlayers) {
-      const nextPlayers = yourRosterPlayers
-        .filter((x) => x.id !== dropP.id)
-        .concat([addP]);
+const candidates: Player[] = [];
 
-      // Must be able to fill fixed required slots after swap.
-      if (canFillRequiredSlots(nextPlayers)) candidates.push(dropP);
-    }
+for (const dropP of yourRosterPlayers) {
+  if (rosterTooSmallForValidation) {
+    candidates.push(dropP);
+    continue;
+  }
+
+  const nextPlayers = yourRosterPlayers
+    .filter((x) => x.id !== dropP.id)
+    .concat([addP]);
+
+  if (canFillRequiredSlots(nextPlayers)) candidates.push(dropP);
+}
 
     // Sort droppable list for nicer UX (by pos)
 const POSITION_ORDER: Record<string, number> = {
@@ -1238,52 +1393,205 @@ setDropModalOpen(true);
     setSelectedDropPlayerId(null);
   }
 
-  function submitProposedTransaction() {
-    if (!activeLeague?.id || !yourDraftTeamId || !proposedAddPlayer) return;
-    if (!selectedDropPlayerId) return;
+  async function refreshTransactionsForLeague(leagueId: string) {
+  // 1) claims
+  const claimsRes = await fetch(`/api/waivers/claims?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
+  const claimsJson = await claimsRes.json().catch(() => null);
 
+  // 2) trades
+  const tradesRes = await fetch(`/api/trades?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
+  const tradesJson = await tradesRes.json().catch(() => null);
+
+  // 3) drop-locks
+  const locksRes = await fetch(`/api/drop-locks?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
+  const locksJson = await locksRes.json().catch(() => null);
+
+  // 4) free agents
+  const faRes = await fetch(`/api/free-agency/transfer?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
+  const faJson = await faRes.json().catch(() => null);
+
+  // Best-effort: each endpoint should return { ok: true, data: [...] }
+  const normClaims =
+  claimsRes.ok && claimsJson?.ok
+    ? (claimsJson.data ?? []).map((c: any) => ({
+        ...c,
+        leagueId: c.league_id ?? c.leagueId,
+        teamId: c.team_id ?? c.teamId,
+        addPlayerId: c.add_player_id ?? c.addPlayerId,
+        dropPlayerId: c.drop_player_id ?? c.dropPlayerId,
+        createdAtMs: c.created_at_ms ?? c.createdAtMs,
+        updatedAtMs: c.updated_at_ms ?? c.updatedAtMs,
+        processedAtMs: c.processed_at_ms ?? c.processedAtMs,
+        decidedAtMs: c.decided_at_ms ?? c.decidedAtMs,
+      }))
+    : [];
+
+setTxClaims(normClaims);
+  setTxTrades(tradesRes.ok && tradesJson?.ok ? (tradesJson.data ?? []) : []);
+  setTxDropLocks(locksRes.ok && locksJson?.ok ? (locksJson.data ?? []) : []);
+  const normFA =
+  faRes.ok && faJson?.ok
+    ? (faJson.data ?? []).map((x: any) => ({
+        ...x,
+        leagueId: x.league_id ?? x.leagueId,
+        teamId: x.team_id ?? x.teamId,
+        addPlayerId: x.add_player_id ?? x.addPlayerId,
+        dropPlayerId: x.drop_player_id ?? x.dropPlayerId,
+        createdAtMs: x.created_at_ms ?? x.createdAtMs,
+        updatedAtMs: x.updated_at_ms ?? x.updatedAtMs,
+      }))
+    : [];
+
+setTxFreeAgents(normFA);
+  setTxLoaded(true);
+}
+
+async function apiAcceptTrade(tradeId: string) {
+  if (!activeLeague?.id) return;
+
+  await fetch(`/api/trades/accept`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      leagueId: activeLeague.id,
+      tradeId,
+      decidedAtMs: Date.now(),
+    }),
+  });
+
+  await refreshTransactionsForLeague(activeLeague.id);
+
+  // refresh rosters too (ownership changes)
+  const res = await fetch(`/api/rosters?leagueId=${encodeURIComponent(activeLeague.id)}`, {
+    cache: "no-store",
+  });
+  const json = await res.json().catch(() => null);
+
+  if (res.ok && json?.ok) {
+    const next: Record<string, any> = {};
+    for (const row of json.data ?? []) {
+      if (row?.team_id) next[row.team_id] = row.data ?? {};
+    }
+    setLeagueRosters(next);
+    setLeagueRostersLoaded(true);
+  }
+}
+
+async function apiDeclineTrade(tradeId: string) {
+  if (!activeLeague?.id) return;
+
+  await fetch(`/api/trades/decline`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      leagueId: activeLeague.id,
+      tradeId,
+      reason: "Declined",
+      decidedAtMs: Date.now(),
+    }),
+  });
+
+  await refreshTransactionsForLeague(activeLeague.id);
+}
+
+async function apiCancelTrade(tradeId: string) {
+  if (!activeLeague?.id) return;
+
+  await fetch(`/api/trades/cancel`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      leagueId: activeLeague.id,
+      tradeId,
+      cancelledAtMs: Date.now(),
+    }),
+  });
+
+  await refreshTransactionsForLeague(activeLeague.id);
+}
+
+useEffect(() => {
+  const leagueId = String(activeLeague?.id ?? "");
+  if (!leagueId) return;
+  refreshTransactionsForLeague(leagueId);
+}, [activeLeague?.id]);
+
+async function submitProposedTransaction() {
+  if (!activeLeague?.id || !yourDraftTeamId || !proposedAddPlayer) return;
+  if (!selectedDropPlayerId) return;
+
+  const leagueId = activeLeague.id;
+
+  try {
+    // ----------------
+    // WAIVERS => POST claim, refresh tx, go to Pending Claims
+    // ----------------
     if (proposeMode === "WAIVER") {
-      addClaim({
-  leagueId: activeLeague.id,
-  week: claimsWeek,
-  teamId: yourDraftTeamId,
-  addPlayerId: proposedAddPlayer.id,
-  dropPlayerId: selectedDropPlayerId,
-});
-setTab("Pending Claims");
-closeDropModal();
-return;
+      const payload = {
+        leagueId,
+        week: claimsWeek,
+        teamId: yourDraftTeamId,
+        addPlayerId: proposedAddPlayer.id,
+        dropPlayerId: selectedDropPlayerId,
+      };
 
+      await fetch(`/api/waivers/claims`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      await refreshTransactionsForLeague(leagueId);
+      setTab("Pending Claims");
+      closeDropModal();
+      return;
     }
 
-// FREE AGENCY:
-
-// 1️⃣ log the transaction (what you already do)
-addFreeAgentTransfer({
-  leagueId: activeLeague.id,
+    // ----------------
+    // FREE AGENCY => POST transfer, then refresh tx + rosters
+    // ----------------
+    const payload = {
+  leagueId,
   week: selectionWeek,
   teamId: yourDraftTeamId,
   addPlayerId: proposedAddPlayer.id,
   dropPlayerId: selectedDropPlayerId,
   createdAtMs: Date.now(),
-});
+  lockedUntilMs: selectionDeadlineMs, // ✅ correct name
+};
 
-// 2️⃣ 🔥 ACTUALLY UPDATE THE ROSTER (THIS WAS MISSING)
-const success = applyRosterMove?.({
-  teamId: yourDraftTeamId,
-  addPlayer: proposedAddPlayer,
-  dropPlayerId: selectedDropPlayerId,
-});
+    await fetch(`/api/free-agency/transfer`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
-if (!success) {
-  console.warn("Roster move failed — check slot constraints");
+    // Refresh transactions
+    await refreshTransactionsForLeague(leagueId);
+
+    // Refresh rosters so ownership updates immediately
+    const res = await fetch(`/api/rosters?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
+    const json = await res.json().catch(() => null);
+
+    if (res.ok && json?.ok) {
+      const next: Record<string, any> = {};
+      for (const row of json.data ?? []) {
+        if (!row?.team_id) continue;
+        next[row.team_id] = row.data ?? {};
+      }
+      setLeagueRosters(next);
+      setLeagueRostersLoaded(true);
+    }
+
+    closeDropModal();
+  } catch (e) {
+    console.warn("submitProposedTransaction failed", e);
+    // optional: keep modal open so user can retry, or close it:
+    // closeDropModal();
+  }
 }
 
-closeDropModal();
-
-
-
-  }
+  
 
   function DropSelectModal() {
     if (!dropModalOpen || !proposedAddPlayer) return null;
@@ -1934,6 +2242,22 @@ function getStatTotalCount(p: Player, header: string, pointsPerEvent: number): n
   }
 }
 
+function ownerTeamLabelForPlayerId(playerId: string): string {
+  const ownerTeamId = ownerByPlayerId.get(playerId) ?? null;
+
+  if (!ownerTeamId) return "Available";
+
+  // Prefer activeLeague teams (these are the league team names you want displayed)
+  const leagueTeam = activeLeague?.teams?.find((t: any) => t.id === ownerTeamId);
+  if (leagueTeam?.name) return leagueTeam.name;
+
+  // Fallback: draftTeams
+  const draftTeam = draftTeams?.find((t: any) => t.id === ownerTeamId);
+  if (draftTeam?.name) return draftTeam.name;
+
+  return "Owned";
+}
+
 function metricSortValue(p: Player, mode: InfoMode): number | null {
   if (mode === "DRAFT_RANK") return typeof p.draftRank === "number" ? p.draftRank : null;
 
@@ -1974,13 +2298,7 @@ function metricSortValue(p: Player, mode: InfoMode): number | null {
   }
 }
 
-  // Players (normalize teamCode like Draft Room)
-  const allPlayers: Player[] = useMemo(() => {
-    return (playersData as Player[]).map((p) => ({
-      ...p,
-      teamCode: normalizeTeamCode(p.teamCode),
-    }));
-  }, []);
+
 
   // =========================
 // DEV MOCKS (hoisted so badge + tab both see them)
@@ -2083,11 +2401,15 @@ const { mockTrades, mockClaims, mockFreeAgents } = useMemo(() => {
 }, [DEV_MOCK_TX, activeLeague?.teams, yourIdForMock, leagueIdForMock, allPlayers, selectionWeek]);
 
 // ✅ arrays the UI should use (badge + tab)
-const tradesForUi = DEV_MOCK_TX ? [...mockTrades, ...(trades as any[])] : (trades as any[]);
-const claimsForUi = DEV_MOCK_TX ? [...mockClaims, ...(claims as any[])] : (claims as any[]);
-const freeForUi = DEV_MOCK_TX
-  ? [...mockFreeAgents, ...(freeAgentTransfers as any[])]
-  : (freeAgentTransfers as any[]);
+const tradesSource = txLoaded ? txTrades : (trades as any[]);
+const claimsSource = txLoaded ? txClaims : (claims as any[]);
+const dropLocksSource = txLoaded ? txDropLocks : (dropLocks as any[]);
+const freeAgentsSource = txLoaded ? txFreeAgents : (freeAgentTransfers as any[]);
+
+// ✅ arrays the UI should use (badge + tab)
+const tradesForUi = DEV_MOCK_TX ? [...mockTrades, ...tradesSource] : tradesSource;
+const claimsForUi = DEV_MOCK_TX ? [...mockClaims, ...claimsSource] : claimsSource;
+const freeForUi = DEV_MOCK_TX ? [...mockFreeAgents, ...freeAgentsSource] : freeAgentsSource;
 
   // ✅ Badge count: pending trade offers RECEIVED by you (league mates -> you)
 const pendingOffersCount = useMemo(() => {
@@ -2172,7 +2494,8 @@ const pendingOffersCount = useMemo(() => {
 const yourClaims = useMemo(() => {
   if (!activeLeague?.id || !yourDraftTeamId) return [];
 
-  return (claims as any[])
+  const list = txLoaded ? txClaims : (claims as any[]);
+return list
   .filter((c) => c.leagueId === activeLeague.id && c.week === claimsWeek && c.teamId === yourDraftTeamId)
   .filter((c) => {
     const s = String(c.status ?? "PENDING").toUpperCase();
@@ -2185,7 +2508,7 @@ const yourClaims = useMemo(() => {
       if (ap !== bp) return ap - bp;
       return (a.createdAtMs ?? 0) - (b.createdAtMs ?? 0);
     });
-}, [claims, activeLeague?.id, claimsWeek, yourDraftTeamId]);
+}, [claims, txClaims, txLoaded, activeLeague?.id, claimsWeek, yourDraftTeamId]);
 
 
 
@@ -2331,7 +2654,7 @@ const yourClaims = useMemo(() => {
             color: "#0f172a",
             textAlign: "center",
             padding: "3px 12px",
-            fontWeight: 800,
+            fontWeight: 700,
             fontSize: 11,
             borderTop: "1px solid rgba(15,23,42,0.12)",
           }}
@@ -2453,7 +2776,7 @@ function PlayerRow({ p }: { p: Player }) {
   const isOwned = !!ownerTeamId;
   const isOwnedByYou = isOwned && ownerTeamId === yourDraftTeamId;
 
- const isTradeable = isOwned && !isOwnedByYou && tradeWindowOpen;
+ const isTradeable = ENABLE_TRADES && isOwned && !isOwnedByYou && tradeWindowOpen;
 
   const locked = lockedUnownedSet.has(p.id);
   const coolingDown = isAddCoolingDown(p.id);
@@ -2466,26 +2789,25 @@ let btnLabel = "+";
 let btnBg = windowMode === "WAIVERS" ? "#FACC15" : "#22C55E";
 let btnFg: string = "white";
 
-// Unowned disabled states (locked / cooldown) -> grey
+// Unowned disabled states (locked / cooldown)
 if (!isOwned && !enabled) {
   btnBg = "rgba(15,23,42,0.25)";
   btnFg = "white";
 }
 
-// Owned by you -> show ME (no action)
+// Owned by you
 if (isOwnedByYou) {
   btnLabel = "ME";
   btnBg = "rgba(148,163,184,0.75)";
   btnFg = "white";
 }
 
-// Owned by someone else -> show Trade icon
-if (isTradeable) {
+// Owned by someone else (DESIGN: always show trade icon)
+if (isOwned && !isOwnedByYou) {
   btnLabel = "↔";
   btnBg = "#2563EB";
   btnFg = "white";
 }
-
 
   return (
     <div
@@ -2599,7 +2921,7 @@ const [overId, setOverId] = useState<string | null>(null);
         // Signature B: reorderClaims({ leagueId, week, teamId, orderedIds })
         setClaimPriority({
           leagueId: activeLeague.id,
-          week: selectionWeek,
+          week: claimsWeek,
           teamId: yourDraftTeamId,
           orderedIds: orderedClaimIds,
         });
@@ -2612,7 +2934,7 @@ const [overId, setOverId] = useState<string | null>(null);
       (useTransactionsStore as any).setState((s: any) => {
         const next = (s.claims ?? []).map((c: any) => {
           if (c.leagueId !== activeLeague.id) return c;
-          if (c.week !== selectionWeek) return c;
+          if (c.week !== claimsWeek) return c;
           if (c.teamId !== yourDraftTeamId) return c;
           const idx = orderedClaimIds.indexOf(c.id);
           if (idx === -1) return c;
@@ -2634,7 +2956,7 @@ const onDragEnd = () => {
   setOverId(null);
 };
 
-const onDropOn = (e: React.DragEvent, targetClaimId: string) => {
+const onDropOn = async (e: React.DragEvent, targetClaimId: string) => {
   e.preventDefault();
 
   const fromId = e.dataTransfer.getData("text/plain") || draggingId;
@@ -2650,7 +2972,23 @@ const onDropOn = (e: React.DragEvent, targetClaimId: string) => {
   const [moved] = next.splice(from, 1);
   next.splice(to, 0, moved);
 
+  // instant local UI update
   persistPriorities(next);
+
+  // ✅ persist to Supabase
+  await fetch(`/api/waivers/claims/reorder`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      leagueId: activeLeague.id,
+      week: claimsWeek,
+      orderedIds: next,
+    }),
+  });
+
+  // ✅ reload from server so UI matches truth
+  await refreshTransactionsForLeague(activeLeague.id);
+
   setDraggingId(null);
   setOverId(null);
 };
@@ -2772,7 +3110,15 @@ const dropP = allPlayers.find((x) => x.id === c.dropPlayerId) ?? null;
                   </div>
 
                   <button
-                    onClick={() => removeClaim(c.id)}
+                    onClick={async () => {
+  if (!activeLeague?.id) return;
+
+  await fetch(`/api/waivers/claims?id=${encodeURIComponent(c.id)}`, {
+    method: "DELETE",
+  });
+
+  await refreshTransactionsForLeague(activeLeague.id);
+}}
                     style={{
                       height: 28,
                       padding: "0 12px",
@@ -3197,9 +3543,7 @@ const text =
           border: "1px solid rgba(239,68,68,0.30)",
         }}
         onClick={() => {
-  if (typeof declineTradeProposal !== "function") return;
-  declineTradeProposal(t.id, "Declined", Date.now(), selectionDeadlineMs);
-
+  apiDeclineTrade(t.id);
 }}
       >
         Decline
@@ -3239,9 +3583,7 @@ const text =
       border: "1px solid rgba(239,68,68,0.30)",
     }}
     onClick={() => {
-  if (typeof cancelTradeProposal !== "function") return;
-  cancelTradeProposal(t.id, Date.now(), selectionDeadlineMs);
-
+  apiCancelTrade(t.id);
 }}
 
   >
@@ -3532,7 +3874,7 @@ const url =
 />
 
             <div style={listBox}>
-              <div style={{ padding: "8px 130px", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
+              <div style={{ padding: "8px 121px", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 180px" }}>
                   <div />
                   <div style={{ textAlign: "right" }}>{metricLabel(infoMode)}</div>
@@ -3565,7 +3907,7 @@ const url =
 />
 
             <div style={listBox}>
-              <div style={{ padding: "8px 130px", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
+              <div style={{ padding: "8px 121px", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 180px" }}>
                   <div />
                   <div style={{ textAlign: "right" }}>{metricLabel(infoMode)}</div>
@@ -3597,23 +3939,25 @@ const url =
 
       {/* Player modal */}
 {modalPlayer ? (
-  <PlayerCardModal
-    onClose={() => setModalPlayer(null)}
-    player={{
-      ...modalPlayer,
+  (() => {
+    const live = getLivePlayerById?.(modalPlayer.id);
 
-      // normalize null -> undefined for modal typing
-      secondaryPosAbbrev: (modalPlayer.secondaryPosAbbrev ?? undefined) as any,
-      secondaryPosName: (modalPlayer.secondaryPosName ?? undefined) as any,
-
-      // always prefer latest live values
-      status: getLivePlayerById(modalPlayer.id)?.status ?? modalPlayer.status ?? undefined,
-      weeklyStatus: getLivePlayerById(modalPlayer.id)?.weeklyStatus ?? modalPlayer.weeklyStatus ?? {},
-    }}
-    teamLabel={yourTeamName}
-    initialTab="Stats"
-    actions={modalActions}
-  />
+    return (
+      <PlayerCardModal
+        onClose={() => setModalPlayer(null)}
+        player={{
+          ...modalPlayer,
+          secondaryPosAbbrev: modalPlayer.secondaryPosAbbrev ?? undefined,
+          secondaryPosName: modalPlayer.secondaryPosName ?? undefined,
+          status: live?.status ?? modalPlayer.status ?? undefined,
+          weeklyStatus: live?.weeklyStatus ?? modalPlayer.weeklyStatus ?? {},
+        }}
+        teamLabel={ownerTeamLabelForPlayerId(modalPlayer.id)}
+        initialTab="Stats"
+        actions={modalActions}
+      />
+    );
+  })()
 ) : null}
 
 
@@ -3624,6 +3968,8 @@ const url =
   );
 }
 export default function Page() {
+  useRequireSession();
+
   return (
     <Suspense fallback={<div style={{ minHeight: "100svh", width: "100%" }} />}>
       <TransactionsPageInner />

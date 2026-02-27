@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+
 
 import { AppMenu } from "@/components/AppMenu";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
@@ -11,9 +11,11 @@ import { useDraftStore } from "@/lib/draft/store";
 
 import fixturesData from "@/data/fixtures-2026.json";
 import type { Fixture } from "@/lib/fixtures/types";
-
-import { getActiveUser, getActiveUsername, getActiveTimezone } from "@/lib/session";
+import { useRequireSession } from "@/lib/session/useRequireSession";
+import { getActiveUsername, getActiveTimezone } from "@/lib/session";
 import { usePlayersStore } from "@/lib/players/store";
+import playersData from "@/data/players.json";
+import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib/league/week";
 
 type ViewMode = "Fixture" | "Latest Score" | "PPG" | "Form";
 
@@ -108,6 +110,8 @@ const JERSEYS: Record<
   WAR: { single: "/images/jerseys/WARJersey.png" },
 };
 
+
+
 function normalizeTeamCode(teamCodeOrName: string) {
   const raw = (teamCodeOrName ?? "").trim();
   if (!raw) return "TBD";
@@ -182,10 +186,10 @@ function isFixtureComplete(f: AnyFixture) {
   return false;
 }
 
-function getSelectionDeadlineMs(firstKickoffMs: number) {
+// function getSelectionDeadlineMs(firstKickoffMs: number) {
   // 2 hours before
-  return firstKickoffMs - 0 * 60 * 60 * 1000;
-}
+//  return firstKickoffMs - 1 * 60 * 60 * 1000;
+// }
 
 function pad2(n: number) {
   const s = String(n);
@@ -208,9 +212,9 @@ function getWeekFirstKickoffMs(fixtures: AnyFixture[], week: number) {
   return Math.min(...wk.map((f: any) => f.kickoffMs ?? toMs(f.kickoffAt)));
 }
 
-function getWeekDeadlineMs(fixtures: AnyFixture[], week: number) {
-  const first = getWeekFirstKickoffMs(fixtures, week);
-  return first ? getSelectionDeadlineMs(first) : 0;
+function getWeekDeadlineMs(fixtures: AnyFixture[], realWeek: number) {
+  const first = getWeekFirstKickoffMs(fixtures, realWeek);
+  return first ? selectionDeadlineFromFirstKickoff(first) : 0;
 }
 
 function getWeeksSorted(fixtures: AnyFixture[]) {
@@ -229,14 +233,15 @@ type LockedSnapshot = {
 
 function formatDeadline(dtMs: number, timeZone?: string) {
   const d = new Date(dtMs);
-  return d.toLocaleString(undefined, {
+  return new Intl.DateTimeFormat("en-AU", {
     weekday: "long",
     day: "2-digit",
     month: "long",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: true,
     timeZone,
-  });
+  }).format(d);
 }
 
 /** --- Figma-ish field placement (percent coords) --- */
@@ -374,8 +379,8 @@ function fixtureTeamCode(nameOrCode: string) {
   return normalizeTeamCode(nameOrCode ?? "");
 }
 
-function lineupDraftStorageKey(leagueId: string | null, teamId: string | null) {
-  return `ts_lineup_${leagueId ?? "no-league"}_${teamId ?? "no-team"}`;
+function lineupDraftStorageKey(leagueId: string, teamId: string) {
+  return `ts_lineup_${leagueId}_${teamId}`;
 }
 
 function syncLineupToRoster(prev: Lineup, rosterPool: Player[]) {
@@ -432,13 +437,8 @@ function syncLineupToRoster(prev: Lineup, rosterPool: Player[]) {
 }
 
 export default function TeamSelectionPage() {
-  const router = useRouter();
-
-  // Route protection
-  useEffect(() => {
-    const u = getActiveUser();
-    if (!u) router.replace("/");
-  }, [router]);
+  useRequireSession();
+  // (router not needed anymore unless you use it elsewhere)
 
   // Menu + league swap
   const [menuOpen, setMenuOpen] = useState(false);
@@ -448,25 +448,73 @@ export default function TeamSelectionPage() {
 
   const userId = useMemo(() => getActiveUsername(), []);
   const userTz = useMemo(() => getActiveTimezone(), []);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // Determine your team in the active league
-  const yourLeagueTeamId = useMemo(() => {
-    const l = activeLeague;
-    if (!l) return null;
+  const leagueTeams = useMemo(() => {
+  return Array.isArray(activeLeague?.teams) ? activeLeague!.teams : [];
+}, [activeLeague?.teams]);
 
-    // Prefer matching team.userId to active username
-    if (userId) {
-      const t = l.teams.find((x) => x.userId === userId);
-      if (t) return t.id;
-    }
+const [serverRosters, setServerRosters] = useState<Map<string, { playerIds: string[] }>>(
+  new Map()
+);
 
-    // fallback
-    return l.teams[0]?.id ?? null;
-  }, [activeLeague, userId]);
+const playersById = useMemo(() => {
+  const m = new Map<string, Player>();
+  for (const p of (playersData as any[])) {
+    if (!p?.id) continue;
+    m.set(String(p.id), p as Player);
+  }
+  return m;
+}, []);
+
+useEffect(() => {
+  if (!activeLeague?.id) return;
+
+  fetch(`/api/rosters?leagueId=${encodeURIComponent(activeLeague.id)}`, {
+    cache: "no-store",
+    credentials: "include",
+  })
+    .then((r) => r.json())
+    .then((j) => {
+      if (!j?.ok) return;
+
+      // API returns { ok: true, data: [...] }
+      const rows = Array.isArray(j.data) ? j.data : [];
+
+      const m = new Map<string, { playerIds: string[] }>();
+      for (const row of rows) {
+        const teamId = String(row.team_id ?? "");
+        const pidArr = (row?.data?.playerIds ?? []) as any;
+
+        if (!teamId) continue;
+        m.set(teamId, {
+          playerIds: Array.isArray(pidArr)
+            ? pidArr.map((x: any) => String(x)).filter(Boolean)
+            : [],
+        });
+      }
+
+      setServerRosters(m);
+    })
+    .catch((e) => console.log("fetch /api/rosters failed", e));
+}, [activeLeague?.id]);
+
+const yourLeagueTeamId = useMemo(() => {
+  if (!leagueTeams.length) return null;
+
+  if (userId) {
+    const t = leagueTeams.find((x) => x.userId === userId);
+    if (t) return t.id;
+  }
+
+  return leagueTeams[0]?.id ?? null;
+}, [leagueTeams, userId]);
 
   // Draft store teams + rosters
   const draftTeams = useDraftStore((s) => s.teams);
-  const rosters = useDraftStore((s) => s.rosters);
+  
 const syncFromLeague = useDraftStore((s) => s.syncFromLeague);
 
   // 👇 MOVE THIS HERE
@@ -481,12 +529,21 @@ const yourDraftTeamId = useMemo(() => {
   if (!yourDraftTeamId) return "Your Team";
   return draftTeams.find((t) => t.id === yourDraftTeamId)?.name ?? "Your Team";
 }, [draftTeams, yourDraftTeamId]);
-useEffect(() => {
-  if (!activeLeague) return;
 
-  // keep draft store team IDs aligned with league team IDs
-  syncFromLeague(activeLeague.teams, true);
-}, [activeLeague?.id, syncFromLeague]); 
+const leagueTeamsSig = useMemo(() => {
+  return leagueTeams.map((t) => t.id).join("|");
+}, [leagueTeams]);
+
+useEffect(() => {
+  if (!activeLeague?.id) return;
+  if (!leagueTeams.length) return;
+
+  const hasOrder =
+    Array.isArray((activeLeague as any).draftOrder) &&
+    (activeLeague as any).draftOrder.length > 0;
+
+  syncFromLeague(leagueTeams, hasOrder);
+}, [activeLeague?.id, leagueTeamsSig, syncFromLeague]);
 
 const livePlayersLoaded = usePlayersStore((s) => s.loaded);
 const refreshLivePlayers = usePlayersStore((s) => s.refresh);
@@ -718,70 +775,80 @@ function getLivePlayerById(id: string) {
   const nowMs = useNowTick(30_000);
 
 // --- Week logic ---
-// "liveWeek" = earliest week that is not complete yet (may already be locked)
-// "selectionWeek" = the week user is editing (after liveWeek locks, move to next week)
+const fantasyWeek = activeLeague?.currentWeek ?? 1;
+const startRound = activeLeague?.startRound ?? 1;
 
-const weeksSorted = useMemo(() => getWeeksSorted(normalizedFixtures), [normalizedFixtures]);
+const realRoundForFantasyWeek = useMemo(() => {
+  return fantasyWeekToRealRound(startRound, fantasyWeek);
+}, [startRound, fantasyWeek]);
 
-const liveWeek = useMemo(() => {
-  for (const w of weeksSorted) {
-    const wkFix = normalizedFixtures.filter((f) => f.week === w);
-    if (!wkFix.length) continue;
-    const weekComplete = wkFix.every(isFixtureComplete);
-    if (!weekComplete) return w;
+const deadlineMs = useMemo(() => {
+  return getWeekDeadlineMs(normalizedFixtures as any, realRoundForFantasyWeek);
+}, [normalizedFixtures, realRoundForFantasyWeek]);
+
+const deadlineLocked = deadlineMs ? nowMs >= deadlineMs : false;
+useEffect(() => {
+  if (!activeLeague?.id) return;
+  if (!deadlineLocked) return;
+
+  const total = activeLeague.totalWeeks ?? 16;
+  const next = Math.min(total, fantasyWeek + 1);
+
+  // prevent spamming updates
+  const k = `wk_adv_${activeLeague.id}_wk${fantasyWeek}`;
+  if (typeof window !== "undefined" && window.localStorage.getItem(k)) return;
+  if (typeof window !== "undefined") window.localStorage.setItem(k, "1");
+
+  if (next !== fantasyWeek) {
+    // persists to server + refresh via your existing API path
+    useLeagueStore.getState().updateLeagueSettings(activeLeague.id, { currentWeek: next });
   }
-  return weeksSorted[0] ?? 1;
-}, [weeksSorted, normalizedFixtures]);
+}, [activeLeague?.id, deadlineLocked, fantasyWeek, activeLeague?.totalWeeks]);
 
-const liveWeekDeadlineMs = useMemo(() => {
-  return getWeekDeadlineMs(normalizedFixtures as any, liveWeek);
-}, [normalizedFixtures, liveWeek]);
-
-// If we're past the live week's deadline, user is now selecting for the NEXT week
+// after the current fantasy week locks, user edits NEXT fantasy week
 const selectionWeek = useMemo(() => {
-  if (!liveWeekDeadlineMs) return liveWeek;
+  if (!deadlineMs) return fantasyWeek;
+  return deadlineLocked ? (fantasyWeek + 1) : fantasyWeek;
+}, [deadlineMs, deadlineLocked, fantasyWeek]);
 
-  if (nowMs < liveWeekDeadlineMs) {
-    return liveWeek; // still selecting for live week
-  }
-
-  // otherwise move to next week number (prefer next existing week)
-  const idx = weeksSorted.indexOf(liveWeek);
-  return weeksSorted[idx + 1] ?? (liveWeek + 1);
-}, [nowMs, liveWeekDeadlineMs, liveWeek, weeksSorted]);
+const selectionRealRound = useMemo(() => {
+  return fantasyWeekToRealRound(startRound, selectionWeek);
+}, [startRound, selectionWeek]);
 
 const selectionDeadlineMs = useMemo(() => {
-  return getWeekDeadlineMs(normalizedFixtures as any, selectionWeek);
-}, [normalizedFixtures, selectionWeek]);
+  return getWeekDeadlineMs(normalizedFixtures as any, selectionRealRound);
+}, [normalizedFixtures, selectionRealRound]);
 
-const deadlineLockedForLiveWeek = liveWeekDeadlineMs ? nowMs >= liveWeekDeadlineMs : false;
-
-const deadlineText = selectionDeadlineMs
-  ? formatDeadline(selectionDeadlineMs, userTz)
-  : "TBC";
+const deadlineText = useMemo(() => {
+  if (!mounted) return ""; // avoid SSR/client mismatch
+  return selectionDeadlineMs ? formatDeadline(selectionDeadlineMs, userTz) : "TBC";
+}, [mounted, selectionDeadlineMs, userTz]);
 
   // View dropdown (DEV — you said remove later)
   const [viewMode, setViewMode] = useState<ViewMode>("Fixture");
 
   // Build roster pool from draft rosters (temporary)
   const rosterPool: Player[] = useMemo(() => {
-    if (!yourDraftTeamId) return [];
-    const r = rosters[yourDraftTeamId];
-    if (!r) return [];
+  if (!yourDraftTeamId) return [];
 
-    const list: Player[] = [];
-    for (const arr of Object.values(r.slots ?? {})) list.push(...(arr as any));
-    list.push(...((r.wildcards ?? []) as any));
+  const row = serverRosters.get(yourDraftTeamId);
+  const ids = row?.playerIds ?? [];
 
-    // Ensure unique by id (just in case)
-    const seen = new Set<string>();
-    return list.filter((p) => {
-      if (!p?.id) return false;
-      if (seen.has(p.id)) return false;
-      seen.add(p.id);
-      return true;
-    });
-  }, [yourDraftTeamId, rosters]);
+  const list: Player[] = [];
+  for (const id of ids) {
+    const p = playersById.get(id);
+    if (p) list.push(p);
+  }
+
+  // unique by id (safety)
+  const seen = new Set<string>();
+  return list.filter((p) => {
+    if (!p?.id) return false;
+    if (seen.has(p.id)) return false;
+    seen.add(p.id);
+    return true;
+  });
+}, [yourDraftTeamId, serverRosters, playersById]);
 
   // Initial lineup:
   // - If no roster: all empty tiles
@@ -862,12 +929,11 @@ useEffect(() => {
   });
 }, [yourDraftTeamId, rosterPool]);
 
-
-
 function saveSelection() {
   if (typeof window === "undefined") return;
+  if (!activeLeague?.id || !yourDraftTeamId) return; // ✅ key guard
 
-  const lineupKey = lineupDraftStorageKey(activeLeague?.id ?? null, yourDraftTeamId);
+  const lineupKey = lineupDraftStorageKey(activeLeague.id, yourDraftTeamId);
   window.localStorage.setItem(lineupKey, JSON.stringify(lineup));
 
   if (captainId) window.localStorage.setItem(CAPTAIN_KEY, captainId);
@@ -883,8 +949,9 @@ function saveSelection() {
 
 useEffect(() => {
   if (typeof window === "undefined") return;
-
-  const lineupKey = lineupDraftStorageKey(activeLeague?.id ?? null, yourDraftTeamId);
+if (!activeLeague?.id || !yourDraftTeamId) return; // ✅ key guard
+  
+  const lineupKey = lineupDraftStorageKey(activeLeague.id, yourDraftTeamId);
 
 // 1) lineup
 const raw = window.localStorage.getItem(lineupKey);
@@ -1200,21 +1267,21 @@ function tileSubtext(p: Player | null) {
 // When live week's deadline passes, freeze THAT week's lineup + C/VC once.
 useEffect(() => {
   if (typeof window === "undefined") return;
-  if (!deadlineLockedForLiveWeek) return;
+  if (!deadlineLocked) return;
 
-  const leagueId = activeLeague?.id ?? null;
-  const teamId = yourDraftTeamId ?? null;
-  if (!teamId) return;
+  if (!activeLeague?.id || !yourDraftTeamId) return;
 
-  const key = matchupSnapshotKey(leagueId, liveWeek, teamId);
+  const leagueId = activeLeague.id;
+  const teamId = yourDraftTeamId;
+
+  // ✅ IMPORTANT: snapshot is stored by FANTASY WEEK (same key Matchup reads)
+  const key = matchupSnapshotKey(leagueId, fantasyWeek, teamId);
 
   // Only write once
   if (window.localStorage.getItem(key)) return;
 
-  // Ensure latest is saved
   saveSelection();
 
-  // Read back the saved state (authoritative)
   const lineupKey = lineupDraftStorageKey(leagueId, teamId);
   const savedLineupRaw = window.localStorage.getItem(lineupKey);
   const savedCaptain = window.localStorage.getItem(CAPTAIN_KEY);
@@ -1228,7 +1295,7 @@ useEffect(() => {
   }
 
   const snap: LockedSnapshot = {
-    week: liveWeek,
+    week: fantasyWeek,
     teamId,
     lockedAtMs: Date.now(),
     lineup: savedLineup,
@@ -1238,18 +1305,14 @@ useEffect(() => {
 
   window.localStorage.setItem(key, JSON.stringify(snap));
 }, [
-  deadlineLockedForLiveWeek,
+  deadlineLocked,
   activeLeague?.id,
   yourDraftTeamId,
-  liveWeek,
+  fantasyWeek,
   CAPTAIN_KEY,
   VICE_KEY,
   lineup,
-  
 ]);
-
-
-
 
   // -----------------------
   // Styles (match your app)
@@ -1743,7 +1806,8 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
 
   </div>
 
-  <div
+    <div
+    suppressHydrationWarning
     style={{
       background: "rgba(255,255,255,0.88)",
       color: "#0f172a",

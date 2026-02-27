@@ -1,61 +1,95 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
-import { getServerUsername } from "@/lib/session/server";
+import { supabaseAdmin } from "@/lib/supabase/server";
+import { getServerUsername } from "@/lib/serverSession";
+import { normalizeLeagueId } from "@/lib/ids";
+
+const norm = (s: string) => s.trim().toLowerCase();
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const leagueId = searchParams.get("leagueId");
+  const leagueId = normalizeLeagueId(searchParams.get("leagueId"));
 
   if (!leagueId) {
     return NextResponse.json({ ok: false, error: "Missing leagueId" }, { status: 400 });
   }
 
-  const { data, error } = await supabaseServer
-    .from("rosters")
-    .select("league_id, team_id, data, updated_at")
-    .eq("league_id", leagueId);
-
-  if (error) return NextResponse.json({ ok: false, error: String(error.message ?? error) }, { status: 500 });
-  return NextResponse.json({ ok: true, data });
-}
-
-export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const { leagueId, teamId, data } = (body ?? {}) as {
-    leagueId?: string;
-    teamId?: string;
-    data?: unknown;
-  };
-
-  if (!leagueId || !teamId || !data) {
-    return NextResponse.json(
-      { ok: false, error: "Missing leagueId/teamId/data" },
-      { status: 400 }
-    );
-  }
-
-  // must be signed in
   const username = await getServerUsername();
   if (!username) {
     return NextResponse.json({ ok: false, error: "Not logged in" }, { status: 401 });
   }
 
-  // check ownership (ONLY allow saving your own team roster)
-  const { data: team, error: teamErr } = await supabaseServer
-    .from("teams")
-    .select("id, owner_username")
-    .eq("id", teamId)
-    .single();
+  const usernameNorm = norm(username);
 
-  if (teamErr || !team) {
+  const { data: membership, error: memErr } = await supabaseAdmin
+    .from("teams")
+    .select("id")
+    .eq("league_id", leagueId)
+    .eq("owner_username", usernameNorm)
+    .maybeSingle();
+
+  if (memErr) {
+    return NextResponse.json({ ok: false, error: memErr.message }, { status: 500 });
+  }
+  if (!membership) {
+    return NextResponse.json({ ok: false, error: "Forbidden (not in league)" }, { status: 403 });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("rosters")
+    .select("league_id, team_id, data, updated_at")
+    .eq("league_id", leagueId);
+
+  if (error) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, data: data ?? [] });
+}
+
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => null);
+  const leagueId = normalizeLeagueId(body?.leagueId);
+  const teamId = String(body?.teamId ?? "").trim();
+  const data = body?.data;
+
+  if (!leagueId || !teamId || data == null) {
+    return NextResponse.json({ ok: false, error: "Missing leagueId/teamId/data" }, { status: 400 });
+  }
+
+  const username = await getServerUsername();
+  if (!username) {
+    return NextResponse.json({ ok: false, error: "Not logged in" }, { status: 401 });
+  }
+
+  const usernameNorm = norm(username);
+
+  // Ensure team exists + requester owns it
+  const { data: team, error: teamErr } = await supabaseAdmin
+    .from("teams")
+    .select("id, league_id, owner_username")
+    .eq("id", teamId)
+    .maybeSingle();
+
+  if (teamErr) {
+    return NextResponse.json({ ok: false, error: teamErr.message }, { status: 500 });
+  }
+  if (!team) {
     return NextResponse.json({ ok: false, error: "Team not found" }, { status: 404 });
   }
 
-  if (team.owner_username !== username) {
+  if (String(team.league_id) !== leagueId) {
+    return NextResponse.json({ ok: false, error: "Team not in league" }, { status: 400 });
+  }
+
+  const owner = norm(String(team.owner_username ?? ""));
+  if (!owner) {
+    return NextResponse.json({ ok: false, error: "Team has no owner_username" }, { status: 500 });
+  }
+  if (owner !== usernameNorm) {
     return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
   }
 
-  const { error } = await supabaseServer
+  const { error } = await supabaseAdmin
     .from("rosters")
     .upsert(
       {
@@ -67,6 +101,9 @@ export async function POST(req: Request) {
       { onConflict: "league_id,team_id" }
     );
 
-  if (error) return NextResponse.json({ ok: false, error: String(error.message ?? error) }, { status: 500 });
+  if (error) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+
   return NextResponse.json({ ok: true });
 }

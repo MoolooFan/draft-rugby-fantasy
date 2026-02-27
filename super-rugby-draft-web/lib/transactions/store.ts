@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { supabaseBrowser } from "@/lib/supabase/client";
 
 import type {
   DropLock,
@@ -21,6 +22,7 @@ type AddFreeAgentTransferFn = (input: {
   addPlayerId: string;
   dropPlayerId: string | null;
   createdAtMs: number;
+  lockUntilMs?: number; // ✅ NEW
 }) => void;
 
 type TransactionsState = {
@@ -72,7 +74,12 @@ cancelTradeProposal: (tradeId: string, decidedAtMs: number, tradeDeadlineMs?: nu
   setClaimPriority: (claimId: string, priority: number) => void;
   updateClaimPriority: (claimId: string, priority: number) => void;
 
-  processWaiversForWeek: (leagueId: string, week: number, processedAtMs: number) => void;
+  processWaiversForWeek: (
+  leagueId: string,
+  week: number,
+  processedAtMs: number,
+  lockUntilMs?: number
+) => void;
 
   // free agency
   addFreeAgentTransfer: AddFreeAgentTransferFn;
@@ -80,13 +87,158 @@ cancelTradeProposal: (tradeId: string, decidedAtMs: number, tradeDeadlineMs?: nu
   // locks
   addDropLock: (l: DropLock) => void;
   cleanupExpiredDropLocks: (nowMs: number) => void;
+
+    // supabase sync
+  hydratedLeagueId: string | null;
+  hydrateFromDb: (leagueId: string) => Promise<void>;
+  startRealtime: (leagueId: string) => () => void; // returns unsubscribe
 };
 
 function uid(prefix = "tx") {
-  return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+  return `${prefix}_${crypto.randomUUID()}`;
 }
 
 type AnyPlayer = any;
+
+// -----------------------
+// Supabase row shapes (DB) + mappers
+// -----------------------
+type DbDropLock = {
+  id?: string;
+  league_id: string;
+  week: number;
+  player_id: string;
+  locked_until_ms: number;
+  dropped_by_team_id: string | null;
+  dropped_at_ms: number | null;
+  reason: string | null;
+  created_at?: string;
+};
+
+type DbFreeAgentTransfer = {
+  id: string; // ✅ make required
+  league_id: string;
+  week: number;
+  team_id: string;
+  add_player_id: string;
+  drop_player_id: string | null;
+  status: string;
+  decided_reason: string | null;
+  created_at_ms: number;
+  updated_at_ms: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
+type DbWaiverClaim = {
+  id: string; // ✅ add
+  league_id: string;
+  week: number;
+  team_id: string;
+  add_player_id: string;
+  drop_player_id: string | null;
+  priority: number;
+  status: string;
+  decided_reason: string | null;
+  created_at_ms: number;
+  updated_at_ms: number;
+  processed_at_ms: number | null;
+  decided_at_ms: number | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+// DB -> App
+function fromDbLock(r: DbDropLock): DropLock {
+  return {
+    leagueId: r.league_id,
+    week: r.week,
+    playerId: r.player_id,
+    lockedUntilMs: r.locked_until_ms,
+    droppedByTeamId: r.dropped_by_team_id ?? undefined,
+    droppedAtMs: r.dropped_at_ms ?? undefined,
+    reason: r.reason ?? undefined,
+  };
+}
+
+function fromDbFree(r: DbFreeAgentTransfer): FreeAgentTransfer {
+  return {
+    id: r.id,
+    leagueId: r.league_id,
+    week: r.week,
+    teamId: r.team_id,
+    addPlayerId: r.add_player_id,
+    dropPlayerId: r.drop_player_id,
+    status: String(r.status ?? "").toUpperCase() as any,
+    decidedReason: r.decided_reason ?? undefined,
+    createdAtMs: r.created_at_ms,
+    updatedAtMs: r.updated_at_ms,
+  };
+}
+
+function fromDbClaim(r: DbWaiverClaim): WaiverClaim {
+  return {
+    id: String(r.id ?? ""),
+    leagueId: r.league_id,
+    week: r.week,
+    teamId: r.team_id,
+    addPlayerId: r.add_player_id,
+    dropPlayerId: r.drop_player_id,
+    priority: r.priority,
+    status: String(r.status ?? "").toUpperCase() as any,
+    decidedReason: r.decided_reason ?? undefined,
+    createdAtMs: r.created_at_ms,
+    updatedAtMs: r.updated_at_ms,
+    processedAtMs: r.processed_at_ms ?? undefined,
+    decidedAtMs: r.decided_at_ms ?? undefined,
+  };
+}
+
+// App -> DB
+function toDbLock(l: DropLock): DbDropLock {
+  return {
+    league_id: l.leagueId,
+    week: l.week,
+    player_id: l.playerId,
+    locked_until_ms: l.lockedUntilMs,
+    dropped_by_team_id: (l as any).droppedByTeamId ?? null,
+    dropped_at_ms: (l as any).droppedAtMs ?? null,
+    reason: (l as any).reason ?? null,
+  };
+}
+
+function toDbFree(f: FreeAgentTransfer): DbFreeAgentTransfer {
+  return {
+    id: f.id, // ✅ add
+    league_id: f.leagueId,
+    week: f.week,
+    team_id: f.teamId,
+    add_player_id: f.addPlayerId,
+    drop_player_id: f.dropPlayerId ?? null,
+    status: String(f.status ?? "PENDING").toUpperCase(),
+    decided_reason: (f as any).decidedReason ?? null,
+    created_at_ms: f.createdAtMs,
+    updated_at_ms: f.updatedAtMs,
+  };
+}
+
+function toDbClaim(c: WaiverClaim): DbWaiverClaim {
+  return {
+    id: c.id, // ✅ add
+    league_id: c.leagueId,
+    week: c.week,
+    team_id: c.teamId,
+    add_player_id: c.addPlayerId,
+    drop_player_id: c.dropPlayerId ?? null,
+    priority: c.priority ?? 9999,
+    status: String(c.status ?? "PENDING").toUpperCase(),
+    decided_reason: (c as any).decidedReason ?? null,
+    created_at_ms: c.createdAtMs,
+    updated_at_ms: c.updatedAtMs,
+    processed_at_ms: (c as any).processedAtMs ?? null,
+    decided_at_ms: (c as any).decidedAtMs ?? null,
+  };
+}
 
 function getPlayerById(playerId: string): AnyPlayer | null {
   return (playersData as AnyPlayer[]).find((p) => p.id === playerId) ?? null;
@@ -407,6 +559,121 @@ export const useTransactionsStore = create<TransactionsState>()(
       dropLocks: [],
       freeAgentTransfers: [],
 
+            // -------- Supabase sync --------
+      hydratedLeagueId: null,
+
+      hydrateFromDb: async (leagueId: string) => {
+        const supabase = supabaseBrowser();
+
+        // Pull latest rows for this league
+        const [locksRes, freeRes, claimsRes] = await Promise.all([
+          supabase.from("drop_locks").select("*").eq("league_id", leagueId),
+          supabase.from("free_agent_transfers").select("*").eq("league_id", leagueId),
+          supabase.from("waiver_claims").select("*").eq("league_id", leagueId),
+        ]);
+
+        const locks = (locksRes.data ?? []).map(fromDbLock);
+        const free = (freeRes.data ?? []).map(fromDbFree);
+        const claims = (claimsRes.data ?? []).map(fromDbClaim);
+
+        set({
+          hydratedLeagueId: leagueId,
+          dropLocks: locks,
+          freeAgentTransfers: free,
+          claims,
+        });
+      },
+
+      startRealtime: (leagueId: string) => {
+        const supabase = supabaseBrowser();
+
+        // drop_locks
+        const locksChan = supabase
+          .channel(`rt_drop_locks_${leagueId}`)
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "drop_locks", filter: `league_id=eq.${leagueId}` },
+            (payload: any) => {
+              set((s) => {
+                const next = [...(s.dropLocks ?? [])];
+
+                // DELETE
+                if (payload.eventType === "DELETE") {
+                  const pid = payload.old?.player_id;
+                  return { dropLocks: next.filter((x: any) => x.playerId !== pid) };
+                }
+
+                // INSERT/UPDATE
+                const row = payload.new as DbDropLock;
+                const mapped = fromDbLock(row);
+                const rest = next.filter((x: any) => x.playerId !== mapped.playerId);
+                return { dropLocks: [...rest, mapped] };
+              });
+            }
+          )
+          .subscribe();
+
+        // free_agent_transfers
+        const freeChan = supabase
+          .channel(`rt_free_${leagueId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "free_agent_transfers",
+              filter: `league_id=eq.${leagueId}`,
+            },
+            (payload: any) => {
+              set((s) => {
+                const next = [...(s.freeAgentTransfers ?? [])];
+
+                if (payload.eventType === "DELETE") {
+                  const id = String(payload.old?.id ?? "");
+                  return { freeAgentTransfers: next.filter((x: any) => x.id !== id) };
+                }
+
+                const row = payload.new as DbFreeAgentTransfer;
+                const mapped = fromDbFree(row);
+                const rest = next.filter((x: any) => x.id !== mapped.id);
+                return { freeAgentTransfers: [mapped, ...rest] };
+              });
+            }
+          )
+          .subscribe();
+
+        // waiver_claims
+        const claimsChan = supabase
+          .channel(`rt_claims_${leagueId}`)
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "waiver_claims", filter: `league_id=eq.${leagueId}` },
+            (payload: any) => {
+              set((s) => {
+                const next = [...(s.claims ?? [])];
+
+                if (payload.eventType === "DELETE") {
+                  const id = String(payload.old?.id ?? "");
+                  return { claims: next.filter((x: any) => x.id !== id) };
+                }
+
+                const row = payload.new as DbWaiverClaim;
+                const mapped = fromDbClaim(row);
+                const rest = next.filter((x: any) => x.id !== mapped.id);
+                return { claims: [...rest, mapped] };
+              });
+            }
+          )
+          .subscribe();
+
+        // unsubscribe
+        return () => {
+          supabase.removeChannel(locksChan);
+          supabase.removeChannel(freeChan);
+          supabase.removeChannel(claimsChan);
+        };
+      },
+
       // -------- Trades --------
       addTradeProposal: (input) =>
         set((s) => {
@@ -590,11 +857,29 @@ export const useTransactionsStore = create<TransactionsState>()(
             ...c,
           };
 
+                    // 3B: write-through insert
+          void (async () => {
+  const { error } = await supabaseBrowser()
+    .from("waiver_claims")
+    .upsert(toDbClaim(next), { onConflict: "id" });
+
+  // optional: console.warn(error);
+})();
+
           return { claims: [...(s.claims ?? []), next] };
         }),
 
-      removeClaim: (claimId) =>
-        set((s) => ({ claims: (s.claims ?? []).filter((c) => c.id !== claimId) })),
+      removeClaim: (claimId) => {
+  void (async () => {
+    const { error } = await supabaseBrowser()
+      .from("waiver_claims")
+      .delete()
+      .eq("id", claimId);
+    // optional: if (error) console.warn(error);
+  })();
+
+  set((s) => ({ claims: (s.claims ?? []).filter((c) => c.id !== claimId) }));
+},
 
       reorderClaimsForTeamWeek: (leagueId, week, teamId, orderedIds) =>
         set((s) => {
@@ -621,7 +906,21 @@ export const useTransactionsStore = create<TransactionsState>()(
             (c) => !(c.leagueId === leagueId && c.week === week && c.teamId === teamId)
           );
 
-          return { claims: [...others, ...reordered] };
+          // ✅ write-through reorder (persist new priorities)
+const now = Date.now();
+const supabase = supabaseBrowser();
+
+// ensure updatedAtMs is consistent for DB write
+const reorderedWithTs = reordered.map((c) => ({ ...c, updatedAtMs: now }));
+
+void (async () => {
+  const { error } = await supabase
+    .from("waiver_claims")
+    .upsert(reorderedWithTs.map(toDbClaim), { onConflict: "id" });
+  // optional: if (error) console.warn(error);
+})();
+
+          return { claims: [...others, ...reorderedWithTs] };
         }),
 
       reorderClaims: (input) =>
@@ -636,8 +935,8 @@ export const useTransactionsStore = create<TransactionsState>()(
 
       updateClaimPriority: (claimId, priority) => get().setClaimPriority(claimId, priority),
 
-      processWaiversForWeek: (leagueId, week, processedAtMs) =>
-        set((s) => {
+      processWaiversForWeek: (leagueId, week, processedAtMs, lockUntilMs) =>
+  set((s) => {
           const pending = (s.claims ?? [])
             .filter((c) => c.leagueId === leagueId && c.week === week)
             .filter((c) => String(c.status ?? "PENDING").toUpperCase() === "PENDING")
@@ -707,27 +1006,56 @@ export const useTransactionsStore = create<TransactionsState>()(
             };
           });
 
-          // add 24h lock on dropped player for processed claims
-          const newLocks: DropLock[] = [];
-          for (const c of pending) {
-            const final = updatedClaims.find((x) => x.id === c.id);
-            if (!final || final.status !== "PROCESSED") continue;
-            if (!c.dropPlayerId) continue;
+          const lockUntil =
+      typeof lockUntilMs === "number" && lockUntilMs > 0
+        ? lockUntilMs
+        : processedAtMs + 24 * 60 * 60 * 1000;
 
-            newLocks.push({
-              playerId: c.dropPlayerId,
-              leagueId,
-              week,
-              lockedUntilMs: processedAtMs + 24 * 60 * 60 * 1000,
-              droppedByTeamId: c.teamId,
-              droppedAtMs: processedAtMs,
-              reason: "WAIVER_PROCESSING",
-            });
-          }
+    // add lock on dropped player for processed claims
+    const newLocks: DropLock[] = [];
+    for (const c of pending) {
+      const final = updatedClaims.find((x) => x.id === c.id);
+      if (!final || final.status !== "PROCESSED") continue;
+      if (!c.dropPlayerId) continue;
+
+      newLocks.push({
+        playerId: c.dropPlayerId,
+        leagueId,
+        week,
+        lockedUntilMs: lockUntil, // ✅ CHANGED
+        droppedByTeamId: c.teamId,
+        droppedAtMs: processedAtMs,
+        reason: "WAIVER_PROCESSING",
+      });
+    }
 
           const locksRest = (s.dropLocks ?? []).filter(
             (x) => x.leagueId !== leagueId || !newLocks.some((n) => n.playerId === x.playerId)
           );
+
+                    // 3B: write-through updates
+          const supabase = supabaseBrowser();
+
+          // upsert claims that changed status
+          const touched = updatedClaims.filter(
+            (c) => c.leagueId === leagueId && c.week === week
+          );
+          void (async () => {
+  const { error } = await supabase
+    .from("waiver_claims")
+    .upsert(touched.map(toDbClaim), { onConflict: "id" });
+  // optional: if (error) console.warn(error);
+})();
+
+          // upsert new locks (if any)
+          if (newLocks.length) {
+  void (async () => {
+    const { error } = await supabase
+      .from("drop_locks")
+      .upsert(newLocks.map(toDbLock), { onConflict: "league_id,player_id" });
+    // optional: if (error) console.warn(error);
+  })();
+}
 
           return {
             claims: updatedClaims,
@@ -762,6 +1090,14 @@ export const useTransactionsStore = create<TransactionsState>()(
               updatedAtMs: input.createdAtMs,
             };
 
+            // 3D: write-through insert (FAILED)
+void (async () => {
+  const { error } = await supabaseBrowser()
+    .from("free_agent_transfers")
+    .insert(toDbFree(failed));
+  // optional: if (error) console.warn(error);
+})();
+
             return { freeAgentTransfers: [failed, ...(s.freeAgentTransfers ?? [])] };
           }
 
@@ -785,6 +1121,14 @@ export const useTransactionsStore = create<TransactionsState>()(
               updatedAtMs: input.createdAtMs,
             };
 
+            // 3D: write-through insert (FAILED)
+void (async () => {
+  const { error } = await supabaseBrowser()
+    .from("free_agent_transfers")
+    .insert(toDbFree(failed));
+  // optional: if (error) console.warn(error);
+})();
+
             return { freeAgentTransfers: [failed, ...(s.freeAgentTransfers ?? [])] };
           }
 
@@ -804,23 +1148,47 @@ export const useTransactionsStore = create<TransactionsState>()(
           };
 
           // add 24h lock to dropped player (if any)
-          const newLock: DropLock | null = input.dropPlayerId
-            ? {
-                playerId: input.dropPlayerId,
-                leagueId: input.leagueId,
-                week: input.week,
-                lockedUntilMs: input.createdAtMs + 24 * 60 * 60 * 1000,
-                droppedByTeamId: input.teamId,
-                droppedAtMs: input.createdAtMs,
-                reason: "FREE_AGENCY_DROP",
-              }
-            : null;
+          const lockUntil =
+  typeof input.lockUntilMs === "number" && input.lockUntilMs > 0
+    ? input.lockUntilMs
+    : input.createdAtMs + 24 * 60 * 60 * 1000;
+
+const newLock: DropLock | null = input.dropPlayerId
+  ? {
+      playerId: input.dropPlayerId,
+      leagueId: input.leagueId,
+      week: input.week,
+      lockedUntilMs: lockUntil, // ✅ CHANGED
+      droppedByTeamId: input.teamId,
+      droppedAtMs: input.createdAtMs,
+      reason: "FREE_AGENCY_DROP",
+    }
+  : null;
 
           const locksRest = input.dropPlayerId
             ? (s.dropLocks ?? []).filter(
                 (x) => !(x.leagueId === input.leagueId && x.playerId === input.dropPlayerId)
               )
             : (s.dropLocks ?? []);
+
+            // 3D: write-through insert (PROCESSED transfer) + upsert lock
+const supabase = supabaseBrowser();
+
+void (async () => {
+  const { error } = await supabase
+    .from("free_agent_transfers")
+    .insert(toDbFree(next));
+  // optional: if (error) console.warn(error);
+})();
+
+if (newLock) {
+  void (async () => {
+  const { error } = await supabase
+    .from("drop_locks")
+    .upsert(toDbLock(newLock), { onConflict: "league_id,player_id" });
+  // optional: if (error) console.warn(error);
+})();
+}
 
           return {
             freeAgentTransfers: [next, ...(s.freeAgentTransfers ?? [])],

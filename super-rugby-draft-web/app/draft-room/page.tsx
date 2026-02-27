@@ -17,7 +17,7 @@ import type { Player } from "@/lib/draft/types";
 
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { usePlayersStore } from "@/lib/players/store";
-
+import { useRequireSession } from "@/lib/session/useRequireSession";
 
 
 type DraftTab = "Player Pool" | "Watchlist" | "Teams" | "Draft Results";
@@ -54,152 +54,224 @@ type Modal =
   | { type: "draftConfirm"; player: Player }
   | { type: "playerCard"; player: Player };
 
+function useNowTick(ms = 250) {
+  const [, force] = useState(0);
+
+  useEffect(() => {
+    const t = window.setInterval(() => force((x) => x + 1), ms);
+    return () => window.clearInterval(t);
+  }, [ms]);
+
+  return Date.now();
+}
 
 export default function DraftRoomPage() {
-  const router = useRouter();
+  useRequireSession();
 
-  // Route protection
-  useEffect(() => {
-    const user = getActiveUser();
-    if (!user) router.replace("/");
-  }, [router]);
+  const router = useRouter();
 
   // -----------------------
   // DEV switches
   // -----------------------
-  const phase = useDraftStore((s) => s.phase);
-const setPhase = useDraftStore((s) => s.setPhase);
-
+  
 const leagues = useLeagueStore((s) => s.leagues);
-const activeLeague = useLeagueStore((s) => s.activeLeague());
+const activeLeagueId = useLeagueStore((s) => s.activeLeagueId); // ✅ source of truth
+const leagueId = activeLeagueId ?? undefined;
+const activeLeague = useMemo(() => {
+  return leagues.find((l) => l.id === activeLeagueId) ?? null;
+}, [leagues, activeLeagueId]);
+
+// ✅ move draft-store selectors HERE (before phase)
+const teams = useDraftStore((s) => s.teams);
+const syncFromLeague = useDraftStore((s) => s.syncFromLeague);
+const isDraftOrderSet = useDraftStore((s) => s.isDraftOrderSet);
+const setDraftOrderSet = useDraftStore((s) => s.setDraftOrderSet);
+const rosters = useDraftStore((s) => s.rosters);
+const draftStoreHydrated = useDraftStore((s) => s.hasHydrated);
+
 const setActiveLeague = useLeagueStore((s) => s.setActiveLeague);
 const completeDraft = useLeagueStore((s) => s.completeDraft);
-// ---- Draft store selectors used early (must be declared before use) ----
-const teams = useDraftStore((s) => s.teams);
-const isDraftOrderSet = useDraftStore((s) => s.isDraftOrderSet);
-const syncFromLeague = useDraftStore((s) => s.syncFromLeague);
-const rosters = useDraftStore((s) => s.rosters);
+
+const phase: DraftPhase =
+  activeLeague?.draftStatus === "live" ? "liveDraft" : "preDraft";
+
+const now = useNowTick(250);
+const refreshLeague = useLeagueStore((s) => s.refreshLeague);
+
+useEffect(() => {
+  if (!activeLeagueId) return;
+
+  refreshLeague(activeLeagueId);
+  const t = window.setInterval(() => refreshLeague(activeLeagueId), 1000);
+
+  return () => window.clearInterval(t);
+}, [activeLeagueId, refreshLeague]);
 
 
   const [activeTab, setActiveTab] = useState<DraftTab>("Player Pool");
   const [menuOpen, setMenuOpen] = useState(false);
-const draftResultsScrollRef = useRef<HTMLDivElement | null>(null);
-const shouldAutoScrollRef = useRef(true);
+  const draftResultsScrollRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
+const refreshFromServer = useDraftStore((s) => s.refreshFromServer);
+const hydrateRostersFromDb = useDraftStore((s) => s.hydrateRostersFromDb);
+  const livePlayers = usePlayersStore((s) => s.players);
+  const livePlayersLoaded = usePlayersStore((s) => s.loaded);
+  const refreshLivePlayers = usePlayersStore((s) => s.refresh);
+  const getLivePlayerById = usePlayersStore((s) => s.getById);
 
-const livePlayers = usePlayersStore((s) => s.players);
-const livePlayersLoaded = usePlayersStore((s) => s.loaded);
-const refreshLivePlayers = usePlayersStore((s) => s.refresh);
-const getLivePlayerById = usePlayersStore((s) => s.getById);
-useEffect(() => {
-  if (!livePlayersLoaded) refreshLivePlayers();
-}, [livePlayersLoaded, refreshLivePlayers]);
-
-// =========================
-// Jersey assets (Draft Room uses ANGLED if available)
-// Files live in: /public/images/jerseys
-// =========================
-const JERSEYS: Record<string, { angle?: string; front?: string; single?: string }> = {
-  BLU: { angle: "/images/jerseys/BLUJerseyAngle.png", front: "/images/jerseys/BLUJerseyFront.png" },
-  BRU: { single: "/images/jerseys/BRUJersey.png" },
-  CHI: { angle: "/images/jerseys/CHIJerseyAngle.png", front: "/images/jerseys/CHIJerseyFront.png" },
-  CRU: { angle: "/images/jerseys/CRUJerseyAngle.png", front: "/images/jerseys/CRUJerseyFront.png" },
-  DRU: { single: "/images/jerseys/DRUJersey.png" },
-  FOR: { single: "/images/jerseys/FORJersey.png" },
-  HIG: { angle: "/images/jerseys/HIGJerseyAngle.png", front: "/images/jerseys/HIGJerseyFront.png" },
-  HUR: { angle: "/images/jerseys/HURJerseyAngle.png", front: "/images/jerseys/HURJerseyFront.png" },
-  MOA: { angle: "/images/jerseys/MOPJerseyAngle.png", front: "/images/jerseys/MOPJerseyFront.png" },
-  RED: { single: "/images/jerseys/REDJersey.png" },
-  WAR: { single: "/images/jerseys/WARJersey.png" },
-};
-
-const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.png";
-
-function jerseySrcForTeamCode(teamCode: string | null | undefined, prefer: "angle" | "front" = "angle") {
- const code = normalizeTeamCode(teamCode);
-  const j = JERSEYS[code];
-  if (!j) return JERSEY_PLACEHOLDER;
-
-  if (prefer === "angle") return j.angle ?? j.single ?? j.front ?? JERSEY_PLACEHOLDER;
-  return j.front ?? j.single ?? j.angle ?? JERSEY_PLACEHOLDER;
-}
-
-// ✅ Sync draft teams from active league
-const leagueTeamsSig = useMemo(() => {
-  if (!activeLeague) return "";
-  return activeLeague.teams.map((t) => t.id).join("|");
-}, [activeLeague]);
+  useEffect(() => {
+    if (!livePlayersLoaded) refreshLivePlayers();
+  }, [livePlayersLoaded, refreshLivePlayers]);
 
 useEffect(() => {
+  const lid = activeLeagueId;
+  if (!lid) return;
+
+  let cancelled = false;
+
+  const tick = async (leagueId: string) => {
+    if (cancelled) return;
+    await refreshFromServer(leagueId);
+  };
+
+  tick(lid);
+  const t = window.setInterval(() => tick(lid), 1000);
+
+  return () => {
+    cancelled = true;
+    window.clearInterval(t);
+  };
+}, [activeLeagueId, refreshFromServer]);
+
+useEffect(() => {
+  const lid = activeLeagueId;
+  if (!lid) return;
+  hydrateRostersFromDb(lid);
+}, [activeLeagueId, hydrateRostersFromDb]);
+
+  // =========================
+  // Jersey assets (Draft Room uses ANGLED if available)
+  // Files live in: /public/images/jerseys
+  // =========================
+  const JERSEYS: Record<string, { angle?: string; front?: string; single?: string }> = {
+    BLU: { angle: "/images/jerseys/BLUJerseyAngle.png", front: "/images/jerseys/BLUJerseyFront.png" },
+    BRU: { single: "/images/jerseys/BRUJersey.png" },
+    CHI: { angle: "/images/jerseys/CHIJerseyAngle.png", front: "/images/jerseys/CHIJerseyFront.png" },
+    CRU: { angle: "/images/jerseys/CRUJerseyAngle.png", front: "/images/jerseys/CRUJerseyFront.png" },
+    DRU: { single: "/images/jerseys/DRUJersey.png" },
+    FOR: { single: "/images/jerseys/FORJersey.png" },
+    HIG: { angle: "/images/jerseys/HIGJerseyAngle.png", front: "/images/jerseys/HIGJerseyFront.png" },
+    HUR: { angle: "/images/jerseys/HURJerseyAngle.png", front: "/images/jerseys/HURJerseyFront.png" },
+    MOA: { angle: "/images/jerseys/MOPJerseyAngle.png", front: "/images/jerseys/MOPJerseyFront.png" },
+    RED: { single: "/images/jerseys/REDJersey.png" },
+    WAR: { single: "/images/jerseys/WARJersey.png" },
+  };
+
+  const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.png";
+
+  function jerseySrcForTeamCode(
+    teamCode: string | null | undefined,
+    prefer: "angle" | "front" = "angle"
+  ) {
+    const code = normalizeTeamCode(teamCode);
+    const j = JERSEYS[code];
+    if (!j) return JERSEY_PLACEHOLDER;
+
+    if (prefer === "angle") return j.angle ?? j.single ?? j.front ?? JERSEY_PLACEHOLDER;
+    return j.front ?? j.single ?? j.angle ?? JERSEY_PLACEHOLDER;
+  }
+
+  // ✅ Sync draft teams from active league
+  const leagueTeamsSig = useMemo(() => {
+  const arr = activeLeague?.teams ?? [];
+  return arr.map((t) => t.id).join("|");
+}, [activeLeague?.teams]);
+
+useEffect(() => {
+  if (!draftStoreHydrated) return;
   if (!activeLeague) return;
 
-  const draftTeams = activeLeague.teams.map((t) => ({
-  id: t.id,
-  name: t.name,
-  initials: t.initials,
-  userId: t.userId,
-  userInitials: t.userInitials,
-}));
+  const leagueTeams = activeLeague?.teams ?? [];
+  if (leagueTeams.length === 0) return; // ✅ optional but recommended
 
+  const hasOrder =
+    Array.isArray((activeLeague as any).draftOrder) &&
+    (activeLeague as any).draftOrder.length > 0;
 
-  // Keep DEV draft-order toggle behaviour for now:
-  // - If you want league always to override, pass true/false from league later
-  syncFromLeague(draftTeams, isDraftOrderSet);
-}, [activeLeague?.id, leagueTeamsSig, syncFromLeague, isDraftOrderSet]);
+  if (isDraftOrderSet !== hasOrder) setDraftOrderSet(hasOrder);
 
-  // ✅ hydration guard (prevents Date.now mismatch between server/client)
+  const draftTeams = leagueTeams.map((t) => ({
+    id: t.id,
+    name: t.name,
+    initials: t.initials,
+    userId: t.userId,
+    userInitials: t.userInitials,
+  }));
+
+  syncFromLeague(draftTeams, hasOrder);
+}, [
+  draftStoreHydrated,
+  activeLeague?.id,
+  activeLeague?.teams,
+  (activeLeague as any)?.draftOrder,
+  syncFromLeague,
+  isDraftOrderSet,
+  setDraftOrderSet,
+]);
+
+  // ✅ hydration guard
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
   }, []);
 
-// Your team (mock): default to the first team in the active draft order
-const yourTeamId = teams[0]?.id ?? "t-1";
-
+const ready = mounted && draftStoreHydrated;
 const rawUser = getActiveUser();
 const activeUser = typeof rawUser === "string" ? { username: rawUser } : rawUser;
 
-const userInitials = useMemo(() => {
-  const fn = (activeUser?.firstName ?? "").trim();
-  const ln = (activeUser?.lastName ?? "").trim();
+const yourTeamId =
+  teams.find(
+    (t) =>
+      (t.userId ?? "").trim().toLowerCase() ===
+      (activeUser?.username ?? "").trim().toLowerCase()
+  )?.id ??
+  teams[0]?.id ??
+  "t-1";
 
-  if (fn || ln) {
-    return `${fn[0] ?? ""}${ln[0] ?? ""}`.toUpperCase();
-  }
+  const userInitials = useMemo(() => {
+    const fn = (activeUser?.firstName ?? "").trim();
+    const ln = (activeUser?.lastName ?? "").trim();
 
-  const u = (activeUser?.username ?? "").trim();
-  return (u.slice(0, 2) || "U").toUpperCase();
-}, [activeUser?.firstName, activeUser?.lastName, activeUser?.username]);
+    if (fn || ln) {
+      return `${fn[0] ?? ""}${ln[0] ?? ""}`.toUpperCase();
+    }
 
+    const u = (activeUser?.username ?? "").trim();
+    return (u.slice(0, 2) || "U").toUpperCase();
+  }, [activeUser?.firstName, activeUser?.lastName, activeUser?.username]);
 
   // -----------------------
-  // ✅ TIMING (fixed)
+  // ✅ TIMING
   // -----------------------
   const liveDeadlineRef = useRef<number | null>(null);
-  const preDraftDeadlineRef = useRef<number | null>(null);
-const PICK_MS = 90_000; // 10s per pick (change this)
+  
+  const PICK_MS = 90_000;
 
   useEffect(() => {
     if (liveDeadlineRef.current == null) {
-      liveDeadlineRef.current = Date.now() + PICK_MS; // 90s pick timer
+      liveDeadlineRef.current = Date.now() + PICK_MS;
     }
-    if (preDraftDeadlineRef.current == null) {
-      preDraftDeadlineRef.current =
-        Date.now() + (2 * 86400 + 20 * 3600 + 45 * 60 + 30) * 1000;
-    }
+    
   }, []);
 
   function resetLiveTimer() {
     liveDeadlineRef.current = Date.now() + PICK_MS;
   }
 
-  function useNowTick(ms = 250) {
-    const [, force] = useState(0);
-    useEffect(() => {
-      const t = window.setInterval(() => force((x) => x + 1), ms);
-      return () => window.clearInterval(t);
-    }, [ms]);
-    return Date.now();
-  }
+const preDraftDeadlineMs = useMemo(() => {
+  const v = activeLeague?.draftAt ?? null; // number | null
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}, [activeLeague?.draftAt]);
 
   // -----------------------
   // Filters
@@ -210,150 +282,147 @@ const PICK_MS = 90_000; // 10s per pick (change this)
 
   // Watchlist
   const watchlist = useDraftStore((s) => s.watchlist);
-const toggleWatchlist = useDraftStore((s) => s.toggleWatchlist);
-
+  const toggleWatchlist = useDraftStore((s) => s.toggleWatchlist);
 
   // Modal
   const [modal, setModal] = useState<Modal>(null);
 
-const setDraftOrderSet = useDraftStore((s) => s.setDraftOrderSet);
+  const totalPicks = useDraftStore((s) => s.totalPicks());
+  const ownerForPickSnake = useDraftStore((s) => s.ownerForPickSnake);
 
-const totalPicks = useDraftStore((s) => s.totalPicks());
+  const pickIndex = useDraftStore((s) => s.pickIndex);
+  const picks = useDraftStore((s) => s.picks);
+  const latestPickText = useDraftStore((s) => s.latestPickText);
 
-const ownerForPickSnake = useDraftStore((s) => s.ownerForPickSnake);
+  const confirmDraft = useDraftStore((s) => s.confirmDraft);
+  const autoDraft = useDraftStore((s) => s.autoDraft);
+  const ensurePicksLength = useDraftStore((s) => s.ensurePicksLength);
+  const rehydratePlayersFromPool = useDraftStore((s) => s.rehydratePlayersFromPool);
 
-const pickIndex = useDraftStore((s) => s.pickIndex);
-const picks = useDraftStore((s) => s.picks);
-const latestPickText = useDraftStore((s) => s.latestPickText);
+  const canTeamDraftPlayer = useDraftStore((s) => s.canTeamDraftPlayer);
+  const isDrafted = useDraftStore((s) => s.isDrafted);
+  const getPlayerTeamName = useDraftStore((s) => s.getPlayerTeamName);
+  const getPlayerPickNumber = useDraftStore((s) => s.getPlayerPickNumber);
 
-const confirmDraft = useDraftStore((s) => s.confirmDraft);
-const autoDraft = useDraftStore((s) => s.autoDraft);
-const ensurePicksLength = useDraftStore((s) => s.ensurePicksLength);
-const rehydratePlayersFromPool = useDraftStore((s) => s.rehydratePlayersFromPool);
+  useEffect(() => {
+    ensurePicksLength();
+  }, [ensurePicksLength, teams.length]);
 
-const canTeamDraftPlayer = useDraftStore((s) => s.canTeamDraftPlayer);
-const isDrafted = useDraftStore((s) => s.isDrafted);
-const getPlayerTeamName = useDraftStore((s) => s.getPlayerTeamName);
-const getPlayerPickNumber = useDraftStore((s) => s.getPlayerPickNumber);
+  const draftComplete =
+    totalPicks > 0 && picks.length === totalPicks && picks[totalPicks - 1] !== null;
 
-// keep picks array sized correctly if teams change etc
-useEffect(() => {
-  ensurePicksLength();
-}, [ensurePicksLength, teams.length]);
+  const currentPick = Math.min(pickIndex, totalPicks);
 
-const draftComplete =
-  totalPicks > 0 &&
-  picks.length === totalPicks &&
-  picks[totalPicks - 1] !== null;
+  const onTheClockTeamId = useMemo(() => {
+    if (draftComplete) return "";
+    const owner = ownerForPickSnake(pickIndex);
+    return owner?.id ?? "";
+  }, [pickIndex, ownerForPickSnake, draftComplete]);
 
+  const isYouOnClock =
+    phase === "liveDraft" && !draftComplete && onTheClockTeamId === yourTeamId;
 
-const currentPick = Math.min(pickIndex, totalPicks);
+  const nextPickInTurns = useMemo(() => {
+    if (draftComplete) return 0;
+    if (!yourTeamId) return 0;
+    for (let i = pickIndex + 1; i <= totalPicks; i++) {
+      const owner = ownerForPickSnake(i);
+      if (owner?.id === yourTeamId) return i - pickIndex;
+    }
+    return 0;
+  }, [pickIndex, totalPicks, yourTeamId, ownerForPickSnake, draftComplete]);
 
+  // -----------------------
+  // Players
+  // -----------------------
+  const allPlayers: Player[] = useMemo(() => {
+    return (playersData as Player[]).map((p) => ({
+      ...p,
+      teamCode: normalizeTeamCode(p.teamCode),
+    }));
+  }, []);
 
-const onTheClockTeamId = useMemo(() => {
-  if (draftComplete) return "";
-  const owner = ownerForPickSnake(pickIndex);
-  return owner?.id ?? "";
-}, [pickIndex, ownerForPickSnake, draftComplete]);
+const allPlayersById = useMemo(() => {
+  const m: Record<string, Player> = {};
+  for (const p of allPlayers) m[p.id] = p;
+  return m;
+}, [allPlayers]);
 
-const isYouOnClock =
-  phase === "liveDraft" && !draftComplete && onTheClockTeamId === yourTeamId;
+/**
+ * Always return a FULL Player object from players.json when possible.
+ * We only use "live player" to overlay status-ish fields.
+ */
+function resolvePlayer(x: any): Player | null {
+  if (!x) return null;
 
-const nextPickInTurns = useMemo(() => {
-  if (draftComplete) return 0;
-  if (!yourTeamId) return 0;
-  for (let i = pickIndex + 1; i <= totalPicks; i++) {
-    const owner = ownerForPickSnake(i);
-    if (owner?.id === yourTeamId) return i - pickIndex;
-  }
-  return 0;
-}, [pickIndex, totalPicks, yourTeamId, ownerForPickSnake, draftComplete]);
+  const id = typeof x === "string" ? x : String(x.id ?? "");
+  if (!id) return null;
 
- // -----------------------
-// Players (real pool from JSON)
-// -----------------------
-// -----------------------
-// Players (from converted JSON – already in Player shape)
-// -----------------------
+  const base = allPlayersById[id];
+  if (!base) return null;
 
-const allPlayers: Player[] = useMemo(() => {
-  return (playersData as Player[]).map((p) => ({
-    ...p,
-    teamCode: normalizeTeamCode(p.teamCode),
-  }));
-}, []);
+  const live: any = getLivePlayerById(id);
 
-useEffect(() => {
-  rehydratePlayersFromPool(allPlayers);
-}, [rehydratePlayersFromPool, allPlayers]);
+  // Return a proper Player shape (base is full), with live status overlays if present
+  return {
+    ...base,
+    status: live?.status ?? base.status ?? null,
+    weeklyStatus: live?.weeklyStatus ?? (base as any).weeklyStatus,
+  } as Player;
+}
 
+  useEffect(() => {
+    rehydratePlayersFromPool(allPlayers);
+  }, [rehydratePlayersFromPool, allPlayers]);
 
-
-const draftedIds = useMemo(() => {
-  return new Set(picks.filter(Boolean).map((p) => (p as Player).id));
-}, [picks]);
-
+  const draftedIds = useMemo(() => {
+    return new Set(picks.filter(Boolean).map((p) => (p as Player).id));
+  }, [picks]);
 
   const filteredPlayers = useMemo(() => {
     const q = search.trim().toLowerCase();
     return allPlayers
       .filter((p) => (draftedIds.has(p.id) ? false : true))
-      .filter((p) =>
-        q ? `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) : true
-      )
+      .filter((p) => (q ? `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) : true))
       .filter((p) => (teamFilter ? p.teamCode === teamFilter : true))
       .filter((p) => {
-  if (!posFilter) return true;
-  const a = (p.posAbbrev ?? "").toUpperCase();
-  const b = (p.secondaryPosAbbrev ?? "").toUpperCase();
-  return a === posFilter || b === posFilter;
-})
-
+        if (!posFilter) return true;
+        const a = (p.posAbbrev ?? "").toUpperCase();
+        const b = (p.secondaryPosAbbrev ?? "").toUpperCase();
+        return a === posFilter || b === posFilter;
+      })
       .sort((a, b) => a.draftRank - b.draftRank);
   }, [allPlayers, draftedIds, search, teamFilter, posFilter]);
 
-  // ✅ Player Pool only: hide players you can no longer draft (position full + WC full)
-const playerPoolPlayers = useMemo(() => {
-  return filteredPlayers.filter((p) => canTeamDraftPlayer(yourTeamId, p));
-}, [filteredPlayers, canTeamDraftPlayer, yourTeamId]);
+  const playerPoolPlayers = useMemo(() => {
+    return filteredPlayers.filter((p) => canTeamDraftPlayer(yourTeamId, p));
+  }, [filteredPlayers, canTeamDraftPlayer, yourTeamId]);
 
   const watchlistPlayers = useMemo(() => {
-  return filteredPlayers.filter((p) => !!watchlist[p.id]);
-}, [filteredPlayers, watchlist]);
+    return filteredPlayers.filter((p) => !!watchlist[p.id]);
+  }, [filteredPlayers, watchlist]);
 
-function hydrateForModal(p: Player): Player {
-  const live = getLivePlayerById(p.id);
-
-  if (!live) return p;
-
+  function hydrateForModal(p: Player): Player {
+  const live: any = getLivePlayerById(p.id);
   return {
     ...p,
-    // pull live sheet fields onto the draft snapshot player
-    status: live.status ?? p.status ?? null,
-    weeklyStatus: live.weeklyStatus ?? (p as any).weeklyStatus,
-  } as any;
+    status: live?.status ?? p.status ?? null,
+    weeklyStatus: live?.weeklyStatus ?? (p as any).weeklyStatus,
+  } as Player;
 }
 
   function openPlayerCard(p: Player) {
-  setModal({ type: "playerCard", player: hydrateForModal(p) });
-}
+    setModal({ type: "playerCard", player: hydrateForModal(p) });
+  }
 
-
-
-  // -----------------------
-  // Draft click flows
-  // -----------------------
   function onDraftClick(p: Player) {
     if (phase !== "liveDraft") return;
     if (draftComplete) return;
     if (!isYouOnClock) return;
-
-    // block if roster full for that position AND WC full
     if (!canTeamDraftPlayer(onTheClockTeamId, p)) return;
 
     setModal({ type: "draftConfirm", player: p });
   }
-
 
   // -----------------------
   // ✅ AUTO DRAFT when timer expires
@@ -361,79 +430,44 @@ function hydrateForModal(p: Player): Player {
   const autoPickGuardRef = useRef<number | null>(null);
 
   useEffect(() => {
-  autoPickGuardRef.current = null;
-}, [pickIndex]);
-
-  function autoDraftIfNeeded() {
-    if (phase !== "liveDraft") return;
-    if (draftComplete) return;
-    if (!liveDeadlineRef.current) return;
-    if (pickIndex > totalPicks) return;
-
-    // only once per pick
-    if (autoPickGuardRef.current === pickIndex) return;
-
-    if (Date.now() < liveDeadlineRef.current) return;
-
-// ✅ mark this pick as already auto-processed (prevents repeat calls)
-autoPickGuardRef.current = pickIndex;
-
-autoDraft(allPlayers);
-resetLiveTimer();
-
-
-  }
+    autoPickGuardRef.current = null;
+  }, [pickIndex]);
 
   useEffect(() => {
-  const t = window.setInterval(() => {
-    if (phase !== "liveDraft") return;
-    if (draftComplete) return;
-    if (!liveDeadlineRef.current) return;
-    if (pickIndex > totalPicks) return;
-    if (autoPickGuardRef.current === pickIndex) return;
-    if (Date.now() < liveDeadlineRef.current) return;
+    const t = window.setInterval(() => {
+      if (phase !== "liveDraft") return;
+      if (draftComplete) return;
+      if (!liveDeadlineRef.current) return;
+      if (pickIndex > totalPicks) return;
+      if (autoPickGuardRef.current === pickIndex) return;
+      if (Date.now() < liveDeadlineRef.current) return;
 
-    autoPickGuardRef.current = pickIndex;
-    autoDraft(allPlayers);
-    resetLiveTimer();
-  }, 300);
+      autoPickGuardRef.current = pickIndex;
+      if (!leagueId) return;
+autoDraft(allPlayers, leagueId, (lid) => completeDraft?.(lid));
+      resetLiveTimer();
+    }, 300);
 
-  return () => window.clearInterval(t);
-}, [phase, draftComplete, pickIndex, totalPicks, autoDraft, allPlayers]);
+    return () => window.clearInterval(t);
+ }, [phase, draftComplete, pickIndex, totalPicks, autoDraft, allPlayers, leagueId, completeDraft]);
 
+  const draftResults: Pick[] = useMemo(() => {
+    return Array.from({ length: totalPicks }).map((_, idx) => {
+      const pickNumber = idx + 1;
+      const owner = ownerForPickSnake(pickNumber);
+      const player = picks[idx] ?? null;
 
-// -----------------------
-// DraftResults data
-// -----------------------
-const draftResults: Pick[] = useMemo(() => {
-  return Array.from({ length: totalPicks }).map((_, idx) => {
-    const pickNumber = idx + 1;
-    const owner = ownerForPickSnake(pickNumber);
-    const player = picks[idx] ?? null;
+      const ownerTeamId = owner?.id;
+      const ownerInitials = owner?.userInitials ?? owner?.initials;
 
-    const ownerTeamId = owner?.id;
+      return { pickNumber, player, ownerInitials, ownerTeamId };
+    });
+  }, [totalPicks, picks, ownerForPickSnake, teams]);
 
-    // ✅ Prefer user initials, fallback to team initials
-    const ownerInitials = owner?.userInitials ?? owner?.initials;
-
-    return {
-      pickNumber,
-      player,
-      ownerInitials,
-      ownerTeamId,
-    };
-  });
-}, [totalPicks, picks, ownerForPickSnake, teams]); // ✅ include teams
-
-
-
-
-  // Pre-draft first pick label
-  const firstPickTeamName = isDraftOrderSet
-  ? ownerForPickSnake(1)?.name ?? "TBC"
-  : "TBC";
-
-
+const firstPickTeamName = useMemo(() => {
+  const t0 = activeLeague?.teams?.[0];
+  return t0?.name ?? "TBC";
+}, [activeLeague?.teams]);
   // -----------------------
   // Styles
   // -----------------------
@@ -477,24 +511,22 @@ const draftResults: Pick[] = useMemo(() => {
     color: "#0f172a",
   };
 
-function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }) {
-  return (
-    <img
-      src={jerseySrcForTeamCode(teamCode, "angle")}
-      alt=""
-      style={{
-        width: size,
-        height: size,
-        borderRadius: 10,
-        objectFit: "contain",
-        display: "block",
-      }}
-      draggable={false}
-    />
-  );
-}
-
-
+  function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }) {
+    return (
+      <img
+        src={jerseySrcForTeamCode(teamCode, "angle")}
+        alt=""
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 10,
+          objectFit: "contain",
+          display: "block",
+        }}
+        draggable={false}
+      />
+    );
+  }
 
   function DraftButton({
     enabled,
@@ -573,12 +605,24 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
     );
   }
 
+  function TimeBlock({ value, label }: { value: string; label: string }) {
+    return (
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 28, fontWeight: 900, lineHeight: "30px" }}>{value}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.9, marginTop: 2 }}>{label}</div>
+      </div>
+    );
+  }
+
   function PreDraftHeader() {
-        const now = mounted ? useNowTick(250) : 0;
-    const deadline = preDraftDeadlineRef.current ?? 0;
-    const preDraftSeconds = mounted
-      ? Math.max(0, Math.floor((deadline - now) / 1000))
-      : 0;
+  
+const deadline = preDraftDeadlineMs; // number | null
+const preDraftSeconds =
+  mounted && deadline
+    ? Math.max(0, Math.floor((deadline - now) / 1000))
+    : 0;
+
+const isTbd = !deadline;
 
     const d = Math.floor(preDraftSeconds / 86400);
     const h = Math.floor((preDraftSeconds % 86400) / 3600);
@@ -594,12 +638,18 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
         <div style={{ marginTop: 8, fontSize: 22, fontWeight: 900 }}>Draft Starts In</div>
 
         <div style={{ marginTop: 10 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-            <TimeBlock value={pad2(d)} label="Days" />
-            <TimeBlock value={pad2(h)} label="Hours" />
-            <TimeBlock value={pad2(m)} label="Minutes" />
-            <TimeBlock value={pad2(s)} label="Seconds" />
-          </div>
+          {isTbd ? (
+  <div style={{ fontSize: 14, fontWeight: 800, opacity: 0.95 }}>
+    Draft time not set yet.
+  </div>
+) : (
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+    <TimeBlock value={pad2(d)} label="Days" />
+    <TimeBlock value={pad2(h)} label="Hours" />
+    <TimeBlock value={pad2(m)} label="Minutes" />
+    <TimeBlock value={pad2(s)} label="Seconds" />
+  </div>
+)}
         </div>
 
         <div style={{ marginTop: 10, fontSize: 13, fontWeight: 900, opacity: 0.95 }}>
@@ -610,38 +660,22 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
   }
 
   function LiveHeader() {
-        const now = mounted ? useNowTick(250) : 0;
+  
     const deadline = liveDeadlineRef.current ?? 0;
 
-    const secondsLeft = mounted
-      ? Math.max(0, Math.floor((deadline - now) / 1000))
-      : 0;
+    const secondsLeft = mounted ? Math.max(0, Math.floor((deadline - now) / 1000)) : 0;
 
     const isLow = secondsLeft <= 20;
     const timeColor = draftComplete ? "white" : isLow ? "#EF4444" : "white";
 
     return (
-      <div
-        style={{
-          ...card35,
-          padding: 14,
-          borderBottomLeftRadius: 16,
-          borderBottomRightRadius: 16,
-        }}
-      >
+      <div style={{ ...card35, padding: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Hamburger />
           <div style={{ flex: 1 }} />
         </div>
 
-        <div
-          style={{
-            marginTop: 2,
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            alignItems: "center",
-          }}
-        >
+        <div style={{ marginTop: 2, display: "grid", gridTemplateColumns: "1fr 1fr", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 18, opacity: 0.95 }}>🕒</span>
             <div style={{ fontSize: 20, fontWeight: 900, color: timeColor }}>
@@ -670,43 +704,19 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
           {latestPickText}
         </div>
 
-        <div
-          style={{
-            marginTop: 10,
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 10,
-          }}
-        >
+        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div style={{ display: "grid", gap: 2 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.95 }}>
-              Your Next Pick in:
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 800 }}>
-              {draftComplete ? "—" : `${nextPickInTurns} turns`}
-            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.95 }}>Your Next Pick in:</div>
+            <div style={{ fontSize: 12, fontWeight: 800 }}>{draftComplete ? "—" : `${nextPickInTurns} turns`}</div>
           </div>
 
           <div style={{ display: "grid", gap: 2, textAlign: "right" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.95 }}>
-              On the Clock:
-            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.95 }}>On the Clock:</div>
             <div style={{ fontSize: 12, fontWeight: 800 }}>
-              {draftComplete
-                ? "—"
-                : teams.find((t) => t.id === onTheClockTeamId)?.name ?? "TBC"}
+              {draftComplete ? "—" : teams.find((t) => t.id === onTheClockTeamId)?.name ?? "TBC"}
             </div>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  function TimeBlock({ value, label }: { value: string; label: string }) {
-    return (
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 28, fontWeight: 900, lineHeight: "30px" }}>{value}</div>
-        <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.9, marginTop: 2 }}>{label}</div>
       </div>
     );
   }
@@ -734,14 +744,7 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
     return (
       <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
         <div style={inputWrap}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 26px",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 26px", alignItems: "center", gap: 8 }}>
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -760,11 +763,7 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <div
-            style={{ ...inputWrap, position: "relative" }}
-            onPointerDownCapture={stopCapture}
-            onClickCapture={stopCapture}
-          >
+          <div style={{ ...inputWrap, position: "relative" }} onPointerDownCapture={stopCapture} onClickCapture={stopCapture}>
             <select
               value={teamFilter}
               onChange={(e) => setTeamFilter(e.target.value)}
@@ -808,11 +807,7 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
             </span>
           </div>
 
-          <div
-            style={{ ...inputWrap, position: "relative" }}
-            onPointerDownCapture={stopCapture}
-            onClickCapture={stopCapture}
-          >
+          <div style={{ ...inputWrap, position: "relative" }} onPointerDownCapture={stopCapture} onClickCapture={stopCapture}>
             <select
               value={posFilter}
               onChange={(e) => setPosFilter(e.target.value)}
@@ -860,15 +855,8 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
     );
   }
 
-  function PlayerRow({
-    p,
-    draftEnabled,
-  }: {
-    p: Player;
-    draftEnabled: boolean;
-  }) {
+  function PlayerRow({ p, draftEnabled }: { p: Player; draftEnabled: boolean }) {
     const isStar = !!watchlist[p.id];
-
 
     return (
       <div
@@ -881,13 +869,7 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
           borderBottom: "1px solid rgba(0,0,0,0.08)",
         }}
       >
-        <div
-          onClick={() => openPlayerCard(p)}
-          style={{
-            cursor: "pointer",
-            userSelect: "none",
-          }}
-        >
+        <div onClick={() => openPlayerCard(p)} style={{ cursor: "pointer", userSelect: "none" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <JerseyTile teamCode={p.teamCode} size={32} />
 
@@ -896,30 +878,18 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
                 {p.firstName[0]}. {p.lastName}
               </div>
               <div style={{ fontSize: 10, opacity: 0.7 }}>
-  {TEAM_OPTIONS.find((t) => t.value === p.teamCode)?.label ?? p.teamCode}
-  {" — "}
-  {p.posName}
-{p.secondaryPosName ? ` / ${p.secondaryPosName}` : ""}
-
-</div>
+                {TEAM_OPTIONS.find((t) => t.value === p.teamCode)?.label ?? p.teamCode}
+                {" — "}
+                {p.posName}
+                {p.secondaryPosName ? ` / ${p.secondaryPosName}` : ""}
+              </div>
             </div>
           </div>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          <div style={{ fontSize: 12, fontWeight: 900, width: 34, textAlign: "right" }}>
-            {p.draftRank}
-          </div>
-
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 900, width: 34, textAlign: "right" }}>{p.draftRank}</div>
           <StarButton active={isStar} onClick={() => toggleWatchlist(p.id)} />
-
           <DraftButton enabled={draftEnabled} onClick={() => onDraftClick(p)} />
         </div>
       </div>
@@ -928,10 +898,7 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
 
   function PlayerPoolTab() {
     const draftEnabledFor = (p: Player) =>
-      phase === "liveDraft" &&
-      isYouOnClock &&
-      canTeamDraftPlayer(yourTeamId, p) &&
-      !draftComplete;
+      phase === "liveDraft" && isYouOnClock && canTeamDraftPlayer(yourTeamId, p) && !draftComplete;
 
     return (
       <>
@@ -943,18 +910,14 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
               <div style={{ textAlign: "right" }}>Draft Rank</div>
             </div>
           </div>
-{playerPoolPlayers.length === 0 ? (
-  <div style={{ padding: 14, fontSize: 12, fontWeight: 700, opacity: 0.7 }}>
-    No eligible players available for your remaining roster slots.
-  </div>
-) : (
-  playerPoolPlayers.map((p) => (
-    <PlayerRow key={p.id} p={p} draftEnabled={draftEnabledFor(p)} />
-  ))
-)}
 
-
-
+          {playerPoolPlayers.length === 0 ? (
+            <div style={{ padding: 14, fontSize: 12, fontWeight: 700, opacity: 0.7 }}>
+              No eligible players available for your remaining roster slots.
+            </div>
+          ) : (
+            playerPoolPlayers.map((p) => <PlayerRow key={p.id} p={p} draftEnabled={draftEnabledFor(p)} />)
+          )}
         </div>
       </>
     );
@@ -962,10 +925,7 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
 
   function WatchlistTab() {
     const draftEnabledFor = (p: Player) =>
-      phase === "liveDraft" &&
-      isYouOnClock &&
-      canTeamDraftPlayer(yourTeamId, p) &&
-      !draftComplete;
+      phase === "liveDraft" && isYouOnClock && canTeamDraftPlayer(yourTeamId, p) && !draftComplete;
 
     return (
       <>
@@ -983,25 +943,35 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
               No players in your watchlist yet.
             </div>
           ) : (
-            watchlistPlayers.map((p) => (
-              <PlayerRow key={p.id} p={p} draftEnabled={draftEnabledFor(p)} />
-            ))
+            watchlistPlayers.map((p) => <PlayerRow key={p.id} p={p} draftEnabled={draftEnabledFor(p)} />)
           )}
         </div>
       </>
     );
   }
 
-
-const [selectedTeamId, setSelectedTeamId] = useState<string>("t-1");
+  // ✅ IMPORTANT: this MUST be inside DraftRoomPage (it’s a hook)
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+useEffect(() => {
+  // if nothing selected yet, or selected team no longer exists, pick the first team
+  if (!teams.length) return;
+  if (!selectedTeamId || !teams.some((t) => t.id === selectedTeamId)) {
+    setSelectedTeamId(teams[0].id);
+  }
+}, [teams, selectedTeamId]);
 
   function TeamsTab() {
-    
-
     const roster = rosters[selectedTeamId] ?? null;
 
-
-
+    if (!roster) {
+    return (
+      <div style={{ ...listBox, marginTop: 10, padding: 14 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.7 }}>
+          Loading rosters…
+        </div>
+      </div>
+    );
+  }
     return (
       <>
         <div style={{ marginTop: 10 }}>
@@ -1043,10 +1013,12 @@ const [selectedTeamId, setSelectedTeamId] = useState<string>("t-1");
               </div>
 
               {Array.from({ length: slot.count }).map((_, i) => {
-                const entry =
-                  slot.posAbbrev === "WC"
-                    ? roster?.wildcards?.[i] ?? null
-                    : roster?.slots?.[slot.posAbbrev]?.[i] ?? null;
+               const rawEntry =
+  slot.posAbbrev === "WC"
+    ? roster?.wildcards?.[i] ?? null
+    : roster?.slots?.[slot.posAbbrev]?.[i] ?? null;
+
+const entry = resolvePlayer(rawEntry);
 
                 return (
                   <div
@@ -1060,53 +1032,45 @@ const [selectedTeamId, setSelectedTeamId] = useState<string>("t-1");
                     }}
                   >
                     {entry ? (
-  <div
-    onClick={() => openPlayerCard(entry)}
-    style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
-  >
-    <JerseyTile teamCode={entry.teamCode} size={32} />
-
-    <div>
-      <div style={{ fontSize: 12, fontWeight: 700 }}>
-        {entry.firstName[0]}. {entry.lastName}
-      </div>
-      <div style={{ fontSize: 10, opacity: 0.7 }}>
-        {TEAM_OPTIONS.find((t) => t.value === entry.teamCode)?.label ?? entry.teamCode}
-        {" — "}
-        {derivePosName(entry.posAbbrev)}
-{entry.secondaryPosAbbrev ? ` / ${derivePosName(entry.secondaryPosAbbrev)}` : ""}
-
-
-      </div>
-    </div>
-  </div>
-) : (
-  <div style={{ display: "flex", alignItems: "center", gap: 10, opacity: 0.55 }}>
-    <div
-      style={{
-        width: 34,
-        height: 34,
-        borderRadius: 10,
-        border: "1px solid rgba(0,0,0,0.10)",
-        display: "grid",
-        placeItems: "center",
-        fontWeight: 700,
-        fontSize: 22,
-        color: "rgba(15,23,42,0.55)",
-      }}
-    >
-      +
-    </div>
-    <div style={{ fontSize: 12, fontWeight: 500 }}>
-      {slot.posAbbrev === "WC" ? "Wildcard" : slot.label.slice(0, -1)}
-    </div>
-  </div>
-)}
-
+                      <div onClick={() => openPlayerCard(entry)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                        <JerseyTile teamCode={entry.teamCode} size={32} />
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 700 }}>
+                            {(entry.firstName?.[0] ?? "?")}. {entry.lastName ?? ""}
+                          </div>
+                          <div style={{ fontSize: 10, opacity: 0.7 }}>
+                            {TEAM_OPTIONS.find((t) => t.value === entry.teamCode)?.label ?? entry.teamCode}
+                            {" — "}
+                            {derivePosName(entry.posAbbrev)}
+                            {entry.secondaryPosAbbrev ? ` / ${derivePosName(entry.secondaryPosAbbrev)}` : ""}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, opacity: 0.55 }}>
+                        <div
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: 10,
+                            border: "1px solid rgba(0,0,0,0.10)",
+                            display: "grid",
+                            placeItems: "center",
+                            fontWeight: 700,
+                            fontSize: 22,
+                            color: "rgba(15,23,42,0.55)",
+                          }}
+                        >
+                          +
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 500 }}>
+                          {slot.posAbbrev === "WC" ? "Wildcard" : slot.label.slice(0, -1)}
+                        </div>
+                      </div>
+                    )}
 
                     <div style={{ textAlign: "right", fontSize: 12, fontWeight: 900, opacity: 0.8 }}>
                       {entry ? (getPlayerPickNumber(entry.id) ?? "") : ""}
-
                     </div>
                   </div>
                 );
@@ -1121,25 +1085,22 @@ const [selectedTeamId, setSelectedTeamId] = useState<string>("t-1");
   function DraftResultsTab() {
     return (
       <div
-  ref={draftResultsScrollRef}
-  onScroll={() => {
-    const el = draftResultsScrollRef.current;
-    if (!el) return;
+        ref={draftResultsScrollRef}
+        onScroll={() => {
+          const el = draftResultsScrollRef.current;
+          if (!el) return;
 
-    const distanceFromBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight;
-
-    shouldAutoScrollRef.current = distanceFromBottom < 80;
-  }}
-  style={{
-    ...listBox,
-    marginTop: 10,
-    maxHeight: "70vh",
-    overflowY: "auto",
-    WebkitOverflowScrolling: "touch",
-  }}
->
-
+          const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+          shouldAutoScrollRef.current = distanceFromBottom < 80;
+        }}
+        style={{
+          ...listBox,
+          marginTop: 10,
+          maxHeight: "70vh",
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
         <div style={{ padding: "8px 17px", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
           <div style={{ display: "grid", gridTemplateColumns: "54px 1fr 60px" }}>
             <div>Pick</div>
@@ -1149,7 +1110,6 @@ const [selectedTeamId, setSelectedTeamId] = useState<string>("t-1");
         </div>
 
         {draftResults.map((r, idx) => {
-
           const hasPlayer = !!r.player;
 
           return (
@@ -1171,32 +1131,22 @@ const [selectedTeamId, setSelectedTeamId] = useState<string>("t-1");
               {r.player ? (
                 (() => {
                   const player = r.player;
-                  const teamLabel =
-                    TEAM_OPTIONS.find((t) => t.value === player.teamCode)?.label ?? player.teamCode;
+                  const teamLabel = TEAM_OPTIONS.find((t) => t.value === player.teamCode)?.label ?? player.teamCode;
 
                   return (
                     <button
                       onClick={() => openPlayerCard(player)}
-                      style={{
-                        border: "none",
-                        background: "transparent",
-                        padding: 0,
-                        textAlign: "left",
-                        cursor: "pointer",
-                      }}
+                      style={{ border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: "pointer" }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <JerseyTile teamCode={player.teamCode} size={32} />
-
                         <div>
                           <div style={{ fontWeight: 700, fontSize: 12 }}>
                             {player.firstName[0]}. {player.lastName}
                           </div>
                           <div style={{ fontSize: 10, opacity: 0.7 }}>
                             {teamLabel} {" — "} {derivePosName(player.posAbbrev)}
-{player.secondaryPosAbbrev ? ` / ${derivePosName(player.secondaryPosAbbrev)}` : ""}
-
-
+                            {player.secondaryPosAbbrev ? ` / ${derivePosName(player.secondaryPosAbbrev)}` : ""}
                           </div>
                         </div>
                       </div>
@@ -1250,9 +1200,7 @@ const [selectedTeamId, setSelectedTeamId] = useState<string>("t-1");
             color: "#0f172a",
           }}
         >
-          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 10 }}>
-            Draft the following player?
-          </div>
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 10 }}>Draft the following player?</div>
 
           <div
             style={{
@@ -1303,11 +1251,11 @@ const [selectedTeamId, setSelectedTeamId] = useState<string>("t-1");
             </button>
             <button
               onClick={() => {
-  setModal(null);
-  confirmDraft(player);
-  resetLiveTimer(); // ✅ new pick starts with fresh 90s
-}}
-
+                setModal(null);
+                if (!leagueId) return;
+confirmDraft(player, leagueId, (lid) => completeDraft?.(lid));
+                resetLiveTimer();
+              }}
               style={{
                 height: 34,
                 borderRadius: 10,
@@ -1327,26 +1275,24 @@ const [selectedTeamId, setSelectedTeamId] = useState<string>("t-1");
     );
   }
 
-
   function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
     return (
       <div style={{ position: "fixed", inset: 0, zIndex: 10000 }}>
         <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)" }} onClick={onClose} />
-        <div
-          style={{
-            position: "absolute",
-            left: "50%",
-            top: "50%",
-            transform: "translate(-50%, -50%)",
-            width: "92%",
-            maxWidth: 520,
-          }}
-        >
+        <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", width: "92%", maxWidth: 520 }}>
           {children}
         </div>
       </div>
     );
   }
+
+  if (!ready) {
+  return (
+    <main style={{ minHeight: "100svh", display: "grid", placeItems: "center", color: "white" }}>
+      Loading…
+    </main>
+  );
+}
 
   return (
     <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
@@ -1356,68 +1302,12 @@ const [selectedTeamId, setSelectedTeamId] = useState<string>("t-1");
           position: "fixed",
           inset: 0,
           zIndex: -1,
-          background:
-            "linear-gradient(to bottom, rgb(15, 23, 42), rgb(13, 148, 136), rgb(16, 185, 129))",
+          background: "linear-gradient(to bottom, rgb(15, 23, 42), rgb(13, 148, 136), rgb(16, 185, 129))",
         }}
       />
 
-      <div
-        style={{
-          maxWidth: 420,
-          margin: "0 auto",
-          padding: "16px 18px",
-          paddingBottom: "calc(18px + env(safe-area-inset-bottom))",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
-          <label style={{ fontSize: 11, fontWeight: 900, opacity: 0.85 }}>
-            DEV:&nbsp;
-            <select
-              value={phase}
-              onChange={(e) => setPhase(e.target.value as DraftPhase)}
-              style={{
-                marginLeft: 6,
-                height: 26,
-                borderRadius: 8,
-                border: "none",
-                outline: "none",
-                padding: "0 8px",
-                fontSize: 11,
-                fontWeight: 800,
-                color: "#0f172a",
-                background: "rgba(255,255,255,0.9)",
-              }}
-            >
-              <option value="preDraft">Pre Draft</option>
-              <option value="liveDraft">Live Draft</option>
-            </select>
-          </label>
-        </div>
-<div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
-  <label style={{ fontSize: 11, fontWeight: 900, opacity: 0.85 }}>
-    Draft Order:&nbsp;
-    <select
-      value={isDraftOrderSet ? "set" : "tbc"}
-      onChange={(e) => setDraftOrderSet(e.target.value === "set")}
-      style={{
-        marginLeft: 6,
-        height: 26,
-        borderRadius: 8,
-        border: "none",
-        outline: "none",
-        padding: "0 8px",
-        fontSize: 11,
-        fontWeight: 800,
-        color: "#0f172a",
-        background: "rgba(255,255,255,0.9)",
-      }}
-    >
-      <option value="tbc">TBC</option>
-      <option value="set">Set</option>
-    </select>
-  </label>
-</div>
-
+      <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px", paddingBottom: "calc(18px + env(safe-area-inset-bottom))" }}>
+        
         {phase === "preDraft" ? <PreDraftHeader /> : <LiveHeader />}
 
         <Tabs />
@@ -1429,60 +1319,39 @@ const [selectedTeamId, setSelectedTeamId] = useState<string>("t-1");
       </div>
 
       <AppMenu
-  open={menuOpen}
-  onClose={() => setMenuOpen(false)}
-  leagues={leagues}
-  activeLeagueId={activeLeague?.id ?? null}
-  setActiveLeague={setActiveLeague}
-  activeItem="Draft Room"
-/>
-
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        leagues={leagues}
+        activeLeagueId={activeLeagueId ?? null}
+        setActiveLeague={setActiveLeague}
+        activeItem="Draft Room"
+      />
 
       {modal?.type === "draftConfirm" && <DraftConfirmModal player={modal.player} />}
 
-{modal?.type === "playerCard" && (
-  <PlayerCardModal
-    onClose={() => setModal(null)}
-    player={{
-      ...modal.player,
-      // ensure the modal always gets live status fields if available
-      status: (getLivePlayerById(modal.player.id)?.status ?? modal.player.status ?? null) as any,
-      weeklyStatus: getLivePlayerById(modal.player.id)?.weeklyStatus ?? (modal.player as any).weeklyStatus,
-    }}
-    // IMPORTANT: don't pass "status" prop anymore unless you want it to override the sheet
-    // status={...}  <-- remove this line
-
-    stats={modal.player.stats ?? {}}
-    teamLabel={getPlayerTeamName(modal.player.id) ?? "Available"}
-    initialTab="Stats"
-    actions={
-      isDrafted(modal.player.id)
-        ? []
-        : phase === "preDraft"
-        ? [
-            {
-              label: !!watchlist[modal.player.id] ? "Remove Watchlist" : "Add Watchlist",
-              onClick: () => toggleWatchlist(modal.player.id),
-              variant: "primary",
-            },
-          ]
-        : [
-            {
-              label: !!watchlist[modal.player.id] ? "Remove from Watchlist" : "Add to Watchlist",
-              onClick: () => toggleWatchlist(modal.player.id),
-              variant: "secondary",
-            },
-            {
-              label: "Draft",
-              onClick: () => onDraftClick(modal.player),
-              variant: "primary",
-            },
-          ]
-    }
-  />
-)}
-
-
+      {modal?.type === "playerCard" && (
+        <PlayerCardModal
+          onClose={() => setModal(null)}
+          player={{
+            ...modal.player,
+            status: (getLivePlayerById(modal.player.id)?.status ?? modal.player.status ?? null) as any,
+            weeklyStatus: getLivePlayerById(modal.player.id)?.weeklyStatus ?? (modal.player as any).weeklyStatus,
+          }}
+          stats={modal.player.stats ?? {}}
+          teamLabel={getPlayerTeamName(modal.player.id) ?? "Available"}
+          initialTab="Stats"
+          actions={
+            isDrafted(modal.player.id)
+              ? []
+              : phase === "preDraft"
+              ? [{ label: !!watchlist[modal.player.id] ? "Remove Watchlist" : "Add Watchlist", onClick: () => toggleWatchlist(modal.player.id), variant: "primary" }]
+              : [
+                  { label: !!watchlist[modal.player.id] ? "Remove from Watchlist" : "Add to Watchlist", onClick: () => toggleWatchlist(modal.player.id), variant: "secondary" },
+                  { label: "Draft", onClick: () => onDraftClick(modal.player), variant: "primary" },
+                ]
+          }
+        />
+      )}
     </main>
   );
 }

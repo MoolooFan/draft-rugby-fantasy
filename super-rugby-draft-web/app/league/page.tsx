@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { getActiveUser } from "@/lib/session";
+import { useRequireSession } from "@/lib/session/useRequireSession";
 import { useLeagueStore } from "@/lib/league/store";
 import type { PlayoffFormat } from "@/lib/league/types";
 import { buildLeagueSchedule } from "@/lib/league/schedule";
 import { AppMenu } from "@/components/AppMenu";
 import { usePlayersStore } from "@/lib/players/store";
+import { fantasyWeekToRealRound } from "@/lib/league/week";
+import fixturesData from "@/data/fixtures-2026.json";
+import type { Fixture } from "@/lib/fixtures/types";
 
 type LeagueTab = "Standings" | "Fixtures" | "Results";
 type Modal =
@@ -22,12 +24,15 @@ type Modal =
   home: string;
   away: string;
 
-  // ✅ optional IDs so we can calculate BYE points accurately
   homeTeamId?: string | null;
   awayTeamId?: string | null;
 
   homeScore: number | null;
   awayScore: number | null;
+
+  // ✅ ADD THESE (for playoff label rows)
+  label?: string | null;
+  kind?: "regular" | "playoff" | "consolation" | string | null;
 };
 
 
@@ -35,6 +40,93 @@ type FixtureWeek = {
   weekNo: number;
   rows: FixtureRow[];
 };
+
+type AnyFixture = Fixture & {
+  id: string;
+  week: number; // real round
+  kickoffAt: string | number;
+  status?: string;
+  homeTeam?: string;
+  awayTeam?: string;
+  homeScore?: number | null;
+  awayScore?: number | null;
+};
+
+function toMs(x: any): number {
+  const n = typeof x === "number" ? x : new Date(x).getTime();
+  return Number.isFinite(n) ? n : 0;
+}
+
+function isFixtureComplete(f: AnyFixture) {
+  const st = String(f.status ?? "").toLowerCase();
+  if (st === "final" || st === "complete") return true;
+  if (f.homeScore != null && f.awayScore != null) return true;
+  return false;
+}
+
+function resultsKey(leagueId: string | null) {
+  return `league_results_${leagueId ?? "no-league"}`;
+}
+
+type StoredMatchResult = {
+  weekNo: number;             // fantasy week
+  kind: "match" | "bye";
+  homeTeamId: string | null;
+  awayTeamId: string | null;
+  homeScore: number;          // fantasy score
+  awayScore: number;          // fantasy score
+  finalizedAtMs: number;
+};
+
+type RemoteMatchResult = {
+  league_id: string;
+  week_no: number;
+  kind: "match" | "bye";
+  home_team_id: string;
+  away_team_id: string; // '__BYE__' for byes
+  home_score: number;
+  away_score: number;
+  finalized_at_ms: number;
+};
+
+const BYE_SENTINEL = "__BYE__";
+
+function rrKey(r: Pick<RemoteMatchResult, "week_no" | "kind" | "home_team_id" | "away_team_id">) {
+  return `${r.week_no}|${r.kind}|${r.home_team_id}|${r.away_team_id}`;
+}
+
+function readLeagueResults(leagueId: string | null): StoredMatchResult[] {
+  if (typeof window === "undefined") return [];
+  const raw = window.localStorage.getItem(resultsKey(leagueId));
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as StoredMatchResult[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLeagueResults(leagueId: string | null, rows: StoredMatchResult[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(resultsKey(leagueId), JSON.stringify(rows));
+}
+
+function upsertResult(leagueId: string | null, next: StoredMatchResult) {
+  if (typeof window === "undefined") return;
+  const existing = readLeagueResults(leagueId);
+  const idx = existing.findIndex(
+    (r) =>
+      r.weekNo === next.weekNo &&
+      r.kind === next.kind &&
+      r.homeTeamId === next.homeTeamId &&
+      r.awayTeamId === next.awayTeamId
+  );
+
+  if (idx >= 0) return; // ✅ already finalized — don’t change it
+
+  writeLeagueResults(leagueId, [...existing, next]);
+}
 
 // ---------- Live scoring helpers (same logic as Matchup page) ----------
 type SlotId =
@@ -172,12 +264,37 @@ function parseDatetimeLocal(value: string) {
 }
 
 export default function LeaguePage() {
-  const router = useRouter();
+ useRequireSession();
+  // --- prevent "bounce" before zustand persist hydrates ---
+  const [leagueHydrated, setLeagueHydrated] = useState(() =>
+    // @ts-ignore - persist is added by zustand middleware at runtime
+    useLeagueStore.persist?.hasHydrated?.() ?? true
+  );
 
   useEffect(() => {
-    const user = getActiveUser();
-    if (!user) router.replace("/");
-  }, [router]);
+    // @ts-ignore
+    const persistApi = useLeagueStore.persist;
+    if (!persistApi?.onFinishHydration) {
+      setLeagueHydrated(true);
+      return;
+    }
+
+    // set immediately in case it hydrated between renders
+    setLeagueHydrated(persistApi.hasHydrated());
+
+    const unsub = persistApi.onFinishHydration(() => setLeagueHydrated(true));
+    return () => {
+      // onFinishHydration returns an unsubscribe in zustand v4
+      try { unsub?.(); } catch {}
+    };
+  }, []);
+
+const [mounted, setMounted] = useState(false);
+
+useEffect(() => {
+  setMounted(true);
+}, []);
+
 
     // ---- Live sheet feed (MUST be inside component) ----
   const livePlayersLoaded = usePlayersStore((s) => s.loaded);
@@ -212,46 +329,99 @@ export default function LeaguePage() {
     return sheetPid != null ? normaliseId(sheetPid) : normaliseId(p.id);
   }
 
-  // Build: weekNo -> (playerId -> points)
-  const pointsByWeek = useMemo(() => {
-    const byWeek = new Map<number, Map<string, number>>();
-    for (const row of roundRows ?? []) {
-      const w = rowRound(row);
-      if (!w) continue;
-      const pidRaw = rowPlayerId(row);
-      if (!pidRaw) continue;
+  // Build: REAL round -> (playerId -> points)
+const pointsByRealRound = useMemo(() => {
+  const byRound = new Map<number, Map<string, number>>();
+  for (const row of roundRows ?? []) {
+    const rr = rowRound(row); // this is REAL round from the sheet
+    if (!rr) continue;
 
-      const pid = normaliseId(pidRaw);
-      const pts = calcFantasyPoints(row);
+    const pidRaw = rowPlayerId(row);
+    if (!pidRaw) continue;
 
-      if (!byWeek.has(w)) byWeek.set(w, new Map());
-      byWeek.get(w)!.set(pid, pts);
-    }
-    return byWeek;
-  }, [roundRows]);
+    const pid = normaliseId(pidRaw);
+    const pts = calcFantasyPoints(row);
 
-  function pointsForPlayerWeek(weekNo: number, p: PlayerLite | null) {
-    const pid = getPlayerSheetId(p);
-    if (!pid) return 0;
-    return pointsByWeek.get(weekNo)?.get(pid) ?? 0;
+    if (!byRound.has(rr)) byRound.set(rr, new Map());
+    byRound.get(rr)!.set(pid, pts);
   }
+  return byRound;
+}, [roundRows]);
+
+function pointsForPlayerWeek(weekNo: number, p: PlayerLite | null) {
+  const pid = getPlayerSheetId(p);
+  if (!pid) return 0;
+
+  const startRound = league?.startRound ?? 1;
+  const realRound = fantasyWeekToRealRound(startRound, weekNo);
+
+  return pointsByRealRound.get(realRound)?.get(pid) ?? 0;
+}
 
   const leagues = useLeagueStore((s) => s.leagues);
-const activeLeagueId = useLeagueStore((s) => s.activeLeagueId);
+const activeLeagueId = useLeagueStore((s: any) => s.activeLeagueId ?? null);
 
 
+const refreshLeague = useLeagueStore((s) => s.refreshLeague);
+const startLeagueRealtime = useLeagueStore((s) => s.startLeagueRealtime);
+
+
+useEffect(() => {
+  if (!mounted) return;
+  if (!leagueHydrated) return;
+  if (!activeLeagueId) return;
+
+  const run = () => refreshLeague(activeLeagueId);
+  run();
+
+  window.addEventListener("focus", run);
+  document.addEventListener("visibilitychange", run);
+
+  return () => {
+    window.removeEventListener("focus", run);
+    document.removeEventListener("visibilitychange", run);
+  };
+}, [mounted, leagueHydrated, activeLeagueId, refreshLeague]);
+
+useEffect(() => {
+  if (!mounted) return;
+  if (!leagueHydrated) return;
+  if (!activeLeagueId) return;
+
+  const stop = startLeagueRealtime(activeLeagueId);
+  return () => stop();
+}, [mounted, leagueHydrated, activeLeagueId, startLeagueRealtime]);
 
 const league = useMemo(() => {
   return leagues.find((l) => l.id === activeLeagueId) ?? null;
 }, [leagues, activeLeagueId]);
 
+const realFixtures = useMemo(() => fixturesData as AnyFixture[], []);
 
+const normalizedFixtures = useMemo(() => {
+  return realFixtures
+    .map((f) => ({ ...f, kickoffMs: toMs(f.kickoffAt) }))
+    .sort((a, b) => (a as any).kickoffMs - (b as any).kickoffMs);
+}, [realFixtures]);
+
+function isRealRoundComplete(realRound: number) {
+  const wk = normalizedFixtures.filter((f) => f.week === realRound);
+  return wk.length ? wk.every(isFixtureComplete) : false;
+}
 
   const setActiveLeague = useLeagueStore((s) => s.setActiveLeague);
   const getIsCreator = useLeagueStore((s) => s.isActiveLeagueCreator);
 const isCreator = getIsCreator();
 
+useEffect(() => {
+  if (!mounted) return;
+  if (!leagueHydrated) return;
 
+  // If we have leagues but no activeLeagueId yet, pick the first one
+  if (!activeLeagueId && leagues?.length) {
+    setActiveLeague(leagues[0].id);
+  }
+}, [mounted, leagueHydrated, activeLeagueId, leagues, setActiveLeague]);
 
   const updateLeagueSettings = useLeagueStore((s) => s.updateLeagueSettings);
   const setDraftOrder = useLeagueStore((s) => s.setDraftOrder);
@@ -282,8 +452,41 @@ type StandingRow = {
   movement: "same" | "up" | "down";
 };
 
-  const weeks = league?.totalWeeks ?? 16;
-  const currentWeek = league?.currentWeek ?? 1;
+const currentWeek = league?.currentWeek ?? 1;
+
+const playoffWeeks =
+  league?.playoffFormat === "final4" ? 2 :
+  league?.playoffFormat === "final3" ? 2 :
+  league?.playoffFormat === "final2" ? 1 :
+  0;
+
+// ✅ Real Super Rugby rounds (full season)
+const REAL_REGULAR_ROUNDS = league?.realRegularSeasonRounds ?? 16;
+
+// ✅ Start round must be within 1..REAL_REGULAR_ROUNDS
+const START_ROUND_RAW = league?.startRound ?? 1;
+const START_ROUND = Math.min(
+  REAL_REGULAR_ROUNDS,
+  Math.max(1, START_ROUND_RAW)
+);
+
+// ✅ Fantasy regular season is FIXED to 14 weeks (or less if startRound is late)
+const FANTASY_REGULAR_WEEKS_CAP = 14;
+const regularWeeks = Math.max(
+  1,
+  Math.min(FANTASY_REGULAR_WEEKS_CAP, REAL_REGULAR_ROUNDS - START_ROUND + 1)
+);
+
+// ✅ Total season weeks = regular + playoffs
+const totalWeeks = regularWeeks + playoffWeeks;
+
+console.log("[WEEKS]", {
+  REAL_REGULAR_ROUNDS,
+  START_ROUND,
+  playoffWeeks,
+  regularWeeks,
+  totalWeeks,
+});
 
 function buildStandingsFromResults(uptoWeekInclusive: number): Omit<StandingRow, "rank" | "movement">[] {
   const teams = league?.teams ?? [];
@@ -305,17 +508,21 @@ function buildStandingsFromResults(uptoWeekInclusive: number): Omit<StandingRow,
   }
 
   const raw: any[] = buildLeagueSchedule({
-    teams,
-    totalWeeks: weeks,
-    currentWeek,
-    playoffFormat: league?.playoffFormat ?? "none",
-  }) as any[];
+  teams,
+  totalWeeks,
+  currentWeek,
+  playoffFormat: league?.playoffFormat ?? "none",
+}) as any[];
 
   const rows = Array.isArray(raw) ? raw : [];
 
   for (const m of rows) {
     const w = Number(m.weekNo);
     if (!w || w > uptoWeekInclusive) continue;
+
+    // ✅ skip playoff placeholder/label rows
+if ((m as any).label) continue;
+if ((m as any).kind && (m as any).kind !== "regular") continue;
 
     const homeId = m.homeTeamId ?? null;
     const awayId = m.awayTeamId ?? null;
@@ -324,7 +531,7 @@ function buildStandingsFromResults(uptoWeekInclusive: number): Omit<StandingRow,
     if (!homeId || !awayId) {
       const realId = homeId ?? awayId;
       if (!realId) continue;
-      const score = teamWeekScore(league?.id ?? null, realId, w);
+      const score = scoreFromStoredResult(w, realId);
       if (score == null) continue; // not actually played yet
 
       const r = base.get(realId);
@@ -339,8 +546,8 @@ function buildStandingsFromResults(uptoWeekInclusive: number): Omit<StandingRow,
       continue;
     }
 
-    const hs = teamWeekScore(league?.id ?? null, homeId, w);
-const as = teamWeekScore(league?.id ?? null, awayId, w);
+    const hs = scoreFromStoredResult(w, homeId);
+const as = scoreFromStoredResult(w, awayId);
     if (hs == null || as == null) continue; // not actually played yet
 
     const home = base.get(homeId);
@@ -373,6 +580,7 @@ const as = teamWeekScore(league?.id ?? null, awayId, w);
 
 const standings = useMemo<StandingRow[]>(() => {
   const totalWeeks = league?.totalWeeks ?? 16;
+  console.log("LEAGUE totalWeeks:", league?.totalWeeks, "playoffFormat:", league?.playoffFormat, "regularWeeks:", regularWeeks);
   const playedNow = Math.max(0, Math.min(totalWeeks, (league?.currentWeek ?? 1) - 1));
   const playedPrev = Math.max(0, Math.min(totalWeeks, (league?.currentWeek ?? 1) - 2));
 
@@ -399,7 +607,7 @@ const standings = useMemo<StandingRow[]>(() => {
 
     return { rank, ...r, movement };
   });
-}, [league?.id, league?.teams, league?.currentWeek, league?.totalWeeks, league?.playoffFormat, weeks, currentWeek, pointsByWeek]);
+}, [league?.id, league?.teams, league?.currentWeek, league?.totalWeeks, league?.playoffFormat, regularWeeks, totalWeeks, currentWeek, pointsByRealRound]);
 
 function readSnapshot(leagueId: string | null, teamId: string | null, weekNo: number): LockedSnapshot | null {
   if (typeof window === "undefined") return null;
@@ -436,14 +644,144 @@ function teamWeekScore(leagueId: string | null, teamId: string | null, weekNo: n
   return sum;
 }
 
+useEffect(() => {
+  if (typeof window === "undefined") return;
+  if (!league?.id) return;
 
+  const leagueId = league.id;
+  const teams = league.teams ?? [];
+  if (teams.length < 2) return;
+
+  // Build schedule rows (flat)
+  const raw: any[] = buildLeagueSchedule({
+    teams,
+    totalWeeks,
+    currentWeek,
+    playoffFormat: league.playoffFormat ?? "none",
+  }) as any[];
+
+  const rows = Array.isArray(raw) ? raw : [];
+
+  // We only finalize weeks that have happened / are current
+  const upto = Math.min(totalWeeks, currentWeek); // includes current week if SR round complete
+
+  for (const m of rows) {
+    const w = Number(m.weekNo);
+    if (!w || w > upto) continue;
+
+    // skip label/playoff placeholders
+    if ((m as any).label) continue;
+    if ((m as any).kind && (m as any).kind !== "regular") continue;
+
+    const startRound = league.startRound ?? 1;
+    const realRound = fantasyWeekToRealRound(startRound, w);
+
+    // ✅ only finalize after the REAL round is complete
+    if (!isRealRoundComplete(realRound)) continue;
+
+    const homeId = m.homeTeamId ?? null;
+    const awayId = m.awayTeamId ?? null;
+
+    // BYE handling
+    if (!homeId || !awayId) {
+      const realId = homeId ?? awayId;
+      if (!realId) continue;
+
+      const score = teamWeekScore(leagueId, realId, w);
+      if (score == null) continue;
+
+      upsertResult(leagueId, {
+        weekNo: w,
+        kind: "bye",
+        homeTeamId: realId,
+        awayTeamId: null,
+        homeScore: score,
+        awayScore: 0,
+        finalizedAtMs: Date.now(),
+      });
+
+      continue;
+    }
+
+    const hs = teamWeekScore(leagueId, homeId, w);
+    const as = teamWeekScore(leagueId, awayId, w);
+    if (hs == null || as == null) continue;
+
+    upsertResult(leagueId, {
+      weekNo: w,
+      kind: "match",
+      homeTeamId: homeId,
+      awayTeamId: awayId,
+      homeScore: hs,
+      awayScore: as,
+      finalizedAtMs: Date.now(),
+    });
+  }
+}, [
+  league?.id,
+  league?.teams,
+  league?.playoffFormat,
+  league?.startRound,
+  totalWeeks,
+  currentWeek,
+  pointsByRealRound,
+  normalizedFixtures,
+]);
+
+// ---------- "played" detection (single source of truth) ----------
+function rowPlayed(r: FixtureRow, weekNo: number) {
+  if (r.label) return false;
+  if (r.kind && r.kind !== "regular") return false;
+
+  const leagueId = league?.id ?? null;
+  if (!leagueId) return false;
+
+  const all = readLeagueResults(leagueId);
+
+  const homeId = r.homeTeamId ?? null;
+  const awayId = r.awayTeamId ?? null;
+
+  // BYE
+  if (!homeId || !awayId) {
+    const realId = homeId ?? awayId;
+    if (!realId) return false;
+    return all.some(
+      (x) => x.weekNo === weekNo && x.kind === "bye" && x.homeTeamId === realId
+    );
+  }
+
+  // normal match
+  return all.some(
+    (x) =>
+      x.weekNo === weekNo &&
+      x.kind === "match" &&
+      x.homeTeamId === homeId &&
+      x.awayTeamId === awayId
+  );
+}
+
+function scoreFromStoredResult(weekNo: number, teamId: string | null): number | null {
+  const leagueId = league?.id ?? null;
+  if (!leagueId || !teamId) return null;
+  const all = readLeagueResults(leagueId);
+
+  // match home/away
+  const m = all.find((x) => x.weekNo === weekNo && x.kind === "match" && (x.homeTeamId === teamId || x.awayTeamId === teamId));
+  if (m) return m.homeTeamId === teamId ? m.homeScore : m.awayScore;
+
+  // bye is stored as homeTeamId
+  const b = all.find((x) => x.weekNo === weekNo && x.kind === "bye" && x.homeTeamId === teamId);
+  if (b) return b.homeScore;
+
+  return null;
+}
 
   // ------- fixtures/results (generated placeholder) -------
 
-    const teamNameById = (id: string | null | undefined) => {
-    if (!id) return "BYE";
-    return league?.teams.find((t) => t.id === id)?.name ?? "TBC";
-  };
+    const teamNameById = (id: string | null | undefined, opts?: { tbcIfMissing?: boolean }) => {
+  if (!id) return opts?.tbcIfMissing ? "TBC" : "BYE";
+  return league?.teams.find((t) => t.id === id)?.name ?? "TBC";
+};
 
     const fixtures = useMemo<FixtureWeek[]>(() => {
 
@@ -451,11 +789,11 @@ function teamWeekScore(leagueId: string | null, teamId: string | null, weekNo: n
     if (teams.length < 2) return [];
 
     const raw: any = buildLeagueSchedule({
-      teams,
-      totalWeeks: weeks,
-      currentWeek,
-      playoffFormat: league?.playoffFormat ?? "none",
-    });
+  teams,
+  totalWeeks,
+  currentWeek,
+  playoffFormat: league?.playoffFormat ?? "none",
+});
 
     // ---- Normalise to: [{ weekNo, rows: [{ home, away, homeScore, awayScore }] }] ----
 
@@ -463,42 +801,80 @@ function teamWeekScore(leagueId: string | null, teamId: string | null, weekNo: n
     if (Array.isArray(raw) && raw.length > 0 && "rows" in raw[0]) {
   return raw.map((w: any) => ({
     weekNo: Number(w.weekNo),
-    rows: (w.rows ?? []).map((r: any) => ({
-      weekNo: Number(w.weekNo),
-      home: typeof r.home === "string" ? r.home : teamNameById(r.homeTeamId),
-      away: typeof r.away === "string" ? r.away : teamNameById(r.awayTeamId),
-      homeTeamId: r.homeTeamId ?? null,
-      awayTeamId: r.awayTeamId ?? null,
-      homeScore: r.homeTeamId ? teamWeekScore(league?.id ?? null, r.homeTeamId, Number(w.weekNo)) : null,
-awayScore: r.awayTeamId ? teamWeekScore(league?.id ?? null, r.awayTeamId, Number(w.weekNo)) : null,
-    })),
+rows: (w.rows ?? []).map((r: any) => {
+  const label = (r.label ?? null) as string | null;
+  const kind = (r.kind ?? null) as string | null;
+
+  const isLabel = !!label;
+  const isNonRegular = !!kind && kind !== "regular"; // ✅ ADD THIS
+
+  return {
+    weekNo: Number(w.weekNo),
+
+    home: isLabel
+      ? label!
+      : (typeof r.home === "string"
+          ? r.home
+          : teamNameById(r.homeTeamId, { tbcIfMissing: isNonRegular })), // ✅ CHANGED
+
+    away: isLabel
+      ? ""
+      : (typeof r.away === "string"
+          ? r.away
+          : teamNameById(r.awayTeamId, { tbcIfMissing: isNonRegular })), // ✅ CHANGED
+    homeTeamId: r.homeTeamId ?? null,
+    awayTeamId: r.awayTeamId ?? null,
+
+    // ✅ No scores for label rows
+    homeScore: isLabel ? null : scoreFromStoredResult(Number(w.weekNo), r.homeTeamId ?? null),
+awayScore: isLabel ? null : scoreFromStoredResult(Number(w.weekNo), r.awayTeamId ?? null),
+
+    // ✅ pass through
+    label,
+    kind,
+  };
+}),
   }));
 }
 
     // Case B: flat list of matches with weekNo
     if (Array.isArray(raw)) {
-      return Array.from({ length: weeks }).map((_, wIdx) => {
-        const weekNo = wIdx + 1;
+  // build 1..totalWeeks, because playoffs should occupy the last weeks (15-16)
+  return Array.from({ length: totalWeeks }).map((_, wIdx) => {
+    const weekNo = wIdx + 1;
 
-        const weekRows = raw
-          .filter((r: any) => Number(r.weekNo) === weekNo)
-          .map((r: any) => ({
-            weekNo,
-            home: typeof r.home === "string" ? r.home : teamNameById(r.homeTeamId),
-            away: typeof r.away === "string" ? r.away : teamNameById(r.awayTeamId),
-            homeTeamId: r.homeTeamId ?? null,
-awayTeamId: r.awayTeamId ?? null,
-            homeScore: r.homeTeamId ? teamWeekScore(league?.id ?? null, r.homeTeamId, weekNo) : null,
-awayScore: r.awayTeamId ? teamWeekScore(league?.id ?? null, r.awayTeamId, weekNo) : null,
-          }));
+    const weekRows = raw
+      .filter((r: any) => Number(r.weekNo) === weekNo)
+      .map((r: any) => {
+  const label = (r.label ?? null) as string | null;
+  const kind = (r.kind ?? null) as string | null;
+  const isLabel = !!label;
+  const isNonRegular = !!kind && kind !== "regular"; // ✅ ADD THIS
 
-        return { weekNo, rows: weekRows };
+  return {
+    weekNo,
+
+    home: isLabel ? label! : teamNameById(r.homeTeamId, { tbcIfMissing: isNonRegular }), // ✅ CHANGED
+    away: isLabel ? "" : teamNameById(r.awayTeamId, { tbcIfMissing: isNonRegular }),   // ✅ CHANGED
+
+          homeTeamId: r.homeTeamId ?? null,
+          awayTeamId: r.awayTeamId ?? null,
+
+          homeScore: isLabel ? null : scoreFromStoredResult(weekNo, r.homeTeamId ?? null),
+awayScore: isLabel ? null : scoreFromStoredResult(weekNo, r.awayTeamId ?? null),
+
+          label,
+          kind,
+        };
       });
-    }
+
+    return { weekNo, rows: weekRows };
+  });
+}
 
     // Fallback
     return [];
- }, [league?.id, league?.teams, league?.playoffFormat, weeks, currentWeek, pointsByWeek]);
+ }, [league?.id, league?.teams, league?.playoffFormat, regularWeeks, totalWeeks, currentWeek, pointsByRealRound]);
 
 
 
@@ -712,19 +1088,42 @@ awayScore: r.awayTeamId ? teamWeekScore(league?.id ?? null, r.awayTeamId, weekNo
     const future = fixtures.filter((w) => w.weekNo >= currentWeek);
     return (
       <div style={listBox}>
-        {future.map((w: FixtureWeek, idx) => (
+        {future.map((w: FixtureWeek, idx) => {
+  const isPlayoffGroup = w.weekNo > regularWeeks;
+
+  return (
 
           <div key={w.weekNo} style={{ borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)" }}>
             <div style={{ padding: "2px 10px", fontSize: 10, fontWeight: 500, opacity: 0.65, textAlign: "center" }}>
-              Week {w.weekNo}
+              {isPlayoffGroup ? "Playoffs" : `Week ${w.weekNo}`}
             </div>
 
             {w.rows.map((r, i) => {
+              const isLabelRow = !!r.label;
+if (isLabelRow) {
+  return (
+    <div
+      key={`${w.weekNo}-${i}`}
+      style={{
+        padding: "9px 10px",
+        borderTop: "1px solid rgba(0,0,0,0.08)",
+        fontSize: 12,
+        fontWeight: 900,
+        textAlign: "center",
+        opacity: 0.9,
+      }}
+    >
+      {r.home}
+    </div>
+  );
+}
   const isHomeBye = r.home === "BYE";
   const isAwayBye = r.away === "BYE";
   const isBye = isHomeBye || isAwayBye;
+  
 
   const realTeam = isHomeBye ? r.away : r.home;
+  const played = rowPlayed(r, w.weekNo);
 
   return (
     <div
@@ -758,14 +1157,40 @@ awayScore: r.awayTeamId ? teamWeekScore(league?.id ?? null, r.awayTeamId, weekNo
 
 
           </div>
-        ))}
+        );
+      })}
       </div>
     );
   }
 
+function hasPlayedResult(w: FixtureWeek) {
+  return (w.rows ?? []).some((r) => rowPlayed(r, w.weekNo));
+}
+
+function manuallyInsertResult(
+  weekNo: number,
+  homeTeamId: string,
+  awayTeamId: string,
+  homeScore: number,
+  awayScore: number
+) {
+  if (!league?.id) return;
+
+  upsertResult(league.id, {
+    weekNo,
+    kind: "match",
+    homeTeamId,
+    awayTeamId,
+    homeScore,
+    awayScore,
+    finalizedAtMs: Date.now(),
+  });
+}
+
   function ResultsTab() {
     const past = fixtures
-  .filter((w) => w.weekNo < currentWeek)
+  .filter((w) => w.weekNo <= currentWeek) // ✅ include current week if played
+  .filter(hasPlayedResult)
   .slice()
   .reverse();
 
@@ -773,20 +1198,80 @@ awayScore: r.awayTeamId ? teamWeekScore(league?.id ?? null, r.awayTeamId, weekNo
       <div style={listBox}>
         {past.map((w, idx) => (
           <div key={w.weekNo} style={{ borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)" }}>
-            <div style={{ padding: "2px 10px", fontSize: 10, fontWeight: 500, opacity: 0.65, textAlign: "center" }}>
-              Week {w.weekNo}
-            </div>
 
-            {w.rows.map((r, i) => {
+  {/* Week heading */}
+  <div style={{ padding: "2px 10px", fontSize: 10, fontWeight: 500, opacity: 0.65, textAlign: "center" }}>
+    Week {w.weekNo}
+  </div>
+
+  {/* ✅ INSERT BUTTON RIGHT HERE */}
+  {isCreator && (
+    <div style={{ padding: "6px 10px", textAlign: "center" }}>
+      <button
+        style={{
+          height: 28,
+          borderRadius: 999,
+          padding: "0 14px",
+          fontSize: 11,
+          fontWeight: 900,
+          background: "#22C55E",
+          border: "none",
+          color: "white",
+          cursor: "pointer",
+        }}
+        onClick={() => {
+          const firstMatch = w.rows.find(r => !r.label && r.homeTeamId && r.awayTeamId);
+          if (!firstMatch) return;
+
+          const hs = Number(prompt("Home score?"));
+          const as = Number(prompt("Away score?"));
+          if (!Number.isFinite(hs) || !Number.isFinite(as)) return;
+
+          manuallyInsertResult(
+            w.weekNo,
+            firstMatch.homeTeamId!,
+            firstMatch.awayTeamId!,
+            hs,
+            as
+          );
+        }}
+      >
+        Add Score (Temp)
+      </button>
+    </div>
+  )}
+
+  {/* existing match rows below */}
+  {w.rows.map((r, i) => {
+              const isLabelRow = !!r.label;
+if (isLabelRow) {
+  return (
+    <div
+      key={`${w.weekNo}-${i}`}
+      style={{
+        padding: "9px 10px",
+        borderTop: "1px solid rgba(0,0,0,0.08)",
+        fontSize: 12,
+        fontWeight: 900,
+        textAlign: "center",
+        opacity: 0.9,
+      }}
+    >
+      {r.home}
+    </div>
+  );
+}
   const isHomeBye = r.home === "BYE";
   const isAwayBye = r.away === "BYE";
   const isBye = isHomeBye || isAwayBye;
-
+const played = rowPlayed(r, w.weekNo);
   const realTeamName = isHomeBye ? r.away : r.home;
-  const realTeamId =
-    isHomeBye ? (r.awayTeamId ?? realTeamName) : (r.homeTeamId ?? realTeamName);
+const realTeamId = isHomeBye ? (r.awayTeamId ?? null) : (r.homeTeamId ?? null);
 
-  const byePoints = isBye ? teamWeekScore(league?.id ?? null, realTeamId, w.weekNo) : null;
+const byePoints =
+  isBye && realTeamId
+    ? scoreFromStoredResult(w.weekNo, realTeamId)
+    : null;
 
   return (
     <div
@@ -825,8 +1310,10 @@ awayScore: r.awayTeamId ? teamWeekScore(league?.id ?? null, r.awayTeamId, weekNo
 
       {/* Middle */}
       <div style={{ opacity: 0.8, fontWeight: 700 }}>
-        {isBye ? "BYE" : "v"}
-      </div>
+  {played
+    ? `${r.homeScore ?? "—"} - ${r.awayScore ?? "—"}`
+    : (isBye ? "BYE" : "v")}
+</div>
 
       {/* Right */}
       <div
@@ -1086,7 +1573,19 @@ function JoinLeagueModal() {
 const [startRound, setStartRound] = useState<number>(league.startRound ?? 1);
     const [playoffs, setPlayoffs] = useState<PlayoffFormat>(league.playoffFormat);
 const REAL_REGULAR_ROUNDS = league.realRegularSeasonRounds ?? 16;
-const computedTotalWeeks = Math.max(1, REAL_REGULAR_ROUNDS - startRound + 1);
+const FANTASY_REGULAR_WEEKS_CAP = 14;
+const computedRegularWeeks = Math.max(
+  1,
+  Math.min(FANTASY_REGULAR_WEEKS_CAP, REAL_REGULAR_ROUNDS - startRound + 1)
+);
+
+const selectedPlayoffWeeks =
+  playoffs === "final4" ? 2 :
+  playoffs === "final3" ? 2 :
+  playoffs === "final2" ? 1 :
+  0;
+
+const computedSeasonWeeks = computedRegularWeeks + selectedPlayoffWeeks;
 
     const readOnly = !isCreator;
 
@@ -1177,8 +1676,9 @@ function moveTeam(fromIdx: number, toIdx: number) {
     onChange={(e) => setStartRound(Number(e.target.value || 1))}
     style={inputStyle(readOnly)}
   />
-  <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, marginTop: 6 }}>
-    Fantasy regular season weeks: {computedTotalWeeks} (of {REAL_REGULAR_ROUNDS})
+    <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, marginTop: 6 }}>
+    Fantasy regular season weeks: {computedRegularWeeks} (of {REAL_REGULAR_ROUNDS})<br/>
+    Total season weeks (incl finals): {computedSeasonWeeks}
   </div>
 </Field>
 
@@ -1292,7 +1792,7 @@ updateLeagueSettings(league.id, {
   draftDateTimeText: draftLocal,
   draftAt,
   startRound,
-  totalWeeks: computedTotalWeeks,
+  totalWeeks: computedSeasonWeeks, // ✅ IMPORTANT: includes finals weeks
 });
 
 
@@ -1449,37 +1949,79 @@ updateLeagueSettings(league.id, {
     };
   }
 
-  if (!league) {
-    return (
-      <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
-        <GradientBg />
-        <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px" }}>
-          <Header />
-          <div style={{ marginTop: 12, ...card35, padding: 14 }}>
-            <div style={{ fontWeight: 900 }}>No active league</div>
-            <div style={{ opacity: 0.85, marginTop: 6 }}>Create or join a league to continue.</div>
-            <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-              <button onClick={() => setModal({ type: "join" })} style={pillButton("#1e3a8a")}>Join League</button>
-              <button onClick={() => setModal({ type: "create" })} style={pillButton("#2563eb")}>Create New League</button>
-            </div>
+  // Still booting → show loading
+if (!mounted || !leagueHydrated) {
+  return (
+    <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
+      <GradientBg />
+      <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px" }}>
+        <div style={{ borderRadius: 18, background: "rgba(255,255,255,0.35)", padding: 14 }}>
+          <div style={{ fontWeight: 900 }}>Loading…</div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+// We have leagues but activeLeagueId hasn't resolved yet → wait one tick
+if (!league && (leagues?.length ?? 0) > 0) {
+  return (
+    <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
+      <GradientBg />
+      <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px" }}>
+        <div style={{ borderRadius: 18, background: "rgba(255,255,255,0.35)", padding: 14 }}>
+          <div style={{ fontWeight: 900 }}>Loading…</div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+// NOW it's truly no leagues
+if (!league) {
+  return (
+    <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
+      <GradientBg />
+
+      <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px" }}>
+        <div style={{ borderRadius: 18, background: "rgba(255,255,255,0.35)", padding: 14 }}>
+          <div style={{ fontWeight: 900, fontSize: 16 }}>No active league</div>
+          <div style={{ marginTop: 6, opacity: 0.9, fontSize: 12, fontWeight: 700 }}>
+            Join a league with a code, or create a new league.
+          </div>
+
+          <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+            <button
+              onClick={() => setModal({ type: "join" })}
+              style={pillButton("linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))")}
+            >
+              Join League
+            </button>
+
+            <button
+              onClick={() => setModal({ type: "create" })}
+              style={pillButton("linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))")}
+            >
+              Create New League
+            </button>
           </div>
         </div>
+      </div>
 
-        <AppMenu
-  open={menuOpen}
-  onClose={() => setMenuOpen(false)}
-  leagues={leagues}
-  activeLeagueId={activeLeagueId}
-  setActiveLeague={setActiveLeague}
-  activeItem="League"
-/>
+      <AppMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        leagues={leagues}
+        activeLeagueId={activeLeagueId}
+        setActiveLeague={setActiveLeague}
+        activeItem="League"
+      />
 
-
-        {modal?.type === "join" && <JoinLeagueModal />}
-        {modal?.type === "create" && <CreateLeagueModal />}
-      </main>
-    );
-  }
+      {modal?.type === "join" && <JoinLeagueModal />}
+      {modal?.type === "create" && <CreateLeagueModal />}
+    </main>
+  );
+}
 
   return (
     <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>

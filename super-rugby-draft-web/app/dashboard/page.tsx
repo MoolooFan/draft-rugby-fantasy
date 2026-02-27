@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getActiveUser } from "@/lib/session";
+
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 import { AppMenu } from "@/components/AppMenu";
 import { useLeagueStore } from "@/lib/league/store";
@@ -48,11 +48,51 @@ type Modal =
 export default function DashboardPage() {
   const router = useRouter();
 
-  // ✅ Route protection
-  useEffect(() => {
-    const user = getActiveUser();
-    if (!user) router.replace("/");
-  }, [router]);
+// ✅ Route protection
+useEffect(() => {
+  let cancelled = false;
+
+  (async () => {
+    try {
+      // 1) must be signed in
+      const me = await fetch("/api/session/me", { cache: "no-store" });
+      if (!me.ok) {
+        if (!cancelled) router.replace("/");
+        return;
+      }
+
+      // 2) load leagues for this user from server
+      const res = await fetch("/api/leagues/list", { cache: "no-store" });
+      const json = await res.json().catch(() => null);
+
+      if (cancelled) return;
+
+      if (!res.ok || !json?.ok) {
+        // If list fails, just leave store empty (dashboard will show No League Joined)
+        console.log("Failed to load leagues:", json?.error ?? res.statusText);
+        return;
+      }
+
+      const leagues = (json.leagues ?? []) as League[];
+
+      // 3) write into zustand store directly
+      useLeagueStore.setState((s) => {
+        const activeLeagueId =
+          s.activeLeagueId && leagues.some((l) => l.id === s.activeLeagueId)
+            ? s.activeLeagueId
+            : leagues[0]?.id ?? null;
+
+        return { ...s, leagues, activeLeagueId };
+      });
+    } catch (e) {
+      if (!cancelled) router.replace("/");
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, [router]);
 
   const leagues = useLeagueStore((s) => s.leagues);
 const activeLeagueId = useLeagueStore((s) => s.activeLeagueId);
@@ -64,7 +104,7 @@ const activeLeague = useMemo(() => {
   return leagues.find((l) => l.id === activeLeagueId) ?? null;
 }, [leagues, activeLeagueId]);
 
-useEffect(() => {
+ useEffect(() => {
   if (!activeLeagueId) return;
 
   // run immediately (covers "already past" cases)
@@ -209,6 +249,21 @@ const draftText = activeLeague?.draftDateTimeText ?? "TBC";
     cursor: "pointer",
   };
 
+async function handleLogout() {
+  try {
+    await fetch("/api/session/logout", { method: "POST" });
+  } catch {
+    // ignore
+  }
+
+  // Optional: clear local UI caches so you see a “clean” state after logout
+  try {
+    localStorage.removeItem("sr-user-profile-v1"); // if you use this key in lib/session
+    localStorage.removeItem("sr-leagues-v3");      // your league zustand persist key
+  } catch {}
+
+  router.replace("/");
+}
   function MovementCircle({ movement }: { movement: Movement }) {
     const isUp = movement === "up";
     const isDown = movement === "down";
@@ -298,25 +353,44 @@ const draftText = activeLeague?.draftDateTimeText ?? "TBC";
 
 
         {/* Hamburger */}
-        <div style={{ display: "flex", alignItems: "center" }}>
-          <button
-            onClick={() => setMenuOpen(true)}
-            aria-label="Open menu"
-            style={{
-              background: "transparent",
-              border: "none",
-              padding: 0,
-              margin: 0,
-              color: "white",
-              fontSize: 36,
-              fontWeight: 900,
-              lineHeight: "36px",
-              cursor: "pointer",
-            }}
-          >
-            ☰
-          </button>
-        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+  <button
+    onClick={() => setMenuOpen(true)}
+    aria-label="Open menu"
+    style={{
+      background: "transparent",
+      border: "none",
+      padding: 0,
+      margin: 0,
+      color: "white",
+      fontSize: 36,
+      fontWeight: 900,
+      lineHeight: "36px",
+      cursor: "pointer",
+    }}
+  >
+    ☰
+  </button>
+
+  <div style={{ flex: 1 }} />
+
+  <button
+    onClick={handleLogout}
+    style={{
+      height: 30,
+      padding: "0 14px",
+      borderRadius: 999,
+      border: "1px solid rgba(255,255,255,0.75)",
+      background: "rgba(0,0,0,0.18)",
+      color: "white",
+      fontSize: 11,
+      fontWeight: 900,
+      cursor: "pointer",
+    }}
+  >
+    Logout
+  </button>
+</div>
 
         {/* Deadline banner */}
         <div

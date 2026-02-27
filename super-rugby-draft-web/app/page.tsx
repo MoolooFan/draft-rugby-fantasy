@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { setActiveUser, getActiveUser } from "@/lib/session";
+import { setActiveUser } from "@/lib/session";
 
 const TIMEZONES = [
   { value: "", label: "Timezone" },
@@ -86,12 +86,25 @@ export default function Page() {
   // Animation control
   const [isMounted, setIsMounted] = useState(true);
 
-  // If already logged in (session only), go straight to dashboard
-  useEffect(() => {
-    const user = getActiveUser();
-    if (user) router.replace("/dashboard");
-  }, [router]);
+// If already signed in via server cookies, go straight to dashboard
+useEffect(() => {
+  let cancelled = false;
 
+  (async () => {
+    try {
+      const res = await fetch("/api/session/me", { cache: "no-store" });
+      if (!cancelled && res.ok) {
+        router.replace("/dashboard");
+      }
+    } catch {
+      // ignore - user will just stay on login screen
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, [router]);
   // Default timezone when entering create mode
   useEffect(() => {
     if (mode === "create" && !timezone) setTimezone("Australia/Perth");
@@ -129,31 +142,41 @@ export default function Page() {
     const accounts = loadAccounts();
     const existing = accounts.find((a) => a.usernameKey === v.key);
 
-    if (mode === "signin") {
-      if (!existing) {
-        setErrorMsg("Account not found. Please create an account first.");
-        setIsLoading(false);
-        return;
-      }
+if (mode === "signin") {
+  // ✅ Sign in must NOT depend on localStorage accounts
+  const r = await fetch("/api/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "signin", username: v.clean }),
+  });
 
-      // Update last login timestamp
-      saveAccounts(
-        accounts.map((a) =>
-          a.usernameKey === v.key ? { ...a, lastLoginAtMs: Date.now() } : a
-        )
-      );
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j?.ok) {
+    setErrorMsg(j?.error ?? "Failed to sign in.");
+    setIsLoading(false);
+    return;
+  }
 
-      // ✅ Session-only login (no remember)
-      setActiveUser({
-        username: existing.username,
-        firstName: existing.firstName,
-        lastName: existing.lastName,
-        timezone: existing.timezone,
-      });
+  // Optional: keep local profile fields ONLY for UI convenience
+  // (do NOT treat this as auth source of truth)
+  const canon = String(j?.username ?? "").trim(); // username_norm from server
+setActiveUser({
+  username: canon,
+  firstName: existing?.firstName,
+  lastName: existing?.lastName,
+  timezone: existing?.timezone,
+});
 
-      router.replace("/dashboard");
-      return;
-    }
+// ✅ Clear persisted app state so this login doesn't reuse old leagues/draft data
+try {
+  localStorage.removeItem("sr-leagues-v3");
+  localStorage.removeItem("sr-draft-store-v3");
+  localStorage.removeItem("mu_accounts_v1"); // optional, but recommended while migrating to server auth
+} catch {}
+
+  router.replace("/dashboard");
+  return;
+}
 
     // mode === "create"
     if (existing) {
@@ -180,15 +203,36 @@ export default function Page() {
 
     saveAccounts([...accounts, newAccount]);
 
-    // ✅ Session-only login (no remember)
-    setActiveUser({
-      username: newAccount.username,
-      firstName: newAccount.firstName,
-      lastName: newAccount.lastName,
-      timezone: newAccount.timezone,
-    });
+    // ✅ Create server session cookies
+const r = await fetch("/api/session", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    action: "create",
+    username: newAccount.username,
+    // optional if you add columns:
+    // firstName: newAccount.firstName,
+    // lastName: newAccount.lastName,
+    // timezone: newAccount.timezone,
+  }),
+});
+const j = await r.json().catch(() => null);
+if (!r.ok || !j?.ok) {
+  setErrorMsg(j?.error ?? "Failed to create session.");
+  setIsLoading(false);
+  return;
+}
 
-    router.replace("/dashboard");
+// keep local profile too (for UI)
+const canon = String(j?.username ?? "").trim();
+setActiveUser({
+  username: canon,
+  firstName: newAccount.firstName,
+  lastName: newAccount.lastName,
+  timezone: newAccount.timezone,
+});
+
+router.replace("/dashboard");
   }
 
   return (
