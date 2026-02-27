@@ -8,6 +8,7 @@ import { PlayerCardModal } from "@/components/PlayerCardModal";
 
 import { useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
+import { useTransactionsStore } from "@/lib/transactions/store";
 
 import fixturesData from "@/data/fixtures-2026.json";
 import type { Fixture } from "@/lib/fixtures/types";
@@ -440,6 +441,47 @@ export default function TeamSelectionPage() {
   useRequireSession();
   // (router not needed anymore unless you use it elsewhere)
 
+  // --- prevent hydration mismatch before zustand persist finishes ---
+const [leagueHydrated, setLeagueHydrated] = useState(() =>
+  // @ts-ignore
+  useLeagueStore.persist?.hasHydrated?.() ?? true
+);
+const [draftHydrated, setDraftHydrated] = useState(() =>
+  // @ts-ignore
+  useDraftStore.persist?.hasHydrated?.() ?? true
+);
+const [txnHydrated, setTxnHydrated] = useState(() =>
+  // @ts-ignore
+  useTransactionsStore.persist?.hasHydrated?.() ?? true
+);
+
+useEffect(() => {
+  // @ts-ignore
+  const p = useLeagueStore.persist;
+  if (!p?.onFinishHydration) { setLeagueHydrated(true); return; }
+  setLeagueHydrated(p.hasHydrated());
+  const unsub = p.onFinishHydration(() => setLeagueHydrated(true));
+  return () => { try { unsub?.(); } catch {} };
+}, []);
+
+useEffect(() => {
+  // @ts-ignore
+  const p = useDraftStore.persist;
+  if (!p?.onFinishHydration) { setDraftHydrated(true); return; }
+  setDraftHydrated(p.hasHydrated());
+  const unsub = p.onFinishHydration(() => setDraftHydrated(true));
+  return () => { try { unsub?.(); } catch {} };
+}, []);
+
+useEffect(() => {
+  // @ts-ignore
+  const p = useTransactionsStore.persist;
+  if (!p?.onFinishHydration) { setTxnHydrated(true); return; }
+  setTxnHydrated(p.hasHydrated());
+  const unsub = p.onFinishHydration(() => setTxnHydrated(true));
+  return () => { try { unsub?.(); } catch {} };
+}, []);
+
   // Menu + league swap
   const [menuOpen, setMenuOpen] = useState(false);
   const leagues = useLeagueStore((s) => s.leagues);
@@ -450,6 +492,9 @@ export default function TeamSelectionPage() {
   const userTz = useMemo(() => getActiveTimezone(), []);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  const ready = mounted && leagueHydrated && draftHydrated && txnHydrated;
+
 
   // Determine your team in the active league
   const leagueTeams = useMemo(() => {
@@ -1759,14 +1804,19 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
         }}
       />
 
-      <div
-        style={{
-          maxWidth: 420,
-          margin: "0 auto",
-          padding: "16px 18px",
-          paddingBottom: "calc(18px + env(safe-area-inset-bottom))",
-        }}
-      >
+      {!ready ? (
+  <div style={{ minHeight: "100svh", display: "grid", placeItems: "center", color: "white" }}>
+    <div style={{ fontWeight: 900 }}>Loading…</div>
+  </div>
+) : (
+  <div
+    style={{
+      maxWidth: 420,
+      margin: "0 auto",
+      padding: "16px 18px",
+      paddingBottom: "calc(18px + env(safe-area-inset-bottom))",
+    }}
+  >
         {/* Header + Hamburger */}
         <div style={{ ...card35, padding: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1887,9 +1937,10 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
         {/* Starters on field */}
         <FieldStarters />
 
-        {/* Bench */}
-        <BenchPanel />
-      </div>
+    {/* Bench */}
+    <BenchPanel />
+  </div>
+)}
 
       {/* Menu */}
       <AppMenu
