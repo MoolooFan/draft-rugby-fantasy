@@ -14,5 +14,5 @@ export function clampWeek(week: number, totalWeeks: number) {
 export function selectionDeadlineFromFirstKickoff(firstKickoffMs: number) {
   // keep EXACTLY one definition across the app
   // (you currently say "2 hours before" but subtract 1 hour)
-  return firstKickoffMs - -3 * 60 * 60 * 1000;
+  return firstKickoffMs - -4 * 60 * 60 * 1000;
 }
