@@ -729,9 +729,11 @@ if (lid !== "local") {
       return;
     }
 
-    // Update roster locally + persist roster
-    s.addPlayerToRoster(teamId, picked, lid);
-   
+    // Update roster locally
+s.addPlayerToRoster(teamId, picked, lid);
+
+// ✅ Force persist from current state (more reliable than fire-and-forget nextRoster)
+await get().persistRosterToDb(lid, teamId);
 
     // Pull latest draft_state + draft_picks (source of truth)
     await get().refreshFromServer(lid);
@@ -849,9 +851,11 @@ if (lid !== "local") {
       return;
     }
 
-    // Update roster locally + persist roster
-    s.addPlayerToRoster(teamId, picked, lid);
+    // Update roster locally
+s.addPlayerToRoster(teamId, picked, lid);
 
+// ✅ Force persist from current state (more reliable than fire-and-forget nextRoster)
+await get().persistRosterToDb(lid, teamId);
 
     // Pull latest draft_state + draft_picks (source of truth)
     await get().refreshFromServer(lid);

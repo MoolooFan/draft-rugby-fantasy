@@ -111,7 +111,37 @@ const JERSEYS: Record<
   WAR: { single: "/images/jerseys/WARJersey.png" },
 };
 
+function extractPlayerIdsFromRosterData(data: any): string[] {
+  if (!data || typeof data !== "object") return [];
 
+  // ✅ preferred modern shape
+  const pidArr = data.playerIds;
+  if (Array.isArray(pidArr)) {
+    return pidArr.map((x: any) => String(x)).filter(Boolean);
+  }
+
+  // ✅ legacy/other shape: { slots: { CE: [{id}], PR: [{id}], ... } }
+  const slots = data.slots;
+  if (slots && typeof slots === "object") {
+    const out: string[] = [];
+    for (const v of Object.values(slots)) {
+      if (Array.isArray(v)) {
+        for (const item of v) {
+          const id = item?.id;
+          if (id) out.push(String(id));
+        }
+      } else if (v && typeof v === "object") {
+        // if a slot ever stored a single object instead of array
+        const id = (v as any).id;
+        if (id) out.push(String(id));
+      }
+    }
+    // unique
+    return Array.from(new Set(out)).filter(Boolean);
+  }
+
+  return [];
+}
 
 function normalizeTeamCode(teamCodeOrName: string) {
   const raw = (teamCodeOrName ?? "").trim();
@@ -501,9 +531,9 @@ useEffect(() => {
   return Array.isArray(activeLeague?.teams) ? activeLeague!.teams : [];
 }, [activeLeague?.teams]);
 
-const [serverRosters, setServerRosters] = useState<Map<string, { playerIds: string[] }>>(
-  new Map()
-);
+type RosterData = { slots?: Record<string, Array<{ id: string }>>; wildcards?: Array<{ id: string }> };
+
+const [serverRosters, setServerRosters] = useState<Map<string, { playerIds: string[] }>>(new Map());
 
 const playersById = useMemo(() => {
   const m = new Map<string, Player>();
@@ -513,6 +543,41 @@ const playersById = useMemo(() => {
   }
   return m;
 }, []);
+
+function rosterRowToPlayerIds(data: any): string[] {
+  const ids: string[] = [];
+
+  // TeamRosterState style: { slots: { HO: [{id}], PR: [{id}], ... }, wildcards: [{id}] }
+  const slots = data?.slots;
+  if (slots && typeof slots === "object") {
+    for (const arr of Object.values(slots)) {
+      if (!Array.isArray(arr)) continue;
+      for (const p of arr) {
+        const id = String((p as any)?.id ?? "");
+        if (id) ids.push(id);
+      }
+    }
+  }
+
+  const wcs = data?.wildcards;
+  if (Array.isArray(wcs)) {
+    for (const p of wcs) {
+      const id = String((p as any)?.id ?? "");
+      if (id) ids.push(id);
+    }
+  }
+
+  // fallback support: if you ever stored {playerIds:[...]}
+  if (!ids.length && Array.isArray(data?.playerIds)) {
+    for (const x of data.playerIds) {
+      const id = String(x ?? "");
+      if (id) ids.push(id);
+    }
+  }
+
+  // unique
+  return Array.from(new Set(ids));
+}
 
 useEffect(() => {
   if (!activeLeague?.id) return;
@@ -530,16 +595,13 @@ useEffect(() => {
 
       const m = new Map<string, { playerIds: string[] }>();
       for (const row of rows) {
-        const teamId = String(row.team_id ?? "");
-        const pidArr = (row?.data?.playerIds ?? []) as any;
+  const teamId = String(row.team_id ?? "");
+  if (!teamId) continue;
 
-        if (!teamId) continue;
-        m.set(teamId, {
-          playerIds: Array.isArray(pidArr)
-            ? pidArr.map((x: any) => String(x)).filter(Boolean)
-            : [],
-        });
-      }
+  const ids = rosterRowToPlayerIds(row?.data);
+
+  m.set(teamId, { playerIds: ids });
+}
 
       setServerRosters(m);
     })
@@ -550,9 +612,10 @@ const yourLeagueTeamId = useMemo(() => {
   if (!leagueTeams.length) return null;
 
   if (userId) {
-    const t = leagueTeams.find((x) => x.userId === userId);
-    if (t) return t.id;
-  }
+  const me = String(userId).trim().toLowerCase();
+  const t = leagueTeams.find((x: any) => String(x.userId ?? "").trim().toLowerCase() === me);
+  if (t) return t.id;
+}
 
   return leagueTeams[0]?.id ?? null;
 }, [leagueTeams, userId]);
@@ -1932,6 +1995,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     {saveToast ? saveToast : "Save"}
   </button>
 </div>
+
 
 
         {/* Starters on field */}

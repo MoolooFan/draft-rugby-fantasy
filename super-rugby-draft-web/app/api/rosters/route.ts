@@ -5,6 +5,42 @@ import { normalizeLeagueId } from "@/lib/ids";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
+function derivePlayerIdsFromRosterData(data: any): string[] {
+  const ids: string[] = [];
+
+  // legacy shape
+  if (Array.isArray(data?.playerIds)) {
+    for (const x of data.playerIds) {
+      const s = String(x ?? "").trim();
+      if (s) ids.push(s);
+    }
+  }
+
+  // canonical shape
+  const slots = data?.slots;
+  if (slots && typeof slots === "object") {
+    for (const arr of Object.values(slots)) {
+      if (!Array.isArray(arr)) continue;
+      for (const p of arr as any[]) {
+        const id = String((p as any)?.id ?? "").trim();
+        if (id) ids.push(id);
+      }
+    }
+  }
+
+  const wild = data?.wildcards;
+  if (Array.isArray(wild)) {
+    for (const p of wild as any[]) {
+      const id = String((p as any)?.id ?? "").trim();
+      if (id) ids.push(id);
+    }
+  }
+
+  // unique preserve order
+  const seen = new Set<string>();
+  return ids.filter((id) => (seen.has(id) ? false : (seen.add(id), true)));
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const leagueId = normalizeLeagueId(searchParams.get("leagueId"));
@@ -43,7 +79,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, data: data ?? [] });
+  const fixed = (data ?? []).map((row) => {
+  const d = row.data ?? {};
+  const derived = derivePlayerIdsFromRosterData(d);
+
+  // if playerIds missing or wrong length, overwrite in response
+  return {
+    ...row,
+    data: { ...d, playerIds: derived },
+  };
+});
+
+return NextResponse.json({ ok: true, data: fixed });
+
 }
 
 export async function POST(req: Request) {
@@ -89,17 +137,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
   }
 
+  const playerIds = derivePlayerIdsFromRosterData(data);
+const dataToSave = { ...(data ?? {}), playerIds };
+
   const { error } = await supabaseAdmin
-    .from("rosters")
-    .upsert(
-      {
-        league_id: leagueId,
-        team_id: teamId,
-        data,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "league_id,team_id" }
-    );
+  .from("rosters")
+  .upsert(
+    {
+      league_id: leagueId,
+      team_id: teamId,
+      data: dataToSave, // ✅
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "league_id,team_id" }
+  );
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
