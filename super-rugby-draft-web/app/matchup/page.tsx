@@ -613,15 +613,16 @@ function currentWeekFromSheet() {
 
 const yourLeagueTeamId = useMemo(() => {
   const l = activeLeague;
-  if (!l) return null;
+  const teams = Array.isArray(l?.teams) ? l!.teams : [];
+  if (!teams.length) return null;
 
   if (userId) {
     const me = norm(userId);
-    const t = l.teams.find((x: any) => norm(x.userId) === me);
-    if (t) return t.id;
+    const t = teams.find((x: any) => norm(x?.userId) === me);
+    if (t?.id) return t.id;
   }
 
-  return l.teams[0]?.id ?? null;
+  return teams[0]?.id ?? null;
 }, [activeLeague, userId]);
 
   // Draft teams for name lookup

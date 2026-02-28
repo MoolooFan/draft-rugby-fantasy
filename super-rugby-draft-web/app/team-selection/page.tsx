@@ -580,28 +580,26 @@ function rosterRowToPlayerIds(data: any): string[] {
 }
 
 useEffect(() => {
-  if (!activeLeague?.id) return;
+  const leagueId = activeLeague?.id;
+  if (!leagueId) return;
 
-  fetch(`/api/rosters?leagueId=${encodeURIComponent(activeLeague.id)}`, {
+  fetch(`/api/rosters?leagueId=${encodeURIComponent(leagueId)}`, {
     cache: "no-store",
     credentials: "include",
   })
     .then((r) => r.json())
     .then((j) => {
       if (!j?.ok) return;
-
-      // API returns { ok: true, data: [...] }
       const rows = Array.isArray(j.data) ? j.data : [];
 
       const m = new Map<string, { playerIds: string[] }>();
       for (const row of rows) {
-  const teamId = String(row.team_id ?? "");
-  if (!teamId) continue;
+        const teamId = String(row.team_id ?? "");
+        if (!teamId) continue;
 
-  const ids = rosterRowToPlayerIds(row?.data);
-
-  m.set(teamId, { playerIds: ids });
-}
+        const ids = rosterRowToPlayerIds(row?.data);
+        m.set(teamId, { playerIds: ids });
+      }
 
       setServerRosters(m);
     })
@@ -896,25 +894,13 @@ const deadlineMs = useMemo(() => {
 
 const deadlineLocked = deadlineMs ? nowMs >= deadlineMs : false;
 
-
-
 useEffect(() => {
-  if (!activeLeague?.id) return;
+  const leagueId = activeLeague?.id;
   if (!deadlineLocked) return;
+  if (!leagueId || !yourDraftTeamId) return;
 
-  const total = activeLeague.totalWeeks ?? 16;
-  const next = Math.min(total, fantasyWeek + 1);
-
-  // prevent spamming updates
-  const k = `wk_adv_${activeLeague.id}_wk${fantasyWeek}`;
-  if (typeof window !== "undefined" && window.localStorage.getItem(k)) return;
-  if (typeof window !== "undefined") window.localStorage.setItem(k, "1");
-
-  if (next !== fantasyWeek) {
-    // persists to server + refresh via your existing API path
-    useLeagueStore.getState().updateLeagueSettings(activeLeague.id, { currentWeek: next });
-  }
-}, [activeLeague?.id, deadlineLocked, fantasyWeek, activeLeague?.totalWeeks]);
+  saveSelection(fantasyWeek); // freeze THIS week
+}, [deadlineLocked, activeLeague?.id, yourDraftTeamId, fantasyWeek]);
 
 // after the current fantasy week locks, user edits NEXT fantasy week
 const selectionWeek = useMemo(() => {
@@ -1014,57 +1000,6 @@ const CAPTAIN_KEY = `${storageKeyBase}_captain`;
 const VICE_KEY = `${storageKeyBase}_vice`;
 const INIT_KEY = `${storageKeyBase}_initDone`;
 
-// --- LOCK SNAPSHOT FOR MATCHUP PAGE ---
-// When live week's deadline passes, freeze THAT week's lineup + C/VC once.
-useEffect(() => {
-  if (typeof window === "undefined") return;
-  if (!deadlineLocked) return;
-
-  if (!activeLeague?.id || !yourDraftTeamId) return;
-
-  const leagueId = activeLeague.id;
-  const teamId = yourDraftTeamId;
-
-  // ✅ IMPORTANT: snapshot is stored by FANTASY WEEK (same key Matchup reads)
-  const key = matchupSnapshotKey(leagueId, fantasyWeek, teamId);
-
-  // Only write once
-  if (window.localStorage.getItem(key)) return;
-
-  saveSelection();
-
-  const lineupKey = lineupDraftStorageKey(leagueId, teamId);
-  const savedLineupRaw = window.localStorage.getItem(lineupKey);
-  const savedCaptain = window.localStorage.getItem(CAPTAIN_KEY);
-  const savedVice = window.localStorage.getItem(VICE_KEY);
-
-  let savedLineup: Lineup = initialLineup; // fallback only
-  if (savedLineupRaw) {
-    try {
-      savedLineup = JSON.parse(savedLineupRaw) as Lineup;
-    } catch {}
-  }
-
-  const snap: LockedSnapshot = {
-    week: fantasyWeek,
-    teamId,
-    lockedAtMs: Date.now(),
-    lineup: savedLineup,
-    captainId: savedCaptain || null,
-    viceId: savedVice || null,
-  };
-
-  window.localStorage.setItem(key, JSON.stringify(snap));
-}, [
-  deadlineLocked,
-  activeLeague?.id,
-  yourDraftTeamId,
-  fantasyWeek,
-  CAPTAIN_KEY,
-  VICE_KEY,
-  initialLineup,
-]);
-
 useEffect(() => {
   if (!yourDraftTeamId) return;
 
@@ -1091,90 +1026,93 @@ useEffect(() => {
   });
 }, [yourDraftTeamId, rosterPool]);
 
-function saveSelection() {
-  if (typeof window === "undefined") return;
-  if (!activeLeague?.id || !yourDraftTeamId) return; // ✅ key guard
+async function saveSelection(weekOverride?: number) {
+  if (!activeLeague?.id || !yourDraftTeamId) return;
 
-  const lineupKey = lineupDraftStorageKey(activeLeague.id, yourDraftTeamId);
-  window.localStorage.setItem(lineupKey, JSON.stringify(lineup));
-
-  if (captainId) window.localStorage.setItem(CAPTAIN_KEY, captainId);
-  else window.localStorage.removeItem(CAPTAIN_KEY);
-
-  if (viceId) window.localStorage.setItem(VICE_KEY, viceId);
-  else window.localStorage.removeItem(VICE_KEY);
-
-  setIsDirty(false);
-  setSaveToast("Saved");
-  window.setTimeout(() => setSaveToast(null), 1200);
-}
-
-useEffect(() => {
-  if (typeof window === "undefined") return;
-if (!activeLeague?.id || !yourDraftTeamId) return; // ✅ key guard
-  
-  const lineupKey = lineupDraftStorageKey(activeLeague.id, yourDraftTeamId);
-
-// 1) lineup
-const raw = window.localStorage.getItem(lineupKey);
-let baseLineup: Lineup = initialLineup;
-
-if (raw) {
   try {
-    const parsed = JSON.parse(raw) as Lineup;
-    const ok =
-      parsed &&
-      typeof parsed === "object" &&
-      "prop1" in parsed &&
-      "bench5" in parsed;
+    const res = await fetch("/api/team-selection/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        leagueId: activeLeague.id,
+        week: weekOverride ?? selectionWeek,
+        teamId: yourDraftTeamId,
+        lineup,
+        captainId,
+        viceId,
+      }),
+    });
 
-    baseLineup = ok ? parsed : initialLineup;
-  } catch {
-    baseLineup = initialLineup;
+    const json = await res.json();
+    if (!json?.ok) {
+      console.error("Save failed:", json?.error);
+      return;
+    }
+
+    setIsDirty(false);
+    setSaveToast("Saved");
+    window.setTimeout(() => setSaveToast(null), 1200);
+  } catch (e) {
+    console.error("Save error:", e);
   }
 }
 
-// ✅ ALWAYS reconcile against current roster
-const { next } = syncLineupToRoster(baseLineup, rosterPool);
-setLineup(next);
+useEffect(() => {
+  const leagueId = activeLeague?.id;
+  if (!leagueId || !yourDraftTeamId) return;
 
+  const leagueIdSafe: string = leagueId; // ✅ forces TS to treat it as string
 
-  // 2) captain/vice
-  const savedCaptain = window.localStorage.getItem(CAPTAIN_KEY);
-  const savedVice = window.localStorage.getItem(VICE_KEY);
-  setCaptainId(savedCaptain || null);
-  setViceId(savedVice || null);
+  async function loadSelection() {
+    try {
+      const res = await fetch(
+        `/api/team-selection/get?leagueId=${encodeURIComponent(leagueIdSafe)}&week=${selectionWeek}`,
+        { credentials: "include", cache: "no-store" }
+      );
 
-  setIsDirty(false);
-  setHasLoadedSaved(true);
+      const json = await res.json();
+      if (!json?.ok) return;
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [activeLeague?.id, yourDraftTeamId, CAPTAIN_KEY, VICE_KEY, initialLineup, rosterPool]);
+      const row = json.rows?.find((r: any) => r.team_id === yourDraftTeamId);
 
+      if (!row?.lineup) {
+        setHasLoadedSaved(true);
+        return;
+      }
 
+      const serverLineup = row.lineup;
+      const { next } = syncLineupToRoster(serverLineup, rosterPool);
+      setLineup(next);
 
+      setCaptainId(row.captain_id ?? null);
+      setViceId(row.vice_id ?? null);
 
+      setIsDirty(false);
+      setHasLoadedSaved(true);
+    } catch (e) {
+      console.error("Load selection failed:", e);
+    }
+  }
+
+  loadSelection();
+}, [activeLeague?.id, yourDraftTeamId, selectionWeek, rosterPool]);
+  
+  
 // One-time default assignment (first open after draft):
 // C = starting flyhalf, V = first outside back
 useEffect(() => {
-  if (typeof window === "undefined") return;
+  // only set defaults if nothing chosen yet
+  if (captainId || viceId) return;
 
-  const initDone = window.localStorage.getItem(INIT_KEY) === "1";
-  if (initDone) return;
-
-  // only run once we actually have a lineup populated with players
   const fly = lineup["flyhalf1"];
   const ob1 = lineup["outsideback1"];
-
   if (!fly?.id || !ob1?.id) return;
 
   setCaptainId(fly.id);
   setViceId(ob1.id);
-
-  window.localStorage.setItem(INIT_KEY, "1");
-  window.localStorage.setItem(CAPTAIN_KEY, fly.id);
-  window.localStorage.setItem(VICE_KEY, ob1.id);
-}, [lineup, INIT_KEY, CAPTAIN_KEY, VICE_KEY]);
+  setIsDirty(true);
+}, [lineup, captainId, viceId]);
 
 
 
@@ -1980,8 +1918,8 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
   </select>
 
   <button
-    onClick={saveSelection}
-    disabled={!hasLoadedSaved || !isDirty}
+  onClick={() => saveSelection()}   // ✅ important
+  disabled={!hasLoadedSaved || !isDirty}
     style={{
       height: 30,
       padding: "0 30px",
@@ -1998,7 +1936,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     }}
   >
     {saveToast ? saveToast : "Save"}
-  </button>
+</button>
 </div>
 
 
