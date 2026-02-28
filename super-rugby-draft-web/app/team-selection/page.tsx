@@ -990,6 +990,8 @@ const [viceId, setViceId] = useState<string | null>(null);
 const [hasLoadedSaved, setHasLoadedSaved] = useState(false);
 const [isDirty, setIsDirty] = useState(false);
 const [saveToast, setSaveToast] = useState<string | null>(null);
+const [loadedFromServer, setLoadedFromServer] = useState(false);
+const [loadedWeek, setLoadedWeek] = useState<number | null>(null);
 
 // Captain/VC storage keys (scoped per league + team)
 const storageKeyBase = useMemo(() => {
@@ -1002,29 +1004,27 @@ const INIT_KEY = `${storageKeyBase}_initDone`;
 
 useEffect(() => {
   if (!yourDraftTeamId) return;
+  if (!hasLoadedSaved) return; // ✅ don't touch lineup until after server load attempt
 
   setLineup((prev) => {
-    const { next, changed } = syncLineupToRoster(prev, rosterPool);
+    const next = reconcileLineupWithRoster(prev, rosterPool);
+
+    const prevIds = Object.values(prev).map((p) => p?.id ?? null);
+    const nextIds = Object.values(next).map((p) => p?.id ?? null);
+    const changed = JSON.stringify(prevIds) !== JSON.stringify(nextIds);
 
     if (changed) {
-      setCaptainId((cid) => {
-        if (!cid) return null;
-        const stillOwned = rosterPool.some((p) => p.id === cid);
-        return stillOwned ? cid : null;
-      });
-
-      setViceId((vid) => {
-        if (!vid) return null;
-        const stillOwned = rosterPool.some((p) => p.id === vid);
-        return stillOwned ? vid : null;
-      });
-
+      // If roster changed (drops/adds), mark dirty so user can re-save
       setIsDirty(true);
+
+      // also clear badges if their player disappeared
+      setCaptainId((cid) => (cid && rosterPool.some((p) => p.id === cid) ? cid : null));
+      setViceId((vid) => (vid && rosterPool.some((p) => p.id === vid) ? vid : null));
     }
 
     return next;
   });
-}, [yourDraftTeamId, rosterPool]);
+}, [yourDraftTeamId, rosterPool, hasLoadedSaved]);
 
 async function saveSelection(weekOverride?: number) {
   if (!activeLeague?.id || !yourDraftTeamId) return;
@@ -1059,46 +1059,79 @@ async function saveSelection(weekOverride?: number) {
 }
 
 useEffect(() => {
-  const leagueId = activeLeague?.id;
-  if (!leagueId || !yourDraftTeamId) return;
+  const leagueIdRaw = activeLeague?.id;
+  if (!leagueIdRaw || !yourDraftTeamId) return;
 
-  const leagueIdSafe: string = leagueId; // ✅ forces TS to treat it as string
+  // ✅ Force a definite string for encodeURIComponent (fixes TS error)
+  const leagueId = String(leagueIdRaw);
+
+  let cancelled = false;
 
   async function loadSelection() {
     try {
       const res = await fetch(
-        `/api/team-selection/get?leagueId=${encodeURIComponent(leagueIdSafe)}&week=${selectionWeek}`,
+        `/api/team-selection/get?leagueId=${encodeURIComponent(leagueId)}&week=${selectionWeek}`,
         { credentials: "include", cache: "no-store" }
       );
 
       const json = await res.json();
-      if (!json?.ok) return;
+      if (cancelled) return;
 
-      const row = json.rows?.find((r: any) => r.team_id === yourDraftTeamId);
-
-      if (!row?.lineup) {
+      if (!json?.ok) {
+        setLoadedFromServer(false);
         setHasLoadedSaved(true);
         return;
       }
 
-      const serverLineup = row.lineup;
-      const { next } = syncLineupToRoster(serverLineup, rosterPool);
-      setLineup(next);
+      const row = (json.rows ?? []).find(
+        (r: any) => String(r.team_id ?? r.teamId) === String(yourDraftTeamId)
+      );
 
-      setCaptainId(row.captain_id ?? null);
-      setViceId(row.vice_id ?? null);
+      if (!row?.lineup) {
+        setLoadedFromServer(false);
+        setLoadedWeek(selectionWeek);
+        setHasLoadedSaved(true);
+        return;
+      }
 
+      // ✅ Use server lineup as truth, then reconcile ONLY for ownership changes
+      const reconciled = reconcileLineupWithRoster(row.lineup as Lineup, rosterPool);
+
+      setLineup(reconciled);
+      setCaptainId(row.captain_id ?? row.captainId ?? null);
+      setViceId(row.vice_id ?? row.viceId ?? null);
+
+      setLoadedFromServer(true);
+      setLoadedWeek(selectionWeek);
       setIsDirty(false);
       setHasLoadedSaved(true);
     } catch (e) {
+      if (cancelled) return;
       console.error("Load selection failed:", e);
+      setLoadedFromServer(false);
+      setHasLoadedSaved(true);
     }
   }
 
   loadSelection();
+  return () => {
+    cancelled = true;
+  };
 }, [activeLeague?.id, yourDraftTeamId, selectionWeek, rosterPool]);
-  
-  
+
+  useEffect(() => {
+  if (!hasLoadedSaved) return;          // wait until we know whether server had a save
+  if (loadedFromServer) return;         // server already set the lineup
+  if (!rosterPool.length) return;       // still nothing to build from
+
+  // If lineup is currently empty (all nulls), replace with initialLineup
+  const isEmpty = Object.values(lineup).every((p) => !p?.id);
+  if (!isEmpty) return;
+
+  setLineup(initialLineup);
+  setIsDirty(true); // optional: you can keep false if you don't want "Save" lit up by default
+}, [hasLoadedSaved, loadedFromServer, rosterPool.length, initialLineup, lineup]);
+
 // One-time default assignment (first open after draft):
 // C = starting flyhalf, V = first outside back
 useEffect(() => {

@@ -1692,7 +1692,7 @@ function openPointsBreakdown(p: Player, owned: boolean, side: "left" | "right") 
 <div style={{ marginTop: 10, fontSize: 16, fontWeight: 950, opacity: 0.95 }}>
   {!mounted
     ? "Loading…"
-    : (displayWeek <= 0 ? "Pre-season" : `Week ${displayWeek} • Round ${displayRealRound}`)}
+    : (displayWeek <= 0 ? "Pre-season" : `Round ${displayRealRound}`)}
 </div>
 
         </div>
