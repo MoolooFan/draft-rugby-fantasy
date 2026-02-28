@@ -365,8 +365,10 @@ function readTeamSelectionCaps(leagueId: string | null, teamId: string | null) {
 function teamSelectionFallbackSnapshot(
   leagueId: string | null,
   displayWeek: number,
-  teamId: string | null
+  teamId: string | null,
+  mounted: boolean
 ): LockedSnapshot | null {
+  if (!mounted) return null;
   if (typeof window === "undefined") return null;
   if (!leagueId || !teamId) return null;
   if (displayWeek <= 0) return null;
@@ -375,26 +377,20 @@ function teamSelectionFallbackSnapshot(
   if (!lineup) return null;
 
   const { captainId, viceId } = readTeamSelectionCaps(leagueId, teamId);
-
-  return {
-    week: displayWeek,
-    teamId,
-    lockedAtMs: 0,
-    lineup,
-    captainId,
-    viceId,
-  };
+  return { week: displayWeek, teamId, lockedAtMs: 0, lineup, captainId, viceId };
 }
 
-
-
 function useNowTick(ms = 1000) {
-  const [, force] = useState(0);
+  const [now, setNow] = useState<number>(0);
+
   useEffect(() => {
-    const t = window.setInterval(() => force((x) => x + 1), ms);
+    // First client paint: still 0 (matches server), then update
+    setNow(Date.now());
+    const t = window.setInterval(() => setNow(Date.now()), ms);
     return () => window.clearInterval(t);
   }, [ms]);
-  return Date.now();
+
+  return now;
 }
 
 export default function MatchupPage() {
@@ -613,15 +609,20 @@ function currentWeekFromSheet() {
 }
 
   // Your team id (league team)
-  const yourLeagueTeamId = useMemo(() => {
-    const l = activeLeague;
-    if (!l) return null;
-    if (userId) {
-      const t = l.teams.find((x) => x.userId === userId);
-      if (t) return t.id;
-    }
-    return l.teams[0]?.id ?? null;
-  }, [activeLeague, userId]);
+  const norm = (s: any) => String(s ?? "").trim().toLowerCase();
+
+const yourLeagueTeamId = useMemo(() => {
+  const l = activeLeague;
+  if (!l) return null;
+
+  if (userId) {
+    const me = norm(userId);
+    const t = l.teams.find((x: any) => norm(x.userId) === me);
+    if (t) return t.id;
+  }
+
+  return l.teams[0]?.id ?? null;
+}, [activeLeague, userId]);
 
   // Draft teams for name lookup
   const draftTeams = useDraftStore((s) => s.teams);
@@ -960,6 +961,7 @@ const hasLeagueId = !!leagueId; // ✅ safeguard
 type RosterApiRow = { team_id: string; data: any };
 
 const [rosterByTeamId, setRosterByTeamId] = useState<Map<string, any>>(new Map());
+const [selectionByTeamId, setSelectionByTeamId] = useState<Map<string, any>>(new Map());
 
 useEffect(() => {
   if (!leagueId) return;
@@ -981,6 +983,52 @@ useEffect(() => {
     })
     .catch((e) => console.error(e));
 }, [leagueId]);
+
+function serverSelectionSnapshot(
+  leagueId: string | null,
+  displayWeek: number,
+  teamId: string | null
+): LockedSnapshot | null {
+  if (!leagueId || !teamId) return null;
+  if (displayWeek <= 0) return null;
+
+  const row = selectionByTeamId.get(teamId);
+  if (!row?.lineup) return null;
+
+  return {
+    week: displayWeek,
+    teamId,
+    lockedAtMs: 0,
+    lineup: row.lineup as Lineup,
+    captainId: row.captain_id ?? row.captainId ?? null,
+    viceId: row.vice_id ?? row.viceId ?? null,
+  };
+}
+
+useEffect(() => {
+  if (!leagueId) return;
+  if (displayWeek <= 0) return;
+
+  fetch(`/api/team-selection/get?leagueId=${encodeURIComponent(leagueId)}&week=${displayWeek}`, {
+    cache: "no-store",
+    credentials: "include",
+  })
+    .then((r) => r.json())
+    .then((j) => {
+      if (!j?.ok) {
+        console.error("team selection fetch failed", j?.error);
+        return;
+      }
+
+      const m = new Map<string, any>();
+      for (const row of (j.rows ?? [])) {
+        const tid = String(row.team_id ?? row.teamId ?? "");
+        if (tid) m.set(tid, row);
+      }
+      setSelectionByTeamId(m);
+    })
+    .catch((e) => console.error(e));
+}, [leagueId, displayWeek]);
 
 const [scoresLockedTick, setScoresLockedTick] = useState(0);
 
@@ -1011,9 +1059,10 @@ const scoresLocked = useMemo(() => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [leagueId, displayWeek, scoresLockedTick]);
 
-  function readFinalized(teamId: string | null) {
+function readFinalized(teamId: string | null) {
+  if (!mounted) return null;            // ✅ ADD
   if (typeof window === "undefined") return null;
-  if (!hasLeagueId) return null;        // ✅ ADD
+  if (!hasLeagueId) return null;
   if (!teamId) return null;
 
   const key = finalizedLineupKey(leagueId, displayWeek, teamId);
@@ -1099,9 +1148,10 @@ function rosterDataToLineup(data: any): Lineup | null {
   return lineup;
 }
 
-  const readSnapshot = (teamId: string | null): LockedSnapshot | null => {
+const readSnapshot = (teamId: string | null): LockedSnapshot | null => {
+  if (!mounted) return null;            // ✅ ADD
   if (typeof window === "undefined") return null;
-  if (!hasLeagueId) return null;        // ✅ ADD
+  if (!hasLeagueId) return null;
   if (!teamId) return null;
 
   const key = matchupSnapshotKey(leagueId, displayWeek, teamId);
@@ -1116,34 +1166,54 @@ function rosterDataToLineup(data: any): Lineup | null {
 };
 
 const leftSnap = useMemo(() => {
-  // 1) locked snapshot (mu_snapshot)
+  // 1) locked snapshot (mu_snapshot) – still highest priority
   const snap = readSnapshot(leftTeamId);
   if (snap) return snap;
 
-  // 2) saved Team Selection lineup (ts_lineup + captain/vice)
-  const ts = teamSelectionFallbackSnapshot(leagueId, displayWeek, leftTeamId);
+  // 2) server stored team selection (Supabase) – required for opponents
+  const supa = serverSelectionSnapshot(leagueId, displayWeek, leftTeamId);
+  if (supa) return supa;
+
+  // 3) local TS (legacy / convenience)
+  const ts = teamSelectionFallbackSnapshot(leagueId, displayWeek, leftTeamId, mounted);
   if (ts) return ts;
 
-  // 3) fallback to Supabase roster conversion (ONLY for current selection week)
+  // 4) fallback to Supabase roster (only for current selection week)
   if (displayWeek === selectionWeek) return rosterFallbackSnapshot(leftTeamId);
 
   return null;
-}, [leagueId, displayWeek, leftTeamId, rosterByTeamId, selectionWeek, tsTick]);
+}, [
+  leagueId,
+  displayWeek,
+  leftTeamId,
+  selectionWeek,
+  rosterByTeamId,
+  selectionByTeamId,
+  tsTick,
+]);
 
 const rightSnap = useMemo(() => {
-  // 1) locked snapshot (mu_snapshot)
   const snap = readSnapshot(rightTeamId);
   if (snap) return snap;
 
-  // 2) saved Team Selection lineup (ts_lineup + captain/vice)
-  const ts = teamSelectionFallbackSnapshot(leagueId, displayWeek, rightTeamId);
+  const supa = serverSelectionSnapshot(leagueId, displayWeek, rightTeamId);
+  if (supa) return supa;
+
+  const ts = teamSelectionFallbackSnapshot(leagueId, displayWeek, rightTeamId, mounted);
   if (ts) return ts;
 
-  // 3) fallback to Supabase roster conversion (ONLY for current selection week)
   if (displayWeek === selectionWeek) return rosterFallbackSnapshot(rightTeamId);
 
   return null;
-}, [leagueId, displayWeek, rightTeamId, rosterByTeamId, selectionWeek, tsTick]);
+}, [
+  leagueId,
+  displayWeek,
+  rightTeamId,
+  selectionWeek,
+  rosterByTeamId,
+  selectionByTeamId,
+  tsTick,
+]);
 
 const leftBlank = !leftSnap;
 const rightBlank = !rightSnap;
@@ -1300,22 +1370,25 @@ function lockScoresAndFinalize() {
   // mark scores locked for the whole league/week
   window.localStorage.setItem(scoresLockedKey(leagueId, displayWeek), "1");
 
-  // finalize every team in the league for this week
-  const missing: string[] = [];
+// finalize every team in the league for this week
+const missing: string[] = [];
 
-  for (const t of activeLeague.teams) {
-    const snap =
-  readSnapshot(t.id) ??
-  (displayWeek === selectionWeek ? rosterFallbackSnapshot(t.id) : null);
-    if (!snap?.lineup) {
-      missing.push(t.name ?? t.id);
-      continue;
-    }
+for (const t of activeLeague.teams) {
+  const snap =
+    readSnapshot(t.id) ??
+    serverSelectionSnapshot(leagueId, displayWeek, t.id) ??
+    teamSelectionFallbackSnapshot(leagueId, displayWeek, t.id, mounted) ??
+    (displayWeek === selectionWeek ? rosterFallbackSnapshot(t.id) : null);
 
-    const k = finalizedLineupKey(leagueId, displayWeek, t.id);
-    const final = applyAutoSubs(snap.lineup);
-    window.localStorage.setItem(k, JSON.stringify(final));
+  if (!snap?.lineup) {
+    missing.push(t.name ?? t.id);
+    continue;
   }
+
+  const k = finalizedLineupKey(leagueId, displayWeek, t.id);
+  const final = applyAutoSubs(snap.lineup);
+  window.localStorage.setItem(k, JSON.stringify(final));
+}
 
   if (missing.length) {
     alert(
