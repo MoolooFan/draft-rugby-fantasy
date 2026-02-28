@@ -106,7 +106,7 @@ function getWeekFirstKickoffMs(fixtures: AnyFixture[], week: number) {
   return Math.min(...wk.map((f) => f.kickoffMs ?? toMs(f.kickoffAt)));
 }
 function getSelectionDeadlineMs(firstKickoffMs: number) {
-  return firstKickoffMs - -4 * 60 * 60 * 1000;
+  return firstKickoffMs - 1 * 60 * 60 * 1000;
 }
 function getWeekDeadlineMs(fixtures: AnyFixture[], week: number) {
   const first = getWeekFirstKickoffMs(fixtures, week);

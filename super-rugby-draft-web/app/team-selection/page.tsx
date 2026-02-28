@@ -895,6 +895,9 @@ const deadlineMs = useMemo(() => {
 }, [normalizedFixtures, realRoundForFantasyWeek]);
 
 const deadlineLocked = deadlineMs ? nowMs >= deadlineMs : false;
+
+
+
 useEffect(() => {
   if (!activeLeague?.id) return;
   if (!deadlineLocked) return;
@@ -1010,6 +1013,57 @@ const storageKeyBase = useMemo(() => {
 const CAPTAIN_KEY = `${storageKeyBase}_captain`;
 const VICE_KEY = `${storageKeyBase}_vice`;
 const INIT_KEY = `${storageKeyBase}_initDone`;
+
+// --- LOCK SNAPSHOT FOR MATCHUP PAGE ---
+// When live week's deadline passes, freeze THAT week's lineup + C/VC once.
+useEffect(() => {
+  if (typeof window === "undefined") return;
+  if (!deadlineLocked) return;
+
+  if (!activeLeague?.id || !yourDraftTeamId) return;
+
+  const leagueId = activeLeague.id;
+  const teamId = yourDraftTeamId;
+
+  // ✅ IMPORTANT: snapshot is stored by FANTASY WEEK (same key Matchup reads)
+  const key = matchupSnapshotKey(leagueId, fantasyWeek, teamId);
+
+  // Only write once
+  if (window.localStorage.getItem(key)) return;
+
+  saveSelection();
+
+  const lineupKey = lineupDraftStorageKey(leagueId, teamId);
+  const savedLineupRaw = window.localStorage.getItem(lineupKey);
+  const savedCaptain = window.localStorage.getItem(CAPTAIN_KEY);
+  const savedVice = window.localStorage.getItem(VICE_KEY);
+
+  let savedLineup: Lineup = initialLineup; // fallback only
+  if (savedLineupRaw) {
+    try {
+      savedLineup = JSON.parse(savedLineupRaw) as Lineup;
+    } catch {}
+  }
+
+  const snap: LockedSnapshot = {
+    week: fantasyWeek,
+    teamId,
+    lockedAtMs: Date.now(),
+    lineup: savedLineup,
+    captainId: savedCaptain || null,
+    viceId: savedVice || null,
+  };
+
+  window.localStorage.setItem(key, JSON.stringify(snap));
+}, [
+  deadlineLocked,
+  activeLeague?.id,
+  yourDraftTeamId,
+  fantasyWeek,
+  CAPTAIN_KEY,
+  VICE_KEY,
+  initialLineup,
+]);
 
 useEffect(() => {
   if (!yourDraftTeamId) return;
@@ -1371,56 +1425,7 @@ function tileSubtext(p: Player | null) {
 
 
   
-// --- LOCK SNAPSHOT FOR MATCHUP PAGE ---
-// When live week's deadline passes, freeze THAT week's lineup + C/VC once.
-useEffect(() => {
-  if (typeof window === "undefined") return;
-  if (!deadlineLocked) return;
 
-  if (!activeLeague?.id || !yourDraftTeamId) return;
-
-  const leagueId = activeLeague.id;
-  const teamId = yourDraftTeamId;
-
-  // ✅ IMPORTANT: snapshot is stored by FANTASY WEEK (same key Matchup reads)
-  const key = matchupSnapshotKey(leagueId, fantasyWeek, teamId);
-
-  // Only write once
-  if (window.localStorage.getItem(key)) return;
-
-  saveSelection();
-
-  const lineupKey = lineupDraftStorageKey(leagueId, teamId);
-  const savedLineupRaw = window.localStorage.getItem(lineupKey);
-  const savedCaptain = window.localStorage.getItem(CAPTAIN_KEY);
-  const savedVice = window.localStorage.getItem(VICE_KEY);
-
-  let savedLineup: Lineup = lineup;
-  if (savedLineupRaw) {
-    try {
-      savedLineup = JSON.parse(savedLineupRaw) as Lineup;
-    } catch {}
-  }
-
-  const snap: LockedSnapshot = {
-    week: fantasyWeek,
-    teamId,
-    lockedAtMs: Date.now(),
-    lineup: savedLineup,
-    captainId: savedCaptain || null,
-    viceId: savedVice || null,
-  };
-
-  window.localStorage.setItem(key, JSON.stringify(snap));
-}, [
-  deadlineLocked,
-  activeLeague?.id,
-  yourDraftTeamId,
-  fantasyWeek,
-  CAPTAIN_KEY,
-  VICE_KEY,
-  lineup,
-]);
 
   // -----------------------
   // Styles (match your app)

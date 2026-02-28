@@ -32,7 +32,7 @@ type Modal =
 
   // ✅ ADD THESE (for playoff label rows)
   label?: string | null;
-  kind?: "regular" | "playoff" | "consolation" | string | null;
+  kind?: "regular" | "playoffs" | "consolation" | string | null;
 };
 
 
@@ -220,6 +220,7 @@ function calcFantasyPoints(row: any): number {
   return pts;
 }
 
+
 function matchupSnapshotKey(leagueId: string | null, week: number, teamId: string | null) {
   return `mu_snapshot_${leagueId ?? "no-league"}_wk${week}_${teamId ?? "no-team"}`;
 }
@@ -247,6 +248,7 @@ function effectiveCaptainId(
 
   return captainId;
 }
+
 
 
 function toDatetimeLocal(ts: number) {
@@ -396,6 +398,140 @@ const league = useMemo(() => {
   return leagues.find((l) => l.id === activeLeagueId) ?? null;
 }, [leagues, activeLeagueId]);
 
+type SheetFixtureRow = {
+  season: number;
+  weekFantasy: number;
+  weekReal: number | null;
+  label: string | null;
+  kind: string | null;
+  homeTeamId: string | null;
+  awayTeamId: string | null;
+  status: string; // upcoming | complete
+  homeScore: number | null;
+  awayScore: number | null;
+};
+
+const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
+
+useEffect(() => {
+  if (!league?.id) return;
+
+  const season = 2026; // or league.season if you have it
+  fetch(`/api/fixtures/leagueMatches?season=${season}`)
+    .then((r) => r.json())
+    .then((j) => {
+      if (j?.ok) setSheetFixtures(j.rows ?? []);
+      else console.error("fixtures fetch failed", j?.error);
+    })
+    .catch((e) => console.error(e));
+}, [league?.id]);
+
+
+function isSheetLabelRow(r: SheetFixtureRow) {
+  return !!(r.label && String(r.label).trim());
+}
+
+function isSheetMatchRow(r: SheetFixtureRow) {
+  // Anything that isn't a label row and has at least one team (includes BYEs and TBC placeholders)
+  if (isSheetLabelRow(r)) return false;
+  const home = (r.homeTeamId ?? "").trim();
+  const away = (r.awayTeamId ?? "").trim();
+  return home !== "" || away !== "";
+}
+
+function isSheetRegularRow(r: SheetFixtureRow) {
+  const k = String(r.kind ?? "").toLowerCase();
+  return !k || k === "regular";
+}
+
+function isPlayoffsKind(kind: string | null) {
+  return String(kind ?? "").toLowerCase() === "playoffs";
+}
+
+function labelText(r: FixtureRow) {
+  return String(r.home ?? "").trim().toLowerCase();
+}
+
+function isGrandFinalHeader(r: FixtureRow) {
+  return labelText(r) === "grand final";
+}
+
+function shouldInjectPlaceholder(r: FixtureRow) {
+  if (!isPlayoffsKind(r.kind ?? null)) return false;
+
+  const text = labelText(r);
+
+  // Do NOT inject if sheet already contains a real matchup row
+  if (
+    text === "consolation final" ||
+    text === "consolation playoff"
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function isLabelOnlyRow(r: FixtureRow) {
+  return !!r.label; // your label rows are rendered as r.home = label text
+}
+
+// Week is "complete" only when ALL non-label regular rows are complete
+function isFantasyWeekComplete(weekNo: number) {
+  const rows = sheetFixtures.filter((r) => Number(r.weekFantasy) === weekNo);
+
+  // playable = any non-label matchup row (regular OR playoffs)
+  const playable = rows.filter(isSheetMatchRow);
+
+  if (playable.length === 0) return false;
+
+  return playable.every((r) => String(r.status ?? "").toLowerCase() === "complete");
+}
+
+function latestCompletedRegularWeek(): number {
+  // Only regular (non-label) weeks count for standings movement.
+  const weeks = Array.from(
+    new Set(
+      sheetFixtures
+        .filter((r) => !isSheetLabelRow(r) && isSheetRegularRow(r))
+        .map((r) => Number(r.weekFantasy))
+        .filter((w) => Number.isFinite(w) && w > 0)
+    )
+  ).sort((a, b) => a - b);
+
+  let latest = 0;
+  for (const w of weeks) {
+    if (isFantasyWeekComplete(w)) latest = w;
+  }
+  return latest;
+}
+
+function rowPlayed(r: FixtureRow, weekNo: number) {
+  if (r.label) return false;
+
+  const hit = sheetFixtures.find((x) =>
+    Number(x.weekFantasy) === weekNo &&
+    (x.homeTeamId ?? null) === (r.homeTeamId ?? null) &&
+    (x.awayTeamId ?? null) === (r.awayTeamId ?? null)
+  );
+
+  return String(hit?.status ?? "").toLowerCase() === "complete";
+}
+
+function scoreFromSheet(weekNo: number, teamId: string | null): number | null {
+  if (!teamId) return null;
+
+  const hit = sheetFixtures.find((x) => {
+    if (Number(x.weekFantasy) !== weekNo) return false;
+    if (String(x.status ?? "").toLowerCase() !== "complete") return false;
+    return x.homeTeamId === teamId || x.awayTeamId === teamId;
+  });
+
+  if (!hit) return null;
+  if (hit.homeTeamId === teamId) return hit.homeScore ?? null;
+  return hit.awayScore ?? null;
+}
+
 const realFixtures = useMemo(() => fixturesData as AnyFixture[], []);
 
 const normalizedFixtures = useMemo(() => {
@@ -480,13 +616,6 @@ const regularWeeks = Math.max(
 // ✅ Total season weeks = regular + playoffs
 const totalWeeks = regularWeeks + playoffWeeks;
 
-console.log("[WEEKS]", {
-  REAL_REGULAR_ROUNDS,
-  START_ROUND,
-  playoffWeeks,
-  regularWeeks,
-  totalWeeks,
-});
 
 function buildStandingsFromResults(uptoWeekInclusive: number): Omit<StandingRow, "rank" | "movement">[] {
   const teams = league?.teams ?? [];
@@ -507,48 +636,26 @@ function buildStandingsFromResults(uptoWeekInclusive: number): Omit<StandingRow,
     });
   }
 
-  const raw: any[] = buildLeagueSchedule({
-  teams,
-  totalWeeks,
-  currentWeek,
-  playoffFormat: league?.playoffFormat ?? "none",
-}) as any[];
-
-  const rows = Array.isArray(raw) ? raw : [];
+  // Only completed REGULAR rows up to the requested week.
+  const rows = sheetFixtures.filter((r) => {
+    const w = Number(r.weekFantasy);
+    if (!w || w > uptoWeekInclusive) return false;
+    if (isSheetLabelRow(r)) return false;
+    if (!isSheetRegularRow(r)) return false;
+    if (String(r.status ?? "").toLowerCase() !== "complete") return false;
+    return true;
+  });
 
   for (const m of rows) {
-    const w = Number(m.weekNo);
-    if (!w || w > uptoWeekInclusive) continue;
-
-    // ✅ skip playoff placeholder/label rows
-if ((m as any).label) continue;
-if ((m as any).kind && (m as any).kind !== "regular") continue;
-
     const homeId = m.homeTeamId ?? null;
     const awayId = m.awayTeamId ?? null;
 
-    // BYE (one side null)
-    if (!homeId || !awayId) {
-      const realId = homeId ?? awayId;
-      if (!realId) continue;
-      const score = scoreFromStoredResult(w, realId);
-      if (score == null) continue; // not actually played yet
+    // BYE (one side null) -> ignore in standings
+    if (!homeId || !awayId) continue;
 
-      const r = base.get(realId);
-      if (!r) continue;
-
-      r.played += 1;
-      r.wins += 1;
-      r.pf += score;
-      r.pa += 0;
-      r.pd = r.pf - r.pa;
-      r.pts += 4;
-      continue;
-    }
-
-    const hs = scoreFromStoredResult(w, homeId);
-const as = scoreFromStoredResult(w, awayId);
-    if (hs == null || as == null) continue; // not actually played yet
+    const hs = m.homeScore;
+    const as = m.awayScore;
+    if (hs == null || as == null) continue;
 
     const home = base.get(homeId);
     const away = base.get(awayId);
@@ -579,10 +686,9 @@ const as = scoreFromStoredResult(w, awayId);
 }
 
 const standings = useMemo<StandingRow[]>(() => {
-  const totalWeeks = league?.totalWeeks ?? 16;
-  console.log("LEAGUE totalWeeks:", league?.totalWeeks, "playoffFormat:", league?.playoffFormat, "regularWeeks:", regularWeeks);
-  const playedNow = Math.max(0, Math.min(totalWeeks, (league?.currentWeek ?? 1) - 1));
-  const playedPrev = Math.max(0, Math.min(totalWeeks, (league?.currentWeek ?? 1) - 2));
+  // ✅ Sheet-driven “current standings week”
+  const playedNow = latestCompletedRegularWeek();      // e.g. 1, 2, 3...
+  const playedPrev = Math.max(0, playedNow - 1);
 
   const curr = buildStandingsFromResults(playedNow);
   const prev = buildStandingsFromResults(playedPrev);
@@ -607,7 +713,7 @@ const standings = useMemo<StandingRow[]>(() => {
 
     return { rank, ...r, movement };
   });
-}, [league?.id, league?.teams, league?.currentWeek, league?.totalWeeks, league?.playoffFormat, regularWeeks, totalWeeks, currentWeek, pointsByRealRound]);
+}, [sheetFixtures, league?.teams]);
 
 function readSnapshot(leagueId: string | null, teamId: string | null, weekNo: number): LockedSnapshot | null {
   if (typeof window === "undefined") return null;
@@ -644,137 +750,7 @@ function teamWeekScore(leagueId: string | null, teamId: string | null, weekNo: n
   return sum;
 }
 
-useEffect(() => {
-  if (typeof window === "undefined") return;
-  if (!league?.id) return;
 
-  const leagueId = league.id;
-  const teams = league.teams ?? [];
-  if (teams.length < 2) return;
-
-  // Build schedule rows (flat)
-  const raw: any[] = buildLeagueSchedule({
-    teams,
-    totalWeeks,
-    currentWeek,
-    playoffFormat: league.playoffFormat ?? "none",
-  }) as any[];
-
-  const rows = Array.isArray(raw) ? raw : [];
-
-  // We only finalize weeks that have happened / are current
-  const upto = Math.min(totalWeeks, currentWeek); // includes current week if SR round complete
-
-  for (const m of rows) {
-    const w = Number(m.weekNo);
-    if (!w || w > upto) continue;
-
-    // skip label/playoff placeholders
-    if ((m as any).label) continue;
-    if ((m as any).kind && (m as any).kind !== "regular") continue;
-
-    const startRound = league.startRound ?? 1;
-    const realRound = fantasyWeekToRealRound(startRound, w);
-
-    // ✅ only finalize after the REAL round is complete
-    if (!isRealRoundComplete(realRound)) continue;
-
-    const homeId = m.homeTeamId ?? null;
-    const awayId = m.awayTeamId ?? null;
-
-    // BYE handling
-    if (!homeId || !awayId) {
-      const realId = homeId ?? awayId;
-      if (!realId) continue;
-
-      const score = teamWeekScore(leagueId, realId, w);
-      if (score == null) continue;
-
-      upsertResult(leagueId, {
-        weekNo: w,
-        kind: "bye",
-        homeTeamId: realId,
-        awayTeamId: null,
-        homeScore: score,
-        awayScore: 0,
-        finalizedAtMs: Date.now(),
-      });
-
-      continue;
-    }
-
-    const hs = teamWeekScore(leagueId, homeId, w);
-    const as = teamWeekScore(leagueId, awayId, w);
-    if (hs == null || as == null) continue;
-
-    upsertResult(leagueId, {
-      weekNo: w,
-      kind: "match",
-      homeTeamId: homeId,
-      awayTeamId: awayId,
-      homeScore: hs,
-      awayScore: as,
-      finalizedAtMs: Date.now(),
-    });
-  }
-}, [
-  league?.id,
-  league?.teams,
-  league?.playoffFormat,
-  league?.startRound,
-  totalWeeks,
-  currentWeek,
-  pointsByRealRound,
-  normalizedFixtures,
-]);
-
-// ---------- "played" detection (single source of truth) ----------
-function rowPlayed(r: FixtureRow, weekNo: number) {
-  if (r.label) return false;
-  if (r.kind && r.kind !== "regular") return false;
-
-  const leagueId = league?.id ?? null;
-  if (!leagueId) return false;
-
-  const all = readLeagueResults(leagueId);
-
-  const homeId = r.homeTeamId ?? null;
-  const awayId = r.awayTeamId ?? null;
-
-  // BYE
-  if (!homeId || !awayId) {
-    const realId = homeId ?? awayId;
-    if (!realId) return false;
-    return all.some(
-      (x) => x.weekNo === weekNo && x.kind === "bye" && x.homeTeamId === realId
-    );
-  }
-
-  // normal match
-  return all.some(
-    (x) =>
-      x.weekNo === weekNo &&
-      x.kind === "match" &&
-      x.homeTeamId === homeId &&
-      x.awayTeamId === awayId
-  );
-}
-
-function scoreFromStoredResult(weekNo: number, teamId: string | null): number | null {
-  const leagueId = league?.id ?? null;
-  if (!leagueId || !teamId) return null;
-  const all = readLeagueResults(leagueId);
-
-  // match home/away
-  const m = all.find((x) => x.weekNo === weekNo && x.kind === "match" && (x.homeTeamId === teamId || x.awayTeamId === teamId));
-  if (m) return m.homeTeamId === teamId ? m.homeScore : m.awayScore;
-
-  // bye is stored as homeTeamId
-  const b = all.find((x) => x.weekNo === weekNo && x.kind === "bye" && x.homeTeamId === teamId);
-  if (b) return b.homeScore;
-
-  return null;
-}
 
   // ------- fixtures/results (generated placeholder) -------
 
@@ -783,98 +759,51 @@ function scoreFromStoredResult(weekNo: number, teamId: string | null): number | 
   return league?.teams.find((t) => t.id === id)?.name ?? "TBC";
 };
 
-    const fixtures = useMemo<FixtureWeek[]>(() => {
+const fixtures = useMemo<FixtureWeek[]>(() => {
+  if (!league?.teams?.length) return [];
 
-    const teams = league?.teams ?? [];
-    if (teams.length < 2) return [];
-
-    const raw: any = buildLeagueSchedule({
-  teams,
-  totalWeeks,
-  currentWeek,
-  playoffFormat: league?.playoffFormat ?? "none",
-});
-
-    // ---- Normalise to: [{ weekNo, rows: [{ home, away, homeScore, awayScore }] }] ----
-
-    // Case A: already grouped
-    if (Array.isArray(raw) && raw.length > 0 && "rows" in raw[0]) {
-  return raw.map((w: any) => ({
-    weekNo: Number(w.weekNo),
-rows: (w.rows ?? []).map((r: any) => {
-  const label = (r.label ?? null) as string | null;
-  const kind = (r.kind ?? null) as string | null;
-
-  const isLabel = !!label;
-  const isNonRegular = !!kind && kind !== "regular"; // ✅ ADD THIS
-
-  return {
-    weekNo: Number(w.weekNo),
-
-    home: isLabel
-      ? label!
-      : (typeof r.home === "string"
-          ? r.home
-          : teamNameById(r.homeTeamId, { tbcIfMissing: isNonRegular })), // ✅ CHANGED
-
-    away: isLabel
-      ? ""
-      : (typeof r.away === "string"
-          ? r.away
-          : teamNameById(r.awayTeamId, { tbcIfMissing: isNonRegular })), // ✅ CHANGED
-    homeTeamId: r.homeTeamId ?? null,
-    awayTeamId: r.awayTeamId ?? null,
-
-    // ✅ No scores for label rows
-    homeScore: isLabel ? null : scoreFromStoredResult(Number(w.weekNo), r.homeTeamId ?? null),
-awayScore: isLabel ? null : scoreFromStoredResult(Number(w.weekNo), r.awayTeamId ?? null),
-
-    // ✅ pass through
-    label,
-    kind,
+  const teamNameById = (id: string | null | undefined, opts?: { tbcIfMissing?: boolean }) => {
+    if (!id) return opts?.tbcIfMissing ? "TBC" : "BYE";
+    return league.teams.find((t) => t.id === id)?.name ?? "TBC";
   };
-}),
-  }));
-}
 
-    // Case B: flat list of matches with weekNo
-    if (Array.isArray(raw)) {
-  // build 1..totalWeeks, because playoffs should occupy the last weeks (15-16)
-  return Array.from({ length: totalWeeks }).map((_, wIdx) => {
-    const weekNo = wIdx + 1;
+  const byWeek = new Map<number, FixtureRow[]>();
 
-    const weekRows = raw
-      .filter((r: any) => Number(r.weekNo) === weekNo)
-      .map((r: any) => {
-  const label = (r.label ?? null) as string | null;
-  const kind = (r.kind ?? null) as string | null;
-  const isLabel = !!label;
-  const isNonRegular = !!kind && kind !== "regular"; // ✅ ADD THIS
+  // Keep CSV order. (So your sheet order controls display order)
+  for (const r of sheetFixtures) {
+    const weekNo = Number(r.weekFantasy);
+    if (!weekNo) continue;
 
-  return {
-    weekNo,
+    const label = r.label ?? null;
+const kind = r.kind ? String(r.kind).toLowerCase() : null;
+    const isLabel = !!label || String(kind ?? "").toLowerCase() === "label";
+    const isNonRegular = !!kind && String(kind).toLowerCase() !== "regular";
 
-    home: isLabel ? label! : teamNameById(r.homeTeamId, { tbcIfMissing: isNonRegular }), // ✅ CHANGED
-    away: isLabel ? "" : teamNameById(r.awayTeamId, { tbcIfMissing: isNonRegular }),   // ✅ CHANGED
+    const homeTeamId = r.homeTeamId ?? null;
+    const awayTeamId = r.awayTeamId ?? null;
 
-          homeTeamId: r.homeTeamId ?? null,
-          awayTeamId: r.awayTeamId ?? null,
+    const row: FixtureRow = {
+      weekNo,
+      label,
+      kind,
+      homeTeamId,
+      awayTeamId,
 
-          homeScore: isLabel ? null : scoreFromStoredResult(weekNo, r.homeTeamId ?? null),
-awayScore: isLabel ? null : scoreFromStoredResult(weekNo, r.awayTeamId ?? null),
+      home: isLabel ? (label ?? "") : teamNameById(homeTeamId, { tbcIfMissing: isNonRegular }),
+      away: isLabel ? "" : teamNameById(awayTeamId, { tbcIfMissing: isNonRegular }),
 
-          label,
-          kind,
-        };
-      });
+      // Scores now come from the sheet
+      homeScore: r.homeScore ?? null,
+      awayScore: r.awayScore ?? null,
+    };
 
-    return { weekNo, rows: weekRows };
-  });
-}
+    if (!byWeek.has(weekNo)) byWeek.set(weekNo, []);
+    byWeek.get(weekNo)!.push(row);
+  }
 
-    // Fallback
-    return [];
- }, [league?.id, league?.teams, league?.playoffFormat, regularWeeks, totalWeeks, currentWeek, pointsByRealRound]);
+  const weeks = Array.from(byWeek.keys()).sort((a, b) => a - b);
+  return weeks.map((w) => ({ weekNo: w, rows: byWeek.get(w)! }));
+}, [league?.teams, sheetFixtures]);
 
 
 
@@ -886,6 +815,37 @@ awayScore: isLabel ? null : scoreFromStoredResult(weekNo, r.awayTeamId ?? null),
     backdropFilter: "blur(10px)",
     boxShadow: "0 12px 30px rgba(0,0,0,0.18)",
   };
+  
+
+  const finalsLabelStyle: React.CSSProperties = {
+  padding: "2px 10px",
+  borderTop: "1px solid rgba(0,0,0,0.08)",
+  fontSize: 11,          // smaller
+  fontWeight: 700,
+  textAlign: "center",
+  background: "rgba(15,23,42,0.14)", // darker than normal label strip
+  color: "#0f172a",
+};
+
+const grandFinalLabelStyle: React.CSSProperties = {
+  ...finalsLabelStyle,
+  background: "rgba(245, 158, 11, 0.28)", // amber/gold tint
+  borderTop: "1px solid rgba(245, 158, 11, 0.45)",
+  borderBottom: "1px solid rgba(245, 158, 11, 0.45)",
+};
+
+const finalsPlaceholderRowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr auto 1fr",
+  gap: 10,
+  padding: "7px 10px",
+  borderTop: "1px solid rgba(0,0,0,0.08)",
+  fontSize: 12,
+  fontWeight: 600,
+  alignItems: "center",
+  opacity: 0.85,
+  background: "rgba(15,23,42,0.03)",
+};
 
   const tabBarStyle: React.CSSProperties = {
     marginTop: 10,
@@ -1085,7 +1045,7 @@ awayScore: isLabel ? null : scoreFromStoredResult(weekNo, r.awayTeamId ?? null),
   }
 
   function FixturesTab() {
-    const future = fixtures.filter((w) => w.weekNo >= currentWeek);
+    const future = fixtures.filter((w) => !isFantasyWeekComplete(w.weekNo));
     return (
       <div style={listBox}>
         {future.map((w: FixtureWeek, idx) => {
@@ -1094,33 +1054,102 @@ awayScore: isLabel ? null : scoreFromStoredResult(weekNo, r.awayTeamId ?? null),
   return (
 
           <div key={w.weekNo} style={{ borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)" }}>
-            <div style={{ padding: "2px 10px", fontSize: 10, fontWeight: 500, opacity: 0.65, textAlign: "center" }}>
-              {isPlayoffGroup ? "Playoffs" : `Week ${w.weekNo}`}
-            </div>
+            <div
+  style={{
+    padding: "6px 10px",
+    fontSize: 11,
+    fontWeight: 800,
+    textAlign: "center",
+    background: "rgba(15,23,42,0.08)",   // darker strip
+    borderTop: "1px solid rgba(0,0,0,0.08)",
+    borderBottom: "1px solid rgba(0,0,0,0.08)",
+    letterSpacing: 0.4,
+  }}
+>
+  {`Week ${w.weekNo}`}
+</div>
 
             {w.rows.map((r, i) => {
-              const isLabelRow = !!r.label;
+const isLabelRow = !!r.label;
+
 if (isLabelRow) {
+  const isFinalsHeader = isPlayoffsKind(r.kind ?? null);
+
   return (
-    <div
-      key={`${w.weekNo}-${i}`}
-      style={{
-        padding: "9px 10px",
-        borderTop: "1px solid rgba(0,0,0,0.08)",
-        fontSize: 12,
-        fontWeight: 900,
-        textAlign: "center",
-        opacity: 0.9,
-      }}
-    >
-      {r.home}
-    </div>
+    <React.Fragment key={`${w.weekNo}-${i}`}>
+      {/* Finals/label header */}
+      <div
+  style={
+    isFinalsHeader
+      ? (isGrandFinalHeader(r) ? grandFinalLabelStyle : finalsLabelStyle)
+      : {
+          padding: "9px 10px",
+          borderTop: "1px solid rgba(0,0,0,0.08)",
+          fontSize: 12,
+          fontWeight: 900,
+          textAlign: "center",
+          opacity: 0.9,
+        }
+  }
+>
+  {r.home}
+</div>
+
+      {/* If it's a finals header, show a placeholder matchup under it */}
+      {shouldInjectPlaceholder(r) && (
+        <div style={finalsPlaceholderRowStyle}>
+          <div style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            TBC
+          </div>
+          <div style={{ opacity: 0.8, fontWeight: 800 }}>v</div>
+          <div style={{ textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            TBC
+          </div>
+        </div>
+      )}
+    </React.Fragment>
   );
 }
   const isHomeBye = r.home === "BYE";
   const isAwayBye = r.away === "BYE";
   const isBye = isHomeBye || isAwayBye;
+  const realTeamName = isHomeBye ? r.away : r.home;
+const realTeamId = isHomeBye ? (r.awayTeamId ?? null) : (r.homeTeamId ?? null);
   
+if (isBye) {
+  return (
+    <div
+      key={`${w.weekNo}-${i}`}
+      style={{
+        padding: "7px 10px",
+        borderTop: "1px solid rgba(0,0,0,0.08)",
+        fontSize: 12,
+        fontWeight: 500,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        // background: "rgba(15,23,42,0.04)",
+      }}
+    >
+      <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {realTeamName}
+      </div>
+
+      <div
+        style={{
+
+          padding: "2px 10px",
+          borderRadius: 999,
+          background: "rgba(15,23,42,0.08)",
+          fontWeight: 700,
+          fontSize: 10,
+        }}
+      >
+        BYE
+      </div>
+    </div>
+  );
+}
 
   const realTeam = isHomeBye ? r.away : r.home;
   const played = rowPlayed(r, w.weekNo);
@@ -1164,33 +1193,14 @@ if (isLabelRow) {
   }
 
 function hasPlayedResult(w: FixtureWeek) {
-  return (w.rows ?? []).some((r) => rowPlayed(r, w.weekNo));
+  return isFantasyWeekComplete(w.weekNo);
 }
 
-function manuallyInsertResult(
-  weekNo: number,
-  homeTeamId: string,
-  awayTeamId: string,
-  homeScore: number,
-  awayScore: number
-) {
-  if (!league?.id) return;
 
-  upsertResult(league.id, {
-    weekNo,
-    kind: "match",
-    homeTeamId,
-    awayTeamId,
-    homeScore,
-    awayScore,
-    finalizedAtMs: Date.now(),
-  });
-}
 
   function ResultsTab() {
     const past = fixtures
-  .filter((w) => w.weekNo <= currentWeek) // ✅ include current week if played
-  .filter(hasPlayedResult)
+  .filter((w) => isFantasyWeekComplete(w.weekNo))
   .slice()
   .reverse();
 
@@ -1200,79 +1210,128 @@ function manuallyInsertResult(
           <div key={w.weekNo} style={{ borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)" }}>
 
   {/* Week heading */}
-  <div style={{ padding: "2px 10px", fontSize: 10, fontWeight: 500, opacity: 0.65, textAlign: "center" }}>
-    Week {w.weekNo}
-  </div>
+  <div
+  style={{
+    padding: "6px 10px",
+    fontSize: 11,
+    fontWeight: 800,
+    textAlign: "center",
+    background: "rgba(15,23,42,0.08)",
+    borderTop: "1px solid rgba(0,0,0,0.08)",
+    borderBottom: "1px solid rgba(0,0,0,0.08)",
+    letterSpacing: 0.4,
+  }}
+>
+  Week {w.weekNo}
+</div>
 
-  {/* ✅ INSERT BUTTON RIGHT HERE */}
-  {isCreator && (
-    <div style={{ padding: "6px 10px", textAlign: "center" }}>
-      <button
-        style={{
-          height: 28,
-          borderRadius: 999,
-          padding: "0 14px",
-          fontSize: 11,
-          fontWeight: 900,
-          background: "#22C55E",
-          border: "none",
-          color: "white",
-          cursor: "pointer",
-        }}
-        onClick={() => {
-          const firstMatch = w.rows.find(r => !r.label && r.homeTeamId && r.awayTeamId);
-          if (!firstMatch) return;
 
-          const hs = Number(prompt("Home score?"));
-          const as = Number(prompt("Away score?"));
-          if (!Number.isFinite(hs) || !Number.isFinite(as)) return;
-
-          manuallyInsertResult(
-            w.weekNo,
-            firstMatch.homeTeamId!,
-            firstMatch.awayTeamId!,
-            hs,
-            as
-          );
-        }}
-      >
-        Add Score (Temp)
-      </button>
-    </div>
-  )}
 
   {/* existing match rows below */}
-  {w.rows.map((r, i) => {
-              const isLabelRow = !!r.label;
+{w.rows.map((r, i) => {
+  const isLabelRow = !!r.label;
+
 if (isLabelRow) {
+  const isFinalsHeader = isPlayoffsKind(r.kind ?? null);
+
   return (
-    <div
-      key={`${w.weekNo}-${i}`}
-      style={{
-        padding: "9px 10px",
-        borderTop: "1px solid rgba(0,0,0,0.08)",
-        fontSize: 12,
-        fontWeight: 900,
-        textAlign: "center",
-        opacity: 0.9,
-      }}
-    >
-      {r.home}
-    </div>
+    <React.Fragment key={`${w.weekNo}-${i}`}>
+      <div
+  style={
+    isFinalsHeader
+      ? (isGrandFinalHeader(r) ? grandFinalLabelStyle : finalsLabelStyle)
+      : {
+          padding: "9px 10px",
+          borderTop: "1px solid rgba(0,0,0,0.08)",
+          fontSize: 12,
+          fontWeight: 900,
+          textAlign: "center",
+          opacity: 0.9,
+        }
+  }
+>
+  {r.home}
+</div>
+
+      {shouldInjectPlaceholder(r) && (
+        <div style={finalsPlaceholderRowStyle}>
+          <div style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            TBC
+          </div>
+          <div style={{ opacity: 0.8, fontWeight: 800 }}>v</div>
+          <div style={{ textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            TBC
+          </div>
+        </div>
+      )}
+    </React.Fragment>
   );
 }
+
   const isHomeBye = r.home === "BYE";
   const isAwayBye = r.away === "BYE";
   const isBye = isHomeBye || isAwayBye;
-const played = rowPlayed(r, w.weekNo);
+
+  const played = rowPlayed(r, w.weekNo);
+
   const realTeamName = isHomeBye ? r.away : r.home;
-const realTeamId = isHomeBye ? (r.awayTeamId ?? null) : (r.homeTeamId ?? null);
+  const realTeamId = isHomeBye ? (r.awayTeamId ?? null) : (r.homeTeamId ?? null);
 
-const byePoints =
-  isBye && realTeamId
-    ? scoreFromStoredResult(w.weekNo, realTeamId)
-    : null;
+  const byePoints =
+    isBye && realTeamId ? scoreFromSheet(w.weekNo, realTeamId) : null;
 
+      // ✅ BYE row (same format as Fixtures tab, but includes score)
+  if (isBye) {
+    return (
+      <div
+        key={`${w.weekNo}-${i}`}
+        style={{
+          padding: "8px 10px",
+          borderTop: "1px solid rgba(0,0,0,0.08)",
+          fontSize: 12,
+          fontWeight: 500,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          background: "rgba(15,23,42,0.04)",
+        }}
+      >
+        <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {realTeamName}
+        </div>
+
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {/* score chip */}
+          <div
+            style={{
+              padding: "2px 10px",
+              borderRadius: 999,
+              background: "rgba(15,23,42,0.10)",
+              fontWeight: 900,
+              fontSize: 10,
+            }}
+            title="Your score this week"
+          >
+            {byePoints ?? "—"}
+          </div>
+
+          {/* BYE chip */}
+          <div
+            style={{
+              padding: "2px 10px",
+              borderRadius: 999,
+              background: "rgba(15,23,42,0.08)",
+              fontWeight: 700,
+              fontSize: 10,
+            }}
+          >
+            BYE
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
   return (
     <div
       key={`${w.weekNo}-${i}`}
@@ -1287,7 +1346,7 @@ const byePoints =
         alignItems: "center",
       }}
     >
-      {/* Left */}
+      {/* Left side */}
       <div
         style={{
           display: "grid",
@@ -1301,21 +1360,17 @@ const byePoints =
           {isHomeBye ? realTeamName : r.home}
         </div>
 
-        <div style={{ fontWeight: 900, textAlign: "right", minWidth: 22, opacity: isBye && isHomeBye ? 1 : 1 }}>
-          {isBye
-            ? (isHomeBye ? byePoints : "—")
-            : (r.homeScore ?? "—")}
+        <div style={{ fontWeight: 900, textAlign: "right", minWidth: 22 }}>
+          {isBye ? (isHomeBye ? byePoints : "—") : (r.homeScore ?? "—")}
         </div>
       </div>
 
       {/* Middle */}
-      <div style={{ opacity: 0.8, fontWeight: 700 }}>
-  {played
-    ? `${r.homeScore ?? "—"} - ${r.awayScore ?? "—"}`
-    : (isBye ? "BYE" : "v")}
+<div style={{ opacity: 0.8, fontWeight: 700 }}>
+  {isBye ? "BYE" : "v"}
 </div>
 
-      {/* Right */}
+      {/* Right side */}
       <div
         style={{
           display: "grid",
@@ -1326,15 +1381,15 @@ const byePoints =
         }}
       >
         <div style={{ fontWeight: 900, textAlign: "left", minWidth: 22 }}>
-          {isBye
-            ? (isAwayBye ? byePoints : "—")
-            : (r.awayScore ?? "—")}
+          {isBye ? (isAwayBye ? byePoints : "—") : (r.awayScore ?? "—")}
         </div>
 
         <div style={{ textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {isAwayBye ? realTeamName : r.away}
         </div>
       </div>
+
+      
     </div>
   );
 })}
