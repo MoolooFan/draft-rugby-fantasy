@@ -40,17 +40,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Team already owned" }, { status: 403 });
   }
 
-  const { error } = await supabaseAdmin.from("teams").upsert(
-    {
-      id: teamId,
-      league_id: leagueId,
-      name,
-      initials: typeof initials === "string" && initials.trim() ? initials.trim().toUpperCase() : null,
-      user_id: owner_username,
-      owner_username,
-    },
-    { onConflict: "id" }
-  );
+  const payload: any = {
+  id: teamId,
+  league_id: leagueId,
+  name,
+  user_id: owner_username,
+  owner_username,
+};
+
+// Only set initials if the client actually provided them
+if (typeof initials === "string" && initials.trim()) {
+  payload.initials = initials.trim().toUpperCase();
+}
+
+const { error } = await supabaseAdmin.from("teams").upsert(payload, { onConflict: "id" });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

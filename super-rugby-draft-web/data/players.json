@@ -18058,5 +18058,47 @@
       "yellowCards": 0,
       "redCards": 0
     }
+  },
+  {
+    "id": "S.Matenga",
+    "firstName": "Sam",
+    "lastName": "Matenga",
+    "teamCode": "BLU",
+    "posAbbrev": "PR",
+    "posName": "Prop",
+    "secondaryPosAbbrev": "",
+    "secondaryPosName": "",
+    "draftRank": 431,
+    "status": "",
+    "stats": {
+      "gamesPlayed": 0,
+      "starts": 0,
+      "triesScored": 0,
+      "tryAssists": 0,
+      "lineBreaks": 0,
+      "lineBreakAssists": 0,
+      "defendersBeaten": 0,
+      "metresGained": 0,
+      "offloads": 0,
+      "tacklesMade": 0,
+      "tacklesMissed": 0,
+      "turnoversForced": 0,
+      "interceptions": 0,
+      "fiftyTwentyTwos": 0,
+      "penaltiesConceded": 0,
+      "errors": 0,
+      "lineoutsWon": 0,
+      "lineoutSteals": 0,
+      "lineoutErrors": 0,
+      "scrumsWon": 0,
+      "conversions": 0,
+      "conversionsMissed": 0,
+      "penaltyGoals": 0,
+      "penaltyGoalsMissed": 0,
+      "dropGoals": 0,
+      "dropGoalsMissed": 0,
+      "yellowCards": 0,
+      "redCards": 0
+    }
   }
 ]

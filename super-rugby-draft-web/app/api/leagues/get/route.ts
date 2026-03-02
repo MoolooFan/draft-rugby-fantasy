@@ -4,6 +4,21 @@ import { getServerUsername } from "@/lib/serverSession";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
+function initialsFromOwnerName(ownerName: any): string | null {
+  const parts = String(ownerName ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!parts.length) return null;
+
+  const first = parts[0]?.[0] ?? "";
+  const last = parts[parts.length - 1]?.[0] ?? parts[0]?.[0] ?? "";
+  const out = (first + last).toUpperCase();
+
+  return out || null;
+}
+
 export async function GET(req: Request) {
   // 0) must be logged in
   const usernameRaw = await getServerUsername();
@@ -67,20 +82,29 @@ if (
   // 3) fetch teams
   const { data: teamRows, error: teamErr } = await supabaseAdmin
     .from("teams")
-    .select("*")
+      .select("id, name, initials, user_id, owner_name, created_at")
     .eq("league_id", leagueId)
     .order("created_at", { ascending: true });
 
   if (teamErr) {
     return NextResponse.json({ ok: false, error: teamErr.message }, { status: 500 });
   }
-const teamsRaw = (teamRows ?? []).map((t: any) => ({
-  id: t.id,
-  name: t.name,
-  initials: t.initials ?? null,
-  userId: t.user_id,
-  userInitials: t.initials ?? null,
-}));
+const teamsRaw = (teamRows ?? []).map((t: any) => {
+  const dbInitials =
+    typeof t.initials === "string" && t.initials.trim()
+      ? t.initials.trim().toUpperCase()
+      : null;
+
+  const computed = dbInitials ?? initialsFromOwnerName(t.owner_name);
+
+  return {
+    id: t.id,
+    name: t.name,
+    initials: computed,
+    userId: t.user_id,
+    userInitials: computed,
+  };
+});
 
 // 3.1) draft order (always compute a stable order)
 const orderFromDb: string[] | null = Array.isArray(leagueRow.draft_order)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { PlayerCardModal } from "@/components/PlayerCardModal";
@@ -8,6 +8,14 @@ import { AppMenu } from "@/components/AppMenu";
 import { useLeagueStore } from "@/lib/league/store";
 import type { League } from "@/lib/league/types";
 import { useDraftStore } from "@/lib/draft/store";
+
+import fixturesData from "@/data/fixtures-2026.json";
+import { getActiveTimezone } from "@/lib/session";
+
+import { usePlayersStore } from "@/lib/players/store";
+import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib/league/week";
+import { getActiveUsername } from "@/lib/session";
+import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 
 type ActiveMenu =
   | "Dashboard"
@@ -42,11 +50,347 @@ type Player = {
 
 type Modal =
   | null
-  | { type: "addPlayer"; player: Player }
   | { type: "playerCard"; player: Player };
+
+  type AnyFixture = {
+  week: number;
+  kickoffAt: string | number;
+  kickoffMs?: number;
+};
+
+function singularPosLabel(pos: string) {
+  const p = String(pos ?? "").trim();
+
+  const map: Record<string, string> = {
+    Hookers: "Hooker",
+    Prop: "Prop",
+    Lock: "Lock",
+    Halfback: "Halfback",
+    Flyhalf: "Flyhalf",
+    "Loose Forward": "Loose Forward",
+    Centre: "Centre",
+    "Outside Backs": "Outside Back",
+  };
+
+  return map[p] ?? p;
+}
+
+function toMs(x: any): number {
+  const n = typeof x === "number" ? x : new Date(x).getTime();
+  return Number.isFinite(n) ? n : 0;
+}
+
+function getSelectionDeadlineMs(firstKickoffMs: number) {
+  return firstKickoffMs - 1 * 60 * 60 * 1000; // 1 hour before first kickoff
+}
+
+function getWeekFirstKickoffMs(fixtures: AnyFixture[], week: number) {
+  const wk = fixtures.filter((f) => f.week === week);
+  if (!wk.length) return 0;
+  return Math.min(...wk.map((f) => f.kickoffMs ?? toMs(f.kickoffAt)));
+}
+
+function getWeeksSorted(fixtures: AnyFixture[]) {
+  return Array.from(new Set(fixtures.map((f) => f.week))).sort((a, b) => a - b);
+}
+
+function getLiveWeekFromNow(fixtures: AnyFixture[], nowMs: number) {
+  if (!fixtures.length) return 1;
+
+  // next fixture that hasn't kicked off yet
+  const next = fixtures.find((f) => (f.kickoffMs ?? toMs(f.kickoffAt)) >= nowMs);
+
+  if (next) return next.week;
+
+  // season finished: use last week in fixtures
+  const weeks = getWeeksSorted(fixtures);
+  return weeks[weeks.length - 1] ?? 1;
+}
+
+function formatDeadline(dtMs: number, timeZone?: string) {
+  const d = new Date(dtMs);
+  return d.toLocaleString(undefined, {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone,
+  });
+}
+
+type SheetFixtureRow = {
+  season: number;
+  weekFantasy: number;
+  weekReal: number | null;
+  label: string | null;
+  kind: string | null;
+  homeTeamId: string | null;
+  awayTeamId: string | null;
+  status: string; // upcoming | complete
+  homeScore: number | null;
+  awayScore: number | null;
+};
+
+function isSheetLabelRow(r: SheetFixtureRow) {
+  return !!r.label || String(r.kind ?? "").toLowerCase() === "label";
+}
+function isSheetPlayableRow(r: SheetFixtureRow) {
+  return !isSheetLabelRow(r);
+}
+function isFantasyWeekCompleteFromSheet(rows: SheetFixtureRow[], weekNo: number) {
+  const wk = rows.filter((r) => Number(r.weekFantasy) === weekNo && isSheetPlayableRow(r));
+  if (!wk.length) return false;
+  return wk.every((r) => String(r.status ?? "").toLowerCase() === "complete");
+}
+function latestCompletedWeekFromSheet(rows: SheetFixtureRow[]) {
+  const weeks = Array.from(
+    new Set(
+      rows
+        .filter(isSheetPlayableRow)
+        .map((r) => Number(r.weekFantasy))
+        .filter((w) => Number.isFinite(w) && w > 0)
+    )
+  ).sort((a, b) => a - b);
+
+  let latest = 0;
+  for (const w of weeks) {
+    if (isFantasyWeekCompleteFromSheet(rows, w)) latest = w;
+  }
+  return latest;
+}
+function currentWeekFromSheet(rows: SheetFixtureRow[]) {
+  const weeks = Array.from(
+    new Set(
+      rows
+        .filter(isSheetPlayableRow)
+        .map((r) => Number(r.weekFantasy))
+        .filter((w) => Number.isFinite(w) && w > 0)
+    )
+  ).sort((a, b) => a - b);
+
+  for (const w of weeks) {
+    if (!isFantasyWeekCompleteFromSheet(rows, w)) return w;
+  }
+  return latestCompletedWeekFromSheet(rows) || 1;
+}
+
+function isSheetRegularRow(r: SheetFixtureRow) {
+  const k = String(r.kind ?? "").toLowerCase();
+  return !k || k === "regular";
+}
+
+function isSheetMatchRow(r: SheetFixtureRow) {
+  // non-label row and has at least one team id (includes BYE)
+  if (isSheetLabelRow(r)) return false;
+  const home = (r.homeTeamId ?? "").trim();
+  const away = (r.awayTeamId ?? "").trim();
+  return home !== "" || away !== "";
+}
+
+type TeamRecord = { w: number; l: number; d: number };
+
+function buildRecordsUpToWeek(rows: SheetFixtureRow[], upToWeek: number) {
+  const map = new Map<string, TeamRecord>();
+  const ensure = (id: string) => {
+    if (!map.has(id)) map.set(id, { w: 0, l: 0, d: 0 });
+    return map.get(id)!;
+  };
+
+  const playable = rows
+    .filter(isSheetPlayableRow)
+    .filter((r) => String(r.status ?? "").toLowerCase() === "complete")
+    .filter((r) => Number(r.weekFantasy) <= upToWeek)
+    .filter((r) => r.homeTeamId && r.awayTeamId && r.homeScore != null && r.awayScore != null);
+
+  for (const m of playable) {
+    const home = ensure(m.homeTeamId!);
+    const away = ensure(m.awayTeamId!);
+
+    const hs = m.homeScore!;
+    const as = m.awayScore!;
+
+    if (hs > as) { home.w += 1; away.l += 1; }
+    else if (as > hs) { away.w += 1; home.l += 1; }
+    else { home.d += 1; away.d += 1; }
+  }
+
+  return map;
+}
+
+type SlotId =
+  | "prop1" | "hooker1" | "prop2"
+  | "lock1" | "lock2"
+  | "looseforward1" | "looseforward2" | "looseforward3"
+  | "halfback1" | "flyhalf1"
+  | "centre1" | "centre2"
+  | "outsideback1" | "outsideback2" | "outsideback3"
+  | "bench1" | "bench2" | "bench3" | "bench4" | "bench5";
+
+type Lineup = Record<SlotId, any | null>;
+
+const STARTER_SLOTS: SlotId[] = [
+  "prop1","hooker1","prop2",
+  "lock1","lock2",
+  "looseforward1","looseforward2","looseforward3",
+  "halfback1","flyhalf1",
+  "centre1","centre2",
+  "outsideback1","outsideback2","outsideback3",
+];
+
+const CAP_MULT = 2;
+
+function effectiveCaptainId(lineup: Lineup | null, captainId: string | null, viceId: string | null) {
+  if (!lineup) return null;
+  const cap = Object.values(lineup).find((x: any) => x?.id === captainId) ?? null;
+  const vice = Object.values(lineup).find((x: any) => x?.id === viceId) ?? null;
+
+  // dashboard doesn’t have minutes logic; we keep it simple:
+  // if captain exists in lineup, use captain, else use vice if exists
+  if (cap?.id) return cap.id;
+  if (vice?.id) return vice.id;
+  return captainId;
+}
+
+// ✅ Stable fallbacks for Zustand selectors (avoid new refs each render)
+const EMPTY_ARR: any[] = [];
+const NOOP = () => {};
+
+function toNum(v: any): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function normaliseId(x: any) {
+  return String(x ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function getPlayerRounds(playerId: string, roundRows: any[]) {
+  const want = normaliseId(playerId);
+
+  const idKeys = ["playerId", "player_id", "playerID", "id", "player"];
+
+  return (roundRows ?? []).filter((r: any) => {
+    if (!r) return false;
+
+    for (const k of idKeys) {
+      if (r[k] != null && normaliseId(r[k]) === want) return true;
+    }
+
+    const ks = Object.keys(r);
+    const maybe = ks.find(
+      (kk) => String(kk).toLowerCase().includes("player") && String(kk).toLowerCase().includes("id")
+    );
+    if (maybe && r[maybe] != null && normaliseId(r[maybe]) === want) return true;
+
+    return false;
+  });
+}
+
+function getRowNumber(row: any, header: string): number {
+  if (!row) return 0;
+
+  if (row[header] != null) {
+    const n = toNum(row[header]);
+    return n != null ? n : 0;
+  }
+
+  const keys = Object.keys(row);
+  const found = keys.find((k) => String(k).trim().toLowerCase() === header.trim().toLowerCase());
+  if (found && row[found] != null) {
+    const n = toNum(row[found]);
+    return n != null ? n : 0;
+  }
+
+  return 0;
+}
+
+function getRoundPointsFromRow(row: any): number | null {
+  if (!row) return null;
+
+  // played = has minutes
+  const minutesPts = getRowNumber(row, "Minutes played");
+  if (!minutesPts) return null;
+
+  const POINT_COLUMNS = [
+    "Tries",
+    "Try Assists",
+    "Linebreaks",
+    "Linebreak assists",
+    "Defenders beaten",
+    "Carries (m)",
+    "Offloads",
+    "Tackles",
+    "Missed tackles",
+    "Turnover Forced",
+    "Interceptions",
+    "50:22 Kicks",
+    "Penalties Conceded",
+    "Errors",
+    "Lineouts won",
+    "Lineout steals",
+    "Lineout errors",
+    "Scrums won outright",
+    "Conversions",
+    "Conversions missed",
+    "Penalty scored",
+    "Penalty missed",
+    "Drop goal scored",
+    "Drop goal missed",
+    "Yellow cards",
+    "Red cards",
+  ];
+
+  let statPts = 0;
+  for (const k of POINT_COLUMNS) statPts += getRowNumber(row, k);
+
+  const total = minutesPts + statPts;
+  return Number.isFinite(total) ? total : null;
+}
+
+// Form = avg points across last 3 PLAYED rounds
+function getFormLast3Avg(playerId: string, roundRows: any[]): number | null {
+  const rounds = getPlayerRounds(playerId, roundRows);
+  if (!rounds.length) return null;
+
+  const played = rounds
+    .map((r: any) => ({ r, pts: getRoundPointsFromRow(r) }))
+    .filter((x: any) => typeof x.pts === "number");
+
+  if (!played.length) return null;
+
+  played.sort((a: any, b: any) => (toNum(a.r?.round) ?? 0) - (toNum(b.r?.round) ?? 0));
+
+  const last3 = played.slice(-3);
+  const sum = last3.reduce((acc: number, x: any) => acc + (x.pts as number), 0);
+  return sum / last3.length;
+}
 
 export default function DashboardPage() {
   const router = useRouter();
+
+    // ✅ keep league + draft store hydrated (same idea as Draft Room)
+  const refreshLeague = useLeagueStore((s) => s.refreshLeague);
+  const refreshFromServer = useDraftStore((s) => s.refreshFromServer);
+  const hydrateRostersFromDb = useDraftStore((s) => s.hydrateRostersFromDb);
+
+  // timezone for consistent deadline display
+const userTz = useMemo(() => getActiveTimezone(), []);
+
+// live "now" (set after mount to avoid hydration mismatch)
+const [nowMs, setNowMs] = useState(0);
+
+useEffect(() => {
+  setNowMs(Date.now());
+  const t = window.setInterval(() => setNowMs(Date.now()), 30_000);
+  return () => window.clearInterval(t);
+}, []);
 
 // ✅ Route protection
 useEffect(() => {
@@ -96,6 +440,34 @@ useEffect(() => {
 
   const leagues = useLeagueStore((s) => s.leagues);
 const activeLeagueId = useLeagueStore((s) => s.activeLeagueId);
+
+useEffect(() => {
+  if (!activeLeagueId) return;
+
+  let cancelled = false;
+
+  const tick = async () => {
+    if (cancelled) return;
+
+    // 1) keep activeLeague fresh (teams, weeks, etc)
+    refreshLeague(activeLeagueId);
+
+    // 2) keep draft store fresh (teams, picks, etc)
+    await refreshFromServer(activeLeagueId);
+
+    // 3) rosters for lineup/score calcs
+    hydrateRostersFromDb(activeLeagueId);
+  };
+
+  tick();
+  const t = window.setInterval(tick, 1000);
+
+  return () => {
+    cancelled = true;
+    window.clearInterval(t);
+  };
+}, [activeLeagueId, refreshLeague, refreshFromServer, hydrateRostersFromDb]);
+
 const setActiveLeague = useLeagueStore((s) => s.setActiveLeague);
 const maybeAutoStartDraft = useLeagueStore((s) => s.maybeAutoStartDraft);
 
@@ -103,6 +475,582 @@ const maybeAutoStartDraft = useLeagueStore((s) => s.maybeAutoStartDraft);
 const activeLeague = useMemo(() => {
   return leagues.find((l) => l.id === activeLeagueId) ?? null;
 }, [leagues, activeLeagueId]);
+
+// --- Deadline banner (real) ---
+const fixtures = useMemo(() => {
+  const raw = fixturesData as AnyFixture[];
+  return raw
+    .map((f) => ({ ...f, kickoffMs: toMs(f.kickoffAt) }))
+    .sort((a, b) => (a.kickoffMs ?? 0) - (b.kickoffMs ?? 0));
+}, []);
+
+// -----------------------
+// Matchup-card live data (same sources as Matchup page)
+// -----------------------
+const userId = useMemo(() => getActiveUsername(), []);
+
+// Draft teams for name lookup (same as Matchup)
+const draftTeams = useDraftStore((s) => s.teams ?? EMPTY_ARR);
+
+const nameByTeamId = (id: string | null) => {
+  if (!id) return "BYE";
+
+  const dt = Array.isArray(draftTeams) ? draftTeams : [];
+  const lt = Array.isArray(activeLeague?.teams) ? activeLeague.teams : [];
+
+  return (
+    dt.find((t: any) => t.id === id)?.name ??
+    lt.find((t: any) => t.id === id)?.name ??
+    "TBC"
+  );
+};
+
+// Sheet fixtures (league matchups / results)
+const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
+
+useEffect(() => {
+  if (!activeLeague?.id) return;
+
+  const season = 2026;
+  fetch(`/api/fixtures/leagueMatches?season=${season}`)
+    .then((r) => r.json())
+    .then((j) => {
+      if (j?.ok) setSheetFixtures(j.rows ?? []);
+      else console.error("fixtures fetch failed", j?.error);
+    })
+    .catch((e) => console.error(e));
+}, [activeLeague?.id]);
+
+// players store so we can compute fantasy totals for the displayed round
+const livePlayersLoaded = usePlayersStore((s) => s.loaded);
+const refreshLivePlayers = usePlayersStore((s) => s.refresh);
+const roundRows = usePlayersStore((s) => s.roundRows);
+const allPlayers = usePlayersStore((s: any) => s.players ?? s.allPlayers ?? EMPTY_ARR);
+
+// --- Watchlist (Supabase via /api/watchlist; same as Transactions) ---
+const [watchlistSet, setWatchlistSet] = useState<Set<string>>(new Set());
+const [pendingTradeCount, setPendingTradeCount] = useState<number>(0);
+
+useEffect(() => {
+  if (!activeLeagueId) {
+    setWatchlistSet(new Set());
+    return;
+  }
+
+  let cancelled = false;
+
+  (async () => {
+    try {
+      const res = await fetch(
+        `/api/watchlist?leagueId=${encodeURIComponent(activeLeagueId)}`,
+        { cache: "no-store", credentials: "include" }
+      );
+      const j = await res.json().catch(() => null);
+
+      if (cancelled) return;
+
+      if (!res.ok || !j?.ok) {
+        console.error("watchlist GET failed", j?.error ?? res.statusText);
+        setWatchlistSet(new Set());
+        return;
+      }
+
+      const ids = Array.isArray(j.data) ? j.data : [];
+      setWatchlistSet(new Set(ids.map((x: any) => String(x))));
+    } catch (e) {
+      if (!cancelled) setWatchlistSet(new Set());
+      console.error(e);
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, [activeLeagueId]);
+
+const isWatched = (playerId: string) => watchlistSet.has(String(playerId));
+
+async function toggleWatchlistForDashboard(playerId: string) {
+  if (!activeLeagueId) return;
+
+  const pid = String(playerId);
+  let wasWatchedSnapshot = false;
+
+  // optimistic UI + snapshot
+  setWatchlistSet((prev) => {
+    wasWatchedSnapshot = prev.has(pid);
+    const next = new Set(prev);
+    if (next.has(pid)) next.delete(pid);
+    else next.add(pid);
+    return next;
+  });
+
+  try {
+    if (!wasWatchedSnapshot) {
+      // ADD (POST)
+      const res = await fetch("/api/watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ leagueId: activeLeagueId, playerId: pid }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j?.ok) throw new Error(j?.error ?? "watchlist POST failed");
+    } else {
+      // REMOVE (DELETE)
+      const res = await fetch(
+        `/api/watchlist?leagueId=${encodeURIComponent(activeLeagueId)}&playerId=${encodeURIComponent(pid)}`,
+        { method: "DELETE", cache: "no-store", credentials: "include" }
+      );
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j?.ok) throw new Error(j?.error ?? "watchlist DELETE failed");
+    }
+  } catch (e) {
+    console.error(e);
+
+    // revert UI on failure
+    setWatchlistSet((prev) => {
+      const next = new Set(prev);
+      if (next.has(pid)) next.delete(pid);
+      else next.add(pid);
+      return next;
+    });
+  }
+}
+
+useEffect(() => {
+  if (!livePlayersLoaded) refreshLivePlayers();
+}, [livePlayersLoaded, refreshLivePlayers]);
+
+// Determine YOUR leagueTeamId (same logic as Matchup page)
+const norm = (s: any) => String(s ?? "").trim().toLowerCase();
+
+const yourLeagueTeamId = useMemo(() => {
+  const teams = Array.isArray(activeLeague?.teams) ? activeLeague!.teams : [];
+  if (!teams.length) return null;
+
+  if (userId) {
+    const me = norm(userId);
+    const t = teams.find((x: any) => norm(x?.userId) === me);
+    if (t?.id) return t.id;
+  }
+
+  return teams[0]?.id ?? null;
+}, [activeLeague, userId]);
+
+useEffect(() => {
+  if (!activeLeagueId || !yourLeagueTeamId) {
+    setPendingTradeCount(0);
+    return;
+  }
+
+  let cancelled = false;
+
+  (async () => {
+    try {
+      const res = await fetch(
+        `/api/trades/pending-count?leagueId=${encodeURIComponent(activeLeagueId)}&teamId=${encodeURIComponent(
+          String(yourLeagueTeamId)
+        )}`,
+        { cache: "no-store", credentials: "include" }
+      );
+      const j = await res.json().catch(() => null);
+
+      if (cancelled) return;
+
+      if (!res.ok || !j?.ok) {
+        console.error("pending trade count fetch failed", j?.error ?? res.statusText);
+        setPendingTradeCount(0);
+        return;
+      }
+
+      setPendingTradeCount(Number(j.count ?? 0) || 0);
+    } catch (e) {
+      if (!cancelled) setPendingTradeCount(0);
+      console.error(e);
+    }
+  })();
+
+  // refresh occasionally so the badge updates
+  const t = window.setInterval(() => {
+    fetch(
+      `/api/trades/pending-count?leagueId=${encodeURIComponent(activeLeagueId)}&teamId=${encodeURIComponent(
+        String(yourLeagueTeamId)
+      )}`,
+      { cache: "no-store", credentials: "include" }
+    )
+      .then((r) => r.json())
+      .then((j) => {
+        if (j?.ok) setPendingTradeCount(Number(j.count ?? 0) || 0);
+      })
+      .catch(() => {});
+  }, 10_000);
+
+  return () => {
+    cancelled = true;
+    window.clearInterval(t);
+  };
+}, [activeLeagueId, yourLeagueTeamId]);
+
+// selectionWeek/displayWeek logic (match Matchup page)
+const selectionWeek = useMemo(() => {
+  if (!sheetFixtures.length) return activeLeague?.currentWeek ?? 1;
+  return currentWeekFromSheet(sheetFixtures);
+}, [sheetFixtures, activeLeague?.currentWeek]);
+
+const startRound = activeLeague?.startRound ?? 1;
+
+const selectionRealRound = useMemo(
+  () => fantasyWeekToRealRound(startRound, selectionWeek),
+  [startRound, selectionWeek]
+);
+
+const deadlineMs2 = useMemo(() => {
+  const wk = fixtures.filter((f) => f.week === selectionRealRound);
+  if (!wk.length) return 0;
+
+  const firstKickoff = Math.min(...wk.map((f) => f.kickoffMs ?? toMs(f.kickoffAt)));
+  if (!Number.isFinite(firstKickoff) || firstKickoff <= 0) return 0;
+
+  return selectionDeadlineFromFirstKickoff(firstKickoff);
+}, [fixtures, selectionRealRound]);
+
+const deadlineLocked2 = deadlineMs2 ? nowMs >= deadlineMs2 : false;
+
+const displayWeek = useMemo(() => {
+  return deadlineLocked2 ? selectionWeek : selectionWeek - 1;
+}, [deadlineLocked2, selectionWeek]);
+
+const displayRealRound = useMemo(() => {
+  if (displayWeek <= 0) return 0;
+  return fantasyWeekToRealRound(startRound, displayWeek);
+}, [startRound, displayWeek]);
+
+// Find the matchup row for your team for the displayWeek
+const matchupsThisWeek = useMemo(() => {
+  if (!sheetFixtures.length) return [];
+  if (displayWeek <= 0) return [];
+  return sheetFixtures
+    .filter((r) => Number(r.weekFantasy) === displayWeek)
+    .filter(isSheetPlayableRow)
+    .map((r) => ({
+      homeTeamId: r.homeTeamId ?? null,
+      awayTeamId: r.awayTeamId ?? null,
+    }));
+}, [sheetFixtures, displayWeek]);
+
+const activeMatchup = useMemo(() => {
+  if (!matchupsThisWeek.length) return null;
+  if (!yourLeagueTeamId) return matchupsThisWeek[0];
+
+  const idx = matchupsThisWeek.findIndex(
+    (m) => m.homeTeamId === yourLeagueTeamId || m.awayTeamId === yourLeagueTeamId
+  );
+  return matchupsThisWeek[idx >= 0 ? idx : 0];
+}, [matchupsThisWeek, yourLeagueTeamId]);
+
+// force your team to be left side
+// ✅ Always: YOUR team on left, opponent on right
+const leftTeamId = useMemo(() => {
+  if (!activeMatchup) return null;
+
+  const h = activeMatchup.homeTeamId ?? null;
+  const a = activeMatchup.awayTeamId ?? null;
+
+  // only force "you left" if you're actually in this matchup row
+  if (yourLeagueTeamId && (h === yourLeagueTeamId || a === yourLeagueTeamId)) {
+    return yourLeagueTeamId;
+  }
+
+  // fallback: home on left
+  return h;
+}, [activeMatchup, yourLeagueTeamId]);
+
+const rightTeamId = useMemo(() => {
+  if (!activeMatchup) return null;
+
+  const h = activeMatchup.homeTeamId ?? null;
+  const a = activeMatchup.awayTeamId ?? null;
+
+  if (yourLeagueTeamId && (h === yourLeagueTeamId || a === yourLeagueTeamId)) {
+    return h === yourLeagueTeamId ? a : h;
+  }
+
+  // fallback: away on right
+  return a;
+}, [activeMatchup, yourLeagueTeamId]);
+
+const leftName = nameByTeamId(leftTeamId);
+const rightName = nameByTeamId(rightTeamId);
+
+// Fetch team selections for displayWeek + rosters fallback
+const leagueId = activeLeague?.id ?? null;
+
+const [selectionByTeamId, setSelectionByTeamId] = useState<Map<string, any>>(new Map());
+const [rosterByTeamId, setRosterByTeamId] = useState<Map<string, any>>(new Map());
+
+function collectPlayerIdsDeep(x: any, out: Set<string>) {
+  if (!x) return;
+
+  // id string/number
+  if (typeof x === "string" || typeof x === "number") {
+    // ignore obvious non-player ids if you have them; otherwise keep simple:
+    const s = String(x).trim();
+    if (s) out.add(s.toLowerCase());
+    return;
+  }
+
+  // array
+  if (Array.isArray(x)) {
+    for (const it of x) collectPlayerIdsDeep(it, out);
+    return;
+  }
+
+  // object
+  if (typeof x === "object") {
+    // common shapes
+    const pid = x.id ?? x.playerId ?? x.player_id;
+    if (pid != null) {
+      const s = String(pid).trim();
+      if (s) out.add(s.toLowerCase());
+    }
+
+    for (const v of Object.values(x)) collectPlayerIdsDeep(v, out);
+  }
+}
+
+const rosteredIds = useMemo(() => {
+  const ids = new Set<string>();
+
+  for (const raw of rosterByTeamId.values()) {
+    // Try “lineup” first (your slot-based roster)
+    const lineup =
+      rosterDataToLineup(raw) ??
+      rosterDataToLineup(raw?.data) ??
+      rosterDataToLineup(raw?.lineup) ??
+      null;
+
+    if (lineup) {
+      for (const p of Object.values(lineup) as any[]) {
+        if (p?.id) ids.add(String(p.id).toLowerCase());
+      }
+      continue;
+    }
+
+    // Fallback: any other roster structure (players[], playerIds[], nested, etc)
+    collectPlayerIdsDeep(raw, ids);
+  }
+
+  return ids;
+}, [rosterByTeamId]);
+
+useEffect(() => {
+  if (!leagueId) return;
+  if (displayWeek <= 0) return;
+
+  fetch(`/api/team-selection/get?leagueId=${encodeURIComponent(leagueId)}&week=${displayWeek}`, {
+    cache: "no-store",
+    credentials: "include",
+  })
+    .then((r) => r.json())
+    .then((j) => {
+      if (!j?.ok) {
+        console.error("team selection fetch failed", j?.error);
+        return;
+      }
+      const m = new Map<string, any>();
+      for (const row of (j.rows ?? [])) {
+        const tid = String(row.team_id ?? row.teamId ?? "");
+        if (tid) m.set(tid, row);
+      }
+      setSelectionByTeamId(m);
+    })
+    .catch((e) => console.error(e));
+}, [leagueId, displayWeek]);
+
+useEffect(() => {
+  if (!leagueId) return;
+
+  fetch(`/api/rosters?leagueId=${leagueId}`)
+    .then((r) => r.json())
+    .then((j) => {
+      if (!j?.ok) {
+        console.error("rosters fetch failed", j?.error);
+        return;
+      }
+      const m = new Map<string, any>();
+      for (const row of (j.data ?? j.rows ?? [])) {
+        const tid = row.team_id ?? row.teamId;
+        if (tid) m.set(String(tid), row.data ?? row);
+      }
+      setRosterByTeamId(m);
+    })
+    .catch((e) => console.error(e));
+}, [leagueId]);
+
+function rosterDataToLineup(data: any): Lineup | null {
+  if (!data) return null;
+  if (data.prop1 || data.hooker1 || data.bench1) return data as Lineup;
+  if (data.lineup && (data.lineup.prop1 || data.lineup.bench1)) return data.lineup as Lineup;
+  return null;
+}
+
+function selectionLineupForTeam(teamId: string | null) {
+  if (!teamId) return { lineup: null as Lineup | null, captainId: null as string | null, viceId: null as string | null };
+
+  const row = selectionByTeamId.get(teamId);
+  const lineup =
+    row?.lineup ??
+    row?.data?.lineup ??
+    row?.selection?.lineup ??
+    row?.snapshot?.lineup ??
+    null;
+
+  if (lineup) {
+    return {
+      lineup: lineup as Lineup,
+      captainId: row.captain_id ?? row.captainId ?? row.data?.captainId ?? null,
+      viceId: row.vice_id ?? row.viceId ?? row.data?.viceId ?? null,
+    };
+  }
+
+  const roster = rosterByTeamId.get(teamId);
+  const rLineup = rosterDataToLineup(roster);
+  return {
+    lineup: rLineup,
+    captainId: roster?.captainId ?? null,
+    viceId: roster?.viceId ?? null,
+  };
+}
+
+// Points mapping for this displayed round
+function rowPlayerId(row: any) {
+  return row?.playerId ?? row?.["Player ID"] ?? row?.player_id ?? row?.id ?? null;
+}
+function rowRound(row: any) {
+  const v = row?.round ?? row?.Round ?? row?.week ?? row?.Week ?? 0;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+function calcFantasyPoints(row: any): number {
+  const toNumber = (v: any) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const POINT_COLUMNS = [
+    "Minutes played",
+    "Tries",
+    "Try Assists",
+    "Linebreaks",
+    "Linebreak assists",
+    "Defenders beaten",
+    "Carries (m)",
+    "Offloads",
+    "Tackles",
+    "Missed tackles",
+    "Turnover Forced",
+    "Interceptions",
+    "50:22 Kicks",
+    "Penalties Conceded",
+    "Errors",
+    "Lineouts won",
+    "Lineout steals",
+    "Lineout errors",
+    "Scrums won outright",
+    "Conversions",
+    "Conversions missed",
+    "Penalty scored",
+    "Penalty missed",
+    "Drop goal scored",
+    "Drop goal missed",
+    "Yellow cards",
+    "Red cards",
+  ];
+
+  let pts = 0;
+  for (const col of POINT_COLUMNS) pts += toNumber(row?.[col]);
+  return pts;
+}
+
+const weekPointsByPlayerId = useMemo(() => {
+  const m = new Map<string, number>();
+  for (const row of roundRows ?? []) {
+    if (rowRound(row) !== displayRealRound) continue;
+    const pid = rowPlayerId(row);
+    if (!pid) continue;
+    m.set(String(pid).toLowerCase(), calcFantasyPoints(row));
+  }
+  return m;
+}, [roundRows, displayRealRound]);
+
+function findPlayerMetaById(allPlayersAny: any[], playerId: string) {
+  const want = normaliseId(playerId);
+  if (!want) return null;
+
+  return (
+    (allPlayersAny ?? []).find((p: any) => {
+      const pid = p?.id ?? p?.playerId ?? p?.player_id ?? p?.["Player ID"] ?? null;
+      return pid != null && normaliseId(pid) === want;
+    }) ?? null
+  );
+}
+
+function pointsForPlayer(p: any | null) {
+  if (!p?.id) return 0;
+  return weekPointsByPlayerId.get(String(p.id).toLowerCase()) ?? 0;
+}
+
+function pointsWithCaptain(p: any | null, effCaptainId: string | null) {
+  if (!p?.id) return 0;
+  const base = pointsForPlayer(p);
+  return p.id === effCaptainId ? base * CAP_MULT : base;
+}
+
+function totalForSlots(lineup: Lineup | null, effCaptain: string | null, slots: SlotId[]) {
+  if (!lineup) return 0;
+  return slots.reduce((sum, sid) => sum + pointsWithCaptain(lineup[sid], effCaptain), 0);
+}
+
+// Live values to replace the placeholders
+const weekLabelLive = displayWeek > 0 ? `Week ${displayWeek}` : "Pre-season";
+
+const leftSel = useMemo(() => selectionLineupForTeam(leftTeamId), [leftTeamId, selectionByTeamId, rosterByTeamId]);
+const rightSel = useMemo(() => selectionLineupForTeam(rightTeamId), [rightTeamId, selectionByTeamId, rosterByTeamId]);
+
+const leftEffC = useMemo(
+  () => effectiveCaptainId(leftSel.lineup, leftSel.captainId, leftSel.viceId),
+  [leftSel.lineup, leftSel.captainId, leftSel.viceId]
+);
+const rightEffC = useMemo(
+  () => effectiveCaptainId(rightSel.lineup, rightSel.captainId, rightSel.viceId),
+  [rightSel.lineup, rightSel.captainId, rightSel.viceId]
+);
+
+const userScoreLive = useMemo(
+  () => totalForSlots(leftSel.lineup, leftEffC, STARTER_SLOTS),
+  [leftSel.lineup, leftEffC, weekPointsByPlayerId]
+);
+const oppScoreLive = useMemo(
+  () => totalForSlots(rightSel.lineup, rightEffC, STARTER_SLOTS),
+  [rightSel.lineup, rightEffC, weekPointsByPlayerId]
+);
+
+const lastCompletedWeek = useMemo(() => {
+  if (!sheetFixtures.length) return Math.max(0, selectionWeek - 1);
+  return latestCompletedWeekFromSheet(sheetFixtures);
+}, [sheetFixtures, selectionWeek]);
+
+const recordMap = useMemo(
+  () => buildRecordsUpToWeek(sheetFixtures, lastCompletedWeek),
+  [sheetFixtures, lastCompletedWeek]
+);
+
+const leftRecordObj = recordMap.get(leftTeamId ?? "") ?? { w: 0, l: 0, d: 0 };
+const rightRecordObj = recordMap.get(rightTeamId ?? "") ?? { w: 0, l: 0, d: 0 };
+
+const userRecordLive = `(${leftRecordObj.w}-${leftRecordObj.l}-${leftRecordObj.d})`;
+const oppRecordLive = `(${rightRecordObj.w}-${rightRecordObj.l}-${rightRecordObj.d})`;
 
  useEffect(() => {
   if (!activeLeagueId) return;
@@ -133,12 +1081,9 @@ const dashState: DashboardState = useMemo(() => {
   return "preDraft";
 }, [activeLeague]);
 
-// ✅ DEV override (lets you force dashboard states while building)
-const [devDashOverride, setDevDashOverride] = useState<"real" | DashboardState>("real");
-
-// The state the UI actually uses
-const effectiveDashState: DashboardState =
-  devDashOverride === "real" ? dashState : devDashOverride;
+// We only run one league and it is post-draft.
+// If there is no league, show NoLeague. Otherwise always show PostDraft.
+const effectiveDashState: DashboardState = activeLeague ? "postDraft" : "noLeague";
 
   // DEV: switch dashboards while we build
 
@@ -157,52 +1102,352 @@ const effectiveDashState: DashboardState =
 const draftText = activeLeague?.draftDateTimeText ?? "TBC";
 
 
-  // Header banner (example only)
-  const bannerTitle = "Week 4 Waiver Deadline";
-  const bannerTime = "Friday 22nd February 22:30";
+const weeksSorted = useMemo(() => getWeeksSorted(fixtures), [fixtures]);
 
-  // Post-draft score card
-  const weekLabel = "Week 4";
-  const userScore = 600;
-  const oppScore = 600;
-  const userRecord = "(16-16-0)";
-  const oppRecord = "(16-16-0)";
+// Live week is derived from fixtures + time (prevents "flash then fallback" when league object changes)
+const liveWeek = useMemo(() => {
+  if (!nowMs) return weeksSorted[0] ?? 1; // before mount; harmless placeholder
+  return getLiveWeekFromNow(fixtures, nowMs);
+}, [fixtures, nowMs, weeksSorted]);
 
-  // Upcoming fixture card (next matchup)
-  const upcomingWeek = "Week 8";
-  const upcomingHome = "Stouty's Studs";
-  const upcomingAway = "Stouty's Studs";
+const liveWeekFirstKickoffMs = useMemo(() => {
+  return getWeekFirstKickoffMs(fixtures, liveWeek);
+}, [fixtures, liveWeek]);
 
-  // Standings (variable team count; max 10)
-  const standings: StandingRow[] = useMemo(() => {
-    const teamCount = 6; // later from league settings
-    const movements: Movement[] = ["same", "up", "down", "same", "up", "down"];
-    return Array.from({ length: teamCount }).map((_, i) => ({
-      rank: i + 1,
-      team: "Stouty's Studs",
-      pts: 45,
-      movement: movements[i % movements.length],
-    }));
-  }, []);
+const liveWeekSelectionDeadlineMs = useMemo(() => {
+  return liveWeekFirstKickoffMs ? getSelectionDeadlineMs(liveWeekFirstKickoffMs) : 0;
+}, [liveWeekFirstKickoffMs]);
 
-  const bestAvailablePlayers: Player[] = useMemo(() => {
-    return Array.from({ length: 10 }).map((_, i) => ({
-      id: `p-${i}`,
-      firstName: "Damian",
-      lastName: "McKenzie",
-      teamCode: "CHI",
-      posAbbrev: "FH",
-      posName: "Flyhalf",
-      form: 78.9,
-    }));
-  }, []);
+// If we've passed this week's selection deadline, show next week's deadlines
+const bannerWeek = useMemo(() => {
+  if (!nowMs || !liveWeekSelectionDeadlineMs) return liveWeek;
 
-  // For now: POTW blank until a week is complete
-  const playerOfWeek: Player | null = null;
+  if (nowMs < liveWeekSelectionDeadlineMs) return liveWeek;
 
-  // Waivers vs Free Agency button colour
-  const isWaivers = true;
-  const addBtnBg = isWaivers ? "#FACC15" : "#22C55E";
+  const idx = weeksSorted.indexOf(liveWeek);
+  return weeksSorted[idx + 1] ?? liveWeek + 1;
+}, [nowMs, liveWeek, liveWeekSelectionDeadlineMs, weeksSorted]);
+
+const bannerWeekFirstKickoffMs = useMemo(() => {
+  return getWeekFirstKickoffMs(fixtures, bannerWeek);
+}, [fixtures, bannerWeek]);
+
+const teamSelectionDeadlineMs = useMemo(() => {
+  return bannerWeekFirstKickoffMs ? getSelectionDeadlineMs(bannerWeekFirstKickoffMs) : 0;
+}, [bannerWeekFirstKickoffMs]);
+
+// Waivers close 24 hours before selection deadline (same concept as Transactions)
+const waiverDeadlineMs = useMemo(() => {
+  return teamSelectionDeadlineMs ? teamSelectionDeadlineMs - 24 * 60 * 60 * 1000 : 0;
+}, [teamSelectionDeadlineMs]);
+
+const windowMode = useMemo<"WAIVERS" | "TEAM_SELECTION">(() => {
+  if (!nowMs || !waiverDeadlineMs || !teamSelectionDeadlineMs) return "WAIVERS";
+  if (nowMs < waiverDeadlineMs) return "WAIVERS";
+  if (nowMs < teamSelectionDeadlineMs) return "TEAM_SELECTION";
+  return "WAIVERS";
+}, [nowMs, waiverDeadlineMs, teamSelectionDeadlineMs]);
+
+const bannerTitle = useMemo(() => {
+  if (!nowMs) return "Loading Deadline…";
+  const label = windowMode === "WAIVERS" ? "Waiver Deadline" : "Team Selection Deadline";
+  return `Week ${bannerWeek} • ${label}`;
+}, [windowMode, bannerWeek, nowMs]);
+
+const bannerTime = useMemo(() => {
+  const ms = windowMode === "WAIVERS" ? waiverDeadlineMs : teamSelectionDeadlineMs;
+  if (!nowMs) return "—";          // before mount
+  if (!ms) return "TBC";           // if fixtures missing
+  return formatDeadline(ms, userTz);
+}, [nowMs, windowMode, waiverDeadlineMs, teamSelectionDeadlineMs, userTz]);
+
+// Waivers vs Free Agency button colour should follow the window mode
+const isWaivers = windowMode === "WAIVERS";
+const addBtnBg = isWaivers ? "#FACC15" : "#22C55E";
+
+// Post-draft score card (LIVE from matchup logic)
+const weekLabel = weekLabelLive;
+const userScore = userScoreLive;
+const oppScore = oppScoreLive;
+const userRecord = userRecordLive;
+const oppRecord = oppRecordLive;
+
+// -----------------------
+// Upcoming fixture (LIVE) = user's matchup for the week AFTER the week shown above
+// "week shown above" on dashboard = displayWeek
+// -----------------------
+const upcomingWeekNo = useMemo(() => {
+  if (!displayWeek || displayWeek <= 0) return 1;
+  return displayWeek + 1;
+}, [displayWeek]);
+
+const upcomingMatch = useMemo(() => {
+  if (!sheetFixtures.length) return null;
+
+  const rows = sheetFixtures
+    .filter((r) => Number(r.weekFantasy) === upcomingWeekNo)
+    .filter((r) => isSheetMatchRow(r));
+
+  if (!rows.length) return null;
+
+  // Find YOUR matchup row; otherwise fallback to first row
+  const hit =
+    (yourLeagueTeamId
+      ? rows.find((r) => r.homeTeamId === yourLeagueTeamId || r.awayTeamId === yourLeagueTeamId)
+      : null) ?? rows[0];
+
+  const homeId = hit.homeTeamId ?? null;
+  const awayId = hit.awayTeamId ?? null;
+
+  // Force "you" on the left if possible
+  let leftId = homeId;
+  let rightId = awayId;
+
+  if (yourLeagueTeamId && (homeId === yourLeagueTeamId || awayId === yourLeagueTeamId)) {
+    leftId = yourLeagueTeamId;
+    rightId = homeId === yourLeagueTeamId ? awayId : homeId;
+  }
+
+  return {
+    weekNo: upcomingWeekNo,
+    leftName: nameByTeamId(leftId),
+    rightName: nameByTeamId(rightId),
+  };
+}, [sheetFixtures, upcomingWeekNo, yourLeagueTeamId, nameByTeamId]);
+
+// These are what your JSX already expects
+const upcomingWeek = upcomingMatch ? `Week ${upcomingMatch.weekNo}` : `Week ${upcomingWeekNo}`;
+const upcomingHome = upcomingMatch ? upcomingMatch.leftName : "Loading…";
+const upcomingAway = upcomingMatch ? upcomingMatch.rightName : "Loading…";
+
+  // -----------------------
+// Standings (LIVE from sheetFixtures + activeLeague teams)
+// -----------------------
+type StandingCalc = {
+  teamId: string;
+  teamName: string;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  pf: number;
+  pa: number;
+  pd: number;
+  pts: number;
+};
+
+function buildStandingsFromResults(uptoWeekInclusive: number): StandingCalc[] {
+  const teams = activeLeague?.teams ?? [];
+  const base = new Map<string, StandingCalc>();
+
+  for (const t of teams) {
+    base.set(t.id, {
+      teamId: t.id,
+      teamName: t.name,
+      played: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      pf: 0,
+      pa: 0,
+      pd: 0,
+      pts: 0,
+    });
+  }
+
+  const rows = sheetFixtures
+    .filter((r) => isSheetMatchRow(r))
+    .filter((r) => isSheetRegularRow(r))
+    .filter((r) => String(r.status ?? "").toLowerCase() === "complete")
+    .filter((r) => Number(r.weekFantasy) <= uptoWeekInclusive);
+
+  for (const m of rows) {
+    const homeId = m.homeTeamId ?? null;
+    const awayId = m.awayTeamId ?? null;
+
+    // BYE rows -> ignore for standings
+    if (!homeId || !awayId) continue;
+
+    const hs = m.homeScore;
+    const as = m.awayScore;
+    if (hs == null || as == null) continue;
+
+    const home = base.get(homeId);
+    const away = base.get(awayId);
+    if (!home || !away) continue;
+
+    home.played += 1;
+    away.played += 1;
+
+    home.pf += hs; home.pa += as;
+    away.pf += as; away.pa += hs;
+
+    if (hs > as) {
+      home.wins += 1; home.pts += 4;
+      away.losses += 1;
+    } else if (as > hs) {
+      away.wins += 1; away.pts += 4;
+      home.losses += 1;
+    } else {
+      home.draws += 1; away.draws += 1;
+      home.pts += 2; away.pts += 2;
+    }
+
+    home.pd = home.pf - home.pa;
+    away.pd = away.pf - away.pa;
+  }
+
+  return Array.from(base.values());
+}
+
+const standings: StandingRow[] = useMemo(() => {
+  if (!activeLeague?.teams?.length) return [];
+
+  // standings should advance only based on completed REGULAR weeks
+  const playedNow = sheetFixtures.length ? latestCompletedWeekFromSheet(
+    sheetFixtures.filter(isSheetRegularRow)
+  ) : 0;
+
+  const playedPrev = Math.max(0, playedNow - 1);
+
+  const curr = buildStandingsFromResults(playedNow);
+  const prev = buildStandingsFromResults(playedPrev);
+
+  const sortRows = (arr: StandingCalc[]) =>
+    arr.slice().sort((a, b) => b.pts - a.pts || b.pd - a.pd || b.pf - a.pf);
+
+  const currSorted = sortRows(curr);
+  const prevSorted = sortRows(prev);
+
+  const prevRankById = new Map(prevSorted.map((r, i) => [r.teamId, i + 1]));
+
+  // Dashboard StandingRow is { rank, team, pts, movement }
+  return currSorted
+    .map((r, i) => {
+      const rank = i + 1;
+      const prevRank = prevRankById.get(r.teamId);
+
+      let movement: Movement = "same";
+      if (prevRank != null) {
+        if (rank < prevRank) movement = "up";
+        else if (rank > prevRank) movement = "down";
+      }
+
+      return {
+        rank,
+        team: r.teamName,
+        pts: r.pts,
+        movement,
+      };
+    })
+    .slice(0, 10); // safety cap for dashboard
+}, [activeLeague?.teams, sheetFixtures]);
+
+const bestAvailablePlayers: Player[] = useMemo(() => {
+  const src = Array.isArray(allPlayers) ? allPlayers : [];
+
+  const mapped: Player[] = src
+    .map((p: any) => {
+      const id = String(p.id ?? p.playerId ?? "").trim();
+      if (!id) return null;
+
+      const firstName = String(p.firstName ?? p.first_name ?? "").trim();
+      const lastName = String(p.lastName ?? p.last_name ?? "").trim();
+
+      const teamCode = String(p.teamCode ?? p.team ?? p.team_code ?? "").trim() || "TBC";
+      const posAbbrev = String(p.posAbbrev ?? p.pos ?? p.position ?? "").trim() || "—";
+const posNamePrimary = String(p.posName ?? p.positionName ?? "").trim() || posAbbrev;
+
+// try common secondary fields
+const pos2 =
+  String(
+    p.pos2 ?? p.secondaryPos ?? p.secondary_position ?? p.secondaryPosition ?? ""
+  ).trim();
+
+const posName = pos2 ? `${posNamePrimary} / ${pos2}` : posNamePrimary;
+
+      const form = getFormLast3Avg(id, roundRows) ?? 0;
+
+      return {
+        id,
+        firstName: firstName || "?",
+        lastName: lastName || "?",
+        teamCode,
+        posAbbrev,
+        posName,
+        form: Number.isFinite(form) ? form : 0,
+      } as Player;
+    })
+    .filter(Boolean) as Player[];
+
+  // "Available" = not currently rostered by ANY team in the league
+  const available = mapped.filter((p) => !rosteredIds.has(String(p.id).toLowerCase()));
+
+  // Sort by form desc, then name as tie-break
+  available.sort((a, b) => {
+    if (b.form !== a.form) return b.form - a.form;
+    const an = `${a.lastName} ${a.firstName}`.toLowerCase();
+    const bn = `${b.lastName} ${b.firstName}`.toLowerCase();
+    return an.localeCompare(bn);
+  });
+
+  return available.slice(0, 10);
+}, [allPlayers, rosteredIds, roundRows]);
+
+  const playersOfWeek: Player[] = useMemo(() => {
+  // need points for the same round as the matchup card
+  if (!displayRealRound) return [];
+  if (!weekPointsByPlayerId || weekPointsByPlayerId.size === 0) return [];
+
+  // find max points this round
+  let maxPts = -Infinity;
+  for (const pts of weekPointsByPlayerId.values()) {
+    if (typeof pts === "number" && pts > maxPts) maxPts = pts;
+  }
+  if (!Number.isFinite(maxPts) || maxPts <= 0) return [];
+
+  // all playerIds with maxPts
+  const topIds: string[] = [];
+  for (const [pid, pts] of weekPointsByPlayerId.entries()) {
+    if (pts === maxPts) topIds.push(pid);
+  }
+  if (!topIds.length) return [];
+
+  const src = Array.isArray(allPlayers) ? allPlayers : [];
+
+  const mapped: Player[] = topIds
+    .map((pidLower) => {
+      const meta = findPlayerMetaById(src, pidLower);
+      // if we can't find metadata, still show something sane
+      const firstName = String(meta?.firstName ?? meta?.first_name ?? "?").trim() || "?";
+      const lastName = String(meta?.lastName ?? meta?.last_name ?? "?").trim() || "?";
+      const teamCode = String(meta?.teamCode ?? meta?.team ?? meta?.team_code ?? "TBC").trim() || "TBC";
+      const posAbbrev = String(meta?.posAbbrev ?? meta?.pos ?? meta?.position ?? "—").trim() || "—";
+      const posName = String(meta?.posName ?? meta?.positionName ?? posAbbrev).trim() || posAbbrev;
+
+      return {
+        id: String(meta?.id ?? meta?.playerId ?? meta?.player_id ?? pidLower),
+        firstName,
+        lastName,
+        teamCode,
+        posAbbrev,
+        posName,
+        form: 0,
+        points: maxPts,
+      } as Player;
+    })
+    .filter(Boolean);
+
+  // stable ordering for ties
+  mapped.sort((a, b) => {
+    const an = `${a.lastName} ${a.firstName}`.toLowerCase();
+    const bn = `${b.lastName} ${b.firstName}`.toLowerCase();
+    return an.localeCompare(bn);
+  });
+
+  return mapped;
+}, [allPlayers, weekPointsByPlayerId, displayRealRound]);
+
 
   function onMenuSelect(item: ActiveMenu) {
     setActiveMenu(item);
@@ -212,6 +1457,10 @@ const draftText = activeLeague?.draftDateTimeText ?? "TBC";
     if (item === "League") router.push("/league");
     if (item === "Draft Room") router.push("/draft-room");
   }
+
+function goToTransactionsForAdd(playerId: string) {
+  router.push(`/transactions?addPlayerId=${encodeURIComponent(playerId)}`);
+}
 
   // -----------------------
   // Styles
@@ -225,7 +1474,7 @@ const draftText = activeLeague?.draftDateTimeText ?? "TBC";
   };
 
   const primaryButton: React.CSSProperties = {
-    height: 40,
+    height: 36,
     width: "100%",
     borderRadius: 999,
     background: "linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))",
@@ -241,13 +1490,32 @@ const draftText = activeLeague?.draftDateTimeText ?? "TBC";
     height: 36,
     width: "100%",
     borderRadius: 999,
-    background: "rgba(0,0,0,0.12)",
+    background: "linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))",
     color: "white",
     fontSize: 12,
     fontWeight: 800,
     border: "2px solid rgba(255,255,255,0.85)",
     cursor: "pointer",
   };
+
+  // Small square icon buttons (match Transactions look/feel)
+const iconBtnBase: React.CSSProperties = {
+  width: 34,
+  height: 34,
+  borderRadius: 10,
+  border: "1px solid rgba(15,23,42,0.18)",
+  boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.22)",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  cursor: "pointer",
+};
+
+const iconGlyphStyle: React.CSSProperties = {
+  lineHeight: "1",
+  transform: "translateY(-1px)", // <-- the key: fixes “looks low” on ★ and +
+  display: "block",
+};
 
 async function handleLogout() {
   try {
@@ -293,27 +1561,80 @@ async function handleLogout() {
     );
   }
 
-  function JerseyTile({ size = 36 }: { size?: number }) {
-    return (
-      <div
-        style={{
-          width: size,
-          height: size,
-          borderRadius: 10,
-          background: "rgba(0,0,0,0.18)",
-          border: "1px solid rgba(255,255,255,0.22)",
-          display: "grid",
-          placeItems: "center",
-          fontWeight: 900,
-          fontSize: 10,
-          opacity: 0.9,
-        }}
-        aria-hidden="true"
-      >
-        👕
-      </div>
-    );
-  }
+const JERSEYS: Record<string, { angle?: string; front?: string; single?: string }> = {
+  BLU: { angle: "/images/jerseys/BLUJerseyAngle.png", front: "/images/jerseys/BLUJerseyFront.png" },
+  BRU: { single: "/images/jerseys/BRUJersey.png" },
+  CHI: { angle: "/images/jerseys/CHIJerseyAngle.png", front: "/images/jerseys/CHIJerseyFront.png" },
+  CRU: { angle: "/images/jerseys/CRUJerseyAngle.png", front: "/images/jerseys/CRUJerseyFront.png" },
+  DRU: { single: "/images/jerseys/DRUJersey.png" },
+  FOR: { single: "/images/jerseys/FORJersey.png" },
+  HIG: { angle: "/images/jerseys/HIGJerseyAngle.png", front: "/images/jerseys/HIGJerseyFront.png" },
+  HUR: { angle: "/images/jerseys/HURJerseyAngle.png", front: "/images/jerseys/HURJerseyFront.png" },
+  MOA: { angle: "/images/jerseys/MOPJerseyAngle.png", front: "/images/jerseys/MOPJerseyFront.png" },
+  RED: { single: "/images/jerseys/REDJersey.png" },
+  WAR: { single: "/images/jerseys/WARJersey.png" },
+};
+
+const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.png";
+
+function jerseySrcForTeamCode(teamCode: string | null | undefined, prefer: "angle" | "front" = "angle") {
+  const code = normalizeTeamCode(teamCode);
+  const j = JERSEYS[code];
+  if (!j) return JERSEY_PLACEHOLDER;
+
+  if (prefer === "angle") return j.angle ?? j.single ?? j.front ?? JERSEY_PLACEHOLDER;
+  return j.front ?? j.single ?? j.angle ?? JERSEY_PLACEHOLDER;
+}
+
+function fullTeamNameFromCode(teamCode: string | null | undefined) {
+  const code = normalizeTeamCode(teamCode);
+
+  const MAP: Record<string, string> = {
+    BLU: "Blues",
+    BRU: "Brumbies",
+    CHI: "Chiefs",
+    CRU: "Crusaders",
+    DRU: "Drua",
+    FOR: "Force",
+    HIG: "Highlanders",
+    HUR: "Hurricanes",
+    MOA: "Moana",
+    RED: "Reds",
+    WAR: "Waratahs",
+  };
+
+  return MAP[code] ?? (teamCode ? String(teamCode) : "TBC");
+}
+
+function JerseyTile({
+  size = 36,
+  teamCode,
+}: {
+  size?: number;
+  teamCode?: string;
+}) {
+  const src = jerseySrcForTeamCode(teamCode, "angle");
+
+  return (
+    <img
+      src={src}
+      alt=""
+      width={size}
+      height={size}
+      style={{
+        width: 30,
+        height: 30,
+        borderRadius: 10,
+        objectFit: "contain",
+        display: "block",
+      }}
+      draggable={false}
+      onError={(e) => {
+        (e.currentTarget as HTMLImageElement).src = JERSEY_PLACEHOLDER;
+      }}
+    />
+  );
+}
 
   // -----------------------
   // Layout blocks
@@ -321,35 +1642,7 @@ async function handleLogout() {
   function Header() {
     return (
       <>
-        {/* DEV state switch (hidden in production) */}
-{process.env.NODE_ENV !== "production" && (
-  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
-    <label style={{ fontSize: 11, fontWeight: 900, opacity: 0.85 }}>
-      DEV:&nbsp;
-      <select
-        value={devDashOverride}
-        onChange={(e) => setDevDashOverride(e.target.value as any)}
-        style={{
-          marginLeft: 6,
-          height: 26,
-          borderRadius: 8,
-          border: "none",
-          outline: "none",
-          padding: "0 8px",
-          fontSize: 11,
-          fontWeight: 800,
-          color: "#0f172a",
-          background: "rgba(255,255,255,0.9)",
-        }}
-      >
-        <option value="real">Real (store)</option>
-        <option value="noLeague">No League</option>
-        <option value="preDraft">Pre Draft</option>
-        <option value="postDraft">Post Draft</option>
-      </select>
-    </label>
-  </div>
-)}
+
 
 
         {/* Hamburger */}
@@ -496,10 +1789,10 @@ async function handleLogout() {
       <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
         {/* League / matchup card */}
         <div style={cardStyle}>
-          <div style={{ textAlign: "center", fontWeight: 900, fontSize: 16 }}>
+          <div style={{ textAlign: "center", fontWeight: 900, fontSize: 24 }}>
             {leagueName}
           </div>
-          <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 800 }}>
+          <div style={{ textAlign: "center", marginTop: 4, fontSize: 18, fontWeight: 800 }}>
             {weekLabel}
           </div>
 
@@ -513,21 +1806,51 @@ async function handleLogout() {
               gap: 10,
             }}
           >
-            <ScoreBlock score={userScore} team={currentTeam} record={userRecord} align="left" />
-            <ScoreBlock score={oppScore} team={"Stouty's Studs"} record={oppRecord} align="right" />
+            <ScoreBlock score={userScore} team={leftName} record={userRecord} align="left" />
+<ScoreBlock score={oppScore} team={rightName} record={oppRecord} align="right" />
           </div>
 
-          <button style={{ ...primaryButton, marginTop: 12 }} onClick={() => alert("Matchup page later")}>
-            View Matchup
-          </button>
+          <button style={{ ...primaryButton, marginTop: 12 }} onClick={() => router.push("/matchup")}>
+  View Matchup
+</button>
 
           <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-            <button style={secondaryButton} onClick={() => alert("Team Selection page later")}>
-              Select Team
-            </button>
-            <button style={secondaryButton} onClick={() => alert("Transfers page later")}>
-              Make Transfers
-            </button>
+            <button style={secondaryButton} onClick={() => router.push("/team-selection")}>
+  Select Team
+</button>
+<button
+  style={{ ...secondaryButton, position: "relative" }}
+  onClick={() => router.push("/transactions")}
+>
+  Make Transfers
+
+  {pendingTradeCount > 0 ? (
+    <span
+      style={{
+        position: "absolute",
+        top: -6,
+        right: -6,
+        minWidth: 18,
+        height: 18,
+        padding: "0 6px",
+        borderRadius: 999,
+        background: "#EF4444",
+        color: "white",
+        fontSize: 11,
+        fontWeight: 900,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        lineHeight: "18px",
+        border: "2px solid rgba(255,255,255,0.9)",
+        boxShadow: "0 10px 18px rgba(0,0,0,0.25)",
+      }}
+      aria-label={`${pendingTradeCount} pending trade offers`}
+    >
+      {pendingTradeCount > 99 ? "99+" : pendingTradeCount}
+    </span>
+  ) : null}
+</button>
           </div>
         </div>
 
@@ -584,24 +1907,53 @@ async function handleLogout() {
               color: "#0f172a",
             }}
           >
-            {playerOfWeek ? (
-              <>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <JerseyTile size={36} />
-                  <div>
-                    <div style={{ fontWeight: 900, fontSize: 12 }}>
-                      {playerOfWeek.firstName} {playerOfWeek.lastName}
-                    </div>
-                    <div style={{ fontSize: 11, opacity: 0.7 }}>
-                      {playerOfWeek.teamCode} — {playerOfWeek.posName}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ fontWeight: 900 }}>{playerOfWeek.points ?? 0}pts</div>
-              </>
-            ) : (
-              <div style={{ opacity: 0.35, fontWeight: 800, fontSize: 12 }} />
-            )}
+            {playersOfWeek.length ? (
+  <div style={{ display: "grid", gap: 8, width: "100%" }}>
+    {playersOfWeek.map((p) => (
+      <button
+        key={p.id}
+        onClick={() => setModal({ type: "playerCard", player: p })}
+        style={{
+          border: "none",
+          background: "transparent",
+          padding: 0,
+          textAlign: "left",
+          cursor: "pointer",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            width: "100%",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <JerseyTile size={44} teamCode={p.teamCode} />
+            <div>
+              <div style={{ fontWeight: 900, fontSize: 12 }}>
+                {p.firstName} {p.lastName}
+              </div>
+              <div style={{ fontSize: 11, opacity: 0.7 }}>
+                {fullTeamNameFromCode(p.teamCode)} — {singularPosLabel(p.posName)}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ fontWeight: 900, whiteSpace: "nowrap" }}>
+            {(p.points ?? 0)} pts
+          </div>
+        </div>
+      </button>
+    ))}
+  </div>
+) : (
+  <div style={{ opacity: 0.35, fontWeight: 800, fontSize: 12 }}>
+    No scores yet this week
+  </div>
+)}
           </div>
 
           <button
@@ -628,9 +1980,9 @@ async function handleLogout() {
             }}
           >
             <div style={{ padding: 5, fontSize: 10, fontWeight: 600, opacity: 0.7 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 44px", gap: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 73px", gap: 10 }}>
                 <div />
-                <div style={{ textAlign: "right" }}>Form</div>
+                <div style={{ textAlign: "right", paddingRight: -0 }}>Form</div>
                 <div />
               </div>
             </div>
@@ -651,7 +2003,7 @@ async function handleLogout() {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "1fr 64px 44px",
+                      gridTemplateColumns: "1fr 64px 66px",
                       gap: 10,
                       alignItems: "center",
                       padding: "5px 10px",
@@ -660,14 +2012,14 @@ async function handleLogout() {
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <JerseyTile size={34} />
+                      <JerseyTile size={34} teamCode={p.teamCode} />
                       <div>
                         <div style={{ fontWeight: 600, fontSize: 12 }}>
                           {p.firstName[0]}. {p.lastName}
                         </div>
                         <div style={{ fontSize: 10, opacity: 0.7 }}>
-                          {p.teamCode} — {p.posName}
-                        </div>
+  {fullTeamNameFromCode(p.teamCode)} — {singularPosLabel(p.posName)}
+</div>
                       </div>
                     </div>
 
@@ -675,31 +2027,57 @@ async function handleLogout() {
                       {p.form.toFixed(1)}
                     </div>
 
-                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setModal({ type: "addPlayer", player: p });
-                        }}
-                        aria-label="Add player"
-                        style={{
-                          width: 34,
-                          height: 34,
-                          borderRadius: 10,
-                          border: "none",
-                          background: addBtnBg,
-                          color: "white",
-                          fontWeight: 700,
-                          fontSize: 36,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          cursor: "pointer",
-                        }}
-                      >
-                        +
-                      </button>
-                    </div>
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+{/* Watchlist */}
+<button
+  onClick={(e) => {
+    e.stopPropagation();
+    toggleWatchlistForDashboard(p.id);
+  }}
+  aria-label={isWatched(p.id) ? "Remove from watchlist" : "Add to watchlist"}
+  style={{
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    border: "1px solid rgba(15,23,42,0.22)",
+    background: isWatched(p.id) ? "#F6E7A6" : "rgba(15,23,42,0.10)",
+    color: "#0f172a",
+    fontWeight: 900,
+    fontSize: 16,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+  }}
+>
+  {isWatched(p.id) ? "★" : "☆"}
+</button>
+
+  {/* Add -> Transactions prefill */}
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      goToTransactionsForAdd(p.id);
+    }}
+    aria-label="Add player"
+    style={{
+      width: 28,
+      height: 28,
+      borderRadius: 10,
+      border: "none",
+      background: addBtnBg,
+      color: "white",
+      fontWeight: 900,
+      fontSize: 24,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      cursor: "pointer",
+    }}
+  >
+    +
+  </button>
+</div>
                   </div>
                 </button>
               ))}
@@ -707,7 +2085,7 @@ async function handleLogout() {
 
             <div style={{ padding: 10, display: "flex", justifyContent: "flex-end" }}>
               <button
-                onClick={() => alert("Player pool page later")}
+                onClick={() => router.push("/transactions")}
                 style={{
                   background: "transparent",
                   border: "none",
@@ -726,7 +2104,7 @@ async function handleLogout() {
           </div>
         </div>
 
-        <CurrentTeamSelector />
+
       </div>
     );
   }
@@ -745,7 +2123,7 @@ async function handleLogout() {
     return (
       <div style={{ textAlign: align as any }}>
         <div style={{ fontSize: 34, fontWeight: 900, lineHeight: "34px" }}>{score}</div>
-        <div style={{ marginTop: 6, fontSize: 12, fontWeight: 900 }}>{team}</div>
+        <div style={{ marginTop: 6, fontSize: 17, fontWeight: 900 }}>{team}</div>
         <div style={{ marginTop: 2, fontSize: 11, fontWeight: 800, opacity: 0.9 }}>{record}</div>
       </div>
     );
@@ -936,7 +2314,7 @@ async function handleLogout() {
                 {player.firstName[0]}. {player.lastName}
               </div>
               <div style={{ fontSize: 11, opacity: 0.7 }}>
-                {player.teamCode} — {player.posName}
+                {fullTeamNameFromCode(player.teamCode)} — {singularPosLabel(player.posName)}
               </div>
             </div>
           </div>
@@ -1055,7 +2433,6 @@ async function handleLogout() {
       >
         <Header />
         {effectiveDashState === "noLeague" && <NoLeague />}
-{effectiveDashState === "preDraft" && <PreDraft />}
 {effectiveDashState === "postDraft" && <PostDraft />}
 
       </div>
@@ -1072,11 +2449,6 @@ async function handleLogout() {
 
 
       {/* MODALS */}
-      {modal?.type === "addPlayer" && (
-        <ModalOverlay onClose={() => setModal(null)}>
-          <AddPlayerPopup player={modal.player} />
-        </ModalOverlay>
-      )}
 
       {modal?.type === "playerCard" && (
         <PlayerCardModal
@@ -1091,12 +2463,15 @@ async function handleLogout() {
           status={"starting"} // later: starting/benched/out/null
           teamLabel={currentTeam}
           actions={[
-            { label: "Watch", onClick: () => alert("Watch later") },
-            {
-              label: "Submit Claim",
-              onClick: () => setModal({ type: "addPlayer", player: modal.player }),
-            },
-          ]}
+  {
+  label: isWatched(modal.player.id) ? "Remove from Watchlist" : "Add to Watchlist",
+  onClick: () => toggleWatchlistForDashboard(modal.player.id),
+},
+  {
+    label: "Submit Claim",
+    onClick: () => goToTransactionsForAdd(modal.player.id),
+  },
+]}
           onClose={() => setModal(null)}
         />
       )}

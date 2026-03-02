@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { normalizeLeagueId } from "@/lib/ids";
+import { cancelPendingTradesTouchingPlayers, cancelInvalidPendingTradesForTeams } from "@/lib/trades/cancelPendingTrades";
 
 function extractIds(data: any): string[] {
   if (Array.isArray(data?.playerIds)) return data.playerIds.map(String);
@@ -56,6 +57,9 @@ export async function POST(req: Request) {
     await requireLeagueTeam(leagueId);
 
     const processedAtMs = Date.now();
+
+    const touchedTeamIds = new Set<string>();
+const touchedPlayerIds = new Set<string>();
 
     // ---------------------------------------------
 // GLOBAL WAIVER RUN GUARD (idempotent processing)
@@ -264,6 +268,10 @@ if (claimOkErr) throw claimOkErr;
       processedClaimIds.push(id);
       madeProgress = true;
 
+      touchedTeamIds.add(teamId);
+touchedPlayerIds.add(addId);
+if (dropId) touchedPlayerIds.add(dropId);
+
       // lock dropped player
       if (dropId) {
         newLocks.push({
@@ -300,6 +308,26 @@ const { error: runDoneErr } = await supabaseAdmin
   .eq("week", week);
 
 if (runDoneErr) throw runDoneErr;
+
+// Cancel trades affected by waiver roster changes
+const touchedTeamsArr = Array.from(touchedTeamIds);
+const touchedPlayersArr = Array.from(touchedPlayerIds);
+
+if (touchedPlayersArr.length) {
+  await cancelPendingTradesTouchingPlayers({
+    leagueId,
+    playerIds: touchedPlayersArr,
+    reason: "PLAYER_MOVED_BY_WAIVER",
+  });
+}
+
+if (touchedTeamsArr.length) {
+  await cancelInvalidPendingTradesForTeams({
+    leagueId,
+    teamIds: touchedTeamsArr,
+    reason: "ROSTER_CHANGED_BY_WAIVER",
+  });
+}
 
     return NextResponse.json({ ok: true, processedAtMs, processedCount: processedClaimIds.length });
   } catch (e: any) {

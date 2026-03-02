@@ -96,7 +96,7 @@ const TEAM_CHIP_BORDER_WIDTH = 3;
 // DEV TOGGLES (easy remove)
 // =========================
 const DEV_SEED_PLAYER_TX = true; // <- set false (or delete) to remove the demo seeding
-const ENABLE_TRADES = false; // 🔒 design-only: keep button, block navigation
+const ENABLE_TRADES = true; // 🔒 design-only: keep button, block navigation
 /**
  * =========================
  * POSITION THEMES

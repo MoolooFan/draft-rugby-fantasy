@@ -4,11 +4,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { TEAM_OPTIONS } from "@/lib/constants";
-import { getActiveUser, getActiveTimezone, getActiveUsername } from "@/lib/session";
+import { getActiveUser, getActiveUsername } from "@/lib/session";
 
 import { useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
-import { useTransactionsStore } from "@/lib/transactions/store";
 
 import playersData from "@/data/players.json";
 import fixturesData from "@/data/fixtures-2026.json";
@@ -115,17 +114,7 @@ function getWeekDeadlineMs(fixtures: AnyFixture[], week: number) {
 function getWeeksSorted(fixtures: AnyFixture[]) {
   return Array.from(new Set(fixtures.map((f) => f.week))).sort((a, b) => a - b);
 }
-function formatDeadline(dtMs: number, timeZone?: string) {
-  const d = new Date(dtMs);
-  return d.toLocaleString(undefined, {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone,
-  });
-}
+
 
 // -----------------------
 // Position + roster validity helpers (matches your waiver validity logic)
@@ -401,6 +390,28 @@ function shortName(p: { firstName?: string; lastName?: string } | null | undefin
 }
 
 // -----------------------
+// Roster helpers (canonical = data.playerIds from API)
+// -----------------------
+function normId(x: any) {
+  return String(x ?? "").trim();
+}
+
+function extractRosterIdsFromData(data: any): string[] {
+  // canonical
+  if (Array.isArray(data?.playerIds)) return data.playerIds.map(normId).filter(Boolean);
+
+  // fallback if older slot-based shape is ever returned
+  const ids: string[] = [];
+  for (const arr of Object.values(data?.slots ?? {})) {
+    if (!Array.isArray(arr)) continue;
+    for (const p of arr as any[]) if (p?.id != null) ids.push(normId(p.id));
+  }
+  for (const p of (data?.wildcards ?? []) as any[]) if (p?.id != null) ids.push(normId(p.id));
+
+  return Array.from(new Set(ids.filter(Boolean)));
+}
+
+// -----------------------
 // Page
 // -----------------------
 export default function TradeProposePageInner() {
@@ -422,15 +433,15 @@ const activeLeague = useMemo(() => {
   return leagues[0];
 }, [leagues, activeLeagueId]);
 
-  const userTz = useMemo(() => getActiveTimezone(), []);
 const userId = useMemo(() => getActiveUsername(), []);
 
   const draftTeams = useDraftStore((s) => s.teams);
   const rosters = useDraftStore((s) => s.rosters);
+  // Server-fetched rosters (so we can see OTHER teams' players)
+const [apiRostersByTeam, setApiRostersByTeam] = useState<Record<string, any>>({});
 const watchlist = useDraftStore((s) => (s as any).watchlist ?? {});
 const toggleWatchlist = useDraftStore((s) => (s as any).toggleWatchlist ?? (() => {}));
 
-  const addTradeProposal = useTransactionsStore((s) => (s as any).addTradeProposal ?? null);
 
   type ModalContext = "REQUESTING" | "OFFERING";
 
@@ -498,6 +509,43 @@ useEffect(() => {
   if (!livePlayersLoaded) refreshLivePlayers();
 }, [livePlayersLoaded, refreshLivePlayers]);
 
+// Fetch all rosters for the active league from the server API (includes other teams)
+useEffect(() => {
+  const leagueId = activeLeague?.id;
+  if (!leagueId) return;
+
+  let cancelled = false;
+
+  (async () => {
+    try {
+      const res = await fetch(`/api/rosters?leagueId=${encodeURIComponent(leagueId)}`, {
+        cache: "no-store",
+      });
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok || !json?.ok) {
+        console.error("[trade/propose] Failed to load rosters:", json?.error ?? res.statusText);
+        return;
+      }
+
+      const rows = (json.data ?? []) as any[];
+      const map: Record<string, any> = {};
+      for (const row of rows) {
+        const teamId = String(row?.team_id ?? "").trim();
+        if (!teamId) continue;
+        map[teamId] = row?.data ?? {};
+      }
+
+      if (!cancelled) setApiRostersByTeam(map);
+    } catch (e) {
+      console.error("[trade/propose] rosters fetch error:", e);
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, [activeLeague?.id]);
 
 function hydratePlayer(p: Player): Player {
   const live: any = getLivePlayerById?.(p.id);
@@ -559,7 +607,6 @@ useEffect(() => {
     return weeksSorted[weeksSorted.length - 1] ?? 1;
   }, [weeksSorted, normalizedFixtures, nowMs]);
 
-  const selectionDeadlineMs = useMemo(() => getWeekDeadlineMs(normalizedFixtures as any, selectionWeek), [normalizedFixtures, selectionWeek]);
 
   // HARD trade deadline = final team selection deadline before playoffs.
   // We’ll look for a league setting; if it doesn’t exist, we assume playoffs start AFTER the final fixture week (so last week is trade-deadline).
@@ -593,6 +640,9 @@ const partnerTeamName = useMemo(() => {
 const [step, setStep] = useState<Step>("REQUESTING");
 const [requestingIds, setRequestingIds] = useState<string[]>([]);
 const [offeringIds, setOfferingIds] = useState<string[]>([]);
+
+const [isProposing, setIsProposing] = useState(false);
+const [proposeError, setProposeError] = useState<string | null>(null);
 
   const modalActions = useMemo(() => {
   if (!modalPlayer) return [];
@@ -640,47 +690,63 @@ const [offeringIds, setOfferingIds] = useState<string[]>([]);
     setStep("REQUESTING");
   }, [partnerTeamId]);
 
+// Get a team roster as a flat unique list
+// Priority:
+// 1) If draft-store roster exists with player objects (slots/wildcards), use that (nice & already hydrated)
+// 2) Otherwise use server API roster (data.playerIds) and map ids -> playersData
+const rosterPlayersForTeam = useMemo(() => {
+  return (teamId: string | null | undefined): Player[] => {
+    if (!teamId) return [];
 
-
-  // Get a team roster as a flat unique list
-  const rosterPlayersForTeam = useMemo(() => {
-    return (teamId: string | null | undefined): Player[] => {
-      if (!teamId) return [];
-      const r: any = (rosters as any)?.[teamId];
-      if (!r) return [];
+    // 1) Draft store roster (slot-based with actual player objects)
+    const storeRoster: any = (rosters as any)?.[teamId];
+    if (storeRoster) {
       const out: Player[] = [];
       const seen = new Set<string>();
 
-      for (const arr of Object.values(r?.slots ?? {})) {
+      for (const arr of Object.values(storeRoster?.slots ?? {})) {
         for (const p of (arr as any[]) ?? []) {
-          if (!p?.id || seen.has(p.id)) continue;
-          seen.add(p.id);
+          const id = String((p as any)?.id ?? "").trim();
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
           out.push(p as Player);
         }
       }
-      for (const p of (r?.wildcards ?? []) as any[]) {
-        if (!p?.id || seen.has(p.id)) continue;
-        seen.add(p.id);
+      for (const p of (storeRoster?.wildcards ?? []) as any[]) {
+        const id = String((p as any)?.id ?? "").trim();
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
         out.push(p as Player);
       }
-      return out;
-    };
-  }, [rosters]);
+
+      if (out.length) return out;
+      // If storeRoster exists but empty, fall through to API
+    }
+
+    // 2) API roster (canonical data.playerIds)
+    const apiData = apiRostersByTeam?.[teamId];
+    if (!apiData) return [];
+
+    const ids = extractRosterIdsFromData(apiData);
+    if (!ids.length) return [];
+
+    // map ids -> player objects
+    const byId = new Map(allPlayers.map((p) => [String(p.id), p]));
+    return ids.map((id) => byId.get(String(id))).filter(Boolean) as Player[];
+  };
+}, [rosters, apiRostersByTeam, allPlayers]);
 
   const partnerRoster = useMemo(() => rosterPlayersForTeam(partnerTeamId), [rosterPlayersForTeam, partnerTeamId]);
   const yourRoster = useMemo(() => rosterPlayersForTeam(yourDraftTeamId), [rosterPlayersForTeam, yourDraftTeamId]);
 
   const partnerRosterLive = useMemo(() => {
   return partnerRoster.map((p) => hydratePlayer(p));
-}, [partnerRoster, livePlayersLoaded, getLivePlayerById]);
-useEffect(() => {
-  if (!partnerRosterLive.length) return;
-  console.log("TRADE LIVE SAMPLE", partnerRosterLive[0]);
-}, [partnerRosterLive]);
+}, [partnerRoster, livePlayersLoaded, getLivePlayerById, roundRows]);
+
 
 const yourRosterLive = useMemo(() => {
   return yourRoster.map((p) => hydratePlayer(p));
-}, [yourRoster, livePlayersLoaded, getLivePlayerById]);
+}, [yourRoster, livePlayersLoaded, getLivePlayerById, roundRows]);
 
 // Prefill requested player (only if on current partner roster)
 useEffect(() => {
@@ -756,6 +822,44 @@ const offPlayers = offeringIds
     }
     router.back();
   }
+
+  async function proposeTrade() {
+  if (tradeWindowClosed) return;
+  if (!validity.ok) return;
+  if (!activeLeague?.id || !yourDraftTeamId || !partnerTeamId) return;
+
+  setIsProposing(true);
+  setProposeError(null);
+
+  try {
+    const res = await fetch("/api/trades/propose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        leagueId: activeLeague.id,
+        week: selectionWeek,
+        toTeamId: partnerTeamId,
+        offerPlayerIds: offeringIds,
+        requestPlayerIds: requestingIds,
+        note: "",
+      }),
+    });
+
+    const json = await res.json().catch(() => null);
+
+    if (!res.ok || !json?.ok) {
+      const msg = json?.error ?? "Failed to propose trade";
+      setProposeError(msg);
+      return;
+    }
+
+    goBackToReturnTo();
+  } catch (e: any) {
+    setProposeError(e?.message ?? "Failed to propose trade");
+  } finally {
+    setIsProposing(false);
+  }
+}
 
   // UI styles (match your Transactions vibe)
   const card35: React.CSSProperties = {
@@ -847,10 +951,8 @@ const offPlayers = offeringIds
     );
   }
 
-// REVIEW: Back + Propose
+// REVIEW: Back only (Propose is in the footer)
 if (step === "REVIEW") {
-  const canPropose = validity.ok && !tradeWindowClosed;
-
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
       <button
@@ -867,53 +969,7 @@ if (step === "REVIEW") {
       >
         Back
       </button>
-
-      <button
-        disabled={!canPropose}
-        onClick={() => {
-          if (tradeWindowClosed) return;
-          if (!validity.ok) return;
-          if (!activeLeague?.id || !yourDraftTeamId || !partnerTeamId) return;
-          if (typeof addTradeProposal !== "function") {
-            alert("Trade store not wired yet: missing useTransactionsStore.addTradeProposal");
-            return;
-          }
-
-          const before = useTransactionsStore.getState().trades.length;
-
-addTradeProposal({
-  leagueId: activeLeague.id,
-  week: selectionWeek,
-  fromTeamId: yourDraftTeamId,
-  toTeamId: partnerTeamId,
-  offerPlayerIds: offeringIds,
-  requestPlayerIds: requestingIds,
-  createdAtMs: Date.now(),
-  note: "",
-});
-
-const after = useTransactionsStore.getState().trades.length;
-
-if (after === before) {
-  alert("Trade could not be proposed. A player may be locked, rosters changed, or it’s a duplicate trade.");
-  return;
-}
-
-goBackToReturnTo();
-
-        }}
-        style={{
-          height: 38,
-          borderRadius: 12,
-          border: "none",
-          background: canPropose ? "#22C55E" : "rgba(0,0,0,0.20)",
-          color: "white",
-          fontWeight: 900,
-          cursor: canPropose ? "pointer" : "not-allowed",
-        }}
-      >
-        Propose
-      </button>
+      <div />
     </div>
   );
 }
@@ -1093,21 +1149,6 @@ function PlayerRow({
   onOpen: () => void;
   infoMode: InfoMode;
 }) {
-useEffect(() => {
-  if (!p?.id) return;
-  // only log once per player
-  // @ts-ignore
-  if ((window as any).__loggedTradeStats?.[p.id]) return;
-  // @ts-ignore
-  (window as any).__loggedTradeStats = { ...((window as any).__loggedTradeStats ?? {}), [p.id]: true };
-
-  console.log("TRADE ROW", p.id, {
-    hasStats: !!(p as any).stats,
-    stats: (p as any).stats,
-    weeklyStatus: (p as any).weeklyStatus,
-    raw: p,
-  });
-}, [p]);
 
 
   return (
@@ -1265,43 +1306,19 @@ function Footer() {
       </button>
 
       <button
-        disabled={!canPropose}
-        onClick={() => {
-          if (tradeWindowClosed) return;
-          if (!validity.ok) return;
-          if (!activeLeague?.id || !yourDraftTeamId || !partnerTeamId) return;
-
-          if (typeof addTradeProposal !== "function") {
-            alert("Trade store not wired yet: missing useTransactionsStore.addTradeProposal");
-            return;
-          }
-
-addTradeProposal({
-  leagueId: activeLeague.id,
-  week: selectionWeek,
-  fromTeamId: yourDraftTeamId,     // ✅ match the rest of the file
-  toTeamId: partnerTeamId,
-  offerPlayerIds: offeringIds,
-  requestPlayerIds: requestingIds,
-  createdAtMs: Date.now(),
-  note: "",
-});
-
-
-
-          goBackToReturnTo();
-        }}
+        disabled={!canPropose || isProposing}
+        onClick={proposeTrade}
         style={{
           height: 42,
           borderRadius: 12,
           border: "none",
-          background: canPropose ? "#22C55E" : "rgba(0,0,0,0.20)",
+          background: canPropose && !isProposing ? "#22C55E" : "rgba(0,0,0,0.20)",
           color: "white",
           fontWeight: 900,
-          cursor: canPropose ? "pointer" : "not-allowed",
+          cursor: canPropose && !isProposing ? "pointer" : "not-allowed",
         }}
       >
-        Propose
+        {isProposing ? "Proposing..." : "Propose"}
       </button>
     </div>
   );
@@ -1429,6 +1446,12 @@ const reviewOfferPlayers = offeringIds
       <span style={{ color: "rgba(0, 0, 0, 0.95)" }}>{validity.msg}</span>
     )}
   </div>
+
+  {proposeError ? (
+  <div style={{ marginTop: 8, fontSize: 12, fontWeight: 900, color: "rgba(239,68,68,0.95)" }}>
+    {proposeError}
+  </div>
+) : null}
 
   {/* Cancel / Propose buttons */}
   <div style={{ marginTop: 10 }}>

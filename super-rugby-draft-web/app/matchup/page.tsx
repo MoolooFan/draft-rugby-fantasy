@@ -172,6 +172,9 @@ function normalizeTeamCode(raw: string | null | undefined): string | null {
 
   const upper = s.toUpperCase();
 
+  // ✅ Canonicalise Moana early (must be BEFORE JERSEYS check)
+if (upper === "MOP" || upper === "MOA" || upper === "MOANA") return "MOA";
+
   // Already a valid code?
   if (JERSEYS[upper]) return upper;
 
@@ -200,7 +203,7 @@ function normalizeTeamCode(raw: string | null | undefined): string | null {
 
     MOA: "MOA",
     MOP: "MOA",
-    MOANA: "MOP",
+    MOANA: "MOA",
     MOANA_PASIFIKA: "MOA",
     MOANAPASIFIKA: "MOA",
 
@@ -994,15 +997,24 @@ function serverSelectionSnapshot(
   if (displayWeek <= 0) return null;
 
   const row = selectionByTeamId.get(teamId);
-  if (!row?.lineup) return null;
+  if (!row) return null;
+
+  const lineup =
+    row.lineup ??
+    row.data?.lineup ??
+    row.selection?.lineup ??
+    row.snapshot?.lineup ??
+    null;
+
+  if (!lineup) return null;
 
   return {
     week: displayWeek,
     teamId,
     lockedAtMs: 0,
-    lineup: row.lineup as Lineup,
-    captainId: row.captain_id ?? row.captainId ?? null,
-    viceId: row.vice_id ?? row.viceId ?? null,
+    lineup: lineup as Lineup,
+    captainId: row.captain_id ?? row.captainId ?? row.data?.captainId ?? null,
+    viceId: row.vice_id ?? row.viceId ?? row.data?.viceId ?? null,
   };
 }
 
@@ -1633,28 +1645,43 @@ function openPointsBreakdown(p: Player, owned: boolean, side: "left" | "right") 
     gap: 4,
   }}
 >
+  <div style={{ position: "relative", width: 22, height: 22 }}>
+  {/* Invisible big hitbox (does NOT affect layout) */}
   <button
     disabled={!canGo}
     onClick={() =>
       setMatchupIdx((i) => (i - 1 + matchupsThisWeek.length) % matchupsThisWeek.length)
     }
+    aria-label="Previous matchup"
     style={{
-      width: 22,
-      height: 22,
+      position: "absolute",
+      inset: -12,            // ✅ controls hitbox size (bigger click area)
       border: "none",
       background: "transparent",
+      padding: 0,
+      margin: 0,
+      cursor: canGo ? "pointer" : "not-allowed",
+    }}
+  />
+
+  {/* Visible arrow (not clickable; click goes to invisible button) */}
+  <div
+    aria-hidden="true"
+    style={{
+      position: "absolute",
+      inset: 0,
+      display: "grid",
+      placeItems: "center",
+      pointerEvents: "none",
       color: "rgb(255, 255, 255)",
       fontSize: 22,
       fontWeight: 900,
-      cursor: canGo ? "pointer" : "not-allowed",
-     
-      padding: 0,
       lineHeight: "22px",
     }}
-    aria-label="Previous matchup"
   >
     ‹
-  </button>
+  </div>
+</div>
 
   <div
     style={{
@@ -1667,26 +1694,39 @@ function openPointsBreakdown(p: Player, owned: boolean, side: "left" | "right") 
     Match Up
   </div>
 
+  <div style={{ position: "relative", width: 22, height: 22 }}>
   <button
     disabled={!canGo}
     onClick={() => setMatchupIdx((i) => (i + 1) % matchupsThisWeek.length)}
+    aria-label="Next matchup"
     style={{
-      width: 22,
-      height: 22,
+      position: "absolute",
+      inset: -12,
       border: "none",
       background: "transparent",
+      padding: 0,
+      margin: 0,
+      cursor: canGo ? "pointer" : "not-allowed",
+    }}
+  />
+
+  <div
+    aria-hidden="true"
+    style={{
+      position: "absolute",
+      inset: 0,
+      display: "grid",
+      placeItems: "center",
+      pointerEvents: "none",
       color: "rgba(255,255,255,0.9)",
       fontSize: 22,
       fontWeight: 900,
-      cursor: canGo ? "pointer" : "not-allowed",
-      
-      padding: 0,
       lineHeight: "22px",
     }}
-    aria-label="Next matchup"
   >
     ›
-  </button>
+  </div>
+</div>
 </div>
 
 <div style={{ marginTop: 10, fontSize: 16, fontWeight: 950, opacity: 0.95 }}>
@@ -1705,7 +1745,7 @@ function openPointsBreakdown(p: Player, owned: boolean, side: "left" | "right") 
 
 <div style={{ fontSize: 13, fontWeight: 900, opacity: 0.75 }}>
   {recordText(leftRecord)}{" "}
-  <span style={{ color: streakColor(leftStreak), fontWeight: 950 }}>
+  <span style={{ color: streakColor(leftStreak), fontWeight: 700 }}>
     {streakText(leftStreak)}
   </span>
 </div>
@@ -1713,14 +1753,14 @@ function openPointsBreakdown(p: Player, owned: boolean, side: "left" | "right") 
 
             </div>
 
-            <div style={{ fontSize: 18, fontWeight: 900, opacity: 0.85 }}>—</div>
+            <div style={{ fontSize: 18, fontWeight: 900, opacity: 0.85 }}></div>
 
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 18, fontWeight: 950 }}>{rightName}</div>
 
 <div style={{ fontSize: 13, fontWeight: 900, opacity: 0.75 }}>
   {recordText(rightRecord)}{" "}
-  <span style={{ color: streakColor(rightStreak), fontWeight: 950 }}>
+  <span style={{ color: streakColor(rightStreak), fontWeight: 700 }}>
     {streakText(rightStreak)}
   </span>
 </div>

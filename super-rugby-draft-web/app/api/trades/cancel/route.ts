@@ -10,8 +10,8 @@ export async function POST(req: Request) {
   const username = norm(usernameRaw);
 
   const body = await req.json().catch(() => null);
-  const tradeOfferId = String(body?.tradeOfferId ?? "").trim();
-  if (!tradeOfferId) return NextResponse.json({ ok: false, error: "Missing tradeOfferId" }, { status: 400 });
+  
+const tradeOfferId = String(body?.tradeOfferId ?? body?.tradeId ?? "").trim();  if (!tradeOfferId) return NextResponse.json({ ok: false, error: "Missing tradeOfferId" }, { status: 400 });
 
   const { data: offer, error: offerErr } = await supabaseAdmin
     .from("trade_offers")

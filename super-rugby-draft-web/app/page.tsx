@@ -74,6 +74,15 @@ export default function Page() {
   const [mode, setMode] = useState<"signin" | "create">("signin");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+useEffect(() => {
+  const saved = localStorage.getItem("sr_remember_me") === "1";
+  setRememberMe(saved);
+}, []);
+
+useEffect(() => {
+  localStorage.setItem("sr_remember_me", rememberMe ? "1" : "0");
+}, [rememberMe]);
 
   // fields
   const [username, setUsername] = useState("");
@@ -147,7 +156,7 @@ if (mode === "signin") {
   const r = await fetch("/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "signin", username: v.clean }),
+    body: JSON.stringify({ action: "signin", username: v.clean, rememberMe }),
   });
 
   const j = await r.json().catch(() => null);
@@ -210,6 +219,7 @@ const r = await fetch("/api/session", {
   body: JSON.stringify({
     action: "create",
     username: newAccount.username,
+    rememberMe,
     // optional if you add columns:
     // firstName: newAccount.firstName,
     // lastName: newAccount.lastName,
@@ -269,6 +279,17 @@ router.replace("/dashboard");
                   autoCapitalize="none"
                   autoCorrect="off"
                 />
+
+                <label className="mt-3 flex items-center gap-2 text-sm font-semibold text-white/90">
+  <input
+    type="checkbox"
+    checked={rememberMe}
+    disabled={isLoading}
+    onChange={(e) => setRememberMe(e.target.checked)}
+    className="h-4 w-4 rounded border-white/50 bg-white/20"
+  />
+  Remember me
+</label>
 
                 {errorMsg && (
                   <p className="mt-1 text-xs font-medium text-red-200">

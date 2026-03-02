@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { buildAndValidateNextIds } from "@/lib/transactions/rosterValidate";
+import { cancelPendingTradesTouchingPlayers, cancelInvalidPendingTradesForTeams } from "@/lib/trades/cancelPendingTrades";
 
 function extractIds(data: any): string[] {
   const ids: string[] = [];
@@ -194,6 +195,19 @@ export async function POST(req: Request) {
     );
 
     if (upErr) throw upErr;
+
+    // Cancel trades affected by free agency roster changes
+await cancelPendingTradesTouchingPlayers({
+  leagueId,
+  playerIds: dropPlayerId ? [addPlayerId, dropPlayerId] : [addPlayerId],
+  reason: "PLAYER_MOVED_BY_FREE_AGENCY",
+});
+
+await cancelInvalidPendingTradesForTeams({
+  leagueId,
+  teamIds: [teamId],
+  reason: "ROSTER_CHANGED_BY_FREE_AGENCY",
+});
 
     // record transfer
     const { data: transfer, error: tErr } = await supabaseAdmin

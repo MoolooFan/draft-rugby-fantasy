@@ -467,6 +467,7 @@ function syncLineupToRoster(prev: Lineup, rosterPool: Player[]) {
   return { next, changed };
 }
 
+
 export default function TeamSelectionPage() {
   useRequireSession();
   // (router not needed anymore unless you use it elsewhere)
@@ -659,22 +660,26 @@ const roundRows = usePlayersStore((s) => s.roundRows);
 useEffect(() => {
   if (!livePlayersLoaded) refreshLivePlayers();
 }, [livePlayersLoaded, refreshLivePlayers]);
-// ✅ subscribe to actual data so the page re-renders when sheet data arrives
-const sheetPlayerById = useMemo(() => {
-  const m = new Map<string, any>();
 
+
+// ✅ subscribe to actual data so the page re-renders when sheet data arrives
+const sheetPlayerByDraftId = useMemo(() => {
+  const m = new Map<string, any>();
   for (const p of sheetPlayers ?? []) {
     const draftLikeId =
       pickValue(p, ["id", "draftId", "draft_id", "Draft ID", "playerKey"]) ?? null;
+    if (draftLikeId != null) m.set(normaliseId(draftLikeId), p);
+  }
+  return m;
+}, [sheetPlayers]);
 
+const sheetPlayerByPlayerId = useMemo(() => {
+  const m = new Map<string, any>();
+  for (const p of sheetPlayers ?? []) {
     const sheetPid =
       pickValue(p, ["playerId", "player_id", "player id", "Player ID"]) ?? null;
-
-    // Map BOTH if present
-    if (draftLikeId != null) m.set(normaliseId(draftLikeId), p);
     if (sheetPid != null) m.set(normaliseId(sheetPid), p);
   }
-
   return m;
 }, [sheetPlayers]);
 
@@ -691,15 +696,20 @@ function toNum(x: any) {
 // Best-effort: find the round/week index (so we can sort)
 function rowPlayerId(row: any) {
   return pickValue(row, [
+    // prefer explicit sheet player id columns
     "playerId",
     "player_id",
     "player id",
     "playerID",
     "Player ID",
     "PlayerId",
+
+    // fallbacks commonly used in other exports
     "id",
-    "player",
-    "Player",
+    "draftId",
+    "draft_id",
+    "Draft ID",
+    "playerKey",
   ]);
 }
 
@@ -720,76 +730,49 @@ function rowRound(row: any) {
   return Number.isFinite(n) ? n : 0;
 }
 
+const POINT_HEADERS: string[] = [
+  "Minutes played",
+  "Tries",
+  "Try Assists",
+  "Linebreaks",
+  "Linebreak assists",
+  "Defenders beaten",
+  "Carries (m)",
+  "Offloads",
+  "Tackles",
+  "Missed tackles",
+  "Turnover Forced",
+  "Interceptions",
+  "50:22 Kicks",
+  "Penalties Conceded",
+  "Errors",
+  "Lineouts won",
+  "Lineout steals",
+  "Lineout errors",
+  "Scrums won outright",
+  "Conversions",
+  "Conversions missed",
+  "Penalty scored",
+  "Penalty missed",
+  "Drop goal scored",
+  "Drop goal missed",
+  "Yellow cards",
+  "Red cards",
+];
+
 function calcFantasyPoints(row: any): number | null {
-  const num = (...keys: string[]) => {
-    const v = pickValue(row, keys);
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  };
+  if (!row) return null;
 
-  const minutes = num("Minutes played", "minutes", "Minutes");
+  const total = POINT_HEADERS.reduce((sum, header) => {
+    const v = pickValue(row, [header]);
+    if (v == null || v === "") return sum;
 
-  let pts = 0;
+    // supports "1,234" too
+    const n = Number(String(v).replace(/,/g, ""));
+    return Number.isFinite(n) ? sum + n : sum;
+  }, 0);
 
-  // Playing time
-  if (minutes >= 2) pts += 2;
-  else if (minutes > 0) pts += 1;
-
-  // Tries / assists
-  pts += num("Tries") * 1;
-  pts += num("Try Assists", "Try assists") * 1;
-
-  // Kicking
-  pts += num("Conversions") * 1;
-  pts += num("Conversions missed", "Missed conversions") * 1;
-
-  pts += num("Penalty scored", "Penalty goal", "Penalties scored") * 1;
-  pts += num("Penalty missed", "Missed penalties") * 1;
-
-  pts += num("Drop goal scored", "Drop goals scored") * 1;
-  pts += num("Drop goal missed", "Drop goals missed") * 1;
-
-  // ✅ 50:22 kicks (big missing piece)
-  pts += num("50:22 Kicks", "50:22 kicks", "5022 Kicks", "50 22 Kicks") * 1;
-
-  // Cards
-  pts += num("Yellow cards", "Yellow card") * 1;
-  pts += num("Red cards", "Red card") * 1;
-
-  // Turnovers / interceptions
-  pts += num("Turnover Forced", "Turnovers forced") * 1;
-  pts += num("Interceptions", "Interception") * 1;
-
-  // Lineouts
-  pts += num("Lineouts won", "Lineouts won on own throw") * 1;
-  pts += num("Lineout steals", "Lineout steal on opponents throw") * 5;
-  pts += num("Lineout errors", "Lineout error") * 1;
-
-  // Tackling
-  pts += num("Tackles") * 1;
-  pts += num("Missed tackles") * 1;
-
-  // Ball carrying / creation
-  pts += num("Defenders beaten", "Defenders Beaten") * 1;
-  pts += num("Offloads") * 1;
-
-  // Line breaks
-  pts += num("Linebreaks", "Line breaks", "Linebreak") * 1;
-  pts += num("Linebreak assists", "Linebreak assists", "Line break assists") * 1;
-
-  // ✅ Metres gained: 1 point per 10 metres
-  // Your sheet column is "Carries (m)" which appears to actually be metres, not carry count.
-  const metres = num("Carries (m)", "Metres gained", "Meters gained", "Run metres", "Running metres");
-  pts += Math.floor(metres / 1);
-
-  // Discipline errors
-  pts += num("Penalties Conceded", "Penalties conceded") * 1;
-  pts += num("Errors", "Error") * 1;
-
-  // Scrum won outright
-  pts += num("Scrums won outright", "Scrums won") * 1;
-
-  return pts;
+  return total;
 }
 
 
@@ -837,6 +820,7 @@ const statsByPlayerId = useMemo(() => {
 useEffect(() => {
   if (!roundRows?.length) return;
   console.log("roundRows[0] keys:", Object.keys(roundRows[0] ?? {}));
+  
   console.log("sample row:", roundRows[0]);
   console.log("statsByPlayerId size:", statsByPlayerId.size);
 }, [roundRows, statsByPlayerId]);
@@ -844,15 +828,20 @@ useEffect(() => {
 function getPlayerSheetId(p: Player | null) {
   if (!p) return null;
 
-  // 1) try the sheet player row (from the "players" tab)
-  const sheetPlayer = sheetPlayerById.get(normaliseId(p.id));
+  // players.json id is your "draft id" in most setups
+  const draftKey = normaliseId(p.id);
+
+  // 1) look up the player row by draft id ONLY
+  const sheetPlayer = sheetPlayerByDraftId.get(draftKey);
+
+  // 2) extract the real sheet playerId from that row
   const sheetPid =
-    pickValue(sheetPlayer, ["playerId", "player_id", "player id", "id", "Player ID"]) ?? null;
+    pickValue(sheetPlayer, ["playerId", "player_id", "player id", "Player ID"]) ?? null;
 
   if (sheetPid != null) return normaliseId(sheetPid);
 
-  // 2) fallback: assume draft id matches roundRows id
-  return normaliseId(p.id);
+  // 3) fallback (only if your roundRows are keyed by draft id)
+  return draftKey;
 }
 
 function getLiveStat(p: Player | null) {
@@ -861,13 +850,10 @@ function getLiveStat(p: Player | null) {
   return statsByPlayerId.get(pid) ?? null;
 }
 
-
 function getLivePlayerById(id: string) {
-  return sheetPlayerById.get(normaliseId(id));
+  // "id" here is a players.json id (draft id)
+  return sheetPlayerByDraftId.get(normaliseId(id));
 }
-
-
-
 
   // Fixtures
   const fixtures = useMemo(() => fixturesData as AnyFixture[], []);
@@ -1565,31 +1551,35 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
       {/* Main content */}
       {p ? (
         <>
-          {/* Jersey image square (centered), partially covered by pill */}
-          <div
-            style={{
-              position: "absolute",
-              top: 3,
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: 65,
-              height: 65,
-              display: "grid",
-              placeItems: "center",
-              zIndex: 1,
-            }}
-          >
-            <img
-              src={jerseyUrl}
-              alt=""
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "contain",
-                filter: "drop-shadow(0 8px 14px rgba(0,0,0,0.25))",
-              }}
-            />
-          </div>
+          {/* Jersey image (clipped so it never peeks under the pill) */}
+<div
+  style={{
+    position: "absolute",
+    top: 3,
+    left: "50%",
+    transform: "translateX(-50%)",
+    width: 65,
+
+    // ✅ key: stop the jersey area above the pill
+    height: 44, // (70 tile height - ~26px pill space)
+
+    overflow: "hidden", // ✅ clips jersey + drop-shadow
+    zIndex: 1,
+    display: "grid",
+    placeItems: "center",
+  }}
+>
+  <img
+    src={jerseyUrl}
+    alt=""
+    style={{
+      width: "100%",
+      height: 65,         // keep full jersey size
+      objectFit: "contain",
+      filter: "drop-shadow(0 8px 14px rgba(0,0,0,0.25))",
+    }}
+  />
+</div>
 
           {/* Combined pill (split horizontally) */}
           <div

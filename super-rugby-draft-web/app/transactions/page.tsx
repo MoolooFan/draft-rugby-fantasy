@@ -241,12 +241,16 @@ function buildStandingsRows(teams: { id: string; name: string }[], playedWeeks: 
 }
 
 function getInitials(name: string | null | undefined) {
-
   const s = String(name ?? "").trim();
   if (!s) return "??";
-  const parts = s.split(/\s+/).filter(Boolean);
+
+  const parts = s
+    .replace(/[_-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+
   const first = parts[0]?.[0] ?? "?";
-  const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : "";
+  const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : (parts[0]?.[1] ?? "");
   return (first + last).toUpperCase();
 }
 
@@ -483,6 +487,7 @@ const Filters = React.memo(function Filters({
             <option value="MATCH_AVG">Match Average</option>
             <option value="TOTAL_PTS">Total Points</option>
             <option value="FORM_3">Form</option>
+            <option value="LAST_SCORE">Last Fixture</option>
             <option value="GAMES_PLAYED">Games Played</option>
             <option value="TRIES">Tries Scored</option>
             <option value="TRY_ASSISTS">Try Assists</option>
@@ -579,7 +584,7 @@ function TransactionsPageInner() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const ENABLE_TRADES = false;
+  const ENABLE_TRADES = true;
 
   const returnTo = useMemo(() => {
     const qs = searchParams?.toString?.() ?? "";
@@ -610,11 +615,83 @@ const activeLeague = useMemo(() => {
   const rosters = useDraftStore((s) => s.rosters);
   const applyRosterMove = useDraftStore((s) => (s as any).applyRosterMove);
 
-const watchlistRaw = useDraftStore((s) => (s as any).watchlist);
-const watchlist = useMemo(() => watchlistRaw ?? EMPTY_OBJ, [watchlistRaw]);
+const [watchlistSet, setWatchlistSet] = useState<Set<string>>(new Set());
+const [watchlistLoaded, setWatchlistLoaded] = useState(false);
 
+const toggleWatchlist = React.useCallback(
+  async (playerId: string) => {
+    const leagueId = String(activeLeague?.id ?? "");
+    if (!leagueId) return;
 
-  const toggleWatchlist = useDraftStore((s) => (s as any).toggleWatchlist ?? (() => {}));
+    // (TEMP) league-wide watchlist
+    // Later when you make it per-team, include teamId in these API calls.
+    const isStar = watchlistSet.has(playerId);
+
+    // optimistic UI
+    setWatchlistSet((prev) => {
+      const next = new Set(prev);
+      if (isStar) next.delete(playerId);
+      else next.add(playerId);
+      return next;
+    });
+
+    try {
+      if (isStar) {
+        await fetch(
+          `/api/watchlist?leagueId=${encodeURIComponent(leagueId)}&playerId=${encodeURIComponent(playerId)}`,
+          { method: "DELETE" }
+        );
+      } else {
+        await fetch(`/api/watchlist`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ leagueId, playerId }),
+        });
+      }
+    } catch (e) {
+      // rollback on failure
+      setWatchlistSet((prev) => {
+        const next = new Set(prev);
+        if (isStar) next.add(playerId);
+        else next.delete(playerId);
+        return next;
+      });
+    }
+  },
+  [activeLeague?.id, watchlistSet]
+);
+
+const watchlist = useMemo(() => {
+  // keep your existing "watchlist[playerId]" checks working
+  const obj: Record<string, boolean> = {};
+  watchlistSet.forEach((id) => (obj[id] = true));
+  return obj;
+}, [watchlistSet]);
+
+useEffect(() => {
+  const leagueId = String(activeLeague?.id ?? "");
+  if (!leagueId) return;
+
+  let cancelled = false;
+  (async () => {
+    setWatchlistLoaded(false);
+    const res = await fetch(`/api/watchlist?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
+    const json = await res.json().catch(() => null);
+
+    if (cancelled) return;
+
+    if (res.ok && json?.ok) {
+      setWatchlistSet(new Set<string>((json.data ?? []).map(String)));
+    } else {
+      setWatchlistSet(new Set());
+    }
+    setWatchlistLoaded(true);
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, [activeLeague?.id]);
 
   // Transactions store (local fallback data)
 const claims = useTransactionsStore((s: any) => s.claims ?? []);
@@ -692,14 +769,8 @@ useEffect(() => {
 
 
   const liveWeek = useMemo(() => {
-    for (const w of weeksSorted) {
-      const wkFix = normalizedFixtures.filter((f) => f.week === w);
-      if (!wkFix.length) continue;
-      const weekComplete = wkFix.every(isFixtureComplete);
-      if (!weekComplete) return w;
-    }
-    return weeksSorted[0] ?? 1;
-  }, [weeksSorted, normalizedFixtures]);
+  return activeLeague?.currentWeek ?? 1;
+}, [activeLeague?.currentWeek]);
 
   const liveWeekDeadlineMs = useMemo(
     () => getWeekDeadlineMs(normalizedFixtures as any, liveWeek),
@@ -1151,6 +1222,7 @@ useEffect(() => {
   | "MATCH_AVG"
   | "TOTAL_PTS"
   | "FORM_3"
+  | "LAST_SCORE"
   | "GAMES_PLAYED"
   | "TRIES"
   | "TRY_ASSISTS"
@@ -1176,7 +1248,7 @@ useEffect(() => {
   | "YELLOW_CARDS"
   | "RED_CARDS";
 
-const [infoMode, setInfoMode] = useState<InfoMode>("DRAFT_RANK");
+const [infoMode, setInfoMode] = useState<InfoMode>("TOTAL_PTS");
 
 
     // =========================
@@ -1398,9 +1470,9 @@ setDropModalOpen(true);
   const claimsRes = await fetch(`/api/waivers/claims?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
   const claimsJson = await claimsRes.json().catch(() => null);
 
-  // 2) trades
-  const tradesRes = await fetch(`/api/trades?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
-  const tradesJson = await tradesRes.json().catch(() => null);
+  // 2) trades (correct endpoint)
+const tradesRes = await fetch(`/api/trades/list?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
+const tradesJson = await tradesRes.json().catch(() => null);
 
   // 3) drop-locks
   const locksRes = await fetch(`/api/drop-locks?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
@@ -1427,7 +1499,29 @@ setDropModalOpen(true);
     : [];
 
 setTxClaims(normClaims);
-  setTxTrades(tradesRes.ok && tradesJson?.ok ? (tradesJson.data ?? []) : []);
+  const normTrades =
+  tradesRes.ok && tradesJson?.ok
+    ? (tradesJson.offers ?? tradesJson.data ?? []).map((t: any) => ({
+        id: t.id,
+        leagueId: t.league_id ?? t.leagueId,
+        week: t.week,
+        fromTeamId: t.from_team_id ?? t.fromTeamId,
+        toTeamId: t.to_team_id ?? t.toTeamId,
+        offerPlayerIds: t.offer_player_ids ?? t.offerPlayerIds ?? [],
+        requestPlayerIds: t.request_player_ids ?? t.requestPlayerIds ?? [],
+        note: t.note ?? "",
+        status: t.status ?? "pending",
+
+        // timestamps -> ms for your sorting/filters
+        createdAtMs: t.createdAtMs ?? (t.created_at ? toMs(t.created_at) : 0),
+        updatedAtMs: t.updatedAtMs ?? (t.updated_at ? toMs(t.updated_at) : 0),
+        acceptedAtMs: t.acceptedAtMs ?? (t.accepted_at ? toMs(t.accepted_at) : null),
+        decidedAtMs: t.decidedAtMs ?? (t.decided_at ? toMs(t.decided_at) : null),
+      }))
+    : [];
+
+setTxTrades(normTrades);
+
   setTxDropLocks(locksRes.ok && locksJson?.ok ? (locksJson.data ?? []) : []);
   const normFA =
   faRes.ok && faJson?.ok
@@ -1450,14 +1544,12 @@ async function apiAcceptTrade(tradeId: string) {
   if (!activeLeague?.id) return;
 
   await fetch(`/api/trades/accept`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      leagueId: activeLeague.id,
-      tradeId,
-      decidedAtMs: Date.now(),
-    }),
-  });
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    tradeOfferId: tradeId,
+  }),
+});
 
   await refreshTransactionsForLeague(activeLeague.id);
 
@@ -2049,6 +2141,24 @@ function getFormLast3Avg(p: Player): number | null {
   return sum / last3.length;
 }
 
+// Most recent score = points from latest PLAYED round
+function getLastRoundPoints(p: Player): number | null {
+  const rounds = getPlayerRounds(p.id);
+  if (!rounds.length) return null;
+
+  const played = rounds
+    .map((r: any) => ({ r, pts: getRoundPointsFromRow(r) }))
+    .filter((x: any) => typeof x.pts === "number");
+
+  if (!played.length) return null;
+
+  // sort by round ascending (sheet column "round")
+  played.sort((a: any, b: any) => (toNum(a.r?.round) ?? 0) - (toNum(b.r?.round) ?? 0));
+
+  const last = played[played.length - 1];
+  return typeof last?.pts === "number" ? last.pts : null;
+}
+
 // Stat totals (as COUNTS) across season
 function getStatTotalCount(p: Player, header: string, pointsPerEvent: number): number | null {
   const rounds = getPlayerRounds(p.id);
@@ -2074,6 +2184,7 @@ function getStatTotalCount(p: Player, header: string, pointsPerEvent: number): n
     case "MATCH_AVG": return "Match Avg";
     case "TOTAL_PTS": return "Total Pts";
     case "FORM_3": return "Form";
+    case "LAST_SCORE": return "Last";
     case "GAMES_PLAYED": return "Games";
 
     case "TRIES": return "Tries";
@@ -2122,6 +2233,11 @@ function getStatTotalCount(p: Player, header: string, pointsPerEvent: number): n
     const f = getFormLast3Avg(p);
     return typeof f === "number" ? f.toFixed(1) : "-";
   }
+
+  if (mode === "LAST_SCORE") {
+  const v = getLastRoundPoints(p);
+  return typeof v === "number" ? String(Math.round(v)) : "-";
+}
 
   if (mode === "GAMES_PLAYED") {
     const gp = getMatchesPlayed(p);
@@ -2264,6 +2380,7 @@ function metricSortValue(p: Player, mode: InfoMode): number | null {
   if (mode === "MATCH_AVG") return getAvgPPG(p);
   if (mode === "TOTAL_PTS") return getTotalPoints(p);
   if (mode === "FORM_3") return getFormLast3Avg(p);
+  if (mode === "LAST_SCORE") return getLastRoundPoints(p);
   if (mode === "GAMES_PLAYED") return getMatchesPlayed(p);
 
   // stat totals as counts (points -> count)
@@ -2419,7 +2536,7 @@ const pendingOffersCount = useMemo(() => {
 
   return (tradesForUi as any[])
     .filter((t) => t.leagueId === leagueId)
-    .filter((t) => String(t.status ?? "").toUpperCase() === "PENDING")
+    .filter((t) => String(t.status ?? "").toLowerCase() === "pending")
     .filter((t) => t.toTeamId === yourId)
     .length;
 }, [tradesForUi, activeLeague?.id, yourDraftTeamId]);
@@ -2668,31 +2785,48 @@ return list
 
 
   function StarButton({ active, onClick }: { active: boolean; onClick: () => void }) {
-    return (
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onClick();
-        }}
-        aria-label={active ? "Remove from watchlist" : "Add to watchlist"}
-        style={{
-          width: 28,
-          height: 28,
-          borderRadius: 10,
-          border: "1px solid rgba(0,0,0,0.10)",
-          background: active ? "rgba(250,204,21,0.25)" : "rgba(0,0,0,0.05)",
-          display: "grid",
-          placeItems: "center",
-          cursor: "pointer",
-          color: "#0f172a",
-          fontSize: 16,
-          fontWeight: 900,
-        }}
-      >
-        {active ? "★" : "☆"}
-      </button>
-    );
-  }
+  return (
+    <button
+      type="button"
+      onMouseDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onTouchStart={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onKeyDown={(e) => {
+        // prevent spacebar from scrolling the page
+        if (e.key === " " || e.key === "Spacebar") {
+          e.preventDefault();
+        }
+        e.stopPropagation();
+      }}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onClick();
+      }}
+      aria-label={active ? "Remove from watchlist" : "Add to watchlist"}
+      style={{
+        width: 28,
+        height: 28,
+        borderRadius: 10,
+        border: "1px solid rgba(0,0,0,0.10)",
+        background: active ? "rgba(250,204,21,0.25)" : "rgba(0,0,0,0.05)",
+        display: "grid",
+        placeItems: "center",
+        cursor: "pointer",
+        color: "#0f172a",
+        fontSize: 16,
+        fontWeight: 900,
+      }}
+    >
+      {active ? "★" : "☆"}
+    </button>
+  );
+}
 
 function TxActionButton({
   enabled,
@@ -3157,21 +3291,24 @@ const teamName = (teamId: string) => teamById?.[teamId]?.name ?? teamId;
 
 const playerById = (id: string) => allPlayers.find((p) => p.id === id) ?? null;
 
-// ✅ user initials
+// ✅ user initials (prefer DB columns from public.teams)
 const userInitials = (teamId: string) => {
   const t: any = teamById?.[teamId] ?? null;
   if (!t) return getInitials(teamId);
 
-  // Prefer owner initials if present
-  if (t.userInitials) return String(t.userInitials).toUpperCase();
+  // 1) BEST: Supabase teams.initials
+  if (t.initials) return String(t.initials).trim().toUpperCase();
 
-  // Else derive from owner username (userId)
+  // 2) Next best: owner's actual name stored in teams.owner_name
+  if (t.ownerName) return getInitials(String(t.ownerName));
+
+  // 3) Then: username stored in teams.owner_username or teams.user_id
+  if (t.ownerUsername) return getInitials(String(t.ownerUsername));
   if (t.userId) return getInitials(String(t.userId));
 
-  // Else fallback to team name
+  // 4) Fallback: team display name
   return getInitials(String(t.name ?? teamId));
 };
-
 
     // --------------------
 // Confirm modal (Trades)
@@ -3309,7 +3446,9 @@ function LeagueTradeRow({ t }: { t: any }) {
     const freeAgencyCutoffMs = lastWaiverDeadlineMs;
 
     // ---------- Pending Trades split ----------
-   const pendingTradesAll = (tradesForUi as any[]).filter((t) => t.leagueId === leagueId && t.status === "PENDING");
+   const pendingTradesAll = (tradesForUi as any[])
+  .filter((t) => t.leagueId === leagueId)
+  .filter((t) => String(t.status ?? "").toLowerCase() === "pending");
 
 
     const offersReceived = pendingTradesAll
@@ -3324,7 +3463,8 @@ function LeagueTradeRow({ t }: { t: any }) {
 
     // ---------- League Trades (accepted since last team selection deadline) ----------
     const leagueTradesSinceDeadline = (tradesForUi as any[])
-      .filter((t) => t.leagueId === leagueId && t.status === "ACCEPTED")
+  .filter((t) => t.leagueId === leagueId)
+  .filter((t) => String(t.status ?? "").toLowerCase() === "accepted")
       .filter((t) => (t.acceptedAtMs ?? t.decidedAtMs ?? t.updatedAtMs ?? t.createdAtMs ?? 0) >= (lastSelectionDeadlineMs || 0))
       .slice()
       .sort(
@@ -3723,22 +3863,15 @@ const modalActions = useMemo(() => {
 
   const isOnWatchlist = !!(watchlist as any)[playerId];
 
-  // Helper: toggle watchlist and close modal (optional, but feels nice)
-  const handleToggleWatchlist = () => {
-    toggleWatchlist(playerId);
-    // keep modal open so they can take another action if they want:
-    // setModalPlayer(modalPlayer);
-  };
-
   // If owned by you: no buttons
   if (isOwnedByYou) return [];
 
   // Watchlist button (always shown unless owned-by-you)
   const watchlistAction = {
-    label: isOnWatchlist ? "Remove from Watchlist" : "Add to Watchlist",
-    variant: "secondary" as const,
-    onClick: handleToggleWatchlist,
-  };
+  label: isOnWatchlist ? "Remove from Watchlist" : "Add to Watchlist",
+  variant: "secondary" as const,
+  onClick: () => toggleWatchlist(playerId),
+};
 
   // Unowned: Claim/Sign/Locked
   if (!isOwned) {
@@ -3762,13 +3895,16 @@ const modalActions = useMemo(() => {
       {
         label,
         variant: "primary" as const,
-        onClick: () => {
-  // ✅ close player card first so it doesn't sit above the drop modal
+onClick: () => {
+  const addP = modalPlayer; // capture before closing
+  if (!addP) return;
+
+  // close player card first
   setModalPlayer(null);
 
-  // then open the add/drop modal on next tick
+  // open add/drop modal next tick
   window.setTimeout(() => {
-    openDropModal(modalPlayer);
+    openDropModal(addP);
   }, 0);
 },
 
