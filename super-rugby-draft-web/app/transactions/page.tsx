@@ -720,46 +720,80 @@ useEffect(() => {
   if (!livePlayersLoaded) refreshLivePlayers();
 }, [livePlayersLoaded, refreshLivePlayers]);
 
+// -----------------------
+// Resolve "your team id" robustly (THIS FIXES RECEIVED TRADES NOT SHOWING)
+// -----------------------
+function pickFirstTruthy<T>(...vals: Array<T | null | undefined>): T | null {
+  for (const v of vals) if (v != null && String(v).trim() !== "") return v as T;
+  return null;
+}
 
+function normStr(x: any) {
+  return String(x ?? "").trim().toLowerCase();
+}
 
-  // Your team ID in league (prefer matching team.userId to active username)
-  const yourLeagueTeamId = useMemo(() => {
+const yourDraftTeamId = useMemo(() => {
   const l: any = activeLeague;
   if (!l) return null;
 
-  const teams = Array.isArray(l.teams) ? l.teams : [];
-  if (!teams.length) return null;
+  // 0) If the league store already knows your team id, use it.
+  // (These keys cover common patterns across your codebase.)
+  const direct = pickFirstTruthy(
+    l.myTeamId,
+    l.my_team_id,
+    l.activeTeamId,
+    l.active_team_id,
+    l.teamId,
+    l.team_id
+  );
+  if (direct) return String(direct);
 
-  if (userId) {
-    const mine = teams.find((t: any) => {
+  const leagueTeams = Array.isArray(l.teams) ? l.teams : [];
+  const u = normStr(userId);
+
+  // 1) Try to match activeLeague.teams ownership fields
+  if (u && leagueTeams.length) {
+    const mine = leagueTeams.find((t: any) => {
       const candidates = [
         t.userId,
         t.user_id,
         t.owner_username,
         t.ownerUsername,
         t.username,
-      ].map(normUser);
+        t.email,
+        t.owner_email,
+        t.ownerEmail,
+      ].map(normStr);
 
-      return candidates.includes(userId);
+      return candidates.includes(u);
     });
 
     if (mine?.id) return String(mine.id);
   }
 
-  // DO NOT guess teams[0] — that’s what breaks the page
+  // 2) Fallback: match draftTeams ownership fields (sometimes this is more reliable)
+  if (u && Array.isArray(draftTeams) && draftTeams.length) {
+    const mineDraft = draftTeams.find((t: any) => {
+      const candidates = [
+        t.userId,
+        t.user_id,
+        t.owner_username,
+        t.ownerUsername,
+        t.username,
+        t.email,
+      ].map(normStr);
+
+      return candidates.includes(u);
+    });
+
+    if (mineDraft?.id) return String(mineDraft.id);
+  }
+
+  // 3) If there is ONLY ONE team in the league, allow that as last resort
+  if (leagueTeams.length === 1) return String(leagueTeams[0].id);
+
   return null;
-}, [activeLeague, userId]);
-
-  // Draft team ID (align to league team if possible)
-  const yourDraftTeamId = useMemo(() => {
-  if (yourLeagueTeamId) return yourLeagueTeamId;
-
-  // last resort only if literally single-team league
-  const teams = (activeLeague as any)?.teams ?? [];
-  if (Array.isArray(teams) && teams.length === 1) return String(teams[0].id);
-
-  return null;
-}, [yourLeagueTeamId, activeLeague]);
+}, [activeLeague, userId, draftTeams]);
 
 
 
@@ -3310,7 +3344,14 @@ const dropP = allPlayers.find((x) => x.id === c.dropPlayerId) ?? null;
 
   function TransactionsTab() {
     const leagueId = activeLeague?.id ?? "";
-    const yourId = yourDraftTeamId ?? "";
+    const yourId = yourDraftTeamId;
+    if (!leagueId || !yourId) {
+  return (
+    <div style={{ ...listBox, padding: 12, fontSize: 12, fontWeight: 900, opacity: 0.8 }}>
+      No league/team selected.
+    </div>
+  );
+}
 // ---------- helpers (MOVE UP HERE) ----------
 const teamById = (activeLeague?.teams ?? []).reduce((acc: any, t: any) => {
   acc[t.id] = t;
