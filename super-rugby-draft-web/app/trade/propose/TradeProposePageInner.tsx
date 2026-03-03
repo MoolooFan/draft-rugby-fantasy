@@ -92,6 +92,10 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
   );
 }
 
+function normUser(x: any) {
+  return String(x ?? "").trim().toLowerCase();
+}
+
 // -----------------------
 // Fixtures helpers (same logic you use elsewhere)
 // -----------------------
@@ -433,7 +437,7 @@ const activeLeague = useMemo(() => {
   return leagues[0];
 }, [leagues, activeLeagueId]);
 
-const userId = useMemo(() => getActiveUsername(), []);
+const userId = useMemo(() => normUser(getActiveUsername()), []);
 
   const draftTeams = useDraftStore((s) => s.teams);
   const rosters = useDraftStore((s) => s.rosters);
@@ -465,19 +469,41 @@ const yourLeagueTeamId = useMemo(() => {
   const l: any = activeLeague;
   if (!l) return null;
 
+  const teams = (l.teams ?? []) as any[];
+  if (!teams.length) return null;
+
   if (userId) {
-    const t = (l.teams ?? []).find((x: any) => x.userId === userId);
-    if (t) return t.id;
+    const mine = teams.find((t) => {
+      const candidates = [
+        t.userId,
+        t.user_id,
+        t.owner_username,
+        t.ownerUsername,
+        t.username,
+      ].map(normUser);
+
+      return candidates.includes(userId);
+    });
+
+    if (mine?.id) return String(mine.id);
   }
 
-  return (l.teams ?? [])?.[0]?.id ?? null;
+  // if we can't identify, don't guess someone else's team
+  return null;
 }, [activeLeague, userId]);
 
 
   const yourDraftTeamId = useMemo(() => {
-    if (yourLeagueTeamId && draftTeams.some((t: any) => t.id === yourLeagueTeamId)) return yourLeagueTeamId;
-    return draftTeams[0]?.id ?? null;
-  }, [yourLeagueTeamId, draftTeams]);
+  if (yourLeagueTeamId) return yourLeagueTeamId;
+
+  // very last resort only if the league literally has one team
+  if ((activeLeague as any)?.teams?.length === 1) {
+    return String((activeLeague as any).teams[0].id);
+  }
+
+  return null;
+}, [yourLeagueTeamId, activeLeague]);
+
     // Partner team selection
   const [partnerTeamId, setPartnerTeamId] = useState<string>(partnerTeamIdInitial);
 

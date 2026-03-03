@@ -24,8 +24,8 @@ function cookieOptions(rememberMe: boolean) {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const rememberMe = !!body?.rememberMe;
+  const body = await req.json().catch(() => ({}));
+const rememberMe = !!(body as any)?.rememberMe;
 const opts = cookieOptions(rememberMe);
 
   const action = String(body?.action ?? "signin").trim(); // "signin" | "create"
@@ -53,12 +53,17 @@ const opts = cookieOptions(rememberMe);
     }
 
     const sig = sign(username_norm);
-    const res = NextResponse.json({ ok: true, username: username_norm });
+const res = NextResponse.json({ ok: true, username: username_norm });
 
-    res.cookies.set(COOKIE, username_norm, opts);
+// clear old cookies first (belt + braces)
+res.cookies.set(COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0 });
+res.cookies.set(SIG, "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0 });
+
+// set new cookies
+res.cookies.set(COOKIE, username_norm, opts);
 res.cookies.set(SIG, sig, opts);
 
-    return res;
+return res;
   }
 
   // 2) action === "create" => create if doesn't exist, error if taken

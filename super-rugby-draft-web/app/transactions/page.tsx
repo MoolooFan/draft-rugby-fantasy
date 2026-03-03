@@ -260,6 +260,10 @@ function initialsForTeamId(teamId: string, activeLeague: any) {
   return getInitials(String(base));
 }
 
+function normUser(x: any) {
+  return String(x ?? "").trim().toLowerCase();
+}
+
 type FiltersProps = {
   search: string;
   setSearch: (v: string) => void;
@@ -607,7 +611,7 @@ const activeLeague = useMemo(() => {
 }, [leagues, activeLeagueId]);
 
 
-  const userId = useMemo(() => getActiveUsername(), []);
+  const userId = useMemo(() => normUser(getActiveUsername()), []);
   const userTz = useMemo(() => getActiveTimezone(), []);
 
   // Draft store data
@@ -720,24 +724,42 @@ useEffect(() => {
 
   // Your team ID in league (prefer matching team.userId to active username)
   const yourLeagueTeamId = useMemo(() => {
-  const l = activeLeague;
+  const l: any = activeLeague;
   if (!l) return null;
 
-  const teams = Array.isArray((l as any).teams) ? (l as any).teams : [];
+  const teams = Array.isArray(l.teams) ? l.teams : [];
+  if (!teams.length) return null;
 
   if (userId) {
-    const t = teams.find((x: any) => x.userId === userId);
-    if (t) return t.id;
+    const mine = teams.find((t: any) => {
+      const candidates = [
+        t.userId,
+        t.user_id,
+        t.owner_username,
+        t.ownerUsername,
+        t.username,
+      ].map(normUser);
+
+      return candidates.includes(userId);
+    });
+
+    if (mine?.id) return String(mine.id);
   }
 
-  return teams[0]?.id ?? null;
+  // DO NOT guess teams[0] — that’s what breaks the page
+  return null;
 }, [activeLeague, userId]);
 
   // Draft team ID (align to league team if possible)
   const yourDraftTeamId = useMemo(() => {
-    if (yourLeagueTeamId && draftTeams.some((t: any) => t.id === yourLeagueTeamId)) return yourLeagueTeamId;
-    return draftTeams[0]?.id ?? null;
-  }, [yourLeagueTeamId, draftTeams]);
+  if (yourLeagueTeamId) return yourLeagueTeamId;
+
+  // last resort only if literally single-team league
+  const teams = (activeLeague as any)?.teams ?? [];
+  if (Array.isArray(teams) && teams.length === 1) return String(teams[0].id);
+
+  return null;
+}, [yourLeagueTeamId, activeLeague]);
 
 
 
@@ -1465,79 +1487,87 @@ setDropModalOpen(true);
     setSelectedDropPlayerId(null);
   }
 
-  async function refreshTransactionsForLeague(leagueId: string) {
-  // 1) claims
-  const claimsRes = await fetch(`/api/waivers/claims?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
-  const claimsJson = await claimsRes.json().catch(() => null);
+async function refreshTransactionsForLeague(leagueId: string) {
+  try {
+    // 1) claims
+    const claimsRes = await fetch(`/api/waivers/claims?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
+    const claimsJson = await claimsRes.json().catch(() => null);
 
-  // 2) trades (correct endpoint)
-const tradesRes = await fetch(`/api/trades/list?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
-const tradesJson = await tradesRes.json().catch(() => null);
+    // 2) trades
+    const tradesRes = await fetch(`/api/trades/list?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
+    const tradesJson = await tradesRes.json().catch(() => null);
 
-  // 3) drop-locks
-  const locksRes = await fetch(`/api/drop-locks?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
-  const locksJson = await locksRes.json().catch(() => null);
+    // 3) drop-locks
+    const locksRes = await fetch(`/api/drop-locks?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
+    const locksJson = await locksRes.json().catch(() => null);
 
-  // 4) free agents
-  const faRes = await fetch(`/api/free-agency/transfer?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
-  const faJson = await faRes.json().catch(() => null);
+    // 4) free agents
+    const faRes = await fetch(`/api/free-agency/transfer?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
+    const faJson = await faRes.json().catch(() => null);
 
-  // Best-effort: each endpoint should return { ok: true, data: [...] }
-  const normClaims =
-  claimsRes.ok && claimsJson?.ok
-    ? (claimsJson.data ?? []).map((c: any) => ({
-        ...c,
-        leagueId: c.league_id ?? c.leagueId,
-        teamId: c.team_id ?? c.teamId,
-        addPlayerId: c.add_player_id ?? c.addPlayerId,
-        dropPlayerId: c.drop_player_id ?? c.dropPlayerId,
-        createdAtMs: c.created_at_ms ?? c.createdAtMs,
-        updatedAtMs: c.updated_at_ms ?? c.updatedAtMs,
-        processedAtMs: c.processed_at_ms ?? c.processedAtMs,
-        decidedAtMs: c.decided_at_ms ?? c.decidedAtMs,
-      }))
-    : [];
+    const normClaims =
+      claimsRes.ok && claimsJson?.ok
+        ? (claimsJson.data ?? []).map((c: any) => ({
+            ...c,
+            leagueId: c.league_id ?? c.leagueId,
+            teamId: c.team_id ?? c.teamId,
+            addPlayerId: c.add_player_id ?? c.addPlayerId,
+            dropPlayerId: c.drop_player_id ?? c.dropPlayerId,
+            createdAtMs: c.created_at_ms ?? c.createdAtMs,
+            updatedAtMs: c.updated_at_ms ?? c.updatedAtMs,
+            processedAtMs: c.processed_at_ms ?? c.processedAtMs,
+            decidedAtMs: c.decided_at_ms ?? c.decidedAtMs,
+          }))
+        : [];
 
-setTxClaims(normClaims);
-  const normTrades =
-  tradesRes.ok && tradesJson?.ok
-    ? (tradesJson.offers ?? tradesJson.data ?? []).map((t: any) => ({
-        id: t.id,
-        leagueId: t.league_id ?? t.leagueId,
-        week: t.week,
-        fromTeamId: t.from_team_id ?? t.fromTeamId,
-        toTeamId: t.to_team_id ?? t.toTeamId,
-        offerPlayerIds: t.offer_player_ids ?? t.offerPlayerIds ?? [],
-        requestPlayerIds: t.request_player_ids ?? t.requestPlayerIds ?? [],
-        note: t.note ?? "",
-        status: t.status ?? "pending",
+    const normTrades =
+      tradesRes.ok && tradesJson?.ok
+        ? (tradesJson.offers ?? tradesJson.data ?? []).map((t: any) => ({
+            id: t.id,
+            leagueId: t.league_id ?? t.leagueId,
+            week: t.week,
+            fromTeamId: t.from_team_id ?? t.fromTeamId,
+            toTeamId: t.to_team_id ?? t.toTeamId,
+            offerPlayerIds: t.offer_player_ids ?? t.offerPlayerIds ?? [],
+            requestPlayerIds: t.request_player_ids ?? t.requestPlayerIds ?? [],
+            note: t.note ?? "",
+            status: t.status ?? "pending",
+            createdAtMs: t.createdAtMs ?? (t.created_at ? toMs(t.created_at) : 0),
+            updatedAtMs: t.updatedAtMs ?? (t.updated_at ? toMs(t.updated_at) : 0),
+            acceptedAtMs: t.acceptedAtMs ?? (t.accepted_at ? toMs(t.accepted_at) : null),
+            decidedAtMs: t.decidedAtMs ?? (t.decided_at ? toMs(t.decided_at) : null),
+          }))
+        : [];
 
-        // timestamps -> ms for your sorting/filters
-        createdAtMs: t.createdAtMs ?? (t.created_at ? toMs(t.created_at) : 0),
-        updatedAtMs: t.updatedAtMs ?? (t.updated_at ? toMs(t.updated_at) : 0),
-        acceptedAtMs: t.acceptedAtMs ?? (t.accepted_at ? toMs(t.accepted_at) : null),
-        decidedAtMs: t.decidedAtMs ?? (t.decided_at ? toMs(t.decided_at) : null),
-      }))
-    : [];
+    const normFA =
+      faRes.ok && faJson?.ok
+        ? (faJson.data ?? []).map((x: any) => ({
+            ...x,
+            leagueId: x.league_id ?? x.leagueId,
+            teamId: x.team_id ?? x.teamId,
+            addPlayerId: x.add_player_id ?? x.addPlayerId,
+            dropPlayerId: x.drop_player_id ?? x.dropPlayerId,
+            createdAtMs: x.created_at_ms ?? x.createdAtMs,
+            updatedAtMs: x.updated_at_ms ?? x.updatedAtMs,
+          }))
+        : [];
 
-setTxTrades(normTrades);
+    setTxClaims(normClaims);
+    setTxTrades(normTrades);
+    setTxDropLocks(locksRes.ok && locksJson?.ok ? (locksJson.data ?? []) : []);
+    setTxFreeAgents(normFA);
+  } catch (err) {
+    console.warn("[transactions] refreshTransactionsForLeague failed:", err);
 
-  setTxDropLocks(locksRes.ok && locksJson?.ok ? (locksJson.data ?? []) : []);
-  const normFA =
-  faRes.ok && faJson?.ok
-    ? (faJson.data ?? []).map((x: any) => ({
-        ...x,
-        leagueId: x.league_id ?? x.leagueId,
-        teamId: x.team_id ?? x.teamId,
-        addPlayerId: x.add_player_id ?? x.addPlayerId,
-        dropPlayerId: x.drop_player_id ?? x.dropPlayerId,
-        createdAtMs: x.created_at_ms ?? x.createdAtMs,
-        updatedAtMs: x.updated_at_ms ?? x.updatedAtMs,
-      }))
-    : [];
-
-setTxFreeAgents(normFA);
-  setTxLoaded(true);
+    // failsafe: don't leave the UI stuck
+    setTxClaims([]);
+    setTxTrades([]);
+    setTxDropLocks([]);
+    setTxFreeAgents([]);
+  } finally {
+    // ✅ the “one extra failsafe code”
+    setTxLoaded(true);
+  }
 }
 
 async function apiAcceptTrade(tradeId: string) {

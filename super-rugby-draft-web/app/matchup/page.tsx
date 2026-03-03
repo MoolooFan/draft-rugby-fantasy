@@ -405,7 +405,7 @@ export default function MatchupPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [cardOpen, setCardOpen] = useState(false);
 const [pointsOpen, setPointsOpen] = useState(false);
-
+const [watchlistSet, setWatchlistSet] = useState<Set<string>>(new Set());
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -438,6 +438,32 @@ type SheetFixtureRow = {
 };
 
 const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
+
+useEffect(() => {
+  if (!activeLeague?.id) return;
+  if (typeof window === "undefined") return;
+
+  fetch(`/api/watchlist?leagueId=${encodeURIComponent(activeLeague.id)}`, {
+    cache: "no-store",
+    credentials: "include",
+  })
+    .then((r) => r.json())
+    .then((j) => {
+      if (!j?.ok) {
+        console.error("watchlist GET failed", j?.error);
+        setWatchlistSet(new Set());
+        return;
+      }
+      const ids = Array.isArray(j.data) ? j.data : [];
+      setWatchlistSet(new Set(ids.map((x: any) => normaliseId(x))));
+    })
+    .catch((e) => console.error("watchlist GET error", e));
+}, [activeLeague?.id]);
+
+const selectedIsWatched = useMemo(() => {
+  if (!selectedPlayer?.id) return false;
+  return watchlistSet.has(normaliseId(selectedPlayer.id));
+}, [watchlistSet, selectedPlayer?.id]);
 
 useEffect(() => {
   if (!activeLeague?.id) return;
@@ -638,6 +664,8 @@ const getLivePlayerById = useDraftStore((s) => (s as any).getLivePlayerById ?? n
       ?? activeLeague?.teams.find((t) => t.id === id)?.name
       ?? "TBC";
   };
+
+
 
   // --- Determine "current week" and deadline from fixtures JSON ---
   const fixtures = useMemo(() => fixturesData as AnyFixture[], []);
@@ -966,6 +994,58 @@ type RosterApiRow = { team_id: string; data: any };
 
 const [rosterByTeamId, setRosterByTeamId] = useState<Map<string, any>>(new Map());
 const [selectionByTeamId, setSelectionByTeamId] = useState<Map<string, any>>(new Map());
+
+  // -----------------------
+// OWNER LOOKUP (from rosters table you already fetched)
+// -----------------------
+function rosterContainsPlayer(roster: any, playerId: string) {
+  if (!roster || !playerId) return false;
+
+  // 1) if roster already looks like a lineup
+  if (typeof roster === "object") {
+    // slots arrays
+    const slots = roster.slots ?? roster.data?.slots ?? null;
+    if (slots && typeof slots === "object") {
+      for (const v of Object.values(slots)) {
+        if (Array.isArray(v) && v.some((p: any) => String(p?.id ?? "") === playerId)) return true;
+      }
+    }
+
+    // wildcards array
+    const wild = roster.wildcards ?? roster.data?.wildcards ?? null;
+    if (Array.isArray(wild) && wild.some((p: any) => String(p?.id ?? "") === playerId)) return true;
+
+    // lineup-style keys
+    for (const v of Object.values(roster)) {
+      if (v && typeof v === "object" && String((v as any)?.id ?? "") === playerId) return true;
+    }
+
+    // nested lineup
+    const lineup = roster.lineup ?? roster.data?.lineup ?? null;
+    if (lineup && typeof lineup === "object") {
+      for (const v of Object.values(lineup)) {
+        if (v && typeof v === "object" && String((v as any)?.id ?? "") === playerId) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+const ownerTeamIdForSelected = useMemo(() => {
+  if (!selectedPlayer?.id) return null;
+
+  for (const [teamId, roster] of rosterByTeamId.entries()) {
+    if (rosterContainsPlayer(roster, selectedPlayer.id)) return teamId;
+  }
+  return null;
+}, [selectedPlayer?.id, rosterByTeamId]);
+
+const ownerTeamLabelForSelected = useMemo(() => {
+  if (!selectedPlayer?.id) return "";
+  if (!ownerTeamIdForSelected) return "Free Agent";
+  return nameByTeamId(ownerTeamIdForSelected);
+}, [selectedPlayer?.id, ownerTeamIdForSelected, draftTeams, activeLeague?.teams]);
 
 useEffect(() => {
   if (!leagueId) return;
@@ -1415,7 +1495,109 @@ for (const t of activeLeague.teams) {
   setScoresLockedTick((x) => x + 1);
 }
 
+async function addSelectedToWatchlist() {
+  if (!activeLeague?.id) {
+    alert("No active league.");
+    return;
+  }
+  if (!selectedPlayer?.id) return;
 
+  const payload = { leagueId: activeLeague.id, playerId: selectedPlayer.id };
+
+  const res = await fetch("/api/watchlist", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j?.ok) {
+    console.error("watchlist POST failed", j?.error);
+    alert("Failed to add to watchlist.");
+    return;
+  }
+
+  setWatchlistSet((prev) => {
+    const next = new Set(prev);
+    next.add(normaliseId(selectedPlayer.id));
+    return next;
+  });
+}
+
+async function removeSelectedFromWatchlist() {
+  if (!activeLeague?.id) {
+    alert("No active league.");
+    return;
+  }
+  if (!selectedPlayer?.id) return;
+
+  const qs = new URLSearchParams();
+  qs.set("leagueId", activeLeague.id);
+  qs.set("playerId", selectedPlayer.id);
+
+  const res = await fetch(`/api/watchlist?${qs.toString()}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j?.ok) {
+    console.error("watchlist DELETE failed", j?.error);
+    alert("Failed to remove from watchlist.");
+    return;
+  }
+
+  setWatchlistSet((prev) => {
+    const next = new Set(prev);
+    next.delete(normaliseId(selectedPlayer.id));
+    return next;
+  });
+}
+
+function goToTradeWithSelected(e?: any) {
+  if (e?.preventDefault) e.preventDefault();
+  if (e?.stopPropagation) e.stopPropagation();
+
+  const pid = selectedPlayer?.id;
+  if (!pid) return;
+
+  // Your team must exist (trade page refuses to guess)
+  if (!yourLeagueTeamId) {
+    alert("Could not determine your team.");
+    return;
+  }
+
+  // ✅ In Matchup, the “partner” is the team you’re requesting the player FROM.
+  // Since the player was clicked from a specific side, we can trust that side’s teamId.
+  const ownerTeamId =
+    selectedSide === "left" ? leftTeamId : rightTeamId;
+
+  if (!ownerTeamId) {
+    alert("Could not determine the owning team for this player.");
+    return;
+  }
+
+  // Don’t allow trading with yourself (just in case)
+  if (ownerTeamId === yourLeagueTeamId) {
+    alert("You can’t trade for your own player.");
+    return;
+  }
+
+  setCardOpen(false);
+
+  // Optional but useful: make the X button return to this exact matchup page
+  const returnTo =
+    typeof window !== "undefined"
+      ? window.location.pathname + window.location.search
+      : "";
+
+  const qs = new URLSearchParams();
+  qs.set("partnerTeamId", ownerTeamId);
+  qs.set("prefillRequestPlayerId", pid);
+  if (returnTo) qs.set("returnTo", returnTo);
+
+  router.push(`/trade/propose?${qs.toString()}`, { scroll: false });
+}
 
 // Effective captain (vice activates if captain not playing)
 const leftEffC = effectiveCaptainId(effectiveLeftLineup, leftC, leftV);
@@ -2368,9 +2550,27 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
     onClose={() => setCardOpen(false)}
     player={selectedPlayerForCard}
     stats={selectedStats ?? {}}
-    teamLabel=""
+
+    // ✅ show owner team like dashboard
+    teamLabel={ownerTeamLabelForSelected}
+
     initialTab="Stats"
-    actions={[]}
+
+    // ✅ only show these actions for players NOT owned by you
+    actions={
+  selectedOwned
+    ? []
+    : [
+        {
+          label: selectedIsWatched ? "Remove from Watchlist" : "Add to Watchlist",
+onClick: selectedIsWatched ? removeSelectedFromWatchlist : addSelectedToWatchlist,
+          variant: "secondary",
+        },
+        { label: "Trade", onClick: goToTradeWithSelected, variant: "primary" },
+      ]
+}
+
+    // ✅ hide footer actions for owned players only
     hideActions={selectedOwned}
   />
 ) : null}

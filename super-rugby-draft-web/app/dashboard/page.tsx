@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { PlayerCardModal } from "@/components/PlayerCardModal";
+import { PlayerCardModal, type PlayerStatus } from "@/components/PlayerCardModal";
 import { AppMenu } from "@/components/AppMenu";
 import { useLeagueStore } from "@/lib/league/store";
 import type { League } from "@/lib/league/types";
@@ -374,6 +374,7 @@ function getFormLast3Avg(playerId: string, roundRows: any[]): number | null {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const [modal, setModal] = useState<Modal>(null);
 
     // ✅ keep league + draft store hydrated (same idea as Draft Room)
   const refreshLeague = useLeagueStore((s) => s.refreshLeague);
@@ -492,7 +493,7 @@ const userId = useMemo(() => getActiveUsername(), []);
 // Draft teams for name lookup (same as Matchup)
 const draftTeams = useDraftStore((s) => s.teams ?? EMPTY_ARR);
 
-const nameByTeamId = (id: string | null) => {
+const nameByTeamId = React.useCallback((id: string | null) => {
   if (!id) return "BYE";
 
   const dt = Array.isArray(draftTeams) ? draftTeams : [];
@@ -503,7 +504,7 @@ const nameByTeamId = (id: string | null) => {
     lt.find((t: any) => t.id === id)?.name ??
     "TBC"
   );
-};
+}, [draftTeams, activeLeague?.teams]);
 
 // Sheet fixtures (league matchups / results)
 const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
@@ -844,6 +845,76 @@ const rosteredIds = useMemo(() => {
   return ids;
 }, [rosterByTeamId]);
 
+  function collectPlayerIdsFromRoster(raw: any): Set<string> {
+  const out = new Set<string>();
+
+  // preferred: slot-lineup shape
+  const lineup =
+    rosterDataToLineup(raw) ??
+    rosterDataToLineup(raw?.data) ??
+    rosterDataToLineup(raw?.lineup) ??
+    null;
+
+  if (lineup) {
+    for (const p of Object.values(lineup) as any[]) {
+      if (p?.id) out.add(normaliseId(p.id));
+    }
+    return out;
+  }
+
+  // fallback: deep scan any other structure
+  collectPlayerIdsDeep(raw, out);
+  return out;
+}
+
+const ownerTeamIdByPlayerId = useMemo(() => {
+  const m = new Map<string, string>(); // pidLower -> teamId
+
+  for (const [teamId, rawRoster] of rosterByTeamId.entries()) {
+    const ids = collectPlayerIdsFromRoster(rawRoster);
+    for (const pidLower of ids) {
+      if (!m.has(pidLower)) m.set(pidLower, String(teamId));
+    }
+  }
+
+  return m;
+}, [rosterByTeamId]);
+
+
+const modalStatus = useMemo<PlayerStatus | undefined>(() => {
+  if (modal?.type !== "playerCard") return undefined;
+
+  const meta = findPlayerMetaById(allPlayers as any[], modal.player.id);
+  const raw =
+    meta?.status ??
+    meta?.Status ??
+    meta?.playerStatus ??
+    meta?.["Player Status"] ??
+    "";
+
+  const text = String(raw ?? "").trim();
+  if (!text) return null;
+
+  const sl = text.toLowerCase();
+  if (sl === "starting") return "starting";
+  if (sl === "benched") return "benched";
+
+  // IMPORTANT:
+  // For ANY other text (e.g. "Hamstring", "Suspended"), do NOT force "out" here.
+  // Pass null so PlayerCardModal uses its own sheet status + outReason (full text).
+  return null;
+}, [modal, allPlayers]);
+
+const modalTeamLabel = useMemo(() => {
+  if (modal?.type !== "playerCard") return "Available";
+
+  const pidLower = normaliseId(modal.player.id);
+  const ownerTeamId = ownerTeamIdByPlayerId.get(pidLower) ?? null;
+
+  if (!ownerTeamId) return "Available";
+  return nameByTeamId(ownerTeamId);
+}, [modal, ownerTeamIdByPlayerId, nameByTeamId]);
+
 useEffect(() => {
   if (!leagueId) return;
   if (displayWeek <= 0) return;
@@ -1093,7 +1164,7 @@ const effectiveDashState: DashboardState = activeLeague ? "postDraft" : "noLeagu
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>("Dashboard");
 
-  const [modal, setModal] = useState<Modal>(null);
+  
 
   // -----------------------
   // Mock / placeholder data
@@ -2238,6 +2309,8 @@ function JerseyTile({
     );
   }
 
+
+
   // -----------------------
   // Popups (keep Add Player here for now)
   // -----------------------
@@ -2460,8 +2533,8 @@ function JerseyTile({
             posName: modal.player.posName,
             teamCode: modal.player.teamCode,
           }}
-          status={"starting"} // later: starting/benched/out/null
-          teamLabel={currentTeam}
+          status={modalStatus}
+teamLabel={modalTeamLabel}
           actions={[
   {
   label: isWatched(modal.player.id) ? "Remove from Watchlist" : "Add to Watchlist",
