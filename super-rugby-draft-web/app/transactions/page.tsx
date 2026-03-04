@@ -977,6 +977,8 @@ const [txClaims, setTxClaims] = useState<any[]>([]);
 const [txTrades, setTxTrades] = useState<any[]>([]);
 const [txDropLocks, setTxDropLocks] = useState<any[]>([]);
 const [txFreeAgents, setTxFreeAgents] = useState<any[]>([]);
+const [waiverOrderLoaded, setWaiverOrderLoaded] = useState(false);
+const [waiverOrderRows, setWaiverOrderRows] = useState<Array<{ teamId: string; rank: number }>>([]);
 
 // ✅ single source of truth for ownership checks
 const rostersForOwnership = useMemo(() => {
@@ -1085,6 +1087,53 @@ if (!leagueId) return;
     cancelled = true;
   };
 }, [activeLeague?.id]);
+
+useEffect(() => {
+  const leagueId = String(activeLeague?.id ?? "");
+  if (!leagueId) return;
+
+  let cancelled = false;
+
+  (async () => {
+    setWaiverOrderLoaded(false);
+
+    try {
+      const res = await fetch(
+        `/api/waivers/order?leagueId=${encodeURIComponent(leagueId)}&week=${encodeURIComponent(String(selectionWeek))}`,
+        { cache: "no-store" }
+      );
+
+      const json = await res.json().catch(() => null);
+      if (cancelled) return;
+
+      if (res.ok && json?.ok && Array.isArray(json.data)) {
+        // json.data is [{ teamId, rank }, ...] sorted by rank ASC
+        setWaiverOrderRows(
+          (json.data ?? []).map((r: any) => ({
+            teamId: String(r.teamId),
+            rank: Number(r.rank),
+          }))
+        );
+      } else {
+        setWaiverOrderRows([]);
+      }
+    } catch {
+      if (!cancelled) setWaiverOrderRows([]);
+    } finally {
+      if (!cancelled) setWaiverOrderLoaded(true);
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, [activeLeague?.id, selectionWeek]);
+
+const waiverOrderIndexByTeamId = useMemo(() => {
+  const m = new Map<string, number>();
+  (waiverOrderRows ?? []).forEach((r) => m.set(String(r.teamId), Number(r.rank) - 1)); // rank 1 => index 0
+  return m;
+}, [waiverOrderRows]);
 
 function closeConfirm() {
   setConfirmOpen(false);
@@ -3352,6 +3401,9 @@ const dropP = allPlayers.find((x) => x.id === c.dropPlayerId) ?? null;
     </div>
   );
 }
+
+const yourWaiverRank = waiverOrderIndexByTeamId.get(String(yourId));
+const yourWaiverRankText = typeof yourWaiverRank === "number" ? `#${yourWaiverRank + 1}` : "—";
 // ---------- helpers (MOVE UP HERE) ----------
 const teamById = (activeLeague?.teams ?? []).reduce((acc: any, t: any) => {
   acc[t.id] = t;
@@ -3565,11 +3617,19 @@ function LeagueTradeRow({ t }: { t: any }) {
 
       .slice()
       .sort((a, b) => {
-        const ap = typeof a.priority === "number" ? a.priority : 9999;
-        const bp = typeof b.priority === "number" ? b.priority : 9999;
-        if (ap !== bp) return ap - bp;
-        return (a.createdAtMs ?? 0) - (b.createdAtMs ?? 0);
-      });
+  // 1) waiver processing order (team priority)
+  const ai = waiverOrderIndexByTeamId.get(String(a.teamId)) ?? 9999;
+  const bi = waiverOrderIndexByTeamId.get(String(b.teamId)) ?? 9999;
+  if (ai !== bi) return ai - bi;
+
+  // 2) within-team claim priority
+  const ap = typeof a.priority === "number" ? a.priority : 9999;
+  const bp = typeof b.priority === "number" ? b.priority : 9999;
+  if (ap !== bp) return ap - bp;
+
+  // 3) stable tie-break
+  return (a.createdAtMs ?? 0) - (b.createdAtMs ?? 0);
+});
 
     // ---------- Free agent transfers feed (latest free agency period) ----------
     const freeAgentFeed = (freeForUi as any[])
@@ -3828,7 +3888,9 @@ const text =
         {/* Waiver Claims from most recent waiver deadline */}
         <div style={{ ...listBox, marginTop: 10 }}>
           <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 900 }}>Waiver Claims</div>
-          
+          <div style={{ padding: "0 10px 10px", fontSize: 10, fontWeight: 900, opacity: 0.7 }}>
+  Your waiver priority: {waiverOrderLoaded ? yourWaiverRankText : "Loading…"}
+</div>
 
           {waiverClaimsFeed.length === 0 ? (
             <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 800, opacity: 0.7 }}>None.</div>

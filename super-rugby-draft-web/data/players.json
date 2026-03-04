@@ -5419,7 +5419,7 @@
   },
   {
     "id": "V.Lasaqa",
-    "firstName": "Viveni",
+    "firstName": "Veveni",
     "lastName": "Lasaqa",
     "teamCode": "HIG",
     "posAbbrev": "LF",
@@ -9750,8 +9750,8 @@
     "teamCode": "CRU",
     "posAbbrev": "FH",
     "posName": "Flyhalf",
-    "secondaryPosAbbrev": "",
-    "secondaryPosName": "",
+    "secondaryPosAbbrev": "OB",
+    "secondaryPosName": "Outside Back",
     "draftRank": 233,
     "status": "Benched",
     "stats": {
@@ -17808,7 +17808,7 @@
     }
   },
   {
-    "id": "C.Haloholo",
+    "id": "C.Halaholo",
     "firstName": "Clem",
     "lastName": "Halaholo",
     "teamCode": "WAR",
