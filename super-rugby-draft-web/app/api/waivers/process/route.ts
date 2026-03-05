@@ -224,13 +224,21 @@ while (madeProgress) {
 }
 
       // apply add/drop to roster (playerIds truth)
-      const roster = structuredClone(rosterByTeam.get(teamId) ?? { playerIds: [] });
-      const ids = new Set(extractIds(roster));
+// IMPORTANT: do NOT preserve slots/wildcards in DB (they go stale)
+const roster = structuredClone(rosterByTeam.get(teamId) ?? { playerIds: [] });
 
-      if (dropId) ids.delete(dropId);
-      ids.add(addId);
+// Only use playerIds array as the source of truth here.
+// If old data might not have playerIds, fall back to extractIds.
+const baseIds = Array.isArray((roster as any)?.playerIds)
+  ? (roster as any).playerIds.map((x: any) => String(x)).filter(Boolean)
+  : extractIds(roster);
 
-      const nextRoster = { ...roster, playerIds: Array.from(ids) };
+const ids = new Set(baseIds);
+
+if (dropId) ids.delete(dropId);
+ids.add(addId);
+
+const nextRoster = { playerIds: Array.from(ids) };
 
       const { error: rosterUpsertErr } = await supabaseAdmin
   .from("rosters")

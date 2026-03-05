@@ -180,7 +180,9 @@ export async function POST(req: Request) {
       return recordFailed("ROSTER_VALIDATION_FAILED", { validationError: built.error });
     }
 
-    const nextRoster = { ...roster, playerIds: built.nextIds };
+    // IMPORTANT: rosters DB should be authoritative by playerIds only.
+// Do NOT persist slots/wildcards here (they go stale and never remove players).
+const nextRoster = { playerIds: built.nextIds };
 
     
 

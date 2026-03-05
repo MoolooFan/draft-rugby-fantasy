@@ -6,17 +6,18 @@ import { normalizeLeagueId } from "@/lib/ids";
 const norm = (s: string) => s.trim().toLowerCase();
 
 function derivePlayerIdsFromRosterData(data: any): string[] {
-  const ids: string[] = [];
-
-  // legacy shape
+  // ✅ Canonical: if playerIds exists, trust it (waivers/free agency updates this)
   if (Array.isArray(data?.playerIds)) {
-    for (const x of data.playerIds) {
-      const s = String(x ?? "").trim();
-      if (s) ids.push(s);
-    }
+    const seen = new Set<string>();
+    return data.playerIds
+      .map((x: any) => String(x ?? "").trim())
+      .filter((id: string) => id.length > 0)
+      .filter((id: string) => (seen.has(id) ? false : (seen.add(id), true)));
   }
 
-  // canonical shape
+  // Legacy fallback: derive from slots + wildcards only if playerIds is missing
+  const ids: string[] = [];
+
   const slots = data?.slots;
   if (slots && typeof slots === "object") {
     for (const arr of Object.values(slots)) {
@@ -36,7 +37,6 @@ function derivePlayerIdsFromRosterData(data: any): string[] {
     }
   }
 
-  // unique preserve order
   const seen = new Set<string>();
   return ids.filter((id) => (seen.has(id) ? false : (seen.add(id), true)));
 }
@@ -143,7 +143,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
   }
 
-  const playerIds = derivePlayerIdsFromRosterData(data);
+  // ✅ Preserve canonical playerIds if caller provided them.
+// Only derive from slots/wildcards if playerIds is missing.
+const existing = Array.isArray((data as any)?.playerIds)
+  ? (data as any).playerIds.map((x: any) => String(x ?? "").trim()).filter(Boolean)
+  : [];
+
+const playerIds = existing.length ? existing : derivePlayerIdsFromRosterData(data);
 const dataToSave = { ...(data ?? {}), playerIds };
 
   const { error } = await supabaseAdmin
