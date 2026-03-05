@@ -81,12 +81,18 @@ export async function GET(req: Request) {
 
   const fixed = (data ?? []).map((row) => {
   const d = row.data ?? {};
-  const derived = derivePlayerIdsFromRosterData(d);
 
-  // if playerIds missing or wrong length, overwrite in response
+  const existing = Array.isArray((d as any).playerIds)
+    ? (d as any).playerIds.map((x: any) => String(x ?? "").trim()).filter(Boolean)
+    : [];
+
+  // Only derive if playerIds is missing/empty.
+  // IMPORTANT: do NOT overwrite valid playerIds coming from waivers/free agency.
+  const playerIds = existing.length ? existing : derivePlayerIdsFromRosterData(d);
+
   return {
     ...row,
-    data: { ...d, playerIds: derived },
+    data: { ...d, playerIds },
   };
 });
 

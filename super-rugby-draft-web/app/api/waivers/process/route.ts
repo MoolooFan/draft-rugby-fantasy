@@ -15,29 +15,19 @@ function extractIds(data: any): string[] {
 }
 
 async function getWaiverTeamOrder(leagueId: string, week: number): Promise<string[]> {
-  // Try to read from waiver_order table (you said you ran SQL for it)
+  // waiver_order is one row per team (league_id, week, team_id, rank)
   const { data, error } = await supabaseAdmin
     .from("waiver_order")
-    .select("*")
+    .select("team_id, rank")
     .eq("league_id", leagueId)
     .eq("week", week)
-    .maybeSingle();
+    .order("rank", { ascending: true });
 
   if (error) throw error;
-  if (!data) return [];
 
-  // Be flexible about column names (since we haven’t seen the SQL)
-  const maybe =
-    (data as any).team_ids ??
-    (data as any).teamIds ??
-    (data as any).order ??
-    (data as any).order_team_ids ??
-    (data as any).data?.teamIds ??
-    (data as any).data?.team_ids;
-
-  if (Array.isArray(maybe)) return maybe.map(String).filter(Boolean);
-
-  return [];
+  return (data ?? [])
+    .map((r: any) => String(r.team_id))
+    .filter(Boolean);
 }
 
 export async function POST(req: Request) {
