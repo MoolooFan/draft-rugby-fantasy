@@ -86,13 +86,20 @@ export async function GET(req: Request) {
     ? (d as any).playerIds.map((x: any) => String(x ?? "").trim()).filter(Boolean)
     : [];
 
-  // Only derive if playerIds is missing/empty.
-  // IMPORTANT: do NOT overwrite valid playerIds coming from waivers/free agency.
+  // Canonical: prefer playerIds (waivers/free agency update this)
   const playerIds = existing.length ? existing : derivePlayerIdsFromRosterData(d);
 
+  // IMPORTANT:
+  // slots/wildcards often contain stale embedded player objects.
+  // Clearing them forces the frontend to rely on playerIds (truth).
   return {
     ...row,
-    data: { ...d, playerIds },
+    data: {
+      ...d,
+      playerIds,
+      slots: {},       // ✅ prevent stale squad from being shown
+      wildcards: [],   // ✅ prevent stale squad from being shown
+    },
   };
 });
 
