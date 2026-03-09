@@ -126,28 +126,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Missing leagueId/week" }, { status: 400 });
     }
 
-    const auth = await requireLeagueTeam(leagueId);
-
-    const { data: league, error: leagueErr } = await supabaseAdmin
-      .from("leagues")
-      .select("id, creator_id")
-      .eq("id", leagueId)
-      .maybeSingle();
-
-    if (leagueErr) throw leagueErr;
-    if (!league) {
-      return NextResponse.json({ ok: false, error: "League not found" }, { status: 404 });
-    }
-
-    const requesterTeamId = String(auth.teamId ?? "");
-    const isCreator =
-      requesterTeamId &&
-      String(league.creator_id ?? "") &&
-      requesterTeamId === String(league.creator_id);
-
-    if (!isCreator) {
-      return NextResponse.json({ ok: false, error: "Only the league creator can finalize matchups." }, { status: 403 });
-    }
+    await requireLeagueTeam(leagueId);
 
     const { data: rows, error: tsErr } = await supabaseAdmin
       .from("team_selections")
