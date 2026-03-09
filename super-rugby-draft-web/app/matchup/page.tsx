@@ -1326,6 +1326,11 @@ const srWeekComplete = useMemo(() => {
   return wk.length ? wk.every(isFixtureComplete) : false;
 }, [normalizedFixtures, displayRealRound]);
 
+const scoresLockAvailable = useMemo(() => {
+  if (!deadlineMs) return false;
+  return nowMs >= deadlineMs + 2 * 24 * 60 * 60 * 1000; // 2 days after selection deadline
+}, [nowMs, deadlineMs]);
+
 // Captain multiplier (for display + totals)
 const CAP_MULT = 2;
 
@@ -1450,6 +1455,11 @@ function lockScoresAndFinalize() {
   // must be locked week (deadline passed)
   if (!displayLocked) {
     alert("Deadline not passed yet — lineups aren’t locked.");
+    return;
+  }
+
+    if (!scoresLockAvailable) {
+    alert("Scores can only be locked 2 days after the team selection deadline.");
     return;
   }
 
@@ -2461,22 +2471,22 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 {isLeagueCreator && displayWeek > 0 ? (
   <div style={{ marginTop: 12, ...listBox, padding: 10 }}>
     <button
-      onClick={lockScoresAndFinalize}
-      disabled={scoresLocked || !displayLocked || !srWeekComplete}
-      style={{
-        width: "100%",
-        border: "none",
-        borderRadius: 12,
-        padding: "12px 14px",
-        fontSize: 14,
-        fontWeight: 950,
-        cursor: scoresLocked || !displayLocked ? "not-allowed" : "pointer",
-        background: scoresLocked ? "rgba(15,23,42,0.15)" : "rgba(15,23,42,0.95)",
-        color: scoresLocked ? "rgba(15,23,42,0.6)" : "white",
-      }}
-    >
-      {scoresLocked ? "Scores locked • Auto-subs applied" : "Lock scores & run auto-subs"}
-    </button>
+  onClick={lockScoresAndFinalize}
+  disabled={scoresLocked || !displayLocked || !scoresLockAvailable}
+  style={{
+    width: "100%",
+    border: "none",
+    borderRadius: 12,
+    padding: "12px 14px",
+    fontSize: 14,
+    fontWeight: 950,
+    cursor: scoresLocked || !displayLocked || !scoresLockAvailable ? "not-allowed" : "pointer",
+    background: scoresLocked ? "rgba(15,23,42,0.15)" : "rgba(15,23,42,0.95)",
+    color: scoresLocked ? "rgba(15,23,42,0.6)" : "white",
+  }}
+>
+  {scoresLocked ? "Scores locked • Auto-subs applied" : "Lock scores & run auto-subs"}
+</button>
 
     {/* ✅ SECOND BUTTON GOES EXACTLY HERE */}
     {scoresLocked ? (
@@ -2525,9 +2535,9 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
       </div>
     ) : null}
 
-    {!srWeekComplete ? (
+    {displayLocked && !scoresLockAvailable ? (
   <div style={{ marginTop: 8, fontSize: 12, fontWeight: 800, opacity: 0.7 }}>
-    Round isn’t complete yet — wait until all matches are final before locking scores.
+    Scores can be locked 2 days after the team selection deadline.
   </div>
 ) : null}
 
