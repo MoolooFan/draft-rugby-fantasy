@@ -900,25 +900,6 @@ const SLOT_GROUP: Record<SlotId, PosGroup> = {
   bench5: "WC",
 };
 
-function canPlayerFitGroup(player: Player, group: PosGroup) {
-  if (group === "WC") return true;
-
-  const primary = (player.posAbbrev ?? "").toUpperCase();
-  const secondary = (player.secondaryPosAbbrev ?? "").toUpperCase();
-  const either = (fn: (p: string) => boolean) => fn(primary) || fn(secondary);
-
-  if (group === "PROP") return either((p) => p.includes("PROP") || p === "PR");
-  if (group === "HOOKER") return either((p) => p.includes("HOOK") || p === "HO");
-  if (group === "LOCK") return either((p) => p.includes("LOCK") || p === "LK");
-  if (group === "LOOSE") return either((p) => p.includes("LOOSE") || p === "LF");
-  if (group === "HB") return either((p) => p.includes("HALF") || p === "HB");
-  if (group === "FH") return either((p) => p.includes("FLY") || p === "FH");
-  if (group === "CENTRE") return either((p) => p.includes("CENTRE") || p === "CE");
-  if (group === "OB") return either((p) => p.includes("OUT") || p.includes("BACK") || p === "OB");
-
-  return false;
-}
-
 const STARTER_SLOTS: SlotId[] = [
   "prop1","hooker1","prop2",
   "lock1","lock2",
@@ -930,36 +911,74 @@ const STARTER_SLOTS: SlotId[] = [
 
 const BENCH_SLOTS: SlotId[] = ["bench1","bench2","bench3","bench4","bench5"];
 
+function playerCanCoverGroup(player: Player | null, group: PosGroup) {
+  if (!player) return false;
+  if (group === "WC") return true;
+
+  const a = String(player.posAbbrev ?? "").toUpperCase();
+  const b = String(player.secondaryPosAbbrev ?? "").toUpperCase();
+
+  if (group === "PROP") return a === "PR" || b === "PR";
+  if (group === "HOOKER") return a === "HO" || b === "HO";
+  if (group === "LOCK") return a === "LK" || b === "LK";
+  if (group === "LOOSE") return a === "LF" || b === "LF";
+  if (group === "HB") return a === "HB" || b === "HB";
+  if (group === "FH") return a === "FH" || b === "FH";
+  if (group === "CENTRE") return a === "CE" || b === "CE";
+  if (group === "OB") return a === "OB" || b === "OB";
+
+  return false;
+}
+
+function starterGroupsStillValid(lineup: Lineup) {
+  for (const starterSlot of STARTER_SLOTS) {
+    const p = lineup[starterSlot];
+    const group = SLOT_GROUP[starterSlot];
+    if (!p) return false;
+    if (!playerCanCoverGroup(p, group)) return false;
+  }
+  return true;
+}
+
 function applyAutoSubs(base: Lineup) {
   const next: Lineup = { ...base };
 
-  // find starters that "did not play" (0 points)
   const startersNeedingHelp = () =>
     STARTER_SLOTS.filter((sid) => {
       const p = next[sid];
       if (!p?.id) return false;
-      return minutesForPlayer(p) <= 0;
+      return pointsForPlayer(p) === 0;
     });
 
   for (const benchSlot of BENCH_SLOTS) {
     const benchPlayer = next[benchSlot];
     if (!benchPlayer?.id) continue;
 
-    // bench player must have played (>0)
-    if (minutesForPlayer(benchPlayer) <= 0) continue;
+    // bench player must have actually scored
+    if (pointsForPlayer(benchPlayer) <= 0) continue;
 
-    // try to sub them in for the first eligible 0-point starter
     const candidates = startersNeedingHelp();
-    const targetStarter = candidates.find((starterSlot) => {
-      const group = SLOT_GROUP[starterSlot];
-      return canPlayerFitGroup(benchPlayer, group);
-    });
 
-    if (!targetStarter) continue;
+    let chosenStarter: SlotId | null = null;
 
-    // swap bench -> starter
-    const starterPlayer = next[targetStarter];
-    next[targetStarter] = benchPlayer;
+    for (const starterSlot of candidates) {
+      const starterPlayer = next[starterSlot];
+      if (!starterPlayer) continue;
+
+      const trial: Lineup = { ...next };
+      trial[starterSlot] = benchPlayer;
+      trial[benchSlot] = starterPlayer;
+
+      if (starterGroupsStillValid(trial)) {
+        chosenStarter = starterSlot;
+        break;
+      }
+    }
+
+    if (!chosenStarter) continue;
+
+    const starterPlayer = next[chosenStarter];
+    next[chosenStarter] = benchPlayer;
     next[benchSlot] = starterPlayer ?? null;
   }
 
@@ -1445,64 +1464,74 @@ useEffect(() => {
 const getIsCreator = useLeagueStore((s) => s.isActiveLeagueCreator);
 const isLeagueCreator = getIsCreator();
 
-function lockScoresAndFinalize() {
+async function lockScoresAndFinalize() {
   if (typeof window === "undefined") return;
   if (!hasLeagueId) return;
   if (displayWeek <= 0) return;
   if (!activeLeague?.teams?.length) return;
   if (scoresLocked) return;
 
-  // must be locked week (deadline passed)
   if (!displayLocked) {
     alert("Deadline not passed yet — lineups aren’t locked.");
     return;
   }
 
-    if (!scoresLockAvailable) {
+  if (!scoresLockAvailable) {
     alert("Scores can only be locked 2 days after the team selection deadline.");
     return;
   }
 
-    // ✅ confirm before locking
   const ok = window.confirm(
     `Lock scores for Week ${displayWeek} (Round ${displayRealRound})?\n\n` +
-    `This will finalize auto-subs for ALL teams and cannot be undone (without a manual reset).`
+    `This will run auto-subs and overwrite the Week ${displayWeek} team selection lineups for all teams in the league.`
   );
   if (!ok) return;
 
-  // mark scores locked for the whole league/week
-  window.localStorage.setItem(scoresLockedKey(leagueId, displayWeek), "1");
+  try {
+    const payload = {
+      leagueId,
+      week: displayWeek,
+      pointsByPlayerId: Object.fromEntries(weekPointsByPlayerId.entries()),
+    };
 
-// finalize every team in the league for this week
-const missing: string[] = [];
+    const res = await fetch("/api/matchups/finalize-week", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
-for (const t of activeLeague.teams) {
-  const snap =
-    readSnapshot(t.id) ??
-    serverSelectionSnapshot(leagueId, displayWeek, t.id) ??
-    teamSelectionFallbackSnapshot(leagueId, displayWeek, t.id, mounted) ??
-    (displayWeek === selectionWeek ? rosterFallbackSnapshot(t.id) : null);
+    const json = await res.json().catch(() => null);
 
-  if (!snap?.lineup) {
-    missing.push(t.name ?? t.id);
-    continue;
-  }
+    if (!res.ok || !json?.ok) {
+      alert(json?.error ?? "Failed to finalize lineups.");
+      return;
+    }
 
-  const k = finalizedLineupKey(leagueId, displayWeek, t.id);
-  const final = applyAutoSubs(snap.lineup);
-  window.localStorage.setItem(k, JSON.stringify(final));
-}
+    // local lock flag still controls the button state in this browser
+    window.localStorage.setItem(scoresLockedKey(leagueId, displayWeek), "1");
 
-  if (missing.length) {
-    alert(
-      `Locked scores, but some teams had no locked lineup snapshot:\n\n${missing.join(
-        "\n"
-      )}`
+    // refresh selections from Supabase
+    const selRes = await fetch(
+      `/api/team-selection/get?leagueId=${encodeURIComponent(leagueId)}&week=${displayWeek}`,
+      { cache: "no-store", credentials: "include" }
     );
-  }
+    const selJson = await selRes.json().catch(() => null);
 
-  // force UI to re-read localStorage
-  setScoresLockedTick((x) => x + 1);
+    if (selRes.ok && selJson?.ok) {
+      const m = new Map<string, any>();
+      for (const row of (selJson.rows ?? [])) {
+        const tid = String(row.team_id ?? row.teamId ?? "");
+        if (tid) m.set(tid, row);
+      }
+      setSelectionByTeamId(m);
+    }
+
+    setTsTick((x) => x + 1);
+    setScoresLockedTick((x) => x + 1);
+  } catch (e) {
+    console.error(e);
+    alert("Failed to finalize lineups.");
+  }
 }
 
 async function addSelectedToWatchlist() {
