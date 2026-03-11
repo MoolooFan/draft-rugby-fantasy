@@ -1028,10 +1028,12 @@ const teamLabelFull =
     color: "#0f172a",
     position: "relative",
     zIndex: 6,
-    // ✅ keep the white section a consistent size
-    minHeight: "52svh",   // tweak this number to taste (e.g. 50–58)
+
+    // ✅ fixed white section height across all tabs
+    height: "52svh",
     display: "flex",
     flexDirection: "column",
+    overflow: "hidden",
   }}
 >
 

@@ -1020,30 +1020,50 @@ const [selectionByTeamId, setSelectionByTeamId] = useState<Map<string, any>>(new
 function rosterContainsPlayer(roster: any, playerId: string) {
   if (!roster || !playerId) return false;
 
-  // 1) if roster already looks like a lineup
+  const target = String(playerId);
+
+  const itemMatches = (x: any) => {
+    if (x == null) return false;
+    if (typeof x === "string" || typeof x === "number") return String(x) === target;
+    if (typeof x === "object") {
+      if (x.id != null && String(x.id) === target) return true;
+      if (x.playerId != null && String(x.playerId) === target) return true;
+    }
+    return false;
+  };
+
+  // 0) roster itself may rarely be an array
+  if (Array.isArray(roster)) {
+    return roster.some(itemMatches);
+  }
+
   if (typeof roster === "object") {
-    // slots arrays
+    // 1) canonical ownership shape: playerIds
+    const playerIds = roster.playerIds ?? roster.data?.playerIds ?? null;
+    if (Array.isArray(playerIds) && playerIds.some(itemMatches)) return true;
+
+    // 2) slots arrays
     const slots = roster.slots ?? roster.data?.slots ?? null;
     if (slots && typeof slots === "object") {
       for (const v of Object.values(slots)) {
-        if (Array.isArray(v) && v.some((p: any) => String(p?.id ?? "") === playerId)) return true;
+        if (Array.isArray(v) && v.some(itemMatches)) return true;
       }
     }
 
-    // wildcards array
+    // 3) wildcards array
     const wild = roster.wildcards ?? roster.data?.wildcards ?? null;
-    if (Array.isArray(wild) && wild.some((p: any) => String(p?.id ?? "") === playerId)) return true;
+    if (Array.isArray(wild) && wild.some(itemMatches)) return true;
 
-    // lineup-style keys
+    // 4) lineup-style keys directly on roster
     for (const v of Object.values(roster)) {
-      if (v && typeof v === "object" && String((v as any)?.id ?? "") === playerId) return true;
+      if (itemMatches(v)) return true;
     }
 
-    // nested lineup
+    // 5) nested lineup
     const lineup = roster.lineup ?? roster.data?.lineup ?? null;
     if (lineup && typeof lineup === "object") {
       for (const v of Object.values(lineup)) {
-        if (v && typeof v === "object" && String((v as any)?.id ?? "") === playerId) return true;
+        if (itemMatches(v)) return true;
       }
     }
   }
@@ -1062,7 +1082,7 @@ const ownerTeamIdForSelected = useMemo(() => {
 
 const ownerTeamLabelForSelected = useMemo(() => {
   if (!selectedPlayer?.id) return "";
-  if (!ownerTeamIdForSelected) return "Free Agent";
+  if (!ownerTeamIdForSelected) return "Available";
   return nameByTeamId(ownerTeamIdForSelected);
 }, [selectedPlayer?.id, ownerTeamIdForSelected, draftTeams, activeLeague?.teams]);
 

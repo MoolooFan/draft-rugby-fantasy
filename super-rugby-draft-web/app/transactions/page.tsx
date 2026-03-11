@@ -1003,16 +1003,28 @@ const ownerByPlayerId = useMemo(() => {
 
   const isPlayerOwned = (playerId: string) => ownerByPlayerId.has(playerId);
 
-  // Drop lock set (grey out add)
+    // Drop lock set (grey out add)
   const lockedUnownedSet = useMemo(() => {
     const set = new Set<string>();
-    for (const l of dropLocks as any[]) {
-      if (l.leagueId !== (activeLeague?.id ?? "")) continue;
-      if (l.lockedUntilMs <= nowMs) continue;
-      if (!isPlayerOwned(l.playerId)) set.add(l.playerId);
+
+    const source = txLoaded ? txDropLocks : (dropLocks as any[]);
+
+    for (const raw of source ?? []) {
+      const leagueId = String(raw?.league_id ?? raw?.leagueId ?? "");
+      const playerId = String(raw?.player_id ?? raw?.playerId ?? "");
+      const lockedUntilMs = Number(raw?.locked_until_ms ?? raw?.lockedUntilMs ?? 0);
+
+      if (leagueId !== String(activeLeague?.id ?? "")) continue;
+      if (!playerId) continue;
+      if (!lockedUntilMs || lockedUntilMs <= nowMs) continue;
+
+      if (!isPlayerOwned(playerId)) {
+        set.add(playerId);
+      }
     }
+
     return set;
-  }, [dropLocks, activeLeague?.id, nowMs, ownerByPlayerId]);
+  }, [txLoaded, txDropLocks, dropLocks, activeLeague?.id, nowMs, ownerByPlayerId]);
 
   // -----------------------
   // Tabs + Modal
@@ -1361,10 +1373,11 @@ const [infoMode, setInfoMode] = useState<InfoMode>("TOTAL_PTS");
   // =========================
   type TxProposeMode = "WAIVER" | "FREE_AGENCY";
 
-  const [dropModalOpen, setDropModalOpen] = useState(false);
+    const [dropModalOpen, setDropModalOpen] = useState(false);
   const [proposeMode, setProposeMode] = useState<TxProposeMode>("WAIVER");
   const [proposedAddPlayer, setProposedAddPlayer] = useState<Player | null>(null);
   const [selectedDropPlayerId, setSelectedDropPlayerId] = useState<string | null>(null);
+  const [submittingProposedTransaction, setSubmittingProposedTransaction] = useState(false);
 
   function fullTeamName(teamCode: string) {
   return teamLabel(teamCode);
@@ -1564,10 +1577,11 @@ setDropModalOpen(true);
   }
 
 
-  function closeDropModal() {
+    function closeDropModal() {
     setDropModalOpen(false);
     setProposedAddPlayer(null);
     setSelectedDropPlayerId(null);
+    setSubmittingProposedTransaction(false);
   }
 
 async function refreshTransactionsForLeague(leagueId: string) {
@@ -1722,10 +1736,12 @@ useEffect(() => {
 }, [activeLeague?.id]);
 
 async function submitProposedTransaction() {
+  if (submittingProposedTransaction) return;
   if (!activeLeague?.id || !yourDraftTeamId || !proposedAddPlayer) return;
   if (!selectedDropPlayerId) return;
 
   const leagueId = activeLeague.id;
+  setSubmittingProposedTransaction(true);
 
   try {
     // ----------------
@@ -1756,14 +1772,14 @@ async function submitProposedTransaction() {
     // FREE AGENCY => POST transfer, then refresh tx + rosters
     // ----------------
     const payload = {
-  leagueId,
-  week: selectionWeek,
-  teamId: yourDraftTeamId,
-  addPlayerId: proposedAddPlayer.id,
-  dropPlayerId: selectedDropPlayerId,
-  createdAtMs: Date.now(),
-  lockedUntilMs: selectionDeadlineMs, // ✅ correct name
-};
+      leagueId,
+      week: selectionWeek,
+      teamId: yourDraftTeamId,
+      addPlayerId: proposedAddPlayer.id,
+      dropPlayerId: selectedDropPlayerId,
+      createdAtMs: Date.now(),
+      lockedUntilMs: selectionDeadlineMs,
+    };
 
     await fetch(`/api/free-agency/transfer`, {
       method: "POST",
@@ -1791,26 +1807,32 @@ async function submitProposedTransaction() {
     closeDropModal();
   } catch (e) {
     console.warn("submitProposedTransaction failed", e);
-    // optional: keep modal open so user can retry, or close it:
-    // closeDropModal();
+    setSubmittingProposedTransaction(false);
   }
 }
 
   
 
-  function DropSelectModal() {
+    function DropSelectModal() {
     if (!dropModalOpen || !proposedAddPlayer) return null;
 
     const confirmBg = proposeMode === "WAIVER" ? "#FACC15" : "#22C55E";
-    const confirmText = proposeMode === "WAIVER" ? "Submit Claim" : "Confirm";
+    const confirmText = submittingProposedTransaction
+      ? "Processing..."
+      : proposeMode === "WAIVER"
+        ? "Submit Claim"
+        : "Confirm";
 
     const confirmFg = proposeMode === "WAIVER" ? "#0f172a" : "white";
 
-    const canConfirm = !!selectedDropPlayerId;
+    const canConfirm = !!selectedDropPlayerId && !submittingProposedTransaction;
 
     return (
-      <div
-  onClick={closeDropModal}
+            <div
+  onClick={() => {
+    if (submittingProposedTransaction) return;
+    closeDropModal();
+  }}
   style={{
     position: "fixed",
     inset: 0,
@@ -1996,8 +2018,12 @@ async function submitProposedTransaction() {
               borderTop: "1px solid rgba(0,0,0,0.10)",
             }}
           >
-            <button
-              onClick={closeDropModal}
+                        <button
+              disabled={submittingProposedTransaction}
+              onClick={() => {
+                if (submittingProposedTransaction) return;
+                closeDropModal();
+              }}
               style={{
                 height: 38,
                 borderRadius: 12,
@@ -2005,13 +2031,14 @@ async function submitProposedTransaction() {
                 background: "transparent",
                 color: "rgba(239,68,68,0.95)",
                 fontWeight: 900,
-                cursor: "pointer",
+                cursor: submittingProposedTransaction ? "not-allowed" : "pointer",
+                opacity: submittingProposedTransaction ? 0.55 : 1,
               }}
             >
               Cancel
             </button>
 
-            <button
+                        <button
               disabled={!canConfirm}
               onClick={submitProposedTransaction}
               style={{
@@ -2022,6 +2049,7 @@ async function submitProposedTransaction() {
                 color: canConfirm ? confirmFg : "rgba(255,255,255,0.75)",
                 fontWeight: 900,
                 cursor: canConfirm ? "pointer" : "not-allowed",
+                opacity: submittingProposedTransaction ? 0.9 : 1,
               }}
             >
               {confirmText}
@@ -3116,6 +3144,9 @@ if (isOwned && !isOwnedByYou) {
 
     // Owned by you (ME) -> do nothing
     if (isOwnedByYou) return;
+
+    // Locked unowned player -> do nothing
+    if (locked) return;
 
     // Add/Claim (unowned)
     guardedAdd(p.id, () => {

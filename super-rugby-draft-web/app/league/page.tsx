@@ -693,8 +693,8 @@ const standings = useMemo<StandingRow[]>(() => {
   const curr = buildStandingsFromResults(playedNow);
   const prev = buildStandingsFromResults(playedPrev);
 
-  const sortRows = (arr: any[]) =>
-    arr.slice().sort((a, b) => b.pts - a.pts || b.pd - a.pd || b.pf - a.pf);
+    const sortRows = (arr: any[]) =>
+    arr.slice().sort((a, b) => b.pts - a.pts || b.pf - a.pf || b.pd - a.pd);
 
   const currSorted = sortRows(curr);
   const prevSorted = sortRows(prev);
