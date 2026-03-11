@@ -35,6 +35,12 @@ const STARTER_SLOTS: SlotId[] = [
 
 const BENCH_SLOTS: SlotId[] = ["bench1", "bench2", "bench3", "bench4", "bench5"];
 
+function normaliseId(x: any) {
+  return String(x ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
 function playerCanPlayPos(player: Player | null, pos: string) {
   if (!player) return false;
 
@@ -96,9 +102,19 @@ function applyAutoSubs(
   base: Lineup,
   pointsByPlayerId: Record<string, number>
 ): Lineup {
-  const scoreOf = (p: Player | null) => {
+    const scoreOf = (p: Player | null) => {
     if (!p?.id) return 0;
-    return Number(pointsByPlayerId[p.id] ?? 0);
+
+    const raw = String(p.id);
+    const norm = normaliseId(p.id);
+
+    const value =
+      pointsByPlayerId[raw] ??
+      pointsByPlayerId[norm] ??
+      0;
+
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
   };
 
   const starterPosOrder: Array<{ slot: SlotId; pos: string }> = [
@@ -221,11 +237,13 @@ function applyAutoSubs(
       continue;
     }
 
-    let accepted = false;
+        let accepted = false;
 
-    // try removing one zero-score starter to make room
-        for (const removable of removableStarters) {
+    // try removing one zero-score starter that is actually in the current pool
+    for (const removable of removableStarters) {
       const currentPoolWithBench = uniquePlayers([...starterPool, benchPlayer]);
+
+      if (!currentPoolWithBench.some((p) => p.id === removable.id)) continue;
 
       const withSwap = currentPoolWithBench.filter((p) => p.id !== removable.id);
 
