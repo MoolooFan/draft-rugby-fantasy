@@ -880,13 +880,6 @@ const deadlineMs = useMemo(() => {
 
 const deadlineLocked = deadlineMs ? nowMs >= deadlineMs : false;
 
-useEffect(() => {
-  const leagueId = activeLeague?.id;
-  if (!deadlineLocked) return;
-  if (!leagueId || !yourDraftTeamId) return;
-
-  saveSelection(fantasyWeek); // freeze THIS week
-}, [deadlineLocked, activeLeague?.id, yourDraftTeamId, fantasyWeek]);
 
 // after the current fantasy week locks, user edits NEXT fantasy week
 const selectionWeek = useMemo(() => {
@@ -1015,6 +1008,37 @@ useEffect(() => {
 async function saveSelection(weekOverride?: number) {
   if (!activeLeague?.id || !yourDraftTeamId) return;
 
+  const weekToSave = weekOverride ?? selectionWeek;
+
+  const requiredSlots: SlotId[] = [
+    "prop1",
+    "hooker1",
+    "prop2",
+    "lock1",
+    "lock2",
+    "looseforward1",
+    "looseforward2",
+    "looseforward3",
+    "halfback1",
+    "flyhalf1",
+    "centre1",
+    "centre2",
+    "outsideback1",
+    "outsideback2",
+    "outsideback3",
+    "bench1",
+    "bench2",
+    "bench3",
+    "bench4",
+    "bench5",
+  ];
+
+  const hasAnyPlayer = requiredSlots.some((slotId) => !!lineup[slotId]?.id);
+  if (!hasAnyPlayer) {
+    console.error("Refusing to save blank lineup");
+    return;
+  }
+
   try {
     const res = await fetch("/api/team-selection/save", {
       method: "POST",
@@ -1022,7 +1046,7 @@ async function saveSelection(weekOverride?: number) {
       credentials: "include",
       body: JSON.stringify({
         leagueId: activeLeague.id,
-        week: weekOverride ?? selectionWeek,
+        week: weekToSave,
         teamId: yourDraftTeamId,
         lineup,
         captainId,
@@ -1081,6 +1105,7 @@ useEffect(() => {
       }
 
       // ✅ Use server lineup as truth, then reconcile ONLY for ownership changes
+            const weekLoaded = selectionWeek;
       const reconciled = reconcileLineupWithRoster(row.lineup as Lineup, rosterPool);
 
       setLineup(reconciled);
@@ -1088,7 +1113,7 @@ useEffect(() => {
       setViceId(row.vice_id ?? row.viceId ?? null);
 
       setLoadedFromServer(true);
-      setLoadedWeek(selectionWeek);
+      setLoadedWeek(weekLoaded);
       setIsDirty(false);
       setHasLoadedSaved(true);
     } catch (e) {
@@ -1105,18 +1130,18 @@ useEffect(() => {
   };
 }, [activeLeague?.id, yourDraftTeamId, selectionWeek, rosterPool]);
 
-  useEffect(() => {
-  if (!hasLoadedSaved) return;          // wait until we know whether server had a save
-  if (loadedFromServer) return;         // server already set the lineup
-  if (!rosterPool.length) return;       // still nothing to build from
+useEffect(() => {
+  if (!hasLoadedSaved) return;
+  if (loadedFromServer) return;
+  if (!rosterPool.length) return;
+  if (loadedWeek !== selectionWeek) return;
 
-  // If lineup is currently empty (all nulls), replace with initialLineup
   const isEmpty = Object.values(lineup).every((p) => !p?.id);
   if (!isEmpty) return;
 
   setLineup(initialLineup);
-  setIsDirty(true); // optional: you can keep false if you don't want "Save" lit up by default
-}, [hasLoadedSaved, loadedFromServer, rosterPool.length, initialLineup, lineup]);
+  setIsDirty(false);
+}, [hasLoadedSaved, loadedFromServer, loadedWeek, selectionWeek, rosterPool.length, initialLineup, lineup]);
 
 // One-time default assignment (first open after draft):
 // C = starting flyhalf, V = first outside back
