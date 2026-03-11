@@ -24,59 +24,72 @@ type SlotId =
 
 type Lineup = Record<SlotId, Player | null>;
 
-type PosGroup = "PROP" | "HOOKER" | "LOCK" | "LOOSE" | "HB" | "FH" | "CENTRE" | "OB" | "WC";
-
-const SLOT_GROUP: Record<SlotId, PosGroup> = {
-  prop1: "PROP",
-  hooker1: "HOOKER",
-  prop2: "PROP",
-  lock1: "LOCK",
-  lock2: "LOCK",
-  looseforward1: "LOOSE",
-  looseforward2: "LOOSE",
-  looseforward3: "LOOSE",
-  halfback1: "HB",
-  flyhalf1: "FH",
-  centre1: "CENTRE",
-  centre2: "CENTRE",
-  outsideback1: "OB",
-  outsideback2: "OB",
-  outsideback3: "OB",
-  bench1: "WC",
-  bench2: "WC",
-  bench3: "WC",
-  bench4: "WC",
-  bench5: "WC",
-};
-
 const STARTER_SLOTS: SlotId[] = [
-  "prop1","hooker1","prop2",
-  "lock1","lock2",
-  "looseforward1","looseforward2","looseforward3",
-  "halfback1","flyhalf1",
-  "centre1","centre2",
-  "outsideback1","outsideback2","outsideback3",
+  "prop1", "hooker1", "prop2",
+  "lock1", "lock2",
+  "looseforward1", "looseforward2", "looseforward3",
+  "halfback1", "flyhalf1",
+  "centre1", "centre2",
+  "outsideback1", "outsideback2", "outsideback3",
 ];
 
-const BENCH_SLOTS: SlotId[] = ["bench1","bench2","bench3","bench4","bench5"];
+const BENCH_SLOTS: SlotId[] = ["bench1", "bench2", "bench3", "bench4", "bench5"];
 
-function canPlayerFitGroup(player: Player, group: PosGroup) {
-  if (group === "WC") return true;
+function playerCanPlayPos(player: Player | null, pos: string) {
+  if (!player) return false;
 
   const primary = String(player.posAbbrev ?? "").toUpperCase();
   const secondary = String(player.secondaryPosAbbrev ?? "").toUpperCase();
-  const either = (fn: (p: string) => boolean) => fn(primary) || fn(secondary);
 
-  if (group === "PROP") return either((p) => p.includes("PROP") || p === "PR");
-  if (group === "HOOKER") return either((p) => p.includes("HOOK") || p === "HO");
-  if (group === "LOCK") return either((p) => p.includes("LOCK") || p === "LK");
-  if (group === "LOOSE") return either((p) => p.includes("LOOSE") || p === "LF");
-  if (group === "HB") return either((p) => p.includes("HALF") || p === "HB");
-  if (group === "FH") return either((p) => p.includes("FLY") || p === "FH");
-  if (group === "CENTRE") return either((p) => p.includes("CENTRE") || p === "CE");
-  if (group === "OB") return either((p) => p.includes("OUT") || p.includes("BACK") || p === "OB");
+  return primary === pos || secondary === pos;
+}
 
-  return false;
+const REQUIRED_STARTER_POSITIONS: string[] = [
+  "PR", "HO", "PR",
+  "LK", "LK",
+  "LF", "LF", "LF",
+  "HB", "FH",
+  "CE", "CE",
+  "OB", "OB", "OB",
+];
+
+function canFillRequiredStarterSlots(players: Player[]) {
+  const required = REQUIRED_STARTER_POSITIONS.slice();
+
+  const candidatesByPos = new Map<string, number[]>();
+  for (const pos of new Set(required)) {
+    const idxs: number[] = [];
+    players.forEach((pl, i) => {
+      if (playerCanPlayPos(pl, pos)) idxs.push(i);
+    });
+    candidatesByPos.set(pos, idxs);
+  }
+
+  required.sort((a, b) => {
+    const ca = candidatesByPos.get(a)?.length ?? 0;
+    const cb = candidatesByPos.get(b)?.length ?? 0;
+    return ca - cb;
+  });
+
+  const used = new Array(players.length).fill(false);
+
+  function dfs(i: number): boolean {
+    if (i >= required.length) return true;
+
+    const pos = required[i];
+    const cand = candidatesByPos.get(pos) ?? [];
+
+    for (const pi of cand) {
+      if (used[pi]) continue;
+      used[pi] = true;
+      if (dfs(i + 1)) return true;
+      used[pi] = false;
+    }
+
+    return false;
+  }
+
+  return dfs(0);
 }
 
 function applyAutoSubs(
@@ -85,30 +98,49 @@ function applyAutoSubs(
 ): Lineup {
   const next: Lineup = { ...base };
 
-  const startersNeedingHelp = () =>
-    STARTER_SLOTS.filter((sid) => {
-      const p = next[sid];
-      if (!p?.id) return false;
-      return (pointsByPlayerId[p.id] ?? 0) <= 0;
-    });
+  const scoreOf = (p: Player | null) => {
+    if (!p?.id) return 0;
+    return Number(pointsByPlayerId[p.id] ?? 0);
+  };
 
   for (const benchSlot of BENCH_SLOTS) {
     const benchPlayer = next[benchSlot];
     if (!benchPlayer?.id) continue;
+    if (scoreOf(benchPlayer) <= 0) continue;
 
-    if ((pointsByPlayerId[benchPlayer.id] ?? 0) <= 0) continue;
-
-    const candidates = startersNeedingHelp();
-    const targetStarter = candidates.find((starterSlot) => {
-      const group = SLOT_GROUP[starterSlot];
-      return canPlayerFitGroup(benchPlayer, group);
+    const zeroScoreStarters = STARTER_SLOTS.filter((starterSlot) => {
+      const starter = next[starterSlot];
+      if (!starter?.id) return false;
+      return scoreOf(starter) <= 0;
     });
 
-    if (!targetStarter) continue;
+    let chosenStarterSlot: SlotId | null = null;
 
-    const starterPlayer = next[targetStarter];
-    next[targetStarter] = benchPlayer;
-    next[benchSlot] = starterPlayer ?? null;
+    for (const starterSlot of zeroScoreStarters) {
+      const starterPlayer = next[starterSlot];
+      if (!starterPlayer?.id) continue;
+
+      const trial = { ...next };
+      trial[starterSlot] = benchPlayer;
+      trial[benchSlot] = starterPlayer;
+
+      const starterPlayers = STARTER_SLOTS
+        .map((slot) => trial[slot])
+        .filter(Boolean) as Player[];
+
+      if (starterPlayers.length !== STARTER_SLOTS.length) continue;
+
+      if (canFillRequiredStarterSlots(starterPlayers)) {
+        chosenStarterSlot = starterSlot;
+        break;
+      }
+    }
+
+    if (!chosenStarterSlot) continue;
+
+    const oldStarter = next[chosenStarterSlot];
+    next[chosenStarterSlot] = benchPlayer;
+    next[benchSlot] = oldStarter ?? null;
   }
 
   return next;
