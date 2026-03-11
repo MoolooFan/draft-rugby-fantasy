@@ -102,11 +102,11 @@ function applyAutoSubs(
   base: Lineup,
   pointsByPlayerId: Record<string, number>
 ): Lineup {
-    const scoreOf = (p: Player | null) => {
+  const scoreOf = (p: Player | null) => {
     if (!p?.id) return 0;
 
     const raw = String(p.id);
-    const norm = normaliseId(p.id);
+    const norm = String(p.id).toLowerCase().replace(/[^a-z0-9]/g, "");
 
     const value =
       pointsByPlayerId[raw] ??
@@ -188,6 +188,7 @@ function applyAutoSubs(
       const entry = orderedSlots[i];
       for (const cand of entry.candidates) {
         if (used[cand.i]) continue;
+
         used[cand.i] = true;
         lineup[entry.slot] = cand.p;
 
@@ -204,6 +205,36 @@ function applyAutoSubs(
     return lineup;
   }
 
+  function compareBenchPriorityVectors(a: number[], b: number[]) {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      const av = a[i] ?? 0;
+      const bv = b[i] ?? 0;
+      if (av !== bv) return av - bv;
+    }
+    return 0;
+  }
+
+  function generateCombinations<T>(
+    arr: T[],
+    choose: number,
+    start = 0,
+    current: T[] = [],
+    out: T[][] = []
+  ): T[][] {
+    if (current.length === choose) {
+      out.push([...current]);
+      return out;
+    }
+
+    for (let i = start; i <= arr.length - (choose - current.length); i++) {
+      current.push(arr[i]);
+      generateCombinations(arr, choose, i + 1, current, out);
+      current.pop();
+    }
+
+    return out;
+  }
+
   const originalStarters = STARTER_SLOTS
     .map((slot) => base[slot])
     .filter(Boolean) as Player[];
@@ -212,73 +243,87 @@ function applyAutoSubs(
     .map((slot) => base[slot])
     .filter(Boolean) as Player[];
 
-  // starters who stay protected in the XV because they did NOT score 0
   const lockedStarters = originalStarters.filter((p) => scoreOf(p) !== 0);
+  const zeroScoreStarters = originalStarters.filter((p) => scoreOf(p) === 0);
 
-  // starters who are allowed to drop out because they scored exactly 0
-  const removableStarters = originalStarters.filter((p) => scoreOf(p) === 0);
-
-  // bench priority is bench1 -> bench5 exactly as stored in BENCH_SLOTS
   const eligibleBench = BENCH_SLOTS
     .map((slot) => base[slot])
     .filter((p): p is Player => !!p?.id)
     .filter((p) => scoreOf(p) !== 0);
 
-  let starterPool = uniquePlayers([...lockedStarters]);
+  const candidatePool = uniquePlayers([
+    ...lockedStarters,
+    ...zeroScoreStarters,
+    ...eligibleBench,
+  ]);
 
-  for (const benchPlayer of eligibleBench) {
-    const trialPool = uniquePlayers([...starterPool, benchPlayer]);
-
-    // cannot exceed 15 starters unless one zero-score starter can be displaced
-    if (trialPool.length <= 15) {
-      if (canFillRequiredStarterSlots(trialPool)) {
-        starterPool = trialPool;
-      }
-      continue;
-    }
-
-        let accepted = false;
-
-    // try removing one zero-score starter that is actually in the current pool
-    for (const removable of removableStarters) {
-      const currentPoolWithBench = uniquePlayers([...starterPool, benchPlayer]);
-
-      if (!currentPoolWithBench.some((p) => p.id === removable.id)) continue;
-
-      const withSwap = currentPoolWithBench.filter((p) => p.id !== removable.id);
-
-      if (withSwap.length !== 15) continue;
-      if (!canFillRequiredStarterSlots(withSwap)) continue;
-
-      starterPool = withSwap;
-      accepted = true;
-      break;
-    }
-
-    if (!accepted) {
-      // if no valid reshuffle exists, skip this bench player
-      continue;
-    }
-  }
-
-  // If we still do not have 15, fill from original starters first, then original bench
-  if (starterPool.length < 15) {
-    for (const p of [...originalStarters, ...originalBench]) {
-      if (starterPool.some((x) => x.id === p.id)) continue;
-      const trial = uniquePlayers([...starterPool, p]);
-      if (trial.length > 15) continue;
-      if (!canFillRequiredStarterSlots(trial)) continue;
-      starterPool = trial;
-      if (starterPool.length === 15) break;
-    }
-  }
-
-  if (starterPool.length !== 15) {
-    // fallback: return unchanged if we somehow cannot build a legal XV
+  if (candidatePool.length < 15) {
     return { ...base };
   }
 
-  const rebuilt = assignStarters(starterPool);
+  const lockedIds = new Set(lockedStarters.map((p) => p.id));
+  const zeroIds = new Set(zeroScoreStarters.map((p) => p.id));
+  const eligibleBenchIdsInPriorityOrder = eligibleBench.map((p) => p.id);
+
+  let bestCombo: Player[] | null = null;
+  let bestBenchCount = -1;
+  let bestBenchPriorityVector: number[] = [];
+  let bestZeroCount = Number.POSITIVE_INFINITY;
+
+  const allCombos = generateCombinations(candidatePool, 15);
+
+  for (const combo of allCombos) {
+    const comboIds = new Set(combo.map((p) => p.id));
+
+    // all non-zero starters must remain in the XV
+    let missingLocked = false;
+    for (const id of lockedIds) {
+      if (!comboIds.has(id)) {
+        missingLocked = true;
+        break;
+      }
+    }
+    if (missingLocked) continue;
+
+    if (!canFillRequiredStarterSlots(combo)) continue;
+
+    const benchPriorityVector = eligibleBenchIdsInPriorityOrder.map((id) =>
+      comboIds.has(id) ? 1 : 0
+    );
+
+    const benchCount = benchPriorityVector.reduce<number>((sum, x) => sum + x, 0);
+
+    let zeroCount = 0;
+    for (const id of comboIds) {
+      if (zeroIds.has(id)) zeroCount++;
+    }
+
+    let better = false;
+
+    if (benchCount > bestBenchCount) {
+      better = true;
+    } else if (benchCount === bestBenchCount) {
+      const cmp = compareBenchPriorityVectors(benchPriorityVector, bestBenchPriorityVector);
+      if (cmp > 0) {
+        better = true;
+      } else if (cmp === 0 && zeroCount < bestZeroCount) {
+        better = true;
+      }
+    }
+
+    if (better) {
+      bestCombo = combo;
+      bestBenchCount = benchCount;
+      bestBenchPriorityVector = benchPriorityVector;
+      bestZeroCount = zeroCount;
+    }
+  }
+
+  if (!bestCombo) {
+    return { ...base };
+  }
+
+  const rebuilt = assignStarters(bestCombo);
   if (!rebuilt) {
     return { ...base };
   }
@@ -289,15 +334,10 @@ function applyAutoSubs(
       .filter(Boolean) as string[]
   );
 
-  // bench order:
-  // 1) original bench players still not in starters, in bench priority order
-  // 2) zero-score starters who got displaced, in original starter order
   const benchPool = [
     ...BENCH_SLOTS.map((slot) => base[slot]).filter(Boolean) as Player[],
     ...STARTER_SLOTS.map((slot) => base[slot]).filter(Boolean) as Player[],
-  ].filter((p, idx, arr) => {
-    return arr.findIndex((x) => x.id === p.id) === idx;
-  });
+  ].filter((p, idx, arr) => arr.findIndex((x) => x.id === p.id) === idx);
 
   const finalBench = benchPool.filter((p) => !starterIds.has(p.id)).slice(0, 5);
 

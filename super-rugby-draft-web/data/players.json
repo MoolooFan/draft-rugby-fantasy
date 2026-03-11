@@ -3408,8 +3408,8 @@
     "teamCode": "WAR",
     "posAbbrev": "OB",
     "posName": "Outside Back",
-    "secondaryPosAbbrev": "",
-    "secondaryPosName": "",
+    "secondaryPosAbbrev": "CE",
+    "secondaryPosName": "Centre",
     "draftRank": 82,
     "status": "Benched",
     "stats": {
