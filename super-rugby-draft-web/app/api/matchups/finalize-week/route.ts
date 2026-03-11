@@ -96,54 +96,200 @@ function applyAutoSubs(
   base: Lineup,
   pointsByPlayerId: Record<string, number>
 ): Lineup {
-  const next: Lineup = { ...base };
-
   const scoreOf = (p: Player | null) => {
     if (!p?.id) return 0;
     return Number(pointsByPlayerId[p.id] ?? 0);
   };
 
-  for (const benchSlot of BENCH_SLOTS) {
-    const benchPlayer = next[benchSlot];
-    if (!benchPlayer?.id) continue;
-    if (scoreOf(benchPlayer) <= 0) continue;
+  const starterPosOrder: Array<{ slot: SlotId; pos: string }> = [
+    { slot: "prop1", pos: "PR" },
+    { slot: "hooker1", pos: "HO" },
+    { slot: "prop2", pos: "PR" },
+    { slot: "lock1", pos: "LK" },
+    { slot: "lock2", pos: "LK" },
+    { slot: "looseforward1", pos: "LF" },
+    { slot: "looseforward2", pos: "LF" },
+    { slot: "looseforward3", pos: "LF" },
+    { slot: "halfback1", pos: "HB" },
+    { slot: "flyhalf1", pos: "FH" },
+    { slot: "centre1", pos: "CE" },
+    { slot: "centre2", pos: "CE" },
+    { slot: "outsideback1", pos: "OB" },
+    { slot: "outsideback2", pos: "OB" },
+    { slot: "outsideback3", pos: "OB" },
+  ];
 
-    const zeroScoreStarters = STARTER_SLOTS.filter((starterSlot) => {
-      const starter = next[starterSlot];
-      if (!starter?.id) return false;
-      return scoreOf(starter) <= 0;
-    });
-
-    let chosenStarterSlot: SlotId | null = null;
-
-    for (const starterSlot of zeroScoreStarters) {
-      const starterPlayer = next[starterSlot];
-      if (!starterPlayer?.id) continue;
-
-      const trial = { ...next };
-      trial[starterSlot] = benchPlayer;
-      trial[benchSlot] = starterPlayer;
-
-      const starterPlayers = STARTER_SLOTS
-        .map((slot) => trial[slot])
-        .filter(Boolean) as Player[];
-
-      if (starterPlayers.length !== STARTER_SLOTS.length) continue;
-
-      if (canFillRequiredStarterSlots(starterPlayers)) {
-        chosenStarterSlot = starterSlot;
-        break;
-      }
+  function uniquePlayers(players: Player[]) {
+    const seen = new Set<string>();
+    const out: Player[] = [];
+    for (const p of players) {
+      const id = String(p?.id ?? "").trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push(p);
     }
-
-    if (!chosenStarterSlot) continue;
-
-    const oldStarter = next[chosenStarterSlot];
-    next[chosenStarterSlot] = benchPlayer;
-    next[benchSlot] = oldStarter ?? null;
+    return out;
   }
 
-  return next;
+  function assignStarters(players: Player[]): Lineup | null {
+    const lineup: Lineup = {
+      prop1: null,
+      hooker1: null,
+      prop2: null,
+      lock1: null,
+      lock2: null,
+      looseforward1: null,
+      looseforward2: null,
+      looseforward3: null,
+      halfback1: null,
+      flyhalf1: null,
+      centre1: null,
+      centre2: null,
+      outsideback1: null,
+      outsideback2: null,
+      outsideback3: null,
+      bench1: null,
+      bench2: null,
+      bench3: null,
+      bench4: null,
+      bench5: null,
+    };
+
+    const used = new Array(players.length).fill(false);
+
+    const orderedSlots = starterPosOrder
+      .map((entry) => ({
+        ...entry,
+        candidates: players
+          .map((p, i) => ({ p, i }))
+          .filter(({ p }) => playerCanPlayPos(p, entry.pos)),
+      }))
+      .sort((a, b) => a.candidates.length - b.candidates.length);
+
+    function dfs(i: number): boolean {
+      if (i >= orderedSlots.length) return true;
+
+      const entry = orderedSlots[i];
+      for (const cand of entry.candidates) {
+        if (used[cand.i]) continue;
+        used[cand.i] = true;
+        lineup[entry.slot] = cand.p;
+
+        if (dfs(i + 1)) return true;
+
+        lineup[entry.slot] = null;
+        used[cand.i] = false;
+      }
+
+      return false;
+    }
+
+    if (!dfs(0)) return null;
+    return lineup;
+  }
+
+  const originalStarters = STARTER_SLOTS
+    .map((slot) => base[slot])
+    .filter(Boolean) as Player[];
+
+  const originalBench = BENCH_SLOTS
+    .map((slot) => base[slot])
+    .filter(Boolean) as Player[];
+
+  // starters who stay protected in the XV because they did NOT score 0
+  const lockedStarters = originalStarters.filter((p) => scoreOf(p) !== 0);
+
+  // starters who are allowed to drop out because they scored exactly 0
+  const removableStarters = originalStarters.filter((p) => scoreOf(p) === 0);
+
+  // bench priority is bench1 -> bench5 exactly as stored in BENCH_SLOTS
+  const eligibleBench = BENCH_SLOTS
+    .map((slot) => base[slot])
+    .filter((p): p is Player => !!p?.id)
+    .filter((p) => scoreOf(p) !== 0);
+
+  let starterPool = uniquePlayers([...lockedStarters]);
+
+  for (const benchPlayer of eligibleBench) {
+    const trialPool = uniquePlayers([...starterPool, benchPlayer]);
+
+    // cannot exceed 15 starters unless one zero-score starter can be displaced
+    if (trialPool.length <= 15) {
+      if (canFillRequiredStarterSlots(trialPool)) {
+        starterPool = trialPool;
+      }
+      continue;
+    }
+
+    let accepted = false;
+
+    // try removing one zero-score starter to make room
+        for (const removable of removableStarters) {
+      const currentPoolWithBench = uniquePlayers([...starterPool, benchPlayer]);
+
+      const withSwap = currentPoolWithBench.filter((p) => p.id !== removable.id);
+
+      if (withSwap.length !== 15) continue;
+      if (!canFillRequiredStarterSlots(withSwap)) continue;
+
+      starterPool = withSwap;
+      accepted = true;
+      break;
+    }
+
+    if (!accepted) {
+      // if no valid reshuffle exists, skip this bench player
+      continue;
+    }
+  }
+
+  // If we still do not have 15, fill from original starters first, then original bench
+  if (starterPool.length < 15) {
+    for (const p of [...originalStarters, ...originalBench]) {
+      if (starterPool.some((x) => x.id === p.id)) continue;
+      const trial = uniquePlayers([...starterPool, p]);
+      if (trial.length > 15) continue;
+      if (!canFillRequiredStarterSlots(trial)) continue;
+      starterPool = trial;
+      if (starterPool.length === 15) break;
+    }
+  }
+
+  if (starterPool.length !== 15) {
+    // fallback: return unchanged if we somehow cannot build a legal XV
+    return { ...base };
+  }
+
+  const rebuilt = assignStarters(starterPool);
+  if (!rebuilt) {
+    return { ...base };
+  }
+
+  const starterIds = new Set(
+    STARTER_SLOTS
+      .map((slot) => rebuilt[slot]?.id)
+      .filter(Boolean) as string[]
+  );
+
+  // bench order:
+  // 1) original bench players still not in starters, in bench priority order
+  // 2) zero-score starters who got displaced, in original starter order
+  const benchPool = [
+    ...BENCH_SLOTS.map((slot) => base[slot]).filter(Boolean) as Player[],
+    ...STARTER_SLOTS.map((slot) => base[slot]).filter(Boolean) as Player[],
+  ].filter((p, idx, arr) => {
+    return arr.findIndex((x) => x.id === p.id) === idx;
+  });
+
+  const finalBench = benchPool.filter((p) => !starterIds.has(p.id)).slice(0, 5);
+
+  rebuilt.bench1 = finalBench[0] ?? null;
+  rebuilt.bench2 = finalBench[1] ?? null;
+  rebuilt.bench3 = finalBench[2] ?? null;
+  rebuilt.bench4 = finalBench[3] ?? null;
+  rebuilt.bench5 = finalBench[4] ?? null;
+
+  return rebuilt;
 }
 
 export async function POST(req: Request) {
