@@ -1417,6 +1417,8 @@ const selectedPlayerForCard = useMemo(() => {
     lastName: selectedPlayer.lastName,
     posAbbrev: selectedPlayer.posAbbrev ?? "",
     posName: selectedPlayer.posName ?? "",
+    secondaryPosAbbrev: selectedPlayer.secondaryPosAbbrev ?? "",
+    secondaryPosName: selectedPlayer.secondaryPosName ?? "",
     teamCode: selectedPlayer.teamCode ?? "",
 
     // ✅ status lives on the player object now
