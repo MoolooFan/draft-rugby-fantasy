@@ -3627,40 +3627,104 @@ function LeagueTradeRow({ t }: { t: any }) {
           (a.acceptedAtMs ?? a.decidedAtMs ?? a.updatedAtMs ?? a.createdAtMs ?? 0)
       );
 
-    // ---------- Waiver claims feed (most recent waiver deadline) ----------
-    // We show all league claims whose created/processed time is >= lastWaiverDeadlineMs (best-effort)
-    // and order by priority/created time so it reads like the processing order.
-    const waiverClaimsFeed = (claimsForUi as any[])
-  .filter((c) => c.leagueId === leagueId)
+// ---------- Waiver claims feed (most recent waiver deadline) ----------
+// Display order should mirror the waiver PROCESS DISPLAY order:
+// in each pass, go team-by-team in waiver order,
+// and for each team show claims until that team hits a PROCESSED claim.
+// Then move to the next team, and repeat passes until all claims are shown.
+const waiverClaimsFeed = useMemo(() => {
+  const eligibleClaims = (claimsForUi as any[])
+    .filter((c) => c.leagueId === leagueId)
     .filter((c) => {
-  const s = String(c.status ?? "").toUpperCase();
-  return s === "PROCESSED" || s === "FAILED";
-})
+      const s = String(c.status ?? "").toUpperCase();
+      return s === "PROCESSED" || s === "FAILED";
+    })
+    .filter((c) => {
+      const ms = c.processedAtMs ?? c.decidedAtMs ?? c.updatedAtMs ?? 0;
+      if (!ms) return false;
+      return ms >= (lastWaiverDeadlineMs || 0);
+    });
 
+  // group claims by team
+  const claimsByTeam = new Map<string, any[]>();
 
-  
+  for (const c of eligibleClaims) {
+    const teamId = String(c.teamId ?? "");
+    if (!teamId) continue;
+    if (!claimsByTeam.has(teamId)) claimsByTeam.set(teamId, []);
+    claimsByTeam.get(teamId)!.push(c);
+  }
 
-      .filter((c) => {
-  const ms = c.processedAtMs ?? c.decidedAtMs ?? c.updatedAtMs ?? 0;
-  if (!ms) return false; // must be decided to be visible
-  return ms >= (lastWaiverDeadlineMs || 0);
-})
+  // sort each team's claims by priority, then created time
+  for (const [teamId, arr] of claimsByTeam.entries()) {
+    arr.sort((a, b) => {
+      const ap = typeof a.priority === "number" ? a.priority : 9999;
+      const bp = typeof b.priority === "number" ? b.priority : 9999;
+      if (ap !== bp) return ap - bp;
+      return (a.createdAtMs ?? 0) - (b.createdAtMs ?? 0);
+    });
+  }
 
-      .slice()
-      .sort((a, b) => {
-  // 1) waiver processing order (team priority)
-  const ai = waiverOrderIndexByTeamId.get(String(a.teamId)) ?? 9999;
-  const bi = waiverOrderIndexByTeamId.get(String(b.teamId)) ?? 9999;
-  if (ai !== bi) return ai - bi;
+  // team order from waiver order table
+  let orderedTeamIds = waiverOrderRows
+    .slice()
+    .sort((a, b) => a.rank - b.rank)
+    .map((r) => String(r.teamId));
 
-  // 2) within-team claim priority
-  const ap = typeof a.priority === "number" ? a.priority : 9999;
-  const bp = typeof b.priority === "number" ? b.priority : 9999;
-  if (ap !== bp) return ap - bp;
+  // fallback if waiver order rows are missing
+  if (!orderedTeamIds.length) {
+    orderedTeamIds = Array.from(claimsByTeam.keys()).sort((a, b) => {
+      const ai = waiverOrderIndexByTeamId.get(String(a)) ?? 9999;
+      const bi = waiverOrderIndexByTeamId.get(String(b)) ?? 9999;
+      if (ai !== bi) return ai - bi;
+      return String(a).localeCompare(String(b));
+    });
+  }
 
-  // 3) stable tie-break
-  return (a.createdAtMs ?? 0) - (b.createdAtMs ?? 0);
-});
+  // include any teams that somehow have claims but are not in waiver order rows
+  for (const teamId of claimsByTeam.keys()) {
+    if (!orderedTeamIds.includes(teamId)) orderedTeamIds.push(teamId);
+  }
+
+  // make mutable queues per team
+  const queues = new Map<string, any[]>();
+  for (const teamId of orderedTeamIds) {
+    queues.set(teamId, [...(claimsByTeam.get(teamId) ?? [])]);
+  }
+
+  const result: any[] = [];
+  let madeProgress = true;
+
+  while (madeProgress) {
+    madeProgress = false;
+
+    for (const teamId of orderedTeamIds) {
+      const queue = queues.get(teamId) ?? [];
+      if (!queue.length) continue;
+
+      madeProgress = true;
+
+      // show this team's claims until first PROCESSED claim in this pass
+      while (queue.length) {
+        const claim = queue.shift()!;
+        result.push(claim);
+
+        const status = String(claim.status ?? "").toUpperCase();
+        if (status === "PROCESSED") {
+          break;
+        }
+      }
+    }
+  }
+
+  return result;
+}, [
+  claimsForUi,
+  leagueId,
+  lastWaiverDeadlineMs,
+  waiverOrderRows,
+  waiverOrderIndexByTeamId,
+]);
 
     // ---------- Free agent transfers feed (latest free agency period) ----------
     const freeAgentFeed = (freeForUi as any[])
@@ -3765,32 +3829,47 @@ function LeagueTradeRow({ t }: { t: any }) {
       );
     }
 
-    function StatusPill({ status }: { status: string }) {
+        function StatusPill({ status }: { status: string }) {
       const s = String(status ?? "").toUpperCase();
+
       const isProcessed = s === "PROCESSED" || s === "SUCCESS" || s === "APPROVED";
-const isFailed = s === "FAILED";
-const isDeclined = s === "DECLINED" || s === "REJECTED";
+      const isFailed = s === "FAILED";
+      const isDeclined = s === "DECLINED" || s === "REJECTED";
 
-const text =
-  isProcessed ? "Processed" :
-  isFailed ? "Failed" :
-  isDeclined ? "Declined" :
-  s ? s[0] + s.slice(1).toLowerCase() : "—";
+      const text =
+        isProcessed ? "Processed" :
+        isFailed ? "Failed" :
+        isDeclined ? "Declined" :
+        s ? s[0] + s.slice(1).toLowerCase() : "—";
 
-      const color = isProcessed ? "rgba(34,197,94,0.95)" : isDeclined ? "rgba(239,68,68,0.95)" : "rgba(15,23,42,0.70)";
-      const bg = isProcessed ? "rgba(34,197,94,0.10)" : isDeclined ? "rgba(239,68,68,0.10)" : "rgba(15,23,42,0.06)";
+      const color =
+        isProcessed ? "rgba(34,197,94,0.95)" :
+        isFailed ? "rgba(239,68,68,0.95)" :
+        isDeclined ? "rgba(239,68,68,0.95)" :
+        "rgba(15,23,42,0.70)";
+
+      const bg =
+        isProcessed ? "rgba(34,197,94,0.10)" :
+        isFailed ? "rgba(239,68,68,0.10)" :
+        isDeclined ? "rgba(239,68,68,0.10)" :
+        "rgba(15,23,42,0.06)";
 
       return (
         <div
           style={{
             justifySelf: "end",
-            padding: "6px 10px",
+            width: 88,
+            height: 30,
             borderRadius: 999,
             fontSize: 11,
             fontWeight: 900,
             color,
             background: bg,
             border: "1px solid rgba(0,0,0,0.06)",
+            display: "grid",
+            placeItems: "center",
+            textAlign: "center",
+            boxSizing: "border-box",
           }}
         >
           {text}

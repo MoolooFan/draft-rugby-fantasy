@@ -905,6 +905,11 @@ const modalStatus = useMemo<PlayerStatus | undefined>(() => {
   return null;
 }, [modal, allPlayers]);
 
+const modalOwnerTeamId = useMemo(() => {
+  if (modal?.type !== "playerCard") return null;
+  return ownerTeamIdByPlayerId.get(normaliseId(modal.player.id)) ?? null;
+}, [modal, ownerTeamIdByPlayerId]);
+
 const modalTeamLabel = useMemo(() => {
   if (modal?.type !== "playerCard") return "Available";
 
@@ -914,6 +919,9 @@ const modalTeamLabel = useMemo(() => {
   if (!ownerTeamId) return "Available";
   return nameByTeamId(ownerTeamId);
 }, [modal, ownerTeamIdByPlayerId, nameByTeamId]);
+
+const modalIsOwned = !!modalOwnerTeamId;
+const modalIsOwnedByYou = !!modalOwnerTeamId && modalOwnerTeamId === yourLeagueTeamId;
 
 useEffect(() => {
   if (!leagueId) return;
@@ -1236,6 +1244,35 @@ const bannerTime = useMemo(() => {
 const isWaivers = windowMode === "WAIVERS";
 const addBtnBg = isWaivers ? "#FACC15" : "#22C55E";
 
+const modalPrimaryAction = useMemo(() => {
+  if (modal?.type !== "playerCard") return null;
+
+  // Owned by another team -> trade
+  if (modalIsOwned && modalOwnerTeamId && !modalIsOwnedByYou) {
+    return {
+      label: "Propose Trade",
+      onClick: () => goToTradeProposal(modalOwnerTeamId, modal.player.id),
+    };
+  }
+
+  // Owned by you -> no trade action
+  if (modalIsOwnedByYou) {
+    return null;
+  }
+
+  // Unowned -> waiver or free agency action
+  return {
+    label: isWaivers ? "Submit Claim" : "Sign Player",
+    onClick: () => goToTransactionsForAdd(modal.player.id),
+  };
+}, [
+  modal,
+  modalIsOwned,
+  modalIsOwnedByYou,
+  modalOwnerTeamId,
+  isWaivers,
+]);
+
 // Post-draft score card (LIVE from matchup logic)
 const weekLabel = weekLabelLive;
 const userScore = userScoreLive;
@@ -1385,7 +1422,7 @@ const standings: StandingRow[] = useMemo(() => {
   const prev = buildStandingsFromResults(playedPrev);
 
   const sortRows = (arr: StandingCalc[]) =>
-    arr.slice().sort((a, b) => b.pts - a.pts || b.pd - a.pd || b.pf - a.pf);
+    arr.slice().sort((a, b) => b.pts - a.pts || b.pf - a.pf || b.pd - a.pd);
 
   const currSorted = sortRows(curr);
   const prevSorted = sortRows(prev);
@@ -1531,6 +1568,16 @@ const posName = pos2 ? `${posNamePrimary} / ${pos2}` : posNamePrimary;
 
 function goToTransactionsForAdd(playerId: string) {
   router.push(`/transactions?addPlayerId=${encodeURIComponent(playerId)}`);
+}
+
+function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
+  const url =
+    `/trade/propose` +
+    `?partnerTeamId=${encodeURIComponent(partnerTeamId)}` +
+    `&prefillRequestPlayerId=${encodeURIComponent(requestPlayerId)}` +
+    `&returnTo=${encodeURIComponent("/dashboard")}`;
+
+  router.push(url);
 }
 
   // -----------------------
@@ -2535,16 +2582,13 @@ function JerseyTile({
           }}
           status={modalStatus}
 teamLabel={modalTeamLabel}
-          actions={[
-  {
-  label: isWatched(modal.player.id) ? "Remove from Watchlist" : "Add to Watchlist",
-  onClick: () => toggleWatchlistForDashboard(modal.player.id),
-},
-  {
-    label: "Submit Claim",
-    onClick: () => goToTransactionsForAdd(modal.player.id),
-  },
-]}
+                    actions={[
+            {
+              label: isWatched(modal.player.id) ? "Remove from Watchlist" : "Add to Watchlist",
+              onClick: () => toggleWatchlistForDashboard(modal.player.id),
+            },
+            ...(modalPrimaryAction ? [modalPrimaryAction] : []),
+          ]}
           onClose={() => setModal(null)}
         />
       )}

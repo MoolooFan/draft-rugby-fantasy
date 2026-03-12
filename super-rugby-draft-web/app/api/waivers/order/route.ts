@@ -112,7 +112,7 @@ function computeStandingsFromSheetRows(
   }
 
   const arr = Array.from(base.values());
-  arr.sort((a, b) => b.pts - a.pts || b.pd - a.pd || b.pf - a.pf || a.teamId.localeCompare(b.teamId));
+  arr.sort((a, b) => b.pts - a.pts || b.pf - a.pf || b.pd - a.pd || a.teamId.localeCompare(b.teamId));
   return arr;
 }
 

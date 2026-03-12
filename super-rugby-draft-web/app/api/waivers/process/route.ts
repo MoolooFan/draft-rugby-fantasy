@@ -192,36 +192,60 @@ while (madeProgress) {
 
       // already owned or locked => fail this claim and continue to next claim for this team
       if (owned.has(addId)) {
-  const { error: claimFailErr } = await supabaseAdmin
-    .from("waiver_claims")
-    .update({
-      status: "FAILED",
-      decided_reason: "Player already owned",
-      decided_at_ms: processedAtMs,
-      processed_at_ms: processedAtMs,
-      updated_at_ms: processedAtMs,
-    })
-    .eq("id", id);
+        const { error: claimFailErr } = await supabaseAdmin
+          .from("waiver_claims")
+          .update({
+            status: "FAILED",
+            decided_reason: "Player already owned",
+            decided_at_ms: processedAtMs,
+            processed_at_ms: processedAtMs,
+            updated_at_ms: processedAtMs,
+          })
+          .eq("id", id);
 
-  if (claimFailErr) throw claimFailErr;
-  continue;
-}
+        if (claimFailErr) throw claimFailErr;
+        continue;
+      }
 
       if (lockedSet.has(addId)) {
-  const { error: claimFailErr } = await supabaseAdmin
-    .from("waiver_claims")
-    .update({
-      status: "FAILED",
-      decided_reason: "Player is locked",
-      decided_at_ms: processedAtMs,
-      processed_at_ms: processedAtMs,
-      updated_at_ms: processedAtMs,
-    })
-    .eq("id", id);
+        const { error: claimFailErr } = await supabaseAdmin
+          .from("waiver_claims")
+          .update({
+            status: "FAILED",
+            decided_reason: "Player is locked",
+            decided_at_ms: processedAtMs,
+            processed_at_ms: processedAtMs,
+            updated_at_ms: processedAtMs,
+          })
+          .eq("id", id);
 
-  if (claimFailErr) throw claimFailErr;
-  continue;
-}
+        if (claimFailErr) throw claimFailErr;
+        continue;
+      }
+
+      // IMPORTANT: validate against the team's CURRENT live roster state
+      const currentRoster = rosterByTeam.get(teamId) ?? { playerIds: [] };
+      const currentIds = new Set(
+        Array.isArray(currentRoster?.playerIds)
+          ? currentRoster.playerIds.map((x: any) => String(x)).filter(Boolean)
+          : extractIds(currentRoster)
+      );
+
+      if (dropId && !currentIds.has(dropId)) {
+        const { error: claimFailErr } = await supabaseAdmin
+          .from("waiver_claims")
+          .update({
+            status: "FAILED",
+            decided_reason: "Drop player is no longer on roster",
+            decided_at_ms: processedAtMs,
+            processed_at_ms: processedAtMs,
+            updated_at_ms: processedAtMs,
+          })
+          .eq("id", id);
+
+        if (claimFailErr) throw claimFailErr;
+        continue;
+      }
 
       // apply add/drop to roster (playerIds truth)
 // IMPORTANT: do NOT preserve slots/wildcards in DB (they go stale)
@@ -261,8 +285,11 @@ if (rosterUpsertErr) throw rosterUpsertErr;
 
 if (claimOkErr) throw claimOkErr;
 
-      rosterByTeam.set(teamId, nextRoster);
+            rosterByTeam.set(teamId, nextRoster);
+
+      if (dropId) owned.delete(dropId);
       owned.add(addId);
+
       processedClaimIds.push(id);
       madeProgress = true;
 
@@ -289,9 +316,29 @@ if (dropId) touchedPlayerIds.add(dropId);
   }
 }
 
-    if (newLocks.length) {
-      // upsert locks by (league_id, player_id) if you set that unique index; otherwise just insert
-      const { error: insErr } = await supabaseAdmin.from("drop_locks").insert(newLocks);
+        if (newLocks.length) {
+      const dropPlayerIds = Array.from(
+        new Set(
+          newLocks
+            .map((x: any) => String(x.player_id ?? "").trim())
+            .filter(Boolean)
+        )
+      );
+
+      if (dropPlayerIds.length) {
+        const { error: delErr } = await supabaseAdmin
+          .from("drop_locks")
+          .delete()
+          .eq("league_id", leagueId)
+          .in("player_id", dropPlayerIds);
+
+        if (delErr) throw delErr;
+      }
+
+      const { error: insErr } = await supabaseAdmin
+        .from("drop_locks")
+        .insert(newLocks);
+
       if (insErr) throw insErr;
     }
 

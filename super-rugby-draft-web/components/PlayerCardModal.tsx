@@ -1030,7 +1030,7 @@ const teamLabelFull =
     zIndex: 6,
 
     // ✅ fixed white section height across all tabs
-    height: "52svh",
+    height: "52svh", //content size area
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
