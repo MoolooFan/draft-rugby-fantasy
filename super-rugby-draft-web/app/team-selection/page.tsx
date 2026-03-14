@@ -467,6 +467,51 @@ function syncLineupToRoster(prev: Lineup, rosterPool: Player[]) {
   return { next, changed };
 }
 
+type SheetFixtureRow = {
+  season: number;
+  weekFantasy: number;
+  weekReal: number | null;
+  label: string | null;
+  kind: string | null;
+  homeTeamId: string | null;
+  awayTeamId: string | null;
+  status: string; // upcoming | complete
+  homeScore: number | null;
+  awayScore: number | null;
+};
+
+function isSheetLabelRow(r: SheetFixtureRow) {
+  return !!r.label || String(r.kind ?? "").toLowerCase() === "label";
+}
+
+function isSheetPlayableRow(r: SheetFixtureRow) {
+  return !isSheetLabelRow(r);
+}
+
+function isFantasyWeekCompleteFromSheet(rows: SheetFixtureRow[], weekNo: number) {
+  const wk = rows.filter(
+    (r) => Number(r.weekFantasy) === weekNo && isSheetPlayableRow(r)
+  );
+  if (!wk.length) return false;
+  return wk.every((r) => String(r.status ?? "").toLowerCase() === "complete");
+}
+
+function currentWeekFromSheet(rows: SheetFixtureRow[]) {
+  const weeks = Array.from(
+    new Set(
+      rows
+        .filter(isSheetPlayableRow)
+        .map((r) => Number(r.weekFantasy))
+        .filter((w) => Number.isFinite(w) && w > 0)
+    )
+  ).sort((a, b) => a - b);
+
+  for (const w of weeks) {
+    if (!isFantasyWeekCompleteFromSheet(rows, w)) return w;
+  }
+
+  return weeks[weeks.length - 1] ?? 1;
+}
 
 export default function TeamSelectionPage() {
   useRequireSession();
@@ -485,6 +530,8 @@ const [txnHydrated, setTxnHydrated] = useState(() =>
   // @ts-ignore
   useTransactionsStore.persist?.hasHydrated?.() ?? true
 );
+const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
+
 
 useEffect(() => {
   // @ts-ignore
@@ -531,6 +578,23 @@ useEffect(() => {
   const leagueTeams = useMemo(() => {
   return Array.isArray(activeLeague?.teams) ? activeLeague!.teams : [];
 }, [activeLeague?.teams]);
+
+useEffect(() => {
+  if (!activeLeague?.id) return;
+
+  const season = 2026;
+
+  fetch(`/api/fixtures/leagueMatches?season=${season}&leagueId=${encodeURIComponent(activeLeague.id)}`, {
+    cache: "no-store",
+    credentials: "include",
+  })
+    .then((r) => r.json())
+    .then((j) => {
+      if (j?.ok) setSheetFixtures(j.rows ?? []);
+      else console.error("fixtures fetch failed", j?.error);
+    })
+    .catch((e) => console.error(e));
+}, [activeLeague?.id]);
 
 type RosterData = { slots?: Record<string, Array<{ id: string }>>; wildcards?: Array<{ id: string }> };
 
@@ -867,8 +931,13 @@ function getLivePlayerById(id: string) {
   const nowMs = useNowTick(30_000);
 
 // --- Week logic ---
-const fantasyWeek = activeLeague?.currentWeek ?? 1;
 const startRound = activeLeague?.startRound ?? 1;
+
+// Sheet-driven current fantasy week, same pattern as your other pages
+const fantasyWeek = useMemo(() => {
+  if (!sheetFixtures.length) return activeLeague?.currentWeek ?? 1;
+  return currentWeekFromSheet(sheetFixtures);
+}, [sheetFixtures, activeLeague?.currentWeek]);
 
 const realRoundForFantasyWeek = useMemo(() => {
   return fantasyWeekToRealRound(startRound, fantasyWeek);
@@ -880,11 +949,10 @@ const deadlineMs = useMemo(() => {
 
 const deadlineLocked = deadlineMs ? nowMs >= deadlineMs : false;
 
-
 // after the current fantasy week locks, user edits NEXT fantasy week
 const selectionWeek = useMemo(() => {
   if (!deadlineMs) return fantasyWeek;
-  return deadlineLocked ? (fantasyWeek + 1) : fantasyWeek;
+  return deadlineLocked ? fantasyWeek + 1 : fantasyWeek;
 }, [deadlineMs, deadlineLocked, fantasyWeek]);
 
 const selectionRealRound = useMemo(() => {
@@ -1329,7 +1397,7 @@ function getUpcomingFixtureTag(teamCodeOrName: string) {
   const teamCode = normalizeTeamCode(teamCodeOrName);
 
   const f = normalizedFixtures.find((x) => {
-    if (x.week !== selectionWeek) return false;
+    if (x.week !== selectionRealRound) return false;
     if (isFixtureComplete(x)) return false;
 
     const homeCode = fixtureTeamCode(x.homeTeam ?? "");
