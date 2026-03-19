@@ -1373,11 +1373,24 @@ function buildStandingsFromResults(uptoWeekInclusive: number): StandingCalc[] {
     const homeId = m.homeTeamId ?? null;
     const awayId = m.awayTeamId ?? null;
 
-    // BYE rows -> ignore for standings
-    if (!homeId || !awayId) continue;
-
     const hs = m.homeScore;
     const as = m.awayScore;
+
+    // BYE row: include the real team's score in PF only
+    if (!homeId || !awayId) {
+      const realTeamId = homeId ?? awayId;
+      const realScore = homeId ? hs : as;
+
+      if (!realTeamId || realScore == null) continue;
+
+      const team = base.get(realTeamId);
+      if (!team) continue;
+
+      team.pf += realScore;
+      team.pd = team.pf - team.pa;
+      continue;
+    }
+
     if (hs == null || as == null) continue;
 
     const home = base.get(homeId);
@@ -1387,18 +1400,24 @@ function buildStandingsFromResults(uptoWeekInclusive: number): StandingCalc[] {
     home.played += 1;
     away.played += 1;
 
-    home.pf += hs; home.pa += as;
-    away.pf += as; away.pa += hs;
+    home.pf += hs;
+    home.pa += as;
+    away.pf += as;
+    away.pa += hs;
 
     if (hs > as) {
-      home.wins += 1; home.pts += 4;
+      home.wins += 1;
+      home.pts += 4;
       away.losses += 1;
     } else if (as > hs) {
-      away.wins += 1; away.pts += 4;
+      away.wins += 1;
+      away.pts += 4;
       home.losses += 1;
     } else {
-      home.draws += 1; away.draws += 1;
-      home.pts += 2; away.pts += 2;
+      home.draws += 1;
+      away.draws += 1;
+      home.pts += 2;
+      away.pts += 2;
     }
 
     home.pd = home.pf - home.pa;
@@ -1651,33 +1670,40 @@ async function handleLogout() {
   router.replace("/");
 }
   function MovementCircle({ movement }: { movement: Movement }) {
-    const isUp = movement === "up";
-    const isDown = movement === "down";
-    const isSame = movement === "same";
+  const isUp = movement === "up";
+  const isDown = movement === "down";
+  const isSame = movement === "same";
 
-    const bg = isUp ? "#22C55E" : isDown ? "#EF4444" : "rgba(255,255,255,0.22)";
-    const symbol = isUp ? "▲" : isDown ? "▼" : "=";
+  const bg = isUp ? "#22C55E" : isDown ? "#EF4444" : "rgba(255,255,255,0.22)";
+  const symbol = isUp ? "▲" : isDown ? "▼" : "=";
 
-    return (
+  return (
+    <span
+      style={{
+        width: 20,
+        height: 20,
+        borderRadius: 999,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: bg,
+        color: "white",
+        fontWeight: 900,
+        fontSize: isSame ? 12 : 11,
+        lineHeight: "12px",
+      }}
+    >
       <span
         style={{
-          width: 20,
-          height: 20,
-          borderRadius: 999,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: bg,
-          color: "white",
-          fontWeight: 900,
-          fontSize: isSame ? 12 : 11,
-          lineHeight: "12px",
+          display: "block",
+          transform: isDown ? "translateY(1px)" : "translateY(0)",
         }}
       >
         {symbol}
       </span>
-    );
-  }
+    </span>
+  );
+}
 
 const JERSEYS: Record<string, { angle?: string; front?: string; single?: string }> = {
   BLU: { angle: "/images/jerseys/BLUJerseyAngle.png", front: "/images/jerseys/BLUJerseyFront.png" },

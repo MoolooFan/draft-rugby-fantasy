@@ -75,11 +75,24 @@ function computeStandingsFromSheetRows(
     const homeId = m.homeTeamId ?? null;
     const awayId = m.awayTeamId ?? null;
 
-    // BYE rows (one side null) are ignored for standings (same as your code)
-    if (!homeId || !awayId) continue;
-
     const hs = m.homeScore;
     const as = m.awayScore;
+
+    // BYE row: include the real team's score in PF only
+    if (!homeId || !awayId) {
+      const realTeamId = homeId ?? awayId;
+      const realScore = homeId ? hs : as;
+
+      if (!realTeamId || realScore == null) continue;
+
+      const team = base.get(realTeamId);
+      if (!team) continue;
+
+      team.pf += realScore;
+      team.pd = team.pf - team.pa;
+      continue;
+    }
+
     if (hs == null || as == null) continue;
 
     const home = base.get(homeId);
@@ -89,8 +102,10 @@ function computeStandingsFromSheetRows(
     home.played += 1;
     away.played += 1;
 
-    home.pf += hs; home.pa += as;
-    away.pf += as; away.pa += hs;
+    home.pf += hs;
+    home.pa += as;
+    away.pf += as;
+    away.pa += hs;
 
     if (hs > as) {
       home.wins += 1;
@@ -112,7 +127,16 @@ function computeStandingsFromSheetRows(
   }
 
   const arr = Array.from(base.values());
-  arr.sort((a, b) => b.pts - a.pts || b.pf - a.pf || b.pd - a.pd || a.teamId.localeCompare(b.teamId));
+
+  // Keep existing app order: pts, then PF, then PD
+  arr.sort(
+    (a, b) =>
+      b.pts - a.pts ||
+      b.pf - a.pf ||
+      b.pd - a.pd ||
+      a.teamId.localeCompare(b.teamId)
+  );
+
   return arr;
 }
 

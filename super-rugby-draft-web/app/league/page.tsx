@@ -647,40 +647,59 @@ function buildStandingsFromResults(uptoWeekInclusive: number): Omit<StandingRow,
   });
 
   for (const m of rows) {
-    const homeId = m.homeTeamId ?? null;
-    const awayId = m.awayTeamId ?? null;
+  const homeId = m.homeTeamId ?? null;
+  const awayId = m.awayTeamId ?? null;
 
-    // BYE (one side null) -> ignore in standings
-    if (!homeId || !awayId) continue;
+  const hs = m.homeScore;
+  const as = m.awayScore;
 
-    const hs = m.homeScore;
-    const as = m.awayScore;
-    if (hs == null || as == null) continue;
+  // BYE row: include the real team's score in PF only
+  if (!homeId || !awayId) {
+    const realTeamId = homeId ?? awayId;
+    const realScore = homeId ? hs : as;
 
-    const home = base.get(homeId);
-    const away = base.get(awayId);
-    if (!home || !away) continue;
+    if (!realTeamId || realScore == null) continue;
 
-    home.played += 1;
-    away.played += 1;
+    const team = base.get(realTeamId);
+    if (!team) continue;
 
-    home.pf += hs; home.pa += as;
-    away.pf += as; away.pa += hs;
-
-    if (hs > as) {
-      home.wins += 1; home.pts += 4;
-      away.losses += 1;
-    } else if (as > hs) {
-      away.wins += 1; away.pts += 4;
-      home.losses += 1;
-    } else {
-      home.draws += 1; away.draws += 1;
-      home.pts += 2; away.pts += 2;
-    }
-
-    home.pd = home.pf - home.pa;
-    away.pd = away.pf - away.pa;
+    team.pf += realScore;
+    team.pd = team.pf - team.pa;
+    continue;
   }
+
+  if (hs == null || as == null) continue;
+
+  const home = base.get(homeId);
+  const away = base.get(awayId);
+  if (!home || !away) continue;
+
+  home.played += 1;
+  away.played += 1;
+
+  home.pf += hs;
+  home.pa += as;
+  away.pf += as;
+  away.pa += hs;
+
+  if (hs > as) {
+    home.wins += 1;
+    home.pts += 4;
+    away.losses += 1;
+  } else if (as > hs) {
+    away.wins += 1;
+    away.pts += 4;
+    home.losses += 1;
+  } else {
+    home.draws += 1;
+    away.draws += 1;
+    home.pts += 2;
+    away.pts += 2;
+  }
+
+  home.pd = home.pf - home.pa;
+  away.pd = away.pf - away.pa;
+}
 
   return Array.from(base.values());
 }
@@ -923,32 +942,39 @@ const finalsPlaceholderRowStyle: React.CSSProperties = {
   }
 
   function MovementCircle({ movement }: { movement: "same" | "up" | "down" }) {
-    const isUp = movement === "up";
-    const isDown = movement === "down";
-    const isSame = movement === "same";
-    const bg = isUp ? "#22C55E" : isDown ? "#EF4444" : "rgba(0,0,0,0.12)";
-    const symbol = isUp ? "▲" : isDown ? "▼" : "=";
+  const isUp = movement === "up";
+  const isDown = movement === "down";
+  const isSame = movement === "same";
+  const bg = isUp ? "#22C55E" : isDown ? "#EF4444" : "rgba(0,0,0,0.12)";
+  const symbol = isUp ? "▲" : isDown ? "▼" : "=";
 
-    return (
+  return (
+    <span
+      style={{
+        width: 18,
+        height: 18,
+        borderRadius: 999,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: bg,
+        color: "white",
+        fontWeight: 900,
+        fontSize: isSame ? 12 : 10,
+        lineHeight: "12px",
+      }}
+    >
       <span
         style={{
-          width: 18,
-          height: 18,
-          borderRadius: 999,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: bg,
-          color: "white",
-          fontWeight: 900,
-          fontSize: isSame ? 12 : 10,
-          lineHeight: "12px",
+          display: "block",
+          transform: isDown ? "translateY(1px)" : "translateY(0)",
         }}
       >
         {symbol}
       </span>
-    );
-  }
+    </span>
+  );
+}
 
   function StandingsTab() {
     // horizontally scrollable table

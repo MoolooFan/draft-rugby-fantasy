@@ -3349,7 +3349,7 @@ const onDropOn = async (e: React.DragEvent, targetClaimId: string) => {
             Your Week {claimsWeek} Claims
 
             <div style={{ marginTop: 4, fontSize: 10, fontWeight: 800, opacity: 0.65 }}>
-  Drag the handle to change claim order
+  Drag the handle to change claim order, wait a few seconds for the reorder to occur
 </div>
 
           </div>
