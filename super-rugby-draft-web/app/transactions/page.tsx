@@ -43,6 +43,51 @@ type Player = {
   stats?: any;
 };
 
+type SheetFixtureRow = {
+  season: number;
+  weekFantasy: number;
+  weekReal: number | null;
+  label: string | null;
+  kind: string | null;
+  homeTeamId: string | null;
+  awayTeamId: string | null;
+  status: string; // upcoming | complete
+  homeScore: number | null;
+  awayScore: number | null;
+};
+
+function isSheetLabelRow(r: SheetFixtureRow) {
+  return !!r.label || String(r.kind ?? "").toLowerCase() === "label";
+}
+
+function isSheetPlayableRow(r: SheetFixtureRow) {
+  return !isSheetLabelRow(r);
+}
+
+function isFantasyWeekCompleteFromSheet(rows: SheetFixtureRow[], weekNo: number) {
+  const wk = rows.filter(
+    (r) => Number(r.weekFantasy) === weekNo && isSheetPlayableRow(r)
+  );
+  if (!wk.length) return false;
+  return wk.every((r) => String(r.status ?? "").toLowerCase() === "complete");
+}
+
+function currentWeekFromSheet(rows: SheetFixtureRow[]) {
+  const weeks = Array.from(
+    new Set(
+      rows
+        .filter(isSheetPlayableRow)
+        .map((r) => Number(r.weekFantasy))
+        .filter((w) => Number.isFinite(w) && w > 0)
+    )
+  ).sort((a, b) => a - b);
+
+  for (const w of weeks) {
+    if (!isFantasyWeekCompleteFromSheet(rows, w)) return w;
+  }
+
+  return weeks[weeks.length - 1] ?? 1;
+}
 
 type AnyFixture = {
   id: string;
@@ -589,6 +634,7 @@ function TransactionsPageInner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const ENABLE_TRADES = true;
+  const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
 
   const returnTo = useMemo(() => {
     const qs = searchParams?.toString?.() ?? "";
@@ -671,6 +717,26 @@ const watchlist = useMemo(() => {
   watchlistSet.forEach((id) => (obj[id] = true));
   return obj;
 }, [watchlistSet]);
+
+useEffect(() => {
+  if (!activeLeague?.id) return;
+
+  const season = 2026;
+
+  fetch(
+    `/api/fixtures/leagueMatches?season=${season}&leagueId=${encodeURIComponent(activeLeague.id)}`,
+    {
+      cache: "no-store",
+      credentials: "include",
+    }
+  )
+    .then((r) => r.json())
+    .then((j) => {
+      if (j?.ok) setSheetFixtures(j.rows ?? []);
+      else console.error("fixtures fetch failed", j?.error);
+    })
+    .catch((e) => console.error(e));
+}, [activeLeague?.id]);
 
 useEffect(() => {
   const leagueId = String(activeLeague?.id ?? "");
@@ -823,10 +889,10 @@ const yourDraftTeamId = useMemo(() => {
   const nowMs = useNowTick(30_000);
   const weeksSorted = useMemo(() => getWeeksSorted(normalizedFixtures), [normalizedFixtures]);
 
-
-  const liveWeek = useMemo(() => {
-  return activeLeague?.currentWeek ?? 1;
-}, [activeLeague?.currentWeek]);
+const liveWeek = useMemo(() => {
+  if (!sheetFixtures.length) return activeLeague?.currentWeek ?? 1;
+  return currentWeekFromSheet(sheetFixtures);
+}, [sheetFixtures, activeLeague?.currentWeek]);
 
   const liveWeekDeadlineMs = useMemo(
     () => getWeekDeadlineMs(normalizedFixtures as any, liveWeek),
@@ -948,14 +1014,16 @@ useEffect(() => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         leagueId: activeLeague.id,
-        week: selectionWeek,
+        week: liveWeek,
       }),
     });
 
     await refreshTransactionsForLeague(activeLeague.id);
 
     // refresh rosters
-    const res = await fetch(`/api/rosters?leagueId=${encodeURIComponent(activeLeague.id)}`, { cache: "no-store" });
+    const res = await fetch(`/api/rosters?leagueId=${encodeURIComponent(activeLeague.id)}`, {
+      cache: "no-store",
+    });
     const json = await res.json().catch(() => null);
 
     if (res.ok && json?.ok) {
@@ -968,7 +1036,7 @@ useEffect(() => {
       setLeagueRostersLoaded(true);
     }
   })();
-}, [activeLeague?.id, waiverDeadlineMs, nowMs, selectionWeek]);
+}, [activeLeague?.id, waiverDeadlineMs, nowMs, liveWeek]);
 
 const [leagueRosters, setLeagueRosters] = useState<Record<string, any>>({});
 const [leagueRostersLoaded, setLeagueRostersLoaded] = useState(false);
