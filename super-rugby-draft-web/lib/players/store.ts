@@ -56,9 +56,9 @@ export const usePlayersStore = create<PlayersState>((set, get) => ({
       set({ loading: true, error: null });
 
       const [playersRes, statsRes] = await Promise.all([
-        fetch("/api/sheets/players", { cache: "no-store" }),
-        fetch("/api/sheets/player-round-stats", { cache: "no-store" }),
-      ]);
+  fetch("/api/sheets/players", { cache: "no-store" }),
+  fetch("/api/players/round-stats?season=2026", { cache: "no-store" }),
+]);
 
       const playersJson = await playersRes.json();
       const statsJson = await statsRes.json();

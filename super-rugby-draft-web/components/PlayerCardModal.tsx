@@ -52,7 +52,7 @@ type PlayerRound = {
   opponent?: string;
   homeAway?: "H" | "A";
   points: number;
-  breakdown?: RoundBreakdown; // needed for the score breakdown popup
+  breakdown?: RoundBreakdown; // RAW COUNTS per stat
   date?: string;
   minutes?: number;
 };
@@ -118,42 +118,31 @@ const POSITION_THEME: Record<
   CE: { primary: "#937df8", secondary: "#514588" },
   OB: { primary: "#f78ef0", secondary: "#884e84" },
 };
-const POINTS_PER_EVENT: Record<string, number> = {
-  minutesPlayed: 1, // because you enter 1 or 2 points
 
+const POINTS_PER_EVENT: Record<string, number> = {
   tries: 15,
   tryAssists: 9,
-
-  lineBreaks: 7,           // you said: 14 points => 2 linebreaks
-  lineBreakAssists: 5,     // CHANGE if different
-  defendersBeaten: 2,      // CHANGE
-  metresGained: 1,         // we’ll map Carries (m) to metresGained
-  offloads: 2,             // CHANGE
-
-  tackles: 1,              // CHANGE
-  tacklesMissed: -1,       // CHANGE (negative)
-
-  turnoversForced: 4,      // CHANGE
-  interceptions: 5,        // CHANGE
-  fiftyTwentyTwos: 10,      // CHANGE
-
-  penaltiesConceded: -1,   // CHANGE (negative)
-  errors: -1,              // CHANGE (negative)
-
-  lineoutsWon: 1,          // CHANGE
-  lineoutSteals: 5,        // CHANGE
-  lineoutErrors: -2,       // CHANGE (negative)
-  scrumsWon: 3,            // CHANGE
-
-  conversions: 2,          // CHANGE
-  conversionsMissed: -1,   // CHANGE (negative)
-
-  penaltyGoals: 3,         // maps to “Penalty scored”
-  penaltyGoalsMissed: -1,  // maps to “Penalty missed”
-
+  lineBreaks: 7,
+  lineBreakAssists: 5,
+  defendersBeaten: 2,
+  offloads: 2,
+  tackles: 1,
+  tacklesMissed: -1,
+  turnoversForced: 4,
+  interceptions: 5,
+  fiftyTwentyTwos: 10,
+  penaltiesConceded: -1,
+  errors: -1,
+  lineoutsWon: 1,
+  lineoutSteals: 5,
+  lineoutErrors: -2,
+  scrumsWon: 3,
+  conversions: 2,
+  conversionsMissed: -1,
+  penaltyGoals: 3,
+  penaltyGoalsMissed: -1,
   dropGoals: 3,
   dropGoalsMissed: -1,
-
   yellowCards: -5,
   redCards: -10,
 };
@@ -434,44 +423,100 @@ function pickAny(row: Record<string, any>, keys: string[]) {
   return "";
 }
 
-function buildRoundsFromSheetRows(
-  rows: Record<string, any>[],
-  playerId: string
-): PlayerRound[] {
+function normaliseIdForRounds(x: any) {
+  return String(x ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
 
-  function normaliseId(x: any) {
-    return String(x ?? "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
+function rowBelongsToPlayer(row: Record<string, any>, playerId: string) {
+  const want = normaliseIdForRounds(playerId);
+
+  const candidates = [
+    pickAny(row, ["playerId", "PlayerId", "playerID"]),
+    pickAny(row, ["internalPlayerId", "internal_player_id", "InternalPlayerId"]),
+    row?.playerId,
+    row?.internalPlayerId,
+    row?.internal_player_id,
+  ];
+
+  return candidates.some((v) => normaliseIdForRounds(v) === want);
+}
+
+function playerGetsScrumPointsForCard(player: {
+  posAbbrev?: string;
+  secondaryPosAbbrev?: string;
+}) {
+  const a = String(player?.posAbbrev ?? "").trim().toUpperCase();
+  const b = String(player?.secondaryPosAbbrev ?? "").trim().toUpperCase();
+  return a === "PR" || a === "HO" || b === "PR" || b === "HO";
+}
+
+function getMinutesFantasyPoints(minutes: number) {
+  if (!minutes) return 0;
+  if (minutes >= 61) return 2;
+  return 1;
+}
+
+function getBreakdownPointsFromCount(
+  key: string,
+  count: number,
+  player: { posAbbrev?: string; secondaryPosAbbrev?: string }
+) {
+  if (!count) return 0;
+
+  if (key === "minutesPlayed") {
+    return getMinutesFantasyPoints(count);
   }
 
-  const mine = rows.filter((r) =>
-    normaliseId(pickAny(r, ["playerId", "PlayerId", "playerID"])) ===
-    normaliseId(playerId)
-  );
+  if (key === "metresGained") {
+    return Math.floor(count / 10);
+  }
+
+  if (key === "scrumsWon" && !playerGetsScrumPointsForCard(player)) {
+    return 0;
+  }
+
+  const per = POINTS_PER_EVENT[key];
+  if (!per) return 0;
+
+  return count * per;
+}
+
+function buildRoundsFromSheetRows(
+  rows: Record<string, any>[],
+  player: PlayerCardPlayer
+): PlayerRound[] {
+  const mine = rows.filter((r) => rowBelongsToPlayer(r, player.id));
 
   return mine
     .map((r) => {
       const week = toNum(pickAny(r, ["round", "Round", "week", "Week"]));
-
       const breakdown: Record<string, number> = {};
-      let totalPoints = 0;
 
       for (const [header, internalKey] of Object.entries(HEADER_TO_KEY)) {
-        const pts = toNum(pickAny(r, [header]));
-        if (!pts) continue;
+        const count = toNum(pickAny(r, [header]));
+        if (!count) continue;
 
-        breakdown[internalKey] = pts; // ✅ store POINTS
-        totalPoints += pts;
+        // store RAW COUNTS
+        breakdown[internalKey] = count;
       }
+
+      const rowPoints =
+        toNum(pickAny(r, ["points", "Points"])) ||
+        0;
+
+      const minutes = toNum(pickAny(r, ["Minutes played"]));
 
       return {
         week,
-        points: totalPoints, // ✅ total fantasy score
+        points: rowPoints,
         breakdown,
+        minutes,
       };
     })
-    .filter((r) => r.week > 0);
+    .filter((r) => r.week > 0)
+    .sort((a, b) => (b.week ?? 0) - (a.week ?? 0));
 }
 
 
@@ -705,7 +750,7 @@ useEffect(() => {
       setError(null);
 
       const [roundRes, fixRes] = await Promise.all([
-  fetch(`/api/sheets/player-round-stats`),
+  fetch(`/api/players/round-stats?season=2026`),
   fetch(`/api/sheets/fixtures`),
 ]);
 
@@ -740,7 +785,7 @@ const weeks = Array.from(
 ).sort((a, b) => b - a); // newest first
 
 // Convert to what the UI expects
-const parsedRounds = buildRoundsFromSheetRows(roundRows, p.id);
+const parsedRounds = buildRoundsFromSheetRows(roundRows, p);
 const parsedFix = buildFixturesForTeam(allFixtures, p.teamCode);
 
 if (!cancelled) {
@@ -1185,14 +1230,16 @@ const teamLabelFull =
 
   const rows = BREAKDOWN_ORDER
   .map((key) => {
-    const pts = Number((selectedRound.breakdown as any)?.[key]) || 0;
+    const count = Number((selectedRound.breakdown as any)?.[key]) || 0;
+    const pts = getBreakdownPointsFromCount(key, count, p);
+
     return {
       key,
       pts,
       label: BREAKDOWN_LABELS[key] ?? key,
     };
   })
-  .filter((x) => x.pts !== 0) // ✅ only stats that scored
+  .filter((x) => x.pts !== 0)
   .map((x) => ({
     label: x.label,
     right: String(x.pts),
@@ -1224,7 +1271,10 @@ const teamLabelFull =
 rows={
   selectedRound
     ? BREAKDOWN_ORDER.reduce<{ label: string; right: string }[]>((acc, key) => {
-        const pts = Number((selectedRound.breakdown as any)?.[key]) || 0;
+        const count = Number((selectedRound.breakdown as any)?.[key]) || 0;
+        if (!count) return acc;
+
+        const pts = getBreakdownPointsFromCount(key, count, p);
         if (!pts) return acc;
 
         acc.push({
@@ -1295,49 +1345,47 @@ function computePositionRank(args: {
     return null as null | { rank: number; outOf: number };
   }
 
-  // build total points by playerId from the sheet rows
+  const wantPlayerId = normaliseIdForRounds(playerId);
+  const wantPos = String(posAbbrev ?? "").trim().toUpperCase();
+
   const totalsById = new Map<string, number>();
 
   for (const r of roundRows) {
-    const idRaw = pickAny(r, ["playerId", "PlayerId", "playerID"]);
-    const id = String(idRaw ?? "").trim();
+    const idRaw =
+      pickAny(r, ["internalPlayerId", "internal_player_id", "InternalPlayerId"]) ||
+      pickAny(r, ["playerId", "PlayerId", "playerID"]);
+
+    const id = normaliseIdForRounds(idRaw);
     if (!id) continue;
 
-    let totalPoints = 0;
-    for (const [header, internalKey] of Object.entries(HEADER_TO_KEY)) {
-      const pts = toNum(pickAny(r, [header]));
-      if (!pts) continue;
-      totalPoints += pts;
-    }
-
-    totalsById.set(id, (totalsById.get(id) ?? 0) + totalPoints);
+    const rowPoints = toNum(pickAny(r, ["points", "Points"]));
+    totalsById.set(id, (totalsById.get(id) ?? 0) + rowPoints);
   }
 
-  // map primary positions from playersData (id -> posAbbrev)
   const primaryPosById = new Map<string, string>();
   for (const pl of (playersData as any[])) {
-    const id = String(pl?.id ?? "").trim();
+    const id = normaliseIdForRounds(pl?.id);
     if (!id) continue;
 
-    // try a few common keys to be safe
     const pos =
       String(pl?.posAbbrev ?? pl?.position ?? pl?.pos ?? "").trim().toUpperCase();
 
     if (pos) primaryPosById.set(id, pos);
   }
 
-  // gather totals for players in this position
   const samePosTotals: { id: string; total: number }[] = [];
   for (const [id, total] of totalsById.entries()) {
     const primaryPos = primaryPosById.get(id);
-    if (primaryPos === posAbbrev) samePosTotals.push({ id, total });
+    if (primaryPos === wantPos) {
+      samePosTotals.push({ id, total });
+    }
   }
 
   if (!samePosTotals.length) return null;
 
-  samePosTotals.sort((a, b) => b.total - a.total);
+  samePosTotals.sort((a, b) => b.total - a.total || a.id.localeCompare(b.id));
 
-  const idx = samePosTotals.findIndex((x) => x.id === playerId);
+  const idx = samePosTotals.findIndex((x) => x.id === wantPlayerId);
   if (idx === -1) return null;
 
   return { rank: idx + 1, outOf: samePosTotals.length };
@@ -1371,17 +1419,7 @@ function totalPointsForKey(rounds: any[], key: string) {
 }
 
 function totalDerived(rounds: any[], key: string) {
-  const pts = totalPointsForKey(rounds, key);
-
-  // Special case: metres (1pt per 10m)
-  if (key === "metresGained") {
-    return Math.floor(pts) * 10;
-  }
-
-  const per = POINTS_PER_EVENT[key];
-  if (!per) return 0;
-
-  return Math.round(pts / per);
+  return rounds.reduce((sum, r) => sum + (Number(r?.breakdown?.[key]) || 0), 0);
 }
 
 function perGameDerived(rounds: any[], key: string) {

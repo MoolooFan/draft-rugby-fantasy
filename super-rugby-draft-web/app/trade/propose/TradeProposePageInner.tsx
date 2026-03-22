@@ -228,53 +228,80 @@ function normaliseId(x: any) {
     .replace(/[^a-z0-9]/g, "");
 }
 
-function getRoundPointsFromRow(row: any): number | null {
+function playerGetsScrumPoints(p: Player): boolean {
+  const a = String(p.posAbbrev ?? "").trim().toUpperCase();
+  const b = String(p.secondaryPosAbbrev ?? "").trim().toUpperCase();
+  return a === "PR" || a === "HO" || b === "PR" || b === "HO";
+}
+
+function getRoundPointsFromRow(row: any, p: Player): number | null {
   if (!row) return null;
 
-  // Transactions logic: minutes must exist or we treat as DNP
-  const minutePts = getRowNumber(row, "Minutes played");
-  if (!minutePts) return null;
+  const minutes = getRowNumber(row, "Minutes played");
+  if (!minutes) return null;
 
-  const pointColumns = [
-    "Tries",
-    "Try Assists",
-    "Linebreaks",
-    "Linebreak assists",
-    "Defenders beaten",
-    "Carries (m)",
-    "Offloads",
-    "Tackles",
-    "Missed tackles",
-    "Turnover Forced",
-    "Interceptions",
-    "50:22 Kicks",
-    "Penalties Conceded",
-    "Errors",
-    "Lineouts won",
-    "Lineout steals",
-    "Lineout errors",
-    "Scrums won outright",
-    "Conversions",
-    "Conversions missed",
-    "Penalty scored",
-    "Penalty missed",
-    "Drop goal scored",
-    "Drop goal missed",
-    "Yellow cards",
-    "Red cards",
-  ];
+  let total = 0;
 
-  let statPts = 0;
-  for (const k of pointColumns) statPts += getRowNumber(row, k);
+  // minutes
+  total += minutes >= 61 ? 2 : 1;
 
-  const total = minutePts + statPts;
+  // attack
+  total += getRowNumber(row, "Tries") * 15;
+  total += getRowNumber(row, "Try Assists") * 9;
+  total += getRowNumber(row, "Linebreaks") * 7;
+  total += getRowNumber(row, "Linebreak assists") * 5;
+  total += getRowNumber(row, "Defenders beaten") * 2;
+  total += Math.floor(getRowNumber(row, "Carries (m)") / 10);
+  total += getRowNumber(row, "Offloads") * 2;
+
+  // defence / playmaking
+  total += getRowNumber(row, "Tackles") * 1;
+  total += getRowNumber(row, "Missed tackles") * -1;
+  total += getRowNumber(row, "Turnover Forced") * 4;
+  total += getRowNumber(row, "Interceptions") * 5;
+  total += getRowNumber(row, "50:22 Kicks") * 10;
+
+  // discipline / errors
+  total += getRowNumber(row, "Penalties Conceded") * -1;
+  total += getRowNumber(row, "Errors") * -1;
+
+  // set piece
+  total += getRowNumber(row, "Lineouts won") * 1;
+  total += getRowNumber(row, "Lineout steals") * 5;
+  total += getRowNumber(row, "Lineout errors") * -2;
+
+  if (playerGetsScrumPoints(p)) {
+    total += getRowNumber(row, "Scrums won outright") * 3;
+  }
+
+  // kicking
+  total += getRowNumber(row, "Conversions") * 2;
+  total += getRowNumber(row, "Conversions missed") * -1;
+  total += getRowNumber(row, "Penalty scored") * 3;
+  total += getRowNumber(row, "Penalty missed") * -1;
+  total += getRowNumber(row, "Drop goal scored") * 3;
+  total += getRowNumber(row, "Drop goal missed") * -1;
+
+  // cards
+  total += getRowNumber(row, "Yellow cards") * -5;
+  total += getRowNumber(row, "Red cards") * -10;
+
   return Number.isFinite(total) ? total : null;
 }
 
 function getPlayerRounds(playerId: string, roundRows: any[]) {
   const want = normaliseId(playerId);
 
-  const idKeys = ["playerId", "player_id", "playerID", "id", "player"];
+  const idKeys = [
+    "playerId",
+    "player_id",
+    "playerID",
+    "internalPlayerId",
+    "internal_player_id",
+    "InternalPlayerId",
+    "id",
+    "player",
+  ];
 
   return (roundRows ?? []).filter((r: any) => {
     if (!r) return false;
@@ -295,15 +322,15 @@ function getPlayerRounds(playerId: string, roundRows: any[]) {
   });
 }
 
-function getTotalPointsFromRounds(playerId: string, roundRows: any[]): number | null {
-  const rounds = getPlayerRounds(playerId, roundRows);
+function getTotalPointsFromRounds(p: Player, roundRows: any[]): number | null {
+  const rounds = getPlayerRounds(p.id, roundRows);
   if (!rounds.length) return null;
 
   let total = 0;
   let any = false;
 
   for (const r of rounds) {
-    const pts = getRoundPointsFromRow(r);
+    const pts = getRoundPointsFromRow(r, p);
     if (pts == null) continue;
     total += pts;
     any = true;
@@ -312,27 +339,31 @@ function getTotalPointsFromRounds(playerId: string, roundRows: any[]): number | 
   return any ? total : null;
 }
 
-function getMatchesPlayedFromRounds(playerId: string, roundRows: any[]): number | null {
-  const rounds = getPlayerRounds(playerId, roundRows);
+function getMatchesPlayedFromRounds(p: Player, roundRows: any[]): number | null {
+  const rounds = getPlayerRounds(p.id, roundRows);
   if (!rounds.length) return null;
 
-  const played = rounds.reduce((acc: number, r: any) => acc + (getRoundPointsFromRow(r) != null ? 1 : 0), 0);
+  const played = rounds.reduce(
+    (acc: number, r: any) => acc + (getRoundPointsFromRow(r, p) != null ? 1 : 0),
+    0
+  );
+
   return played || null;
 }
 
-function getAvgPPGFromRounds(playerId: string, roundRows: any[]): number | null {
-  const tot = getTotalPointsFromRounds(playerId, roundRows);
-  const gp = getMatchesPlayedFromRounds(playerId, roundRows);
+function getAvgPPGFromRounds(p: Player, roundRows: any[]): number | null {
+  const tot = getTotalPointsFromRounds(p, roundRows);
+  const gp = getMatchesPlayedFromRounds(p, roundRows);
   if (tot != null && gp != null && gp > 0) return tot / gp;
   return null;
 }
 
-function getFormLast3AvgFromRounds(playerId: string, roundRows: any[]): number | null {
-  const rounds = getPlayerRounds(playerId, roundRows);
+function getFormLast3AvgFromRounds(p: Player, roundRows: any[]): number | null {
+  const rounds = getPlayerRounds(p.id, roundRows);
   if (!rounds.length) return null;
 
   const played = rounds
-    .map((r: any) => ({ r, pts: getRoundPointsFromRow(r) }))
+    .map((r: any) => ({ r, pts: getRoundPointsFromRow(r, p) }))
     .filter((x: any) => typeof x.pts === "number");
 
   if (!played.length) return null;
@@ -345,30 +376,27 @@ function getFormLast3AvgFromRounds(playerId: string, roundRows: any[]): number |
 }
 
 function metricValue(p: Player, mode: InfoMode, roundRows: any[]): string {
-  if (mode === "DRAFT_RANK") return typeof p.draftRank === "number" ? String(p.draftRank) : "-";
+  if (mode === "DRAFT_RANK") {
+    return typeof p.draftRank === "number" ? String(p.draftRank) : "-";
+  }
 
   if (mode === "TOTAL_PTS") {
-    const t = getTotalPointsFromRounds(p.id, roundRows);
+    const t = getTotalPointsFromRounds(p, roundRows);
     return typeof t === "number" ? String(Math.round(t)) : "-";
   }
 
   if (mode === "AVG_PPG") {
-    const v = getAvgPPGFromRounds(p.id, roundRows);
+    const v = getAvgPPGFromRounds(p, roundRows);
     return typeof v === "number" ? v.toFixed(1) : "-";
   }
 
   if (mode === "FORM") {
-    const f = getFormLast3AvgFromRounds(p.id, roundRows);
+    const f = getFormLast3AvgFromRounds(p, roundRows);
     return typeof f === "number" ? f.toFixed(1) : "-";
   }
 
   return "—";
 }
-
-
-
-
-
 
 
 function fullTeamName(teamCode: string) {
@@ -576,9 +604,9 @@ useEffect(() => {
 function hydratePlayer(p: Player): Player {
   const live: any = getLivePlayerById?.(p.id);
 
-  const totalPoints = getTotalPointsFromRounds(p.id, roundRows ?? []);
-  const matchesPlayed = getMatchesPlayedFromRounds(p.id, roundRows ?? []);
-  const avgPointsPerMatch = getAvgPPGFromRounds(p.id, roundRows ?? []);
+  const totalPoints = getTotalPointsFromRounds(p, roundRows ?? []);
+const matchesPlayed = getMatchesPlayedFromRounds(p, roundRows ?? []);
+const avgPointsPerMatch = getAvgPPGFromRounds(p, roundRows ?? []);
 
   return {
     ...p,
@@ -662,6 +690,16 @@ useEffect(() => {
 const partnerTeamName = useMemo(() => {
   return (activeLeague as any)?.teams?.find((t: any) => t.id === partnerTeamId)?.name ?? "";
 }, [activeLeague, partnerTeamId]);
+
+const modalTeamLabel = useMemo(() => {
+  if (!modalPlayer) return "";
+
+  if (modalContext === "REQUESTING") {
+    return partnerTeamName || "Available";
+  }
+
+  return yourTeamName || "Available";
+}, [modalPlayer, modalContext, partnerTeamName, yourTeamName]);
 
 const [step, setStep] = useState<Step>("REQUESTING");
 const [requestingIds, setRequestingIds] = useState<string[]>([]);
@@ -1204,7 +1242,7 @@ function PlayerRow({
               fontWeight: 800,
               opacity: 0.7,
               whiteSpace: "nowrap",
-              overflow: "hidden",
+              overflow: "visible",
               textOverflow: "ellipsis",
             }}
           >
@@ -1494,8 +1532,8 @@ const reviewOfferPlayers = offeringIds
 {modalPlayer ? (
   <PlayerCardModal
     onClose={() => setModalPlayer(null)}
-    player={hydratePlayer(modalPlayer)} // ✅ always pass fully hydrated player
-    teamLabel={yourTeamName}
+    player={hydratePlayer(modalPlayer)}
+    teamLabel={modalTeamLabel}
     initialTab="Stats"
     actions={modalActions}
   />

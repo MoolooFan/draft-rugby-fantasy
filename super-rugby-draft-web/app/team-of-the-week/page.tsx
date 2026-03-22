@@ -237,44 +237,66 @@ function rowRound(row: any) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-function calcFantasyPoints(row: any): number {
-  const toNumber = (v: any) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  };
 
-  const POINT_COLUMNS = [
-    "Minutes played",
-    "Tries",
-    "Try Assists",
-    "Linebreaks",
-    "Linebreak assists",
-    "Defenders beaten",
-    "Carries (m)",
-    "Offloads",
-    "Tackles",
-    "Missed tackles",
-    "Turnover Forced",
-    "Interceptions",
-    "50:22 Kicks",
-    "Penalties Conceded",
-    "Errors",
-    "Lineouts won",
-    "Lineout steals",
-    "Lineout errors",
-    "Scrums won outright",
-    "Conversions",
-    "Conversions missed",
-    "Penalty scored",
-    "Penalty missed",
-    "Drop goal scored",
-    "Drop goal missed",
-    "Yellow cards",
-    "Red cards",
-  ];
+function toNum(v: any): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function calcFantasyPoints(row: any, player?: Player | null): number {
+  const minutes = toNum(row?.["Minutes played"]);
+  if (!minutes) return 0;
 
   let pts = 0;
-  for (const col of POINT_COLUMNS) pts += toNumber(row?.[col]);
+
+  // minutes
+  pts += minutes >= 61 ? 2 : 1;
+
+  // attack
+  pts += toNum(row?.["Tries"]) * 15;
+  pts += toNum(row?.["Try Assists"]) * 9;
+  pts += toNum(row?.["Linebreaks"]) * 7;
+  pts += toNum(row?.["Linebreak assists"]) * 5;
+  pts += toNum(row?.["Defenders beaten"]) * 2;
+  pts += Math.floor(toNum(row?.["Carries (m)"]) / 10);
+  pts += toNum(row?.["Offloads"]) * 2;
+
+  // defence
+  pts += toNum(row?.["Tackles"]) * 1;
+  pts += toNum(row?.["Missed tackles"]) * -1;
+  pts += toNum(row?.["Turnover Forced"]) * 4;
+  pts += toNum(row?.["Interceptions"]) * 5;
+  pts += toNum(row?.["50:22 Kicks"]) * 10;
+
+  // discipline / errors
+  pts += toNum(row?.["Penalties Conceded"]) * -1;
+  pts += toNum(row?.["Errors"]) * -1;
+  pts += toNum(row?.["Yellow cards"]) * -5;
+  pts += toNum(row?.["Red cards"]) * -10;
+
+  // set piece
+  pts += toNum(row?.["Lineouts won"]) * 1;
+  pts += toNum(row?.["Lineout steals"]) * 5;
+  pts += toNum(row?.["Lineout errors"]) * -2;
+
+  // scrum points only for props + hookers
+  const posA = String(player?.posAbbrev ?? "").toUpperCase();
+  const posB = String(player?.secondaryPosAbbrev ?? "").toUpperCase();
+  const isFrontRow =
+    posA === "PR" || posA === "HO" || posB === "PR" || posB === "HO";
+
+  if (isFrontRow) {
+    pts += toNum(row?.["Scrums won outright"]) * 3;
+  }
+
+  // kicking
+  pts += toNum(row?.["Conversions"]) * 2;
+  pts += toNum(row?.["Conversions missed"]) * -1;
+  pts += toNum(row?.["Penalty scored"]) * 3;
+  pts += toNum(row?.["Penalty missed"]) * -1;
+  pts += toNum(row?.["Drop goal scored"]) * 3;
+  pts += toNum(row?.["Drop goal missed"]) * -1;
+
   return pts;
 }
 
@@ -469,17 +491,6 @@ export default function TeamOfTheWeekPage() {
     if (!livePlayersLoaded) refreshLivePlayers();
   }, [livePlayersLoaded, refreshLivePlayers]);
 
-  const weekPointsByPlayerId = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const row of roundRows ?? []) {
-      if (rowRound(row) !== realRound) continue;
-      const pid = rowPlayerId(row);
-      if (!pid) continue;
-      m.set(String(pid).toLowerCase(), calcFantasyPoints(row));
-    }
-    return m;
-  }, [roundRows, realRound]);
-
   const players: Player[] = useMemo(() => {
     const src = Array.isArray(allPlayersRaw) ? allPlayersRaw : [];
     return src
@@ -502,6 +513,28 @@ export default function TeamOfTheWeekPage() {
       })
       .filter(Boolean) as Player[];
   }, [allPlayersRaw]);
+  
+  const weekPointsByPlayerId = useMemo(() => {
+  const m = new Map<string, number>();
+
+  for (const row of roundRows ?? []) {
+    if (rowRound(row) !== realRound) continue;
+
+    const pidRaw = rowPlayerId(row);
+    if (!pidRaw) continue;
+
+    const pid = String(pidRaw).toLowerCase();
+
+    const player =
+      players.find((p) => String(p.id).toLowerCase() === pid) ?? null;
+
+    m.set(pid, calcFantasyPoints(row, player));
+  }
+
+  return m;
+}, [roundRows, realRound, players]);
+
+  
 
   // POTW ids (ties allowed)
   const potwIds = useMemo(() => {

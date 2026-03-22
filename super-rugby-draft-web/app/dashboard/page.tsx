@@ -50,7 +50,12 @@ type Player = {
 
 type Modal =
   | null
-  | { type: "playerCard"; player: Player };
+  | {
+      type: "playerCard";
+      player: Player;
+      ownerTeamId?: string | null;
+      teamLabel?: string;
+    };
 
   type AnyFixture = {
   week: number;
@@ -267,8 +272,8 @@ function toNum(v: any): number | null {
 
 function normaliseId(x: any) {
   return String(x ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
+    .trim()
+    .toLowerCase();
 }
 
 function getPlayerRounds(playerId: string, roundRows: any[]) {
@@ -311,47 +316,78 @@ function getRowNumber(row: any, header: string): number {
   return 0;
 }
 
-function getRoundPointsFromRow(row: any): number | null {
+function directPointsFromRow(row: any): number | null {
   if (!row) return null;
 
-  // played = has minutes
-  const minutesPts = getRowNumber(row, "Minutes played");
-  if (!minutesPts) return null;
+  const v =
+    row?.points ??
+    row?.Points ??
+    row?.fantasyPoints ??
+    row?.totalPoints ??
+    null;
 
-  const POINT_COLUMNS = [
-    "Tries",
-    "Try Assists",
-    "Linebreaks",
-    "Linebreak assists",
-    "Defenders beaten",
-    "Carries (m)",
-    "Offloads",
-    "Tackles",
-    "Missed tackles",
-    "Turnover Forced",
-    "Interceptions",
-    "50:22 Kicks",
-    "Penalties Conceded",
-    "Errors",
-    "Lineouts won",
-    "Lineout steals",
-    "Lineout errors",
-    "Scrums won outright",
-    "Conversions",
-    "Conversions missed",
-    "Penalty scored",
-    "Penalty missed",
-    "Drop goal scored",
-    "Drop goal missed",
-    "Yellow cards",
-    "Red cards",
-  ];
+  return toNum(v);
+}
 
-  let statPts = 0;
-  for (const k of POINT_COLUMNS) statPts += getRowNumber(row, k);
+function fantasyPointsFromMinutes(minutes: number): number {
+  if (minutes <= 0) return 0;
+  if (minutes >= 61) return 2;
+  return 1;
+}
 
-  const total = minutesPts + statPts;
-  return Number.isFinite(total) ? total : null;
+function fantasyPointsFromRow(row: any): number | null {
+  if (!row) return null;
+
+  const minutes = getRowNumber(row, "Minutes played");
+  if (!minutes) return null; // not played
+
+  let total = 0;
+
+  total += fantasyPointsFromMinutes(minutes);
+
+  total += getRowNumber(row, "Tries") * 15;
+  total += getRowNumber(row, "Try Assists") * 9;
+  total += getRowNumber(row, "Conversions") * 2;
+  total += getRowNumber(row, "Conversions missed") * -1;
+  total += getRowNumber(row, "Penalty scored") * 3;
+  total += getRowNumber(row, "Penalty missed") * -1;
+  total += getRowNumber(row, "Drop goal scored") * 3;
+  total += getRowNumber(row, "Drop goal missed") * -1;
+
+  total += getRowNumber(row, "Yellow cards") * -5;
+  total += getRowNumber(row, "Red cards") * -10;
+
+  total += getRowNumber(row, "Turnover Forced") * 4;
+  total += getRowNumber(row, "Interceptions") * 5;
+  total += getRowNumber(row, "Offloads") * 2;
+  total += getRowNumber(row, "Linebreaks") * 7;
+  total += getRowNumber(row, "Linebreak assists") * 5;
+  total += Math.floor(getRowNumber(row, "Carries (m)") / 10);
+  total += getRowNumber(row, "Penalties Conceded") * -1;
+  total += getRowNumber(row, "Lineouts won") * 1;
+  total += getRowNumber(row, "Lineout steals") * 5;
+  total += getRowNumber(row, "Lineout errors") * -2;
+  total += getRowNumber(row, "Tackles") * 1;
+  total += getRowNumber(row, "Missed tackles") * -1;
+  total += getRowNumber(row, "Errors") * -1;
+  total += getRowNumber(row, "Defenders beaten") * 2;
+  total += getRowNumber(row, "Scrums won outright") * 3;
+  total += getRowNumber(row, "50:22 Kicks") * 10;
+
+  return total;
+}
+
+function getRoundPointsFromRow(row: any): number | null {
+  const direct = directPointsFromRow(row);
+  if (direct != null) return direct;
+
+  return fantasyPointsFromRow(row);
+}
+
+function rowRound(row: any) {
+  const v = row?.round ?? row?.Round ?? row?.week ?? row?.Week ?? 0;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 // Form = avg points across last 3 PLAYED rounds
@@ -360,16 +396,66 @@ function getFormLast3Avg(playerId: string, roundRows: any[]): number | null {
   if (!rounds.length) return null;
 
   const played = rounds
-    .map((r: any) => ({ r, pts: getRoundPointsFromRow(r) }))
-    .filter((x: any) => typeof x.pts === "number");
+    .map((r: any) => ({
+      r,
+      pts: getRoundPointsFromRow(r),
+      minutes: getRowNumber(r, "Minutes played"),
+      round: rowRound(r),
+    }))
+    .filter((x: any) => typeof x.pts === "number" && x.minutes > 0 && x.round > 0);
 
   if (!played.length) return null;
 
-  played.sort((a: any, b: any) => (toNum(a.r?.round) ?? 0) - (toNum(b.r?.round) ?? 0));
+  // newest round first
+  played.sort((a: any, b: any) => b.round - a.round);
 
-  const last3 = played.slice(-3);
+  // most recent 3 played rounds
+  const last3 = played.slice(0, 3);
+
   const sum = last3.reduce((acc: number, x: any) => acc + (x.pts as number), 0);
   return sum / last3.length;
+}
+
+
+// Points mapping for this displayed round
+function rowPlayerId(row: any) {
+  return (
+    row?.playerId ??
+    row?.internalPlayerId ??
+    row?.internal_player_id ??
+    row?.["Player ID"] ??
+    row?.player_id ??
+    row?.id ??
+    null
+  );
+}
+
+function getLatest3FormFromRoundRows(playerId: string, roundRows: any[]): number {
+  const want = normaliseId(playerId);
+
+  const rows = (roundRows ?? [])
+    .filter((r: any) => normaliseId(rowPlayerId(r)) === want)
+    .map((r: any) => ({
+      round: rowRound(r),
+      points: Number(r?.points ?? getRoundPointsFromRow(r) ?? 0),
+    }))
+    .filter((x: any) => Number.isFinite(x.round) && x.round > 0 && Number.isFinite(x.points))
+    .sort((a: any, b: any) => b.round - a.round);
+
+  const latest3: Array<{ round: number; points: number }> = [];
+  const seenRounds = new Set<number>();
+
+  for (const r of rows) {
+    if (seenRounds.has(r.round)) continue;
+    seenRounds.add(r.round);
+    latest3.push(r);
+    if (latest3.length === 3) break;
+  }
+
+  if (!latest3.length) return 0;
+
+  const sum = latest3.reduce((acc, r) => acc + r.points, 0);
+  return sum / latest3.length;
 }
 
 export default function DashboardPage() {
@@ -620,8 +706,8 @@ async function toggleWatchlistForDashboard(playerId: string) {
 }
 
 useEffect(() => {
-  if (!livePlayersLoaded) refreshLivePlayers();
-}, [livePlayersLoaded, refreshLivePlayers]);
+  refreshLivePlayers();
+}, [refreshLivePlayers]);
 
 // Determine YOUR leagueTeamId (same logic as Matchup page)
 const norm = (s: any) => String(s ?? "").trim().toLowerCase();
@@ -907,6 +993,11 @@ const modalStatus = useMemo<PlayerStatus | undefined>(() => {
 
 const modalOwnerTeamId = useMemo(() => {
   if (modal?.type !== "playerCard") return null;
+
+  if (modal.ownerTeamId !== undefined) {
+    return modal.ownerTeamId ?? null;
+  }
+
   return ownerTeamIdByPlayerId.get(normaliseId(modal.player.id)) ?? null;
 }, [modal, ownerTeamIdByPlayerId]);
 
@@ -914,10 +1005,18 @@ const modalTeamLabel = useMemo(() => {
   if (modal?.type !== "playerCard") return "Available";
 
   const pidLower = normaliseId(modal.player.id);
-  const ownerTeamId = ownerTeamIdByPlayerId.get(pidLower) ?? null;
 
-  if (!ownerTeamId) return "Available";
-  return nameByTeamId(ownerTeamId);
+  const ownerTeamId =
+    modal.ownerTeamId !== undefined
+      ? (modal.ownerTeamId ?? null)
+      : (ownerTeamIdByPlayerId.get(pidLower) ?? null);
+
+  if (ownerTeamId) return nameByTeamId(ownerTeamId);
+
+  // only use the saved label as a fallback when it is something real
+  if (modal.teamLabel && modal.teamLabel !== "Available") return modal.teamLabel;
+
+  return "Available";
 }, [modal, ownerTeamIdByPlayerId, nameByTeamId]);
 
 const modalIsOwned = !!modalOwnerTeamId;
@@ -1002,64 +1101,24 @@ function selectionLineupForTeam(teamId: string | null) {
   };
 }
 
-// Points mapping for this displayed round
-function rowPlayerId(row: any) {
-  return row?.playerId ?? row?.["Player ID"] ?? row?.player_id ?? row?.id ?? null;
-}
-function rowRound(row: any) {
-  const v = row?.round ?? row?.Round ?? row?.week ?? row?.Week ?? 0;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
+
+
 function calcFantasyPoints(row: any): number {
-  const toNumber = (v: any) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  };
-
-  const POINT_COLUMNS = [
-    "Minutes played",
-    "Tries",
-    "Try Assists",
-    "Linebreaks",
-    "Linebreak assists",
-    "Defenders beaten",
-    "Carries (m)",
-    "Offloads",
-    "Tackles",
-    "Missed tackles",
-    "Turnover Forced",
-    "Interceptions",
-    "50:22 Kicks",
-    "Penalties Conceded",
-    "Errors",
-    "Lineouts won",
-    "Lineout steals",
-    "Lineout errors",
-    "Scrums won outright",
-    "Conversions",
-    "Conversions missed",
-    "Penalty scored",
-    "Penalty missed",
-    "Drop goal scored",
-    "Drop goal missed",
-    "Yellow cards",
-    "Red cards",
-  ];
-
-  let pts = 0;
-  for (const col of POINT_COLUMNS) pts += toNumber(row?.[col]);
-  return pts;
+  return getRoundPointsFromRow(row) ?? 0;
 }
 
 const weekPointsByPlayerId = useMemo(() => {
   const m = new Map<string, number>();
+
   for (const row of roundRows ?? []) {
     if (rowRound(row) !== displayRealRound) continue;
+
     const pid = rowPlayerId(row);
     if (!pid) continue;
-    m.set(String(pid).toLowerCase(), calcFantasyPoints(row));
+
+    m.set(normaliseId(pid), calcFantasyPoints(row));
   }
+
   return m;
 }, [roundRows, displayRealRound]);
 
@@ -1077,7 +1136,7 @@ function findPlayerMetaById(allPlayersAny: any[], playerId: string) {
 
 function pointsForPlayer(p: any | null) {
   if (!p?.id) return 0;
-  return weekPointsByPlayerId.get(String(p.id).toLowerCase()) ?? 0;
+  return weekPointsByPlayerId.get(normaliseId(p.id)) ?? 0;
 }
 
 function pointsWithCaptain(p: any | null, effCaptainId: string | null) {
@@ -1470,6 +1529,7 @@ const standings: StandingRow[] = useMemo(() => {
     .slice(0, 10); // safety cap for dashboard
 }, [activeLeague?.teams, sheetFixtures]);
 
+
 const bestAvailablePlayers: Player[] = useMemo(() => {
   const src = Array.isArray(allPlayers) ? allPlayers : [];
 
@@ -1493,7 +1553,21 @@ const pos2 =
 
 const posName = pos2 ? `${posNamePrimary} / ${pos2}` : posNamePrimary;
 
-      const form = getFormLast3Avg(id, roundRows) ?? 0;
+      const form = getLatest3FormFromRoundRows(id, roundRows);
+
+      if (normaliseId(id) === normaliseId("M.Jorgensen")) {
+  console.log("MAX FORM DEBUG", {
+    id,
+    form,
+    rows: (roundRows ?? [])
+      .filter((r: any) => normaliseId(rowPlayerId(r)) === normaliseId("M.Jorgensen"))
+      .map((r: any) => ({
+        round: rowRound(r),
+        points: Number(r?.points ?? getRoundPointsFromRow(r) ?? 0),
+      }))
+      .sort((a: any, b: any) => b.round - a.round),
+  });
+}
 
       return {
         id,
@@ -1522,8 +1596,7 @@ const posName = pos2 ? `${posNamePrimary} / ${pos2}` : posNamePrimary;
 }, [allPlayers, rosteredIds, roundRows]);
 
   const playersOfWeek: Player[] = useMemo(() => {
-  // need points for the same round as the matchup card
-  if (!displayRealRound) return [];
+  if (!displayWeek) return [];
   if (!weekPointsByPlayerId || weekPointsByPlayerId.size === 0) return [];
 
   // find max points this round
@@ -1573,7 +1646,7 @@ const posName = pos2 ? `${posNamePrimary} / ${pos2}` : posNamePrimary;
   });
 
   return mapped;
-}, [allPlayers, weekPointsByPlayerId, displayRealRound]);
+}, [allPlayers, weekPointsByPlayerId, displayWeek]);
 
 
   function onMenuSelect(item: ActiveMenu) {
@@ -2056,7 +2129,15 @@ function JerseyTile({
     {playersOfWeek.map((p) => (
       <button
         key={p.id}
-        onClick={() => setModal({ type: "playerCard", player: p })}
+        onClick={() => {
+  const ownerTeamId = ownerTeamIdByPlayerId.get(normaliseId(p.id)) ?? null;
+
+  setModal({
+  type: "playerCard",
+  player: p,
+  ownerTeamId,
+});
+}}
         style={{
           border: "none",
           background: "transparent",
@@ -2135,8 +2216,16 @@ function JerseyTile({
               {bestAvailablePlayers.map((p, idx) => (
                 <button
                   key={p.id}
-                  onClick={() => setModal({ type: "playerCard", player: p })}
-                  style={{
+onClick={() => {
+  const ownerTeamId = ownerTeamIdByPlayerId.get(normaliseId(p.id)) ?? null;
+
+  setModal({
+    type: "playerCard",
+    player: p,
+    ownerTeamId,
+    teamLabel: ownerTeamId ? nameByTeamId(ownerTeamId) : "Available",
+  });
+}}                  style={{
                     border: "none",
                     background: "transparent",
                     padding: 0,

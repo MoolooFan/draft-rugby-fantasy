@@ -66,6 +66,10 @@ function normaliseId(x: any) {
     .replace(/[^a-z0-9]/g, "");
 }
 
+function exactId(x: any) {
+  return String(x ?? "").trim().toLowerCase();
+}
+
 function rowPlayerId(row: any) {
   return pickValue(row, ["playerId", "Player ID", "player_id", "id"]);
 }
@@ -78,89 +82,114 @@ function rowRound(row: any) {
 
 
 // ✅ sheet already contains POINTS per column → sum them
-function calcFantasyPoints(row: any): number {
-  const toNumber = (v: any) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
+function playerGetsScrumPoints(
+  p: Pick<Player, "posAbbrev" | "secondaryPosAbbrev"> | null
+) {
+  if (!p) return false;
+
+  const a = String(p.posAbbrev ?? "").trim().toUpperCase();
+  const b = String(p.secondaryPosAbbrev ?? "").trim().toUpperCase();
+
+  return a === "PR" || a === "HO" || b === "PR" || b === "HO";
+}
+
+// ✅ external stats now store RAW STAT COUNTS, so convert them to fantasy points here
+function calcFantasyPoints(
+  row: any,
+  player: Pick<Player, "posAbbrev" | "secondaryPosAbbrev"> | null
+): number {
+  const n = (header: string) => {
+    const v = Number(pickValue(row, [header]));
+    return Number.isFinite(v) ? v : 0;
   };
 
-  const POINT_COLUMNS = [
-    "Minutes played",
-    "Tries",
-    "Try Assists",
-    "Linebreaks",
-    "Linebreak assists",
-    "Defenders beaten",
-    "Carries (m)",
-    "Offloads",
-    "Tackles",
-    "Missed tackles",
-    "Turnover Forced",
-    "Interceptions",
-    "50:22 Kicks",
-    "Penalties Conceded",
-    "Errors",
-    "Lineouts won",
-    "Lineout steals",
-    "Lineout errors",
-    "Scrums won outright",
-    "Conversions",
-    "Conversions missed",
-    "Penalty scored",
-    "Penalty missed",
-    "Drop goal scored",
-    "Drop goal missed",
-    "Yellow cards",
-    "Red cards",
-  ];
+  const minutes = n("Minutes played");
 
-  let pts = 0;
-  for (const col of POINT_COLUMNS) pts += toNumber(pickValue(row, [col]));
-  return pts;
+  let total = 0;
+
+  // minutes
+  if (minutes > 0 && minutes < 61) total += 1;
+  if (minutes >= 61) total += 2;
+
+  // positive scoring
+  total += n("Tries") * 15;
+  total += n("Try Assists") * 9;
+  total += n("Linebreaks") * 7;
+  total += n("Linebreak assists") * 5;
+  total += n("Defenders beaten") * 2;
+  total += Math.floor(n("Carries (m)") / 10);
+  total += n("Offloads") * 2;
+  total += n("Tackles") * 1;
+  total += n("Turnover Forced") * 4;
+  total += n("Interceptions") * 5;
+  total += n("50:22 Kicks") * 10;
+  total += n("Lineouts won") * 1;
+  total += n("Lineout steals") * 5;
+  total += playerGetsScrumPoints(player) ? n("Scrums won outright") * 3 : 0;
+  total += n("Conversions") * 2;
+  total += n("Penalty scored") * 3;
+  total += n("Drop goal scored") * 3;
+
+  // negative scoring
+  total -= n("Missed tackles") * 1;
+  total -= n("Penalties Conceded") * 1;
+  total -= n("Errors") * 1;
+  total -= n("Lineout errors") * 2;
+  total -= n("Conversions missed") * 1;
+  total -= n("Penalty missed") * 1;
+  total -= n("Drop goal missed") * 1;
+  total -= n("Yellow cards") * 5;
+  total -= n("Red cards") * 10;
+
+  return total;
 }
 
 // Build breakdown rows for PointsBreakdownModal (matches Row: { label, right })
-function buildBreakdownRows(row: any): Array<{ label: string; right?: string }> {
-  const POINT_COLUMNS = [
-    "Minutes played",
-    "Tries",
-    "Try Assists",
-    "Linebreaks",
-    "Linebreak assists",
-    "Defenders beaten",
-    "Carries (m)",
-    "Offloads",
-    "Tackles",
-    "Missed tackles",
-    "Turnover Forced",
-    "Interceptions",
-    "50:22 Kicks",
-    "Penalties Conceded",
-    "Errors",
-    "Lineouts won",
-    "Lineout steals",
-    "Lineout errors",
-    "Scrums won outright",
-    "Conversions",
-    "Conversions missed",
-    "Penalty scored",
-    "Penalty missed",
-    "Drop goal scored",
-    "Drop goal missed",
-    "Yellow cards",
-    "Red cards",
-  ];
-
-  const toNum = (v: any) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
+function buildBreakdownRows(row: any, player: Player | null): Array<{ label: string; right?: string }> {
+  const n = (header: string) => {
+    const v = Number(pickValue(row, [header]));
+    return Number.isFinite(v) ? v : 0;
   };
 
-  return POINT_COLUMNS.map((col) => {
-    const v = pickValue(row, [col]);
-    return { label: col, right: String(toNum(v)) };
-  });
+  const minutes = n("Minutes played");
+  const scrumPoints = playerGetsScrumPoints(player) ? n("Scrums won outright") * 3 : 0;
+
+  const rows: Array<{ label: string; right?: string }> = [
+    {
+      label: "Minutes played",
+      right: String(minutes >= 61 ? 2 : minutes > 0 ? 1 : 0),
+    },
+    { label: "Tries", right: String(n("Tries") * 15) },
+    { label: "Try Assists", right: String(n("Try Assists") * 9) },
+    { label: "Linebreaks", right: String(n("Linebreaks") * 7) },
+    { label: "Linebreak assists", right: String(n("Linebreak assists") * 5) },
+    { label: "Defenders beaten", right: String(n("Defenders beaten") * 2) },
+    { label: "Carries (m)", right: String(Math.floor(n("Carries (m)") / 10)) },
+    { label: "Offloads", right: String(n("Offloads") * 2) },
+    { label: "Tackles", right: String(n("Tackles")) },
+    { label: "Missed tackles", right: String(-n("Missed tackles")) },
+    { label: "Turnover Forced", right: String(n("Turnover Forced") * 4) },
+    { label: "Interceptions", right: String(n("Interceptions") * 5) },
+    { label: "50:22 Kicks", right: String(n("50:22 Kicks") * 10) },
+    { label: "Penalties Conceded", right: String(-n("Penalties Conceded")) },
+    { label: "Errors", right: String(-n("Errors")) },
+    { label: "Lineouts won", right: String(n("Lineouts won")) },
+    { label: "Lineout steals", right: String(n("Lineout steals") * 5) },
+    { label: "Lineout errors", right: String(-n("Lineout errors") * 2) },
+    { label: "Scrums won outright", right: String(scrumPoints) },
+    { label: "Conversions", right: String(n("Conversions") * 2) },
+    { label: "Conversions missed", right: String(-n("Conversions missed")) },
+    { label: "Penalty scored", right: String(n("Penalty scored") * 3) },
+    { label: "Penalty missed", right: String(-n("Penalty missed")) },
+    { label: "Drop goal scored", right: String(n("Drop goal scored") * 3) },
+    { label: "Drop goal missed", right: String(-n("Drop goal missed")) },
+    { label: "Yellow cards", right: String(-n("Yellow cards") * 5) },
+    { label: "Red cards", right: String(-n("Red cards") * 10) },
+  ];
+
+  return rows;
 }
+
 /**
  * Your Player currently uses `teamCode` for fixture matching in some places
  * (sometimes a full team name), and in other places you use abbreviations.
@@ -735,47 +764,59 @@ useEffect(() => {
   if (!livePlayersLoaded) refreshLivePlayers();
 }, [livePlayersLoaded, refreshLivePlayers]);
 
-const sheetPlayerById = useMemo(() => {
+const playersByInternalId = useMemo(() => {
   const m = new Map<string, any>();
+
   for (const p of sheetPlayers ?? []) {
-    const draftLikeId =
+    const internalId =
       pickValue(p, ["id", "draftId", "draft_id", "Draft ID", "playerKey"]) ?? null;
 
-    const sheetPid =
-      pickValue(p, ["playerId", "player_id", "player id", "Player ID", "id"]) ?? null;
+    if (internalId != null) {
+      const exact = exactId(internalId);
+      const norm = normaliseId(internalId);
 
-    if (draftLikeId != null) m.set(normaliseId(draftLikeId), p);
-    if (sheetPid != null) m.set(normaliseId(sheetPid), p);
+      if (exact) m.set(exact, p);
+      if (norm) m.set(norm, p);
+    }
   }
+
   return m;
 }, [sheetPlayers]);
 
-function getPlayerSheetId(p: Player | null) {
-  if (!p) return null;
+function getPlayerInternalIds(p: Player | null) {
+  if (!p?.id) return { exact: null as string | null, norm: null as string | null };
 
-  const sheetPlayer = sheetPlayerById.get(normaliseId(p.id));
-  const sheetPid =
-    pickValue(sheetPlayer, ["playerId", "player_id", "player id", "Player ID", "id"]) ?? null;
-
-  if (sheetPid != null) return normaliseId(sheetPid);
-  return normaliseId(p.id); // fallback
+  return {
+    exact: exactId(p.id),
+    norm: normaliseId(p.id),
+  };
 }
 
 const weekPointsByPlayerId = useMemo(() => {
   const m = new Map<string, number>();
 
   for (const row of roundRows ?? []) {
-  if (rowRound(row) !== displayRealRound) continue;
+    if (rowRound(row) !== displayRealRound) continue;
 
     const pidRaw = rowPlayerId(row);
     if (!pidRaw) continue;
 
-    const pid = normaliseId(pidRaw);
-    m.set(pid, calcFantasyPoints(row));
+    const exact = exactId(pidRaw);
+    const norm = normaliseId(pidRaw);
+
+    const playerMeta =
+      playersByInternalId.get(exact) ??
+      playersByInternalId.get(norm) ??
+      null;
+
+    const pts = calcFantasyPoints(row, playerMeta);
+
+    if (exact) m.set(exact, pts);
+    if (norm) m.set(norm, pts);
   }
 
   return m;
-}, [roundRows, displayRealRound]);
+}, [roundRows, displayRealRound, playersByInternalId]);
 
 
 const weekMinutesByPlayerId = useMemo(() => {
@@ -787,33 +828,55 @@ const weekMinutesByPlayerId = useMemo(() => {
     const pidRaw = rowPlayerId(row);
     if (!pidRaw) continue;
 
-    const pid = normaliseId(pidRaw); // keep this
+    const exact = exactId(pidRaw);
+    const norm = normaliseId(pidRaw);
 
-    // Pull the "Minutes played" column (same header you used in calcFantasyPoints)
     const minRaw = pickValue(row, ["Minutes played", "minutes played", "Minutes Played", "minutes"]);
     const mins = Number(minRaw);
-    m.set(pid, Number.isFinite(mins) ? mins : 0);
+    const val = Number.isFinite(mins) ? mins : 0;
+
+    if (exact) m.set(exact, val);
+    if (norm) m.set(norm, val);
   }
 
   return m;
 }, [roundRows, displayRealRound]);
 
 function pointsForPlayer(p: Player | null) {
-  const pid = getPlayerSheetId(p);
-  if (!pid) return 0;
-  return weekPointsByPlayerId.get(pid) ?? 0;
+  const { exact, norm } = getPlayerInternalIds(p);
+
+  if (exact && weekPointsByPlayerId.has(exact)) {
+    return weekPointsByPlayerId.get(exact) ?? 0;
+  }
+
+  if (norm && weekPointsByPlayerId.has(norm)) {
+    return weekPointsByPlayerId.get(norm) ?? 0;
+  }
+
+  return 0;
 }
 
 function minutesForPlayer(p: Player | null) {
-  if (!p) return 0;
+  const { exact, norm } = getPlayerInternalIds(p);
 
-  // Prefer the sheet's actual playerId (same ids used in roundRows)
-  const sheetPlayer = sheetPlayerById.get(normaliseId(p.id));
-  const sheetPid =
-    pickValue(sheetPlayer, ["playerId", "player_id", "player id", "Player ID", "id"]) ?? null;
+  if (exact && weekMinutesByPlayerId.has(exact)) {
+    return weekMinutesByPlayerId.get(exact) ?? 0;
+  }
 
-  const key = normaliseId(sheetPid ?? p.id);
-  return weekMinutesByPlayerId.get(key) ?? 0;
+  if (norm && weekMinutesByPlayerId.has(norm)) {
+    return weekMinutesByPlayerId.get(norm) ?? 0;
+  }
+
+  return 0;
+}
+
+function hasScoreForPlayer(p: Player | null) {
+  const { exact, norm } = getPlayerInternalIds(p);
+
+  if (exact && weekPointsByPlayerId.has(exact)) return true;
+  if (norm && weekPointsByPlayerId.has(norm)) return true;
+
+  return false;
 }
 
 const matchupsThisWeek = useMemo(() => {
@@ -1397,19 +1460,32 @@ function pointsWithCaptain(p: Player | null, effCaptainId: string | null) {
 
 
 // If captain isn't in the lineup, vice becomes "active captain"
-function effectiveCaptainId(lineup: Lineup | null, captainId: string | null, viceId: string | null) {
+function effectiveCaptainId(
+  lineup: Lineup | null,
+  captainId: string | null,
+  viceId: string | null,
+  allowViceFallback: boolean
+) {
   if (!lineup) return null;
 
   const cap = Object.values(lineup).find((x) => x?.id === captainId) ?? null;
   const vice = Object.values(lineup).find((x) => x?.id === viceId) ?? null;
 
-  const capMins = cap ? minutesForPlayer(cap) : 0;
-if (cap && capMins > 0) return cap.id;
+  // Before scores are locked, ALWAYS keep captain as the doubled player
+  if (!allowViceFallback) {
+    return captainId;
+  }
 
-const viceMins = vice ? minutesForPlayer(vice) : 0;
-if (vice && viceMins > 0) return vice.id;
+  // After scores are locked / auto-subs finalized:
+  // captain keeps multiplier if they scored anything above 0
+  const capPts = cap ? pointsForPlayer(cap) : 0;
+  if (cap && capPts > 0) return cap.id;
 
-  return captainId; // fallback (won’t matter if 0)
+  // otherwise vice takes over only if vice scored above 0
+  const vicePts = vice ? pointsForPlayer(vice) : 0;
+  if (vice && vicePts > 0) return vice.id;
+
+  return captainId;
 }
 
 
@@ -1661,8 +1737,18 @@ function goToTradeWithSelected(e?: any) {
 }
 
 // Effective captain (vice activates if captain not playing)
-const leftEffC = effectiveCaptainId(effectiveLeftLineup, leftC, leftV);
-const rightEffC = effectiveCaptainId(effectiveRightLineup, rightC, rightV);
+const leftEffC = effectiveCaptainId(
+  effectiveLeftLineup,
+  leftC,
+  leftV,
+  scoresLocked
+);
+const rightEffC = effectiveCaptainId(
+  effectiveRightLineup,
+  rightC,
+  rightV,
+  scoresLocked
+);
 
 function totalForSlots(lineup: Lineup | null, effCaptain: string | null, slots: SlotId[]) {
   if (!lineup) return 0;
@@ -1744,16 +1830,24 @@ function openPointsBreakdown(p: Player, owned: boolean, side: "left" | "right") 
   setSelectedFixtureLabel(fixtureTagForPlayer(p));
 
   // ✅ Find the correct sheet row for THIS displayed round + player
-  const pid = getPlayerSheetId(p);
+  const { exact: pidExact, norm: pidNorm } = getPlayerInternalIds(p);
 
   const row =
     (roundRows ?? []).find((r: any) => {
       if (rowRound(r) !== displayRealRound) return false;
       const rid = rowPlayerId(r);
-      return rid && normaliseId(rid) === pid;
+      if (!rid) return false;
+
+const ridExact = exactId(rid);
+const ridNorm = normaliseId(rid);
+
+return (
+  (pidExact != null && ridExact === pidExact) ||
+  (pidNorm != null && ridNorm === pidNorm)
+);
     }) ?? null;
 
-  setSelectedRows(row ? buildBreakdownRows(row) : []);
+  setSelectedRows(row ? buildBreakdownRows(row, p) : []);
   setPointsOpen(true);
 }
 
@@ -2152,7 +2246,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
           : "Player points"
     }
   >
-    {lp ? pointsWithCaptain(lp, leftEffC) : "—"}
+    {lp ? (hasScoreForPlayer(lp) ? pointsWithCaptain(lp, leftEffC) : "-") : "—"}
   </div>
 );
 
@@ -2210,7 +2304,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
             : "Player points"
       }
     >
-      {rp ? pointsWithCaptain(rp, rightEffC) : "—"}
+      {rp ? (hasScoreForPlayer(rp) ? pointsWithCaptain(rp, rightEffC) : "-") : "—"}
     </div>
   );
 })()}
@@ -2407,7 +2501,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
   }}
   title={lIsC ? `Captain x${CAP_MULT}` : "Player points"}
 >
-  {lp?.id ? pointsWithCaptain(lp, leftEffC) : "—"}
+  {lp?.id ? (hasScoreForPlayer(lp) ? pointsWithCaptain(lp, leftEffC) : "-") : "—"}
 </div>
 
 
@@ -2454,7 +2548,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
   }}
   title={rIsC ? `Captain x${CAP_MULT}` : "Player points"}
 >
-  {rp?.id ? pointsWithCaptain(rp, rightEffC) : "—"}
+  {rp?.id ? (hasScoreForPlayer(rp) ? pointsWithCaptain(rp, rightEffC) : "-") : "—"}
 </div>
 
         </div>
@@ -2653,10 +2747,7 @@ onClick: selectedIsWatched ? removeSelectedFromWatchlist : addSelectedToWatchlis
             const lineup = selectedSide === "left" ? effectiveLeftLineup : effectiveRightLineup;
             const c = selectedSide === "left" ? leftC : rightC;
             const v = selectedSide === "left" ? leftV : rightV;
-            const effC = effectiveCaptainId(lineup, c, v);
-
-            const base = pointsForPlayer(selectedPlayer);
-            return selectedPlayer.id === effC ? base * CAP_MULT : base;
+            return pointsForPlayer(selectedPlayer);
           })()
         : 0
     }

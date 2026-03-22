@@ -751,7 +751,7 @@ const sheetPlayerByPlayerId = useMemo(() => {
 
 function toNum(x: any) {
   const n = Number(x);
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) ? n : 0;
 }
 
 
@@ -794,78 +794,94 @@ function rowRound(row: any) {
   return Number.isFinite(n) ? n : 0;
 }
 
-const POINT_HEADERS: string[] = [
-  "Minutes played",
-  "Tries",
-  "Try Assists",
-  "Linebreaks",
-  "Linebreak assists",
-  "Defenders beaten",
-  "Carries (m)",
-  "Offloads",
-  "Tackles",
-  "Missed tackles",
-  "Turnover Forced",
-  "Interceptions",
-  "50:22 Kicks",
-  "Penalties Conceded",
-  "Errors",
-  "Lineouts won",
-  "Lineout steals",
-  "Lineout errors",
-  "Scrums won outright",
-  "Conversions",
-  "Conversions missed",
-  "Penalty scored",
-  "Penalty missed",
-  "Drop goal scored",
-  "Drop goal missed",
-  "Yellow cards",
-  "Red cards",
-];
+function calcFantasyPoints(row: any, player?: Player | null): number {
+  if (!row) return 0;
 
-function calcFantasyPoints(row: any): number | null {
-  if (!row) return null;
+  const minutes = toNum(pickValue(row, ["Minutes played"]));
+  if (!minutes) return 0;
 
-  const total = POINT_HEADERS.reduce((sum, header) => {
-    const v = pickValue(row, [header]);
-    if (v == null || v === "") return sum;
+  let pts = 0;
 
-    // supports "1,234" too
-    const n = Number(String(v).replace(/,/g, ""));
-    return Number.isFinite(n) ? sum + n : sum;
-  }, 0);
+  // minutes played
+  pts += minutes >= 61 ? 2 : 1;
 
-  return total;
+  // attack
+  pts += toNum(pickValue(row, ["Tries"])) * 15;
+  pts += toNum(pickValue(row, ["Try Assists"])) * 9;
+  pts += toNum(pickValue(row, ["Linebreaks"])) * 7;
+  pts += toNum(pickValue(row, ["Linebreak assists"])) * 5;
+  pts += toNum(pickValue(row, ["Defenders beaten"])) * 2;
+  pts += Math.floor(toNum(pickValue(row, ["Carries (m)"])) / 10);
+  pts += toNum(pickValue(row, ["Offloads"])) * 2;
+
+  // defence
+  pts += toNum(pickValue(row, ["Tackles"])) * 1;
+  pts += toNum(pickValue(row, ["Missed tackles"])) * -1;
+  pts += toNum(pickValue(row, ["Turnover Forced"])) * 4;
+  pts += toNum(pickValue(row, ["Interceptions"])) * 5;
+  pts += toNum(pickValue(row, ["50:22 Kicks"])) * 10;
+
+  // discipline / errors
+  pts += toNum(pickValue(row, ["Penalties Conceded"])) * -1;
+  pts += toNum(pickValue(row, ["Errors"])) * -1;
+  pts += toNum(pickValue(row, ["Yellow cards"])) * -5;
+  pts += toNum(pickValue(row, ["Red cards"])) * -10;
+
+  // set piece
+  pts += toNum(pickValue(row, ["Lineouts won"])) * 1;
+  pts += toNum(pickValue(row, ["Lineout steals"])) * 5;
+  pts += toNum(pickValue(row, ["Lineout errors"])) * -2;
+
+  // scrum points: props + hookers only
+  const posA = String(player?.posAbbrev ?? "").toUpperCase();
+  const posB = String(player?.secondaryPosAbbrev ?? "").toUpperCase();
+  const isFrontRow =
+    posA === "PR" || posA === "HO" || posB === "PR" || posB === "HO";
+
+  if (isFrontRow) {
+    pts += toNum(pickValue(row, ["Scrums won outright"])) * 3;
+  }
+
+  // kicking
+  pts += toNum(pickValue(row, ["Conversions"])) * 2;
+  pts += toNum(pickValue(row, ["Conversions missed"])) * -1;
+  pts += toNum(pickValue(row, ["Penalty scored"])) * 3;
+  pts += toNum(pickValue(row, ["Penalty missed"])) * -1;
+  pts += toNum(pickValue(row, ["Drop goal scored"])) * 3;
+  pts += toNum(pickValue(row, ["Drop goal missed"])) * -1;
+
+  return pts;
 }
 
-
 const statsByPlayerId = useMemo(() => {
-  // normalizedId -> array of { round, points }
   const buckets = new Map<string, Array<{ r: number; pts: number }>>();
 
   for (const row of roundRows ?? []) {
-  const pidRaw = rowPlayerId(row);
-  if (!pidRaw) continue;
+    const pidRaw = rowPlayerId(row);
+    if (!pidRaw) continue;
 
-  const pid = normaliseId(pidRaw);
+    const pid = normaliseId(pidRaw);
+    const r = rowRound(row);
 
-  const pts = calcFantasyPoints(row);
-  if (pts == null) continue;
+    const playerMeta =
+      sheetPlayerByPlayerId.get(pid) ??
+      sheetPlayerByDraftId.get(pid) ??
+      null;
 
-  const r = rowRound(row);
+    const pts = calcFantasyPoints(row, playerMeta);
+    if (!Number.isFinite(pts)) continue;
 
-  const arr = buckets.get(pid) ?? [];
-  arr.push({ r, pts });
-  buckets.set(pid, arr);
-}
+    const arr = buckets.get(pid) ?? [];
+    arr.push({ r, pts });
+    buckets.set(pid, arr);
+  }
 
-
-  // normalizedId -> { latest, ppg, form }
-  const out = new Map<string, { latest: number | null; ppg: number | null; form: number | null }>();
+  const out = new Map<
+    string,
+    { latest: number | null; ppg: number | null; form: number | null }
+  >();
 
   for (const [pid, arr] of buckets.entries()) {
-    // sort newest -> oldest by round, fallback stable
     const sorted = arr.slice().sort((a, b) => (b.r || 0) - (a.r || 0));
 
     const latest = sorted[0]?.pts ?? null;
@@ -880,7 +896,8 @@ const statsByPlayerId = useMemo(() => {
   }
 
   return out;
-}, [roundRows]);
+}, [roundRows, sheetPlayerByPlayerId, sheetPlayerByDraftId]);
+
 useEffect(() => {
   if (!roundRows?.length) return;
   console.log("roundRows[0] keys:", Object.keys(roundRows[0] ?? {}));

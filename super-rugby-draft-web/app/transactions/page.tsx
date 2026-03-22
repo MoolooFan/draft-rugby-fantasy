@@ -151,13 +151,13 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
   );
 }
 
-function toNum(v: any): number | null {
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+function toNum(v: any): number {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
   if (typeof v === "string") {
     const n = Number(v);
-    return Number.isFinite(n) ? n : null;
+    return Number.isFinite(n) ? n : 0;
   }
-  return null;
+  return 0;
 }
 
 // -----------------------
@@ -2134,76 +2134,112 @@ function normaliseId(x: any) {
     .replace(/[^a-z0-9]/g, "");
 }
 
+function playerGetsScrumPoints(p: Player): boolean {
+  const a = String(p.posAbbrev ?? "").trim().toUpperCase();
+  const b = String(p.secondaryPosAbbrev ?? "").trim().toUpperCase();
+  return a === "PR" || a === "HO" || b === "PR" || b === "HO";
+}
 
 // =========================
-// SCORING (EDIT THESE ONCE)
+// SCORING (raw stat counts -> fantasy points)
 // =========================
 const SCORING = {
   // minutes
   min_1_to_60: 1,
   min_61_plus: 2,
 
-  // scoring
+  // attack
   try: 15,
   tryAssist: 9,
+  linebreak: 7,
+  linebreakAssist: 5,
+  defendersBeaten: 2,
+  metresPerPoint: 10, // 1 point per 10 metres
+  offload: 2,
+
+  // defence / playmaking
+  tackle: 1,
+  missedTackle: -1,
+  turnoverForced: 4,
+  interception: 5,
+  kick5022: 10,
+
+  // discipline / errors
+  penaltyConceded: -1,
+  error: -1,
+
+  // set piece
+  lineoutWon: 1,
+  lineoutSteal: 5,
+  lineoutError: -2,
+  scrumWon: 3, // front row only
+
+  // kicking
   conversion: 2,
   conversionMiss: -1,
-  penaltyGoal: 3,        // change if your game uses a different value
-  penaltyMiss: -1,       // change if your game uses a different value
-  dropGoal: 5,           // change if your game uses a different value
-  dropGoalMiss: -1,      // change if your game uses a different value
+  penaltyGoal: 3,
+  penaltyMiss: -1,
+  dropGoal: 3,
+  dropGoalMiss: -1,
 
   // cards
-  yellow: -3,            // change if needed
-  red: -6,               // change if needed
+  yellow: -5,
+  red: -10,
 };
 
-
-
-// IMPORTANT: Now we CALCULATE fantasy points from your sheet columns.
-function getRoundPointsFromRow(row: any): number | null {
+function getRoundPointsFromRow(row: any, p: Player): number | null {
   if (!row) return null;
 
-  // If minutes is blank/0, treat as not played so matchesPlayed doesn't increment
-  const minutePts = getRowNumber(row, "Minutes played");
-if (!minutePts) return null;
+  const minutes = getRowNumber(row, "Minutes played");
+  if (!minutes) return null; // not played
 
+  let total = 0;
 
-  // ✅ IMPORTANT:
-  // All these columns already store POINTS (not counts), so we just sum them.
-  const pointColumns = [
-    "Tries",
-    "Try Assists",
-    "Linebreaks",
-    "Linebreak assists",
-    "Defenders beaten",
-    "Carries (m)",
-    "Offloads",
-    "Tackles",
-    "Missed tackles",
-    "Turnover Forced",
-    "Interceptions",
-    "50:22 Kicks",
-    "Penalties Conceded",
-    "Errors",
-    "Lineouts won",
-    "Lineout steals",
-    "Lineout errors",
-    "Scrums won outright",
-    "Conversions",
-    "Conversions missed",
-    "Penalty scored",
-    "Penalty missed",
-    "Drop goal scored",
-    "Drop goal missed",
-    "Yellow cards",
-    "Red cards",
-  ];
+  // minutes
+  if (minutes > 0 && minutes < 61) total += SCORING.min_1_to_60;
+  if (minutes >= 61) total += SCORING.min_61_plus;
 
-  let statPts = 0;
-  for (const k of pointColumns) statPts += getRowNumber(row, k);
+  // attack
+  total += getRowNumber(row, "Tries") * SCORING.try;
+  total += getRowNumber(row, "Try Assists") * SCORING.tryAssist;
+  total += getRowNumber(row, "Linebreaks") * SCORING.linebreak;
+  total += getRowNumber(row, "Linebreak assists") * SCORING.linebreakAssist;
+  total += getRowNumber(row, "Defenders beaten") * SCORING.defendersBeaten;
+  total += Math.floor(getRowNumber(row, "Carries (m)") / SCORING.metresPerPoint);
+  total += getRowNumber(row, "Offloads") * SCORING.offload;
 
-  const total = minutePts + statPts;
+  // defence / playmaking
+  total += getRowNumber(row, "Tackles") * SCORING.tackle;
+  total += getRowNumber(row, "Missed tackles") * SCORING.missedTackle;
+  total += getRowNumber(row, "Turnover Forced") * SCORING.turnoverForced;
+  total += getRowNumber(row, "Interceptions") * SCORING.interception;
+  total += getRowNumber(row, "50:22 Kicks") * SCORING.kick5022;
+
+  // discipline / errors
+  total += getRowNumber(row, "Penalties Conceded") * SCORING.penaltyConceded;
+  total += getRowNumber(row, "Errors") * SCORING.error;
+
+  // set piece
+  total += getRowNumber(row, "Lineouts won") * SCORING.lineoutWon;
+  total += getRowNumber(row, "Lineout steals") * SCORING.lineoutSteal;
+  total += getRowNumber(row, "Lineout errors") * SCORING.lineoutError;
+
+  if (playerGetsScrumPoints(p)) {
+    total += getRowNumber(row, "Scrums won outright") * SCORING.scrumWon;
+  }
+
+  // kicking
+  total += getRowNumber(row, "Conversions") * SCORING.conversion;
+  total += getRowNumber(row, "Conversions missed") * SCORING.conversionMiss;
+  total += getRowNumber(row, "Penalty scored") * SCORING.penaltyGoal;
+  total += getRowNumber(row, "Penalty missed") * SCORING.penaltyMiss;
+  total += getRowNumber(row, "Drop goal scored") * SCORING.dropGoal;
+  total += getRowNumber(row, "Drop goal missed") * SCORING.dropGoalMiss;
+
+  // cards
+  total += getRowNumber(row, "Yellow cards") * SCORING.yellow;
+  total += getRowNumber(row, "Red cards") * SCORING.red;
+
   return Number.isFinite(total) ? total : null;
 }
 
@@ -2246,7 +2282,7 @@ function getTotalPoints(p: Player): number | null {
   let any = false;
 
   for (const r of rounds) {
-    const pts = getRoundPointsFromRow(r);
+    const pts = getRoundPointsFromRow(r, p);
     if (pts == null) continue;
     total += pts;
     any = true;
@@ -2260,7 +2296,7 @@ function getMatchesPlayed(p: Player): number | null {
   if (!rounds.length) return null;
 
   // Count only rounds that actually have a points value
-  const played = rounds.reduce((acc: number, r: any) => acc + (getRoundPointsFromRow(r) != null ? 1 : 0), 0);
+  const played = rounds.reduce((acc: number, r: any) => acc + (getRoundPointsFromRow(r, p) != null ? 1 : 0), 0);
   return played || null;
 }
 
@@ -2292,41 +2328,22 @@ function getRowNumber(row: any, header: string): number {
   return 0;
 }
 
-// Your sheet stores stat columns as POINTS already.
-// Convert "points in that column" -> "count" by dividing by the per-event points.
-// (Rounds to nearest int for cleanliness.)
-function statCountFromPoints(row: any, header: string, pointsPerEvent: number): number | null {
-  if (!row) return null;
-  const pts = getRowNumber(row, header);
 
-  // missing => 0
-  if (pts === 0) return 0;
-  if (!pointsPerEvent) return null;
-
-  // handle negative scoring stats (cards/errors): pts and divisor are both negative
-  const divisor = pointsPerEvent;
-  const raw = pts / divisor;
-
-  // counts should be positive integers
-  return Math.round(Math.abs(raw));
-}
 function getMetresGainedTotal(p: Player): number | null {
   const rounds = getPlayerRounds(p.id);
   if (!rounds.length) return null;
 
-  let totalPoints = 0;
+  let totalMetres = 0;
   let any = false;
 
   for (const r of rounds) {
-    const pts = getRowNumber(r, "Carries (m)");
-    if (pts === 0) continue;
-    totalPoints += pts;
+    const metres = getRowNumber(r, "Carries (m)");
+    if (metres === 0) continue;
+    totalMetres += metres;
     any = true;
   }
 
-  // sheet stores 1 point per 10 metres
-  // so metres = points * 10
-  return any ? totalPoints * 10 : null;
+  return any ? totalMetres : null;
 }
 
 
@@ -2337,8 +2354,8 @@ function getFormLast3Avg(p: Player): number | null {
 
   // keep only played rows (where getRoundPointsFromRow returns a number)
   const played = rounds
-    .map((r: any) => ({ r, pts: getRoundPointsFromRow(r) }))
-    .filter((x: any) => typeof x.pts === "number");
+  .map((r: any) => ({ r, pts: getRoundPointsFromRow(r, p) }))
+  .filter((x: any) => typeof x.pts === "number");
 
   if (!played.length) return null;
 
@@ -2356,8 +2373,8 @@ function getLastRoundPoints(p: Player): number | null {
   if (!rounds.length) return null;
 
   const played = rounds
-    .map((r: any) => ({ r, pts: getRoundPointsFromRow(r) }))
-    .filter((x: any) => typeof x.pts === "number");
+  .map((r: any) => ({ r, pts: getRoundPointsFromRow(r, p) }))
+  .filter((x: any) => typeof x.pts === "number");
 
   if (!played.length) return null;
 
@@ -2368,8 +2385,7 @@ function getLastRoundPoints(p: Player): number | null {
   return typeof last?.pts === "number" ? last.pts : null;
 }
 
-// Stat totals (as COUNTS) across season
-function getStatTotalCount(p: Player, header: string, pointsPerEvent: number): number | null {
+function getStatTotalCount(p: Player, header: string): number | null {
   const rounds = getPlayerRounds(p.id);
   if (!rounds.length) return null;
 
@@ -2377,9 +2393,8 @@ function getStatTotalCount(p: Player, header: string, pointsPerEvent: number): n
   let any = false;
 
   for (const r of rounds) {
-    const c = statCountFromPoints(r, header, pointsPerEvent);
-    if (c == null) continue;
-    total += c;
+    const v = getRowNumber(r, header);
+    total += v;
     any = true;
   }
 
@@ -2454,27 +2469,27 @@ function getStatTotalCount(p: Player, header: string, pointsPerEvent: number): n
   }
 
   // Stat totals shown as COUNTS (convert points -> count)
-  const stat = (header: string, per: number) => getStatTotalCount(p, header, per);
+  const stat = (header: string) => getStatTotalCount(p, header);
 
   switch (mode) {
     case "TRIES": {
-      const v = stat("Tries", 15);
-      return v == null ? "-" : String(v);
-    }
-    case "TRY_ASSISTS": {
-      const v = stat("Try Assists", 9);
-      return v == null ? "-" : String(v);
-    }
-    case "LINEBREAKS": {
-      const v = stat("Linebreaks", 7); // adjust if your linebreak points differ
-      return v == null ? "-" : String(v);
-    }
-    case "LINEBREAK_ASSISTS": {
-      const v = stat("Linebreak assists", 5); // adjust if needed
-      return v == null ? "-" : String(v);
-    }
-    case "DEFENDERS_BEATEN": {
-  const v = stat("Defenders beaten", 2);
+  const v = stat("Tries");
+  return v == null ? "-" : String(v);
+}
+case "TRY_ASSISTS": {
+  const v = stat("Try Assists");
+  return v == null ? "-" : String(v);
+}
+case "LINEBREAKS": {
+  const v = stat("Linebreaks");
+  return v == null ? "-" : String(v);
+}
+case "LINEBREAK_ASSISTS": {
+  const v = stat("Linebreak assists");
+  return v == null ? "-" : String(v);
+}
+case "DEFENDERS_BEATEN": {
+  const v = stat("Defenders beaten");
   return v == null ? "-" : String(v);
 }
 
@@ -2483,82 +2498,73 @@ function getStatTotalCount(p: Player, header: string, pointsPerEvent: number): n
   return typeof m === "number" ? String(Math.round(m)) : "-";
 }
 
-    case "OFFLOADS": {
-      const v = stat("Offloads", 2); // adjust if needed
-      return v == null ? "-" : String(v);
-    }
-    case "TACKLES": {
-      const v = stat("Tackles", 1); // adjust if needed
-      return v == null ? "-" : String(v);
-    }
-    case "MISSED_TACKLES": {
-  const v = stat("Missed tackles", -1);
+case "OFFLOADS": {
+  const v = stat("Offloads");
+  return v == null ? "-" : String(v);
+}
+case "TACKLES": {
+  const v = stat("Tackles");
+  return v == null ? "-" : String(v);
+}
+case "MISSED_TACKLES": {
+  const v = stat("Missed tackles");
+  return v == null ? "-" : String(v);
+}
+case "TURNOVERS_FORCED": {
+  const v = stat("Turnover Forced");
+  return v == null ? "-" : String(v);
+}
+case "INTERCEPTIONS": {
+  const v = stat("Interceptions");
+  return v == null ? "-" : String(v);
+}
+case "KICKS_50_22": {
+  const v = stat("50:22 Kicks");
+  return v == null ? "-" : String(v);
+}
+case "PENALTIES_CONCEDED": {
+  const v = stat("Penalties Conceded");
+  return v == null ? "-" : String(v);
+}
+case "ERRORS": {
+  const v = stat("Errors");
   return v == null ? "-" : String(v);
 }
 
-    case "TURNOVERS_FORCED": {
-  const v = stat("Turnover Forced", 4);
+case "LINEOUTS_WON": {
+  const v = stat("Lineouts won");
   return v == null ? "-" : String(v);
 }
-
-    case "INTERCEPTIONS": {
-      const v = stat("Interceptions", 5); // adjust if needed
-      return v == null ? "-" : String(v);
-    }
-    case "KICKS_50_22": {
-  const v = stat("50:22 Kicks", 10);
+case "LINEOUT_STEALS": {
+  const v = stat("Lineout steals");
   return v == null ? "-" : String(v);
 }
-
-    case "PENALTIES_CONCEDED": {
-  const v = stat("Penalties Conceded", -1);
+case "LINEOUT_ERRORS": {
+  const v = stat("Lineout errors");
   return v == null ? "-" : String(v);
 }
-
-    case "ERRORS": {
-  const v = stat("Errors", -1);
+case "SCRUMS_WON": {
+  const v = playerGetsScrumPoints(p) ? stat("Scrums won outright") : 0;
   return v == null ? "-" : String(v);
 }
-
-    case "LINEOUTS_WON": {
-      const v = stat("Lineouts won", 1);
-      return v == null ? "-" : String(v);
-    }
-    case "LINEOUT_STEALS": {
-  const v = stat("Lineout steals", 5);
+case "CONVERSIONS": {
+  const v = stat("Conversions");
   return v == null ? "-" : String(v);
 }
-
-    case "LINEOUT_ERRORS": {
-  const v = stat("Lineout errors", -2);
+case "PENALTY_GOALS": {
+  const v = stat("Penalty scored");
   return v == null ? "-" : String(v);
 }
-
-    case "SCRUMS_WON": {
-  const v = stat("Scrums won outright", 3);
+case "DROP_GOALS": {
+  const v = stat("Drop goal scored");
   return v == null ? "-" : String(v);
 }
-
-    case "CONVERSIONS": {
-      const v = stat("Conversions", 2);
-      return v == null ? "-" : String(v);
-    }
-    case "PENALTY_GOALS": {
-      const v = stat("Penalty scored", 3);
-      return v == null ? "-" : String(v);
-    }
-    case "DROP_GOALS": {
-  const v = stat("Drop goal scored", 3);
+case "YELLOW_CARDS": {
+  const v = stat("Yellow cards");
   return v == null ? "-" : String(v);
 }
-
-    case "YELLOW_CARDS": {
-  const v = stat("Yellow cards", -5);
-  return v == null ? "-" : String(v);
-}
-
-    case "RED_CARDS": {
-  const v = stat("Red cards", -10);
+case "RED_CARDS": {
+  const v = stat("Red cards");
   return v == null ? "-" : String(v);
 }
 
@@ -2593,32 +2599,32 @@ function metricSortValue(p: Player, mode: InfoMode): number | null {
   if (mode === "GAMES_PLAYED") return getMatchesPlayed(p);
 
   // stat totals as counts (points -> count)
-  const stat = (header: string, per: number) => getStatTotalCount(p, header, per);
+  const stat = (header: string) => getStatTotalCount(p, header);
 
   switch (mode) {
-    case "TRIES": return stat("Tries", 15);
-    case "TRY_ASSISTS": return stat("Try Assists", 9);
-    case "LINEBREAKS": return stat("Linebreaks", 7);
-    case "LINEBREAK_ASSISTS": return stat("Linebreak assists", 5);
-    case "DEFENDERS_BEATEN": return stat("Defenders beaten", 2);
-    case "METRES_GAINED": return getMetresGainedTotal(p); // metres numeric
-    case "OFFLOADS": return stat("Offloads", 2);
-    case "TACKLES": return stat("Tackles", 1);
-    case "MISSED_TACKLES": return stat("Missed tackles", -1);
-    case "TURNOVERS_FORCED": return stat("Turnover Forced", 4);
-    case "INTERCEPTIONS": return stat("Interceptions", 5);
-    case "KICKS_50_22": return stat("50:22 Kicks", 10);
-    case "PENALTIES_CONCEDED": return stat("Penalties Conceded", -1);
-    case "ERRORS": return stat("Errors", -1);
-    case "LINEOUTS_WON": return stat("Lineouts won", 1);
-    case "LINEOUT_STEALS": return stat("Lineout steals", 5);
-    case "LINEOUT_ERRORS": return stat("Lineout errors", -2);
-    case "SCRUMS_WON": return stat("Scrums won outright", 3);
-    case "CONVERSIONS": return stat("Conversions", 2);
-    case "PENALTY_GOALS": return stat("Penalty scored", 3);
-    case "DROP_GOALS": return stat("Drop goal scored", 3);
-    case "YELLOW_CARDS": return stat("Yellow cards", -5);
-    case "RED_CARDS": return stat("Red cards", -10);
+    case "TRIES": return stat("Tries");
+case "TRY_ASSISTS": return stat("Try Assists");
+case "LINEBREAKS": return stat("Linebreaks");
+case "LINEBREAK_ASSISTS": return stat("Linebreak assists");
+case "DEFENDERS_BEATEN": return stat("Defenders beaten");
+case "METRES_GAINED": return getMetresGainedTotal(p);
+case "OFFLOADS": return stat("Offloads");
+case "TACKLES": return stat("Tackles");
+case "MISSED_TACKLES": return stat("Missed tackles");
+case "TURNOVERS_FORCED": return stat("Turnover Forced");
+case "INTERCEPTIONS": return stat("Interceptions");
+case "KICKS_50_22": return stat("50:22 Kicks");
+case "PENALTIES_CONCEDED": return stat("Penalties Conceded");
+case "ERRORS": return stat("Errors");
+case "LINEOUTS_WON": return stat("Lineouts won");
+case "LINEOUT_STEALS": return stat("Lineout steals");
+case "LINEOUT_ERRORS": return stat("Lineout errors");
+case "SCRUMS_WON": return playerGetsScrumPoints(p) ? stat("Scrums won outright") : 0;
+case "CONVERSIONS": return stat("Conversions");
+case "PENALTY_GOALS": return stat("Penalty scored");
+case "DROP_GOALS": return stat("Drop goal scored");
+case "YELLOW_CARDS": return stat("Yellow cards");
+case "RED_CARDS": return stat("Red cards");
     default:
       return null;
   }
