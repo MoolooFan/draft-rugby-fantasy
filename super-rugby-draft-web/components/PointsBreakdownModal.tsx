@@ -103,7 +103,7 @@ teamCode = null,
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 9999,
+        zIndex: 20000,
         background: "rgba(2,6,23,0.55)",
         display: "grid",
         placeItems: "center",
@@ -123,35 +123,41 @@ teamCode = null,
       >
         {/* Top blue header */}
         <div
-          style={{
-            position: "relative",
-            padding: "14px 14px 12px 14px",
-            background: "linear-gradient(135deg, rgb(30, 64, 175), rgb(5,150,105), rgb(255, 255, 255))",
-            color: "white",
-            minHeight: 116,
-          }}
-        >
+  style={{
+    position: "relative",
+    padding: "14px 14px 12px 14px",
+    background: "linear-gradient(135deg, rgb(30, 64, 175), rgb(5,150,105), rgb(255, 255, 255))",
+    color: "white",
+    minHeight: 116,
+    overflow: "visible",
+  }}
+>
           <button
-            onClick={onClose}
-            aria-label="Close"
-            style={{
-              position: "absolute",
-              right: 10,
-              top: 10,
-              width: 32,
-              height: 32,
-              borderRadius: 10,
-              border: "none",
-              background: "rgba(255,255,255,0.18)",
-              color: "white",
-              fontSize: 18,
-              fontWeight: 900,
-              cursor: "pointer",
-              lineHeight: "32px",
-            }}
-          >
-            ×
-          </button>
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
+    onClose();
+  }}
+  aria-label="Close"
+  style={{
+    position: "absolute",
+    right: 10,
+    top: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    border: "none",
+    background: "rgba(255,255,255,0.18)",
+    color: "white",
+    fontSize: 18,
+    fontWeight: 900,
+    cursor: "pointer",
+    lineHeight: "32px",
+    zIndex: 20,
+  }}
+>
+  ×
+</button>
 
           <div style={{ position: "relative", zIndex: 2 }}>
 

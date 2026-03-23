@@ -1075,7 +1075,7 @@ const teamLabelFull =
     zIndex: 6,
 
     // ✅ fixed white section height across all tabs
-    height: "52svh", //content size area
+    height: "48svh", //content size area
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
@@ -1152,11 +1152,12 @@ const teamLabelFull =
 
 
 ) : tab === "Stats" ? (
-<StatsTab
-  rounds={rounds}
-  gamesPlayed={computed.gamesPlayed}
-  starts={computed.starts}
-/>
+  <StatsTab
+    player={p}
+    rounds={rounds}
+    gamesPlayed={computed.gamesPlayed}
+    starts={computed.starts}
+  />
 
 ) : tab === "Fixtures" ? (
   <FixturesTab
@@ -1429,10 +1430,15 @@ function perGameDerived(rounds: any[], key: string) {
 }
 
 function StatsTab({
+  player,
   rounds,
   gamesPlayed,
   starts,
 }: {
+  player: {
+    posAbbrev?: string;
+    secondaryPosAbbrev?: string;
+  };
   rounds: any[];
   gamesPlayed?: number;
   starts?: number;
@@ -1449,13 +1455,13 @@ function StatsTab({
   const tryAssistsTotal = totalDerived(rounds, "tryAssists");
 
   // Per-game single-value rows (match screenshot order)
-  const perGameRows: { label: string; key: string }[] = [
+    const allPerGameRows: { label: string; key: string }[] = [
     { label: "Line Breaks", key: "lineBreaks" },
     { label: "Line Break Assists", key: "lineBreakAssists" },
     { label: "Defenders Beaten", key: "defendersBeaten" },
     { label: "Metres Gained", key: "metresGained" },
     { label: "Offloads", key: "offloads" },
-    { label: "Tackles", key: "tackles" }, // special (missed shown) but keep label order here
+    { label: "Tackles", key: "tackles" },
     { label: "Turnovers Forced", key: "turnoversForced" },
     { label: "Interceptions", key: "interceptions" },
     { label: "Successful 50:22s", key: "fiftyTwentyTwos" },
@@ -1465,10 +1471,48 @@ function StatsTab({
     { label: "Lineout Steals", key: "lineoutSteals" },
     { label: "Lineout Errors", key: "lineoutErrors" },
     { label: "Scrums Won", key: "scrumsWon" },
-    { label: "Conversions", key: "conversions" }, // special missed
-    { label: "Penalty Goals", key: "penaltyGoals" }, // special missed
-    { label: "Drop Goals", key: "dropGoals" }, // special missed
+    { label: "Conversions", key: "conversions" },
+    { label: "Penalty Goals", key: "penaltyGoals" },
+    { label: "Drop Goals", key: "dropGoals" },
   ];
+
+  const shouldShowPerGameRow = (key: string) => {
+    const total = totalDerived(rounds, key);
+
+    // Only props / hookers should see scrums won
+    if (key === "scrumsWon") {
+      return playerGetsScrumPointsForCard(player) && total > 0;
+    }
+
+    // Only show these if non-zero
+    if (
+      key === "interceptions" ||
+      key === "fiftyTwentyTwos" ||
+      key === "lineoutsWon" ||
+      key === "lineoutSteals" ||
+      key === "lineoutErrors"
+    ) {
+      return total > 0;
+    }
+
+    // Show kicking rows if either made OR missed is non-zero
+    if (key === "conversions") {
+      return totalDerived(rounds, "conversions") > 0 || totalDerived(rounds, "conversionsMissed") > 0;
+    }
+
+    if (key === "penaltyGoals") {
+      return totalDerived(rounds, "penaltyGoals") > 0 || totalDerived(rounds, "penaltyGoalsMissed") > 0;
+    }
+
+    if (key === "dropGoals") {
+      return totalDerived(rounds, "dropGoals") > 0 || totalDerived(rounds, "dropGoalsMissed") > 0;
+    }
+
+    // Everything else stays visible
+    return true;
+  };
+
+  const perGameRows = allPerGameRows.filter((r) => shouldShowPerGameRow(r.key));
 
   // Map which rows have "Missed"
   const missedKeyByMadeKey: Record<string, string> = {

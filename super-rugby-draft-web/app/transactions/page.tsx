@@ -1873,6 +1873,10 @@ async function submitProposedTransaction() {
     }
 
     closeDropModal();
+
+    window.setTimeout(() => {
+      router.push("/team-selection");
+    }, 0);
   } catch (e) {
     console.warn("submitProposedTransaction failed", e);
     setSubmittingProposedTransaction(false);
