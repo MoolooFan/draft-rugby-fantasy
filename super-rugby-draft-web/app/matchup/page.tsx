@@ -2735,6 +2735,7 @@ onClick: selectedIsWatched ? removeSelectedFromWatchlist : addSelectedToWatchlis
   <PointsBreakdownModal
     open={pointsOpen}
     onClose={() => setPointsOpen(false)}
+    playerId={selectedPlayer?.id}
     playerName={selectedPlayer ? `${selectedPlayer.firstName} ${selectedPlayer.lastName}` : "Player"}
     jerseySrc={jerseySrcForPlayer(selectedPlayer, "angle") ?? undefined}
     teamCode={selectedPlayer?.teamCode ?? null}

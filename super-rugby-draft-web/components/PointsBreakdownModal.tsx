@@ -52,34 +52,36 @@ export function PointsBreakdownModal(props: {
   open: boolean;
   onClose: () => void;
 
+  playerId?: string;
   playerName: string;
-    jerseySrc?: string;
-  teamCode?: string | null; // ✅ add
+  jerseySrc?: string;
+  teamCode?: string | null;
 
-
-  weekLabel: string;      // e.g. "Week 4"
-  fixtureLabel: string;   // e.g. "v BLU (H)"
+  weekLabel: string;
+  fixtureLabel: string;
 
   totalPoints: number;
-
-  // Placeholder rows for now
   rows?: Row[];
 }) {
   const {
-    open,
-    onClose,
-    playerName,
-    jerseySrc,
-teamCode = null,
-
-    weekLabel,
-    fixtureLabel,
-    totalPoints,
-    rows = [],
-  } = props;
+  open,
+  onClose,
+  playerId,
+  playerName,
+  jerseySrc,
+  teamCode = null,
+  weekLabel,
+  fixtureLabel,
+  totalPoints,
+  rows = [],
+} = props;
   const resolvedJerseySrc = teamCode
   ? jerseySrcForTeam(normalizeTeamCode(teamCode), "front")
   : (jerseySrc ?? JERSEY_PLACEHOLDER);
+
+const resolvedPlayerImageSrc = playerId
+  ? `/api/players/image-file?playerId=${encodeURIComponent(playerId)}`
+  : resolvedJerseySrc;
 
 
   const filteredRows = (rows ?? []).filter((r) => {
@@ -174,21 +176,23 @@ teamCode = null,
             </div>
 
             <img
-  src={resolvedJerseySrc}
-
+  src={resolvedPlayerImageSrc}
   alt=""
   draggable={false}
+  onError={(e) => {
+    e.currentTarget.src = resolvedJerseySrc;
+  }}
   style={{
     position: "absolute",
     right: -10,
-    bottom: -66,            // 👈 pushes it down so it “hangs” into the white area
-    width: 150,             // 👈 bigger
-    height: 150,            // 👈 bigger
+    bottom: -66,
+    width: 150,
+    height: 150,
     objectFit: "contain",
-    background: "transparent", // ✅ removes the box behind it
-    padding: 0,                // ✅ removes padding box effect
-    borderRadius: 0,           // ✅ no rounded box
-    zIndex: 1,                 // behind text, above header bg
+    background: "transparent",
+    padding: 0,
+    borderRadius: 0,
+    zIndex: 1,
     pointerEvents: "none",
   }}
 />

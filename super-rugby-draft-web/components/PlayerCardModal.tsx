@@ -91,6 +91,8 @@ const POSITION_CHIP_MIN_WIDTH = 54;
 const TEAM_CHIP_MIN_WIDTH = 54;
 const POSITION_CHIP_BORDER_WIDTH = 3;
 const TEAM_CHIP_BORDER_WIDTH = 3;
+const PLAYER_CARD_HEADER_MIN_HEIGHT = 150;
+const PLAYER_CARD_BOTTOM_LABEL_BOTTOM = 12;
 
 // =========================
 // DEV TOGGLES (easy remove)
@@ -429,6 +431,10 @@ function normaliseIdForRounds(x: any) {
     .replace(/[^a-z0-9]/g, "");
 }
 
+function encodePlayerImageId(id: string) {
+  return encodeURIComponent(String(id ?? "")).replace(/'/g, "%27");
+}
+
 function rowBelongsToPlayer(row: Record<string, any>, playerId: string) {
   const want = normaliseIdForRounds(playerId);
 
@@ -660,6 +666,7 @@ const [allRoundRows, setAllRoundRows] = useState<Record<string, any>[]>([]);
 const [seasonWeeks, setSeasonWeeks] = useState<number[]>([]);
 const [lastCompletedWeek, setLastCompletedWeek] = useState<number>(0);
 
+
 // for the Results score breakdown popup
 const [openBreakdown, setOpenBreakdown] = useState(false);
 const [selectedRound, setSelectedRound] = useState<PlayerRound | null>(null);
@@ -675,6 +682,7 @@ if (!open || !player) return null;
 
 // ✅ from here onward, player is guaranteed non-null
 const p = player;
+
 // ensure sheet players are loaded (no-op if already loaded)
 usePlayers();
 
@@ -951,6 +959,7 @@ const teamLabelFull =
           <div
   style={{
     padding: 12,
+    minHeight: PLAYER_CARD_HEADER_MIN_HEIGHT,
     position: "relative",
     overflow: "visible",
     background: "linear-gradient(to right, rgb(255, 255, 255), rgb(29, 78, 216))",
@@ -994,7 +1003,18 @@ const teamLabelFull =
 </div>
 
 
-                <div style={{ marginTop: 10, fontSize: 12, fontWeight: 900, opacity: 0.95, color: "#000000" }}>
+                <div
+  style={{
+    position: "absolute",
+    left: 12,
+    bottom: PLAYER_CARD_BOTTOM_LABEL_BOTTOM,
+    fontSize: 12,
+    fontWeight: 900,
+    opacity: 0.95,
+    color: "#000000",
+    zIndex: 2,
+  }}
+>
   {teamLabel}
 </div>
               </div>
@@ -1013,16 +1033,22 @@ const teamLabelFull =
   }}
 >
   <img
-    src={jerseySrcForTeam(normalizeTeamCodeLocal(p.teamCode), "front")}
-
-    alt=""
-    style={{
-      width: "100%",
-      height: "100%",
-      objectFit: "contain",
-      display: "block",
-    }}
-  />
+  key={p.id}
+  src={`/api/players/image-file?playerId=${encodePlayerImageId(p.id)}`}
+  alt=""
+  onError={(e) => {
+    e.currentTarget.src = jerseySrcForTeam(
+      normalizeTeamCodeLocal(p.teamCode),
+      "front"
+    );
+  }}
+  style={{
+    width: "100%",
+    height: "100%",
+    objectFit: "contain",
+    display: "block",
+  }}
+/>
 </div>
 
 
@@ -1252,8 +1278,9 @@ const teamLabelFull =
   open={openBreakdown}
   onClose={() => setOpenBreakdown(false)}
 
+  playerId={p.id}
   playerName={`${p.firstName} ${p.lastName}`}
-  teamCode={p.teamCode}          // ✅ THIS is the key line
+  teamCode={p.teamCode}
 
   weekLabel={selectedRound ? `Week ${selectedRound.week}` : ""}
   fixtureLabel={
