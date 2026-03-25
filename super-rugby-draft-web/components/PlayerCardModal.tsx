@@ -963,7 +963,7 @@ const teamLabelFull =
     position: "relative",
     overflow: "visible",
     background: "linear-gradient(to right, rgb(255, 255, 255), rgb(29, 78, 216))",
-    borderBottom: "1px solid rgba(255,255,255,0.14)",
+    borderBottom: "0px solid rgba(255,255,255,0.14)",
     paddingRight: 160, // keeps text clear of big jersey
     zIndex: 1,
   }}
@@ -1071,6 +1071,7 @@ const teamLabelFull =
     <div
       style={{
         background: "#059669",
+        borderTop: "1x solid rgba(255,255,255,0)",
         borderBottom: "1px solid rgba(255,255,255,0.14)",
         padding: 10,
         display: "grid",
