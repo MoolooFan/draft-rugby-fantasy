@@ -253,7 +253,7 @@ export const EXTERNAL_PLAYER_ID_MAP: Record<string, number> = {
   "t.lynagh": 252,
   "c.gordon": 253,
   "h.mclaughlin-phillips": 254,
-  "f.flook": 255,
+  "j.flook": 255,
   "h.paisami": 256,
   "i.henry": 257,
   "d.pakeho": 258,
@@ -448,6 +448,9 @@ export const EXTERNAL_PLAYER_ID_MAP: Record<string, number> = {
   "t.annan": 447,
   "s.ravudi": 448,
   "c.grant": 449,
+  "z.lomax": 450,
+  "n.shearer": 451,
+  "j.sexton": 452
 };
 
 function normaliseInternalId(x: string) {
