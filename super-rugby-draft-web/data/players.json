@@ -6054,8 +6054,8 @@
     "teamCode": "MOP",
     "posAbbrev": "OB",
     "posName": "Outside Back",
-    "secondaryPosAbbrev": "",
-    "secondaryPosName": "",
+    "secondaryPosAbbrev": "CE",
+    "secondaryPosName": "Centre",
     "draftRank": 145,
     "status": "Starting",
     "stats": {
