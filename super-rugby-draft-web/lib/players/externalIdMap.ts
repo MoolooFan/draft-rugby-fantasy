@@ -428,7 +428,7 @@ export const EXTERNAL_PLAYER_ID_MAP: Record<string, number> = {
   "j.martens": 427,
   "t.robinson2": 428,
   "l.casey": 429,
-  "v.vakatawa": 430,
+  "v.vakatawa": 1000,
   "t.barnes": 431,
   "m.tupaea": 432,
   "r.wingham": 433,
@@ -448,7 +448,7 @@ export const EXTERNAL_PLAYER_ID_MAP: Record<string, number> = {
   "t.annan": 447,
   "s.ravudi": 448,
   "c.grant": 449,
-  "z.lomax": 450,
+  "z.lomax": 925703,
   "n.shearer": 451,
   "j.sexton": 452
 };
