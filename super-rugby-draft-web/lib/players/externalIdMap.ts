@@ -450,7 +450,8 @@ export const EXTERNAL_PLAYER_ID_MAP: Record<string, number> = {
   "c.grant": 449,
   "z.lomax": 925703,
   "n.shearer": 451,
-  "j.sexton": 452
+  "j.sexton": 452,
+  "o.mathis": 453
 };
 
 function normaliseInternalId(x: string) {
