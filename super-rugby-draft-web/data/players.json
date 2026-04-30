@@ -8070,8 +8070,8 @@
     "teamCode": "DRU",
     "posAbbrev": "HB",
     "posName": "Halfback",
-    "secondaryPosAbbrev": "",
-    "secondaryPosName": "",
+    "secondaryPosAbbrev": "OB",
+    "secondaryPosName": "Outside Back",
     "draftRank": 193,
     "status": "",
     "stats": {
