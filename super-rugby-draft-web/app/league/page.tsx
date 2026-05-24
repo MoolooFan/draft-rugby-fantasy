@@ -607,7 +607,7 @@ const START_ROUND = Math.min(
 );
 
 // ✅ Fantasy regular season is FIXED to 14 weeks (or less if startRound is late)
-const FANTASY_REGULAR_WEEKS_CAP = 15;
+const FANTASY_REGULAR_WEEKS_CAP = 16;
 const regularWeeks = Math.max(
   1,
   Math.min(FANTASY_REGULAR_WEEKS_CAP, REAL_REGULAR_ROUNDS - START_ROUND + 1)
@@ -1654,7 +1654,7 @@ function JoinLeagueModal() {
 const [startRound, setStartRound] = useState<number>(league.startRound ?? 1);
     const [playoffs, setPlayoffs] = useState<PlayoffFormat>(league.playoffFormat);
 const REAL_REGULAR_ROUNDS = league.realRegularSeasonRounds ?? 16;
-const FANTASY_REGULAR_WEEKS_CAP = 15;
+const FANTASY_REGULAR_WEEKS_CAP = 16;
 const computedRegularWeeks = Math.max(
   1,
   Math.min(FANTASY_REGULAR_WEEKS_CAP, REAL_REGULAR_ROUNDS - startRound + 1)

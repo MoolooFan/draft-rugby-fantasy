@@ -25,7 +25,7 @@ function getWeekFirstKickoffMs(fixtures: AnyFixture[], week: number) {
 // Team selection deadline = 1 hour before first kickoff
 function getWeekDeadlineMs(fixtures: AnyFixture[], week: number) {
   const firstKickoff = getWeekFirstKickoffMs(fixtures, week);
-  return firstKickoff ? firstKickoff - -26 * 60 * 60 * 1000 : 0;
+  return firstKickoff ? firstKickoff - 1 * 60 * 60 * 1000 : 0;
 }
 
 function getWeeksSorted(fixtures: AnyFixture[]) {

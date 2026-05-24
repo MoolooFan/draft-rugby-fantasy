@@ -175,7 +175,7 @@ function isFixtureComplete(f: AnyFixture) {
 }
 
 function getSelectionDeadlineMs(firstKickoffMs: number) {
-  return firstKickoffMs - -26 * 60 * 60 * 1000; // 1h before first kickoff
+  return firstKickoffMs - 1 * 60 * 60 * 1000; // 1h before first kickoff
 }
 
 function getWeekFirstKickoffMs(fixtures: AnyFixture[], week: number) {

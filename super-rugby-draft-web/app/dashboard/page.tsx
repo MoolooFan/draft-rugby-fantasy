@@ -86,7 +86,7 @@ function toMs(x: any): number {
 }
 
 function getSelectionDeadlineMs(firstKickoffMs: number) {
-  return firstKickoffMs - -26 * 60 * 60 * 1000; // 1 hour before first kickoff
+  return firstKickoffMs - 1 * 60 * 60 * 1000; // 1 hour before first kickoff
 }
 
 function getWeekFirstKickoffMs(fixtures: AnyFixture[], week: number) {
