@@ -10,14 +10,16 @@ Status key: ⬜ not started · 🔶 in progress · ✅ done
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | 1 | **Proper logins with passwords.** Today anyone can sign in as anyone just by typing their username. | 🔶 | Built 4 Nov 2026 with Supabase's login system (email + password, working "Remember me", forgot-password emails). 34/34 automated tests pass on the local test database. **Still to do:** Ethan tries it in his browser; when the new Supabase project is made (item 8): turn off "Confirm email" (or add an email provider), set the Site URL, and load the reset-email template. Old username-only accounts can't sign in; everyone makes a fresh account. |
-| 2 | **Lock down the database.** 3 tables have "temp public write" rules, 6 have no protection, and the database's "who are you" check trusts whatever the browser says. | ✅ | Done 5 Nov 2026 on the test database: all 44 old rules removed, every table protected, browsers have no direct access (the site's server does everything). **Not yet applied to the live 2026 database**; the new project gets it automatically. |
+| 2 | **Lock down the database.** 3 tables have "temp public write" rules, 6 have no protection, and the database's "who are you" check trusts whatever the browser says. | ✅ | Done 5 Nov 2026 on the test database: all 44 old rules removed, every table protected, browsers have no direct access (the site's server does everything). **Not applied to the live 2026 database** (Ethan's call, 5 Nov 2026: skip, since the new project gets it automatically and more table changes are coming). |
 | 3 | **Remove unused and risky server routes** (about 12), including the sign-in-as-anyone route, an unprotected "overwrite player stats" route, the debug page, and a broken team-rename route. | ✅ | Done 5 Nov 2026: 11 routes + debug page removed. Also fixed: any player could save another team's lineup or change league settings (now own team only / league creator only); drop-lock cleanup now needs sign-in. 37/37 tests pass. Kept the player-image sync route (password-protected, useful for 2027 photos). |
 
 ## Bugs
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 4 | **Crash risks** in the player card pop-up, league settings pop-up and transactions page. | ⬜ | Fix without changing how they look. |
+| 4 | **Crash risks** in the player card pop-up, league settings pop-up and transactions page. | ✅ | Done 5 Nov 2026, no visual changes. Also fixed: the league settings pop-up lost anything you'd typed if you switched apps and came back. Checked in a real browser (Edge, phone-sized): 18/18 checks pass, including a browser run of the new sign-in/create-account screens. |
+| 4b | **Expired trade offers are never auto-declined.** The transactions page calls `/api/trades/decline-expired`, which was never built. Expired trades already can't be accepted, so nothing breaks, but they're never marked as declined. | ⬜ | Half-built feature found while testing. |
+| 4c | **Minor: two pages draw slightly differently on the server than in the browser** (matchup page; dashboard has a button inside a button). React redraws them; no crash. | ⬜ | Existed before; tidy up with item 7. |
 | 5 | **Save weekly results.** Scores are recalculated every time, so old results can change and there is no season history. | ⬜ | |
 
 ## Getting ready for 2027
@@ -25,7 +27,7 @@ Status key: ⬜ not started · 🔶 in progress · ✅ done
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | 6 | **One season settings file.** "2026" is typed into about 30 files, plus Google Sheet links. | ⬜ | |
-| 7 | **Tidy up.** Duplicate code, 2 unused database tables, 4 empty junk files, split the biggest pages (up to 4,400 lines). | ⬜ | |
+| 7 | **Tidy up.** Duplicate code, 2 unused database tables, 4 empty junk files, split the biggest pages (up to 4,400 lines). | ⬜ | Includes pop-ups/panels built inside their pages (join/create league pop-ups, team-selection pitch and bench) that get rebuilt on every refresh. |
 | 8 | **New clean Supabase project** with only the tables we need, then copy the data across. | ⬜ | After 1, 2, 5 and 7. |
 | 9 | **Before the season:** re-enable the GitHub stats-sync workflow (GitHub turned it off after 60 quiet days) and update fixtures/players for 2027. | ⬜ | |
 | 11 | **Idea: live updates.** The league page was meant to update by itself when another team changed, but it never worked (it relied on the fake-able check). Could be built properly on top of the new logins. | ⬜ | Optional improvement. |

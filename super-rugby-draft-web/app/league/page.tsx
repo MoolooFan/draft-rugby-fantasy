@@ -3,13 +3,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { useLeagueStore } from "@/lib/league/store";
-import type { PlayoffFormat } from "@/lib/league/types";
+import type { League, PlayoffFormat } from "@/lib/league/types";
 import { buildLeagueSchedule } from "@/lib/league/schedule";
 import { AppMenu } from "@/components/AppMenu";
 import { usePlayersStore } from "@/lib/players/store";
 import { fantasyWeekToRealRound } from "@/lib/league/week";
 import fixturesData from "@/data/fixtures-2026.json";
 import type { Fixture } from "@/lib/fixtures/types";
+
+type LeagueStoreActions = ReturnType<typeof useLeagueStore.getState>;
 
 type LeagueTab = "Standings" | "Fixtures" | "Results";
 type Modal =
@@ -263,6 +265,347 @@ function parseDatetimeLocal(value: string) {
   if (!value) return null;
   const ts = new Date(value).getTime();
   return Number.isFinite(ts) ? ts : null;
+}
+
+// ---- League settings pop-up and shared modal helpers ----
+// These live outside LeaguePage so React keeps their state when the page
+// re-renders (e.g. when it refreshes the league after you switch back to the tab).
+
+function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 10000 }}>
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)" }} onClick={onClose} />
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "92%",
+          maxWidth: 420,
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.9 }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function inputStyle(disabled = false): React.CSSProperties {
+return {
+  width: "100%",
+  height: 36,
+  borderRadius: 10,
+  border: "1px solid rgba(0,0,0,0.18)",
+  padding: "0 10px",
+  fontSize: 13,
+  fontWeight: 800,
+  outline: "none",
+  background: disabled ? "rgba(255,255,255,0.75)" : "#FFFFFF",
+  color: "#0f172a",
+  opacity: disabled ? 0.75 : 1,
+};
+}
+
+function selectStyle(disabled = false): React.CSSProperties {
+return {
+  width: "100%",
+  height: 36,
+  borderRadius: 10,
+  border: "1px solid rgba(0,0,0,0.18)",
+  padding: "0 10px",
+  fontSize: 13,
+  fontWeight: 800,
+  outline: "none",
+  background: disabled ? "rgba(255,255,255,0.75)" : "#FFFFFF",
+  color: "#0f172a",
+  opacity: disabled ? 0.75 : 1,
+};
+}
+
+function saveButton(): React.CSSProperties {
+  return {
+    height: 34,
+    borderRadius: 999,
+    padding: "0 18px",
+    background: "#22C55E",
+    border: "none",
+    color: "white",
+    fontWeight: 900,
+    fontSize: 12,
+    cursor: "pointer",
+  };
+}
+
+function LeagueSettingsModal({
+  league,
+  isCreator,
+  onClose,
+  updateLeagueSettings,
+  setDraftOrder,
+}: {
+  league: League;
+  isCreator: boolean;
+  onClose: () => void;
+  updateLeagueSettings: LeagueStoreActions["updateLeagueSettings"];
+  setDraftOrder: LeagueStoreActions["setDraftOrder"];
+}) {
+
+  const [name, setName] = useState(league.name);
+  const [draftLocal, setDraftLocal] = useState(
+league.draftDateTimeText || (league.draftAt ? toDatetimeLocal(league.draftAt) : "")
+);
+const [startRound, setStartRound] = useState<number>(league.startRound ?? 1);
+  const [playoffs, setPlayoffs] = useState<PlayoffFormat>(league.playoffFormat);
+const REAL_REGULAR_ROUNDS = league.realRegularSeasonRounds ?? 16;
+const FANTASY_REGULAR_WEEKS_CAP = 16;
+const computedRegularWeeks = Math.max(
+1,
+Math.min(FANTASY_REGULAR_WEEKS_CAP, REAL_REGULAR_ROUNDS - startRound + 1)
+);
+
+const selectedPlayoffWeeks =
+playoffs === "final4" ? 2 :
+playoffs === "final3" ? 2 :
+playoffs === "final2" ? 1 :
+0;
+
+const computedSeasonWeeks = computedRegularWeeks + selectedPlayoffWeeks;
+
+  const readOnly = !isCreator;
+
+  // Draft order (editable)
+const [draftOrderIds, setDraftOrderIds] = useState<string[]>(() =>
+league.teams.map((t) => t.id)
+);
+
+// If the active league changes while modal open, reset draft order list
+useEffect(() => {
+setDraftOrderIds(league.teams.map((t) => t.id));
+}, [league.id, league.teams]);
+
+function moveTeam(fromIdx: number, toIdx: number) {
+setDraftOrderIds((prev) => {
+  if (toIdx < 0 || toIdx >= prev.length) return prev;
+  const next = [...prev];
+  const [item] = next.splice(fromIdx, 1);
+  next.splice(toIdx, 0, item);
+  return next;
+});
+}
+
+
+
+  return (
+    <ModalOverlay onClose={() => onClose()}>
+      <div
+        style={{
+          borderRadius: 14,
+          background: "linear-gradient(to bottom, #0f172a, #2563eb)",
+          padding: 14,
+          color: "white",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
+          position: "relative",
+        }}
+      >
+        <button
+          onClick={() => onClose()}
+          aria-label="Close"
+          style={{
+            position: "absolute",
+            right: 10,
+            top: 10,
+            background: "transparent",
+            border: "none",
+            color: "white",
+            fontSize: 20,
+            fontWeight: 900,
+            cursor: "pointer",
+          }}
+        >
+          ×
+        </button>
+
+        <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 12 }}>League Settings</div>
+
+        <Field label="Change League Name">
+<input
+  disabled={readOnly}
+  value={name}
+  onChange={(e) => setName(e.target.value)}
+  style={inputStyle(readOnly)}
+/>
+</Field>
+
+<Field label="Change Playoff Format">
+<select
+  disabled={readOnly}
+  value={playoffs}
+  onChange={(e) => setPlayoffs(e.target.value as PlayoffFormat)}
+  style={selectStyle(readOnly)}
+>
+  <option value="none">None</option>
+  <option value="final2">2 Teams (Final only)</option>
+  <option value="final3">3 Teams (Qualifying Final)</option>
+  <option value="final4">4 Teams (Semi + Final)</option>
+</select>
+</Field>
+
+<Field label="Start Round (Real Super Rugby Round)">
+<input
+  disabled={readOnly}
+  type="number"
+  min={1}
+  max={REAL_REGULAR_ROUNDS}
+  value={startRound}
+  onChange={(e) => setStartRound(Number(e.target.value || 1))}
+  style={inputStyle(readOnly)}
+/>
+  <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, marginTop: 6 }}>
+  Fantasy regular season weeks: {computedRegularWeeks} (of {REAL_REGULAR_ROUNDS})<br/>
+  Total season weeks (incl finals): {computedSeasonWeeks}
+</div>
+</Field>
+
+<Field label="Change Draft Date & Time">
+<input
+  disabled={readOnly}
+  type="datetime-local"
+  value={draftLocal}
+  onChange={(e) => setDraftLocal(e.target.value)}
+  style={inputStyle(readOnly)}
+/>
+</Field>
+
+
+
+
+        <div style={{ marginTop: 10, fontSize: 12, fontWeight: 900, opacity: 0.9 }}>
+          Draft Order
+        </div>
+
+        <div
+          style={{
+            marginTop: 8,
+            borderRadius: 10,
+            overflow: "hidden",
+            background: "rgba(255,255,255,0.92)",
+            color: "#0f172a",
+            border: "1px solid rgba(0,0,0,0.10)",
+          }}
+        >
+          {draftOrderIds.map((teamId, idx) => {
+const t = league.teams.find((x) => x.id === teamId);
+if (!t) return null;
+
+const upDisabled = readOnly || idx === 0;
+const downDisabled = readOnly || idx === draftOrderIds.length - 1;
+
+return (
+  <div
+    key={t.id}
+    style={{
+      display: "grid",
+      gridTemplateColumns: "26px 1fr auto",
+      gap: 10,
+      padding: "10px 10px",
+      borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)",
+      fontSize: 12,
+      fontWeight: 700,
+      alignItems: "center",
+    }}
+  >
+    <div style={{ opacity: 0.7 }}>{idx + 1}</div>
+
+    <div>{t.name}</div>
+
+    {/* Up/Down controls */}
+    <div style={{ display: "flex", gap: 8 }}>
+      <button
+        disabled={upDisabled}
+        onClick={() => moveTeam(idx, idx - 1)}
+        style={{
+          height: 28,
+          width: 34,
+          borderRadius: 10,
+          border: "none",
+          background: "#E2E8F0",
+          color: "#0f172a",
+          fontWeight: 900,
+          cursor: upDisabled ? "not-allowed" : "pointer",
+          opacity: upDisabled ? 0.45 : 1,
+        }}
+        aria-label="Move team up"
+      >
+        ▲
+      </button>
+
+      <button
+        disabled={downDisabled}
+        onClick={() => moveTeam(idx, idx + 1)}
+        style={{
+          height: 28,
+          width: 34,
+          borderRadius: 10,
+          border: "none",
+          background: "#E2E8F0",
+          color: "#0f172a",
+          fontWeight: 900,
+          cursor: downDisabled ? "not-allowed" : "pointer",
+          opacity: downDisabled ? 0.45 : 1,
+        }}
+        aria-label="Move team down"
+      >
+        ▼
+      </button>
+    </div>
+  </div>
+);
+})}
+
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+          <button
+            disabled={readOnly}
+            onClick={() => {
+              const draftAt = parseDatetimeLocal(draftLocal);
+
+updateLeagueSettings(league.id, {
+name,
+playoffFormat: playoffs,
+draftDateTimeText: draftLocal,
+draftAt,
+startRound,
+totalWeeks: computedSeasonWeeks, // ✅ IMPORTANT: includes finals weeks
+});
+
+
+              setDraftOrder(league.id, draftOrderIds);
+
+              onClose();
+            }}
+            style={{
+              ...saveButton(),
+              opacity: readOnly ? 0.45 : 1,
+              cursor: readOnly ? "not-allowed" : "pointer",
+            }}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
 }
 
 export default function LeaguePage() {
@@ -1428,25 +1771,6 @@ if (isLabelRow) {
   }
 
 
-  function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-    return (
-      <div style={{ position: "fixed", inset: 0, zIndex: 10000 }}>
-        <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)" }} onClick={onClose} />
-        <div
-          style={{
-            position: "absolute",
-            left: "50%",
-            top: "50%",
-            transform: "translate(-50%, -50%)",
-            width: "92%",
-            maxWidth: 420,
-          }}
-        >
-          {children}
-        </div>
-      </div>
-    );
-  }
 
 function JoinLeagueModal() {
   const [code, setCode] = useState("");
@@ -1644,256 +1968,6 @@ function JoinLeagueModal() {
 
 
 
-  function LeagueSettingsModal() {
-    if (!league) return null;
-
-    const [name, setName] = useState(league.name);
-    const [draftLocal, setDraftLocal] = useState(
-  league.draftDateTimeText || (league.draftAt ? toDatetimeLocal(league.draftAt) : "")
-);
-const [startRound, setStartRound] = useState<number>(league.startRound ?? 1);
-    const [playoffs, setPlayoffs] = useState<PlayoffFormat>(league.playoffFormat);
-const REAL_REGULAR_ROUNDS = league.realRegularSeasonRounds ?? 16;
-const FANTASY_REGULAR_WEEKS_CAP = 16;
-const computedRegularWeeks = Math.max(
-  1,
-  Math.min(FANTASY_REGULAR_WEEKS_CAP, REAL_REGULAR_ROUNDS - startRound + 1)
-);
-
-const selectedPlayoffWeeks =
-  playoffs === "final4" ? 2 :
-  playoffs === "final3" ? 2 :
-  playoffs === "final2" ? 1 :
-  0;
-
-const computedSeasonWeeks = computedRegularWeeks + selectedPlayoffWeeks;
-
-    const readOnly = !isCreator;
-
-    // Draft order (editable)
-const [draftOrderIds, setDraftOrderIds] = useState<string[]>(() =>
-  league.teams.map((t) => t.id)
-);
-
-// If the active league changes while modal open, reset draft order list
-useEffect(() => {
-  setDraftOrderIds(league.teams.map((t) => t.id));
-}, [league.id, league.teams]);
-
-function moveTeam(fromIdx: number, toIdx: number) {
-  setDraftOrderIds((prev) => {
-    if (toIdx < 0 || toIdx >= prev.length) return prev;
-    const next = [...prev];
-    const [item] = next.splice(fromIdx, 1);
-    next.splice(toIdx, 0, item);
-    return next;
-  });
-}
-
-
-
-    return (
-      <ModalOverlay onClose={() => setModal(null)}>
-        <div
-          style={{
-            borderRadius: 14,
-            background: "linear-gradient(to bottom, #0f172a, #2563eb)",
-            padding: 14,
-            color: "white",
-            boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
-            position: "relative",
-          }}
-        >
-          <button
-            onClick={() => setModal(null)}
-            aria-label="Close"
-            style={{
-              position: "absolute",
-              right: 10,
-              top: 10,
-              background: "transparent",
-              border: "none",
-              color: "white",
-              fontSize: 20,
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            ×
-          </button>
-
-          <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 12 }}>League Settings</div>
-
-          <Field label="Change League Name">
-  <input
-    disabled={readOnly}
-    value={name}
-    onChange={(e) => setName(e.target.value)}
-    style={inputStyle(readOnly)}
-  />
-</Field>
-
-<Field label="Change Playoff Format">
-  <select
-    disabled={readOnly}
-    value={playoffs}
-    onChange={(e) => setPlayoffs(e.target.value as PlayoffFormat)}
-    style={selectStyle(readOnly)}
-  >
-    <option value="none">None</option>
-    <option value="final2">2 Teams (Final only)</option>
-    <option value="final3">3 Teams (Qualifying Final)</option>
-    <option value="final4">4 Teams (Semi + Final)</option>
-  </select>
-</Field>
-
-<Field label="Start Round (Real Super Rugby Round)">
-  <input
-    disabled={readOnly}
-    type="number"
-    min={1}
-    max={REAL_REGULAR_ROUNDS}
-    value={startRound}
-    onChange={(e) => setStartRound(Number(e.target.value || 1))}
-    style={inputStyle(readOnly)}
-  />
-    <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, marginTop: 6 }}>
-    Fantasy regular season weeks: {computedRegularWeeks} (of {REAL_REGULAR_ROUNDS})<br/>
-    Total season weeks (incl finals): {computedSeasonWeeks}
-  </div>
-</Field>
-
-<Field label="Change Draft Date & Time">
-  <input
-    disabled={readOnly}
-    type="datetime-local"
-    value={draftLocal}
-    onChange={(e) => setDraftLocal(e.target.value)}
-    style={inputStyle(readOnly)}
-  />
-</Field>
-
-
-
-
-          <div style={{ marginTop: 10, fontSize: 12, fontWeight: 900, opacity: 0.9 }}>
-            Draft Order
-          </div>
-
-          <div
-            style={{
-              marginTop: 8,
-              borderRadius: 10,
-              overflow: "hidden",
-              background: "rgba(255,255,255,0.92)",
-              color: "#0f172a",
-              border: "1px solid rgba(0,0,0,0.10)",
-            }}
-          >
-            {draftOrderIds.map((teamId, idx) => {
-  const t = league.teams.find((x) => x.id === teamId);
-  if (!t) return null;
-
-  const upDisabled = readOnly || idx === 0;
-  const downDisabled = readOnly || idx === draftOrderIds.length - 1;
-
-  return (
-    <div
-      key={t.id}
-      style={{
-        display: "grid",
-        gridTemplateColumns: "26px 1fr auto",
-        gap: 10,
-        padding: "10px 10px",
-        borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)",
-        fontSize: 12,
-        fontWeight: 700,
-        alignItems: "center",
-      }}
-    >
-      <div style={{ opacity: 0.7 }}>{idx + 1}</div>
-
-      <div>{t.name}</div>
-
-      {/* Up/Down controls */}
-      <div style={{ display: "flex", gap: 8 }}>
-        <button
-          disabled={upDisabled}
-          onClick={() => moveTeam(idx, idx - 1)}
-          style={{
-            height: 28,
-            width: 34,
-            borderRadius: 10,
-            border: "none",
-            background: "#E2E8F0",
-            color: "#0f172a",
-            fontWeight: 900,
-            cursor: upDisabled ? "not-allowed" : "pointer",
-            opacity: upDisabled ? 0.45 : 1,
-          }}
-          aria-label="Move team up"
-        >
-          ▲
-        </button>
-
-        <button
-          disabled={downDisabled}
-          onClick={() => moveTeam(idx, idx + 1)}
-          style={{
-            height: 28,
-            width: 34,
-            borderRadius: 10,
-            border: "none",
-            background: "#E2E8F0",
-            color: "#0f172a",
-            fontWeight: 900,
-            cursor: downDisabled ? "not-allowed" : "pointer",
-            opacity: downDisabled ? 0.45 : 1,
-          }}
-          aria-label="Move team down"
-        >
-          ▼
-        </button>
-      </div>
-    </div>
-  );
-})}
-
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
-            <button
-              disabled={readOnly}
-              onClick={() => {
-                const draftAt = parseDatetimeLocal(draftLocal);
-
-updateLeagueSettings(league.id, {
-  name,
-  playoffFormat: playoffs,
-  draftDateTimeText: draftLocal,
-  draftAt,
-  startRound,
-  totalWeeks: computedSeasonWeeks, // ✅ IMPORTANT: includes finals weeks
-});
-
-
-                setDraftOrder(league.id, draftOrderIds);
-
-                setModal(null);
-              }}
-              style={{
-                ...saveButton(),
-                opacity: readOnly ? 0.45 : 1,
-                cursor: readOnly ? "not-allowed" : "pointer",
-              }}
-            >
-              Save
-            </button>
-          </div>
-        </div>
-      </ModalOverlay>
-    );
-  }
 
   function ModalCard({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
     return (
@@ -1930,14 +2004,6 @@ updateLeagueSettings(league.id, {
     );
   }
 
-  function Field({ label, children }: { label: string; children: React.ReactNode }) {
-    return (
-      <div style={{ display: "grid", gap: 6 }}>
-        <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.9 }}>{label}</div>
-        {children}
-      </div>
-    );
-  }
 
   function pillButton(bg: string): React.CSSProperties {
     return {
@@ -1982,53 +2048,10 @@ updateLeagueSettings(league.id, {
     };
   }
 
-  function inputStyle(disabled = false): React.CSSProperties {
-  return {
-    width: "100%",
-    height: 36,
-    borderRadius: 10,
-    border: "1px solid rgba(0,0,0,0.18)",
-    padding: "0 10px",
-    fontSize: 13,
-    fontWeight: 800,
-    outline: "none",
-    background: disabled ? "rgba(255,255,255,0.75)" : "#FFFFFF",
-    color: "#0f172a",
-    opacity: disabled ? 0.75 : 1,
-  };
-}
 
 
-  function selectStyle(disabled = false): React.CSSProperties {
-  return {
-    width: "100%",
-    height: 36,
-    borderRadius: 10,
-    border: "1px solid rgba(0,0,0,0.18)",
-    padding: "0 10px",
-    fontSize: 13,
-    fontWeight: 800,
-    outline: "none",
-    background: disabled ? "rgba(255,255,255,0.75)" : "#FFFFFF",
-    color: "#0f172a",
-    opacity: disabled ? 0.75 : 1,
-  };
-}
 
 
-  function saveButton(): React.CSSProperties {
-    return {
-      height: 34,
-      borderRadius: 999,
-      padding: "0 18px",
-      background: "#22C55E",
-      border: "none",
-      color: "white",
-      fontWeight: 900,
-      fontSize: 12,
-      cursor: "pointer",
-    };
-  }
 
   // Still booting → show loading
 if (!mounted || !leagueHydrated) {
@@ -2137,7 +2160,15 @@ if (!league) {
 
       {modal?.type === "join" && <JoinLeagueModal />}
       {modal?.type === "create" && <CreateLeagueModal />}
-      {modal?.type === "settings" && <LeagueSettingsModal />}
+      {modal?.type === "settings" && league && (
+        <LeagueSettingsModal
+          league={league}
+          isCreator={isCreator}
+          onClose={() => setModal(null)}
+          updateLeagueSettings={updateLeagueSettings}
+          setDraftOrder={setDraftOrder}
+        />
+      )}
     </main>
   );
 }

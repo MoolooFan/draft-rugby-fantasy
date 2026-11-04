@@ -626,12 +626,35 @@ return mine
 
 
 
-export function PlayerCardModal({
+type PlayerCardModalProps = {
+  open?: boolean;
+  player: PlayerCardPlayer | null;
+  status?: PlayerStatus;
+  stats?: Record<string, number>;
+
+  teamLabel?: string;
+  initialTab?: PlayerCardTab;
+  actions?: PlayerCardAction[];
+  hideActions?: boolean;
+  onClose: () => void;
+};
+
+/**
+ * Shows nothing when closed or when there's no player; otherwise the card.
+ * (Kept separate so the card's React hooks always run in the same order;
+ * returning early in the middle of them could crash the page.)
+ */
+export function PlayerCardModal(props: PlayerCardModalProps) {
+  if (props.open === false || !props.player) return null;
+  return <PlayerCardModalInner {...props} player={props.player} />;
+}
+
+function PlayerCardModalInner({
   open = true,
   player,
   status = null,
   stats = {},
-  
+
 
   teamLabel = "Stouty's Studs",
   initialTab = "Stats",
@@ -641,19 +664,7 @@ export function PlayerCardModal({
   ],
   hideActions = false,
   onClose,
-}: {
-  open?: boolean;
-  player: PlayerCardPlayer | null;
-  status?: PlayerStatus;
-  stats?: Record<string, number>;
-  
-
-  teamLabel?: string;
-  initialTab?: PlayerCardTab;
-  actions?: PlayerCardAction[];
-  hideActions?: boolean;
-  onClose: () => void;
-}) {
+}: PlayerCardModalProps & { player: PlayerCardPlayer }) {
 
 
 
@@ -677,10 +688,8 @@ const [selectedRound, setSelectedRound] = useState<PlayerRound | null>(null);
 );
 
   const [tab, setTab] = useState<PlayerCardTab>(initialTab);
-if (!open || !player) return null;
 
-
-// ✅ from here onward, player is guaranteed non-null
+// player is always set here (PlayerCardModal only renders this when it is)
 const p = player;
 
 // ensure sheet players are loaded (no-op if already loaded)

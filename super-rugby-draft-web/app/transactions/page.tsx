@@ -3503,13 +3503,6 @@ const dropP = allPlayers.find((x) => x.id === c.dropPlayerId) ?? null;
   function TransactionsTab() {
     const leagueId = activeLeague?.id ?? "";
     const yourId = yourDraftTeamId;
-    if (!leagueId || !yourId) {
-  return (
-    <div style={{ ...listBox, padding: 12, fontSize: 12, fontWeight: 900, opacity: 0.8 }}>
-      No league/team selected.
-    </div>
-  );
-}
 
 const yourWaiverRank = waiverOrderIndexByTeamId.get(String(yourId));
 const yourWaiverRankText = typeof yourWaiverRank === "number" ? `#${yourWaiverRank + 1}` : "—";
@@ -3956,6 +3949,15 @@ const waiverClaimsFeed = useMemo(() => {
     }
 
     // ---------- Render ----------
+    // (This check sits after all the hooks above: returning before them could crash the page.)
+    if (!leagueId || !yourId) {
+      return (
+        <div style={{ ...listBox, padding: 12, fontSize: 12, fontWeight: 900, opacity: 0.8 }}>
+          No league/team selected.
+        </div>
+      );
+    }
+
     return (
       <>
 {/* Pending Trades FIRST */}
