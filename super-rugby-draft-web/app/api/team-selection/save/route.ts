@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { requireLeagueTeam } from "@/lib/league/serverAuth";
+import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 
 export async function POST(req: Request) {
   try {
@@ -39,8 +39,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ server-side auth: ensure requester is this team (or league creator)
-    await requireLeagueTeam(leagueId);
+    // Players can only save their own team's lineup.
+    const { teamId: myTeamId } = await requireLeagueTeam(leagueId);
+    if (myTeamId !== teamId) {
+      return NextResponse.json(
+        { ok: false, error: "You can only pick your own team" },
+        { status: 403 }
+      );
+    }
 
     const { error } = await supabaseAdmin
       .from("team_selections")
@@ -61,6 +67,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? "Unknown error" }, { status: 500 });
+    const { msg, status } = toHttpError(e);
+    return NextResponse.json({ ok: false, error: msg }, { status });
   }
 }

@@ -1,22 +1,24 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 
+// Deletes this league's drop locks that have already expired.
+// Only players in the league can trigger it.
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-
     const leagueId = String(body?.leagueId ?? "").trim();
-    const nowMs = Number(body?.nowMs ?? Date.now());
 
     if (!leagueId) {
       return NextResponse.json({ ok: false, error: "Missing leagueId" }, { status: 400 });
     }
 
-    // Admin client (bypasses RLS)
-const supabase = supabaseAdmin;
+    await requireLeagueTeam(leagueId);
 
-    // Delete expired locks for this league
-    const { data, error } = await supabase
+    // Always use the server's clock, so nobody can expire locks early.
+    const nowMs = Date.now();
+
+    const { data, error } = await supabaseAdmin
       .from("drop_locks")
       .delete()
       .eq("league_id", leagueId)
@@ -31,7 +33,8 @@ const supabase = supabaseAdmin;
       ok: true,
       deletedCount: Array.isArray(data) ? data.length : 0,
     });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? "Unknown error" }, { status: 500 });
+  } catch (e: unknown) {
+    const { msg, status } = toHttpError(e);
+    return NextResponse.json({ ok: false, error: msg }, { status });
   }
 }

@@ -10,8 +10,8 @@ Status key: ⬜ not started · 🔶 in progress · ✅ done
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | 1 | **Proper logins with passwords.** Today anyone can sign in as anyone just by typing their username. | 🔶 | Built 4 Nov 2026 with Supabase's login system (email + password, working "Remember me", forgot-password emails). 34/34 automated tests pass on the local test database. **Still to do:** Ethan tries it in his browser; when the new Supabase project is made (item 8): turn off "Confirm email" (or add an email provider), set the Site URL, and load the reset-email template. Old username-only accounts can't sign in; everyone makes a fresh account. |
-| 2 | **Lock down the database.** 3 tables have "temp public write" rules, 6 have no protection, and the database's "who are you" check trusts whatever the browser says. | ⬜ | Site does everything through its own server, so this should be invisible to players. |
-| 3 | **Remove unused and risky server routes** (about 12), including the sign-in-as-anyone route, an unprotected "overwrite player stats" route, the debug page, and a broken team-rename route. | ⬜ | |
+| 2 | **Lock down the database.** 3 tables have "temp public write" rules, 6 have no protection, and the database's "who are you" check trusts whatever the browser says. | ✅ | Done 5 Nov 2026 on the test database: all 44 old rules removed, every table protected, browsers have no direct access (the site's server does everything). **Not yet applied to the live 2026 database**; the new project gets it automatically. |
+| 3 | **Remove unused and risky server routes** (about 12), including the sign-in-as-anyone route, an unprotected "overwrite player stats" route, the debug page, and a broken team-rename route. | ✅ | Done 5 Nov 2026: 11 routes + debug page removed. Also fixed: any player could save another team's lineup or change league settings (now own team only / league creator only); drop-lock cleanup now needs sign-in. 37/37 tests pass. Kept the player-image sync route (password-protected, useful for 2027 photos). |
 
 ## Bugs
 
@@ -28,6 +28,7 @@ Status key: ⬜ not started · 🔶 in progress · ✅ done
 | 7 | **Tidy up.** Duplicate code, 2 unused database tables, 4 empty junk files, split the biggest pages (up to 4,400 lines). | ⬜ | |
 | 8 | **New clean Supabase project** with only the tables we need, then copy the data across. | ⬜ | After 1, 2, 5 and 7. |
 | 9 | **Before the season:** re-enable the GitHub stats-sync workflow (GitHub turned it off after 60 quiet days) and update fixtures/players for 2027. | ⬜ | |
+| 11 | **Idea: live updates.** The league page was meant to update by itself when another team changed, but it never worked (it relied on the fake-able check). Could be built properly on top of the new logins. | ⬜ | Optional improvement. |
 | 10 | **Upgrade Node.js to version 22** on Ethan's PC and on Vercel. Supabase's code now warns that Node 20 support is ending. | ⬜ | Quick; do before the season. |
 
 ## Done so far

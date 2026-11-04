@@ -19,19 +19,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Missing leagueId or patch" }, { status: 400 });
   }
 
-  // must be league member (or you can tighten to creator only)
-  const { data: memberTeam, error: memberErr } = await supabaseAdmin
-    .from("teams")
-    .select("id")
-    .eq("league_id", leagueId)
-    .eq("owner_username", username)
+  // Only the league creator can change settings (matches the settings screen,
+  // which is read-only for everyone else).
+  const { data: leagueRow, error: leagueErr } = await supabaseAdmin
+    .from("leagues")
+    .select("created_by")
+    .eq("id", leagueId)
     .maybeSingle();
 
-  if (memberErr) {
-    return NextResponse.json({ ok: false, error: memberErr.message }, { status: 500 });
+  if (leagueErr) {
+    return NextResponse.json({ ok: false, error: leagueErr.message }, { status: 500 });
   }
-  if (!memberTeam) {
-    return NextResponse.json({ ok: false, error: "Not a league member" }, { status: 403 });
+  if (!leagueRow) {
+    return NextResponse.json({ ok: false, error: "League not found" }, { status: 404 });
+  }
+  if (norm(String(leagueRow.created_by ?? "")) !== username) {
+    return NextResponse.json(
+      { ok: false, error: "Only the league creator can change settings" },
+      { status: 403 }
+    );
   }
 
   // Map API patch -> DB columns

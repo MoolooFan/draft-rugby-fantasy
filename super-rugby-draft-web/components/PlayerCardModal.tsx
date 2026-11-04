@@ -769,7 +769,7 @@ useEffect(() => {
 const roundJson = await roundRes.json();
 const fixJson = await fixRes.json();
 
-// /api/sheets/player-round-stats -> { ok: true, rows: [...] }
+// /api/players/round-stats -> { ok: true, rows: [...] }
 const roundRows: Record<string, any>[] = Array.isArray(roundJson?.rows) ? roundJson.rows : [];
 
 // /api/sheets/fixtures -> { ok: true, fixtures: [...] }
