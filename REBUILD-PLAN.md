@@ -34,6 +34,19 @@ Status key: ⬜ not started · 🔶 in progress · ✅ done
 | 11 | **Idea: live updates.** The league page was meant to update by itself when another team changed, but it never worked (it relied on the fake-able check). Could be built properly on top of the new logins. | ⬜ | Optional improvement. |
 | 10 | **Upgrade Node.js to version 22** on Ethan's PC and on Vercel. Supabase's code now warns that Node 20 support is ending. | ⬜ | Quick; do before the season. |
 
+## Season rules agreed with Ethan (for items 5 and 12)
+
+- **2027 season:** 17 Super Rugby rounds, but rounds 10 and 11 count as one fantasy week (round 10 has 4 games, round 11 has 1), so 16 fantasy weeks. The fantasy season starts at round 1. Finals use the last weeks of the regular season.
+- **Lineup deadline:** 1 hour before the week's first kickoff (enforced by the server). Combined week 10 & 11: before round 10's first game.
+- **Finalising:** 13.5 hours after the week's last kickoff: auto-subs, then scores locked. Stats sync runs only from each game's kickoff until 13.5 hours after it, so it is quiet between weekends.
+- **Standings:** 4 points for a win, 2 for a draw; then points for, then points difference. Bye: score counts toward points for, no win or loss.
+- **Bonus points:** for winning by 140+ or losing by 40 or less (Ethan sets the site-wide margins; commissioner can switch them off before the draft). Not in finals or byes.
+- **Finals:** none / 2 / 3 / 4 / 6 teams. 3: 1st seed gets a bye to the final. 6: top two get byes, 3 weeks. Finals tie: most tries that matchup, then higher seed.
+- **Consolation (wooden spoon):** mirror of the finals (losers go through, bottom seeds get byes). If it needs fewer weeks than the finals, the bottom teams play extra (2 teams: both weeks, lowest total gets the spoon). If it needs more, the top consolation seeds play fill-in games so the spoon is decided in time. No finals: champion and spoon are the top and bottom of the ladder.
+- **League settings** (scoring system, bonus points, finals): the commissioner can change them until the draft, then they lock. The schedule is built after the draft.
+- **Scoring options:** Standard / Alternate / Custom. Custom can change every stat's points and the minutes points, but not the x2 captain.
+- **History:** 2026: Ethan champion, Sam runner-up, Logan and Will semi-finalists (weeks 15 and 16 were the playoffs). 2025 (Sam, Ethan, Josh, Jake): Sam champion, Ethan runner-up, Jake last. Stored by person and linked to the new accounts once people sign up.
+
 ## Done so far
 
 - ✅ Checked GitHub connection and that no keys are committed (4 Nov 2026)
