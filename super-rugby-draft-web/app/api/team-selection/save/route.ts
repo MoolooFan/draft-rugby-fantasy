@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
+import { selectionDeadlineMs } from "@/lib/league/deadlines";
 
 export async function POST(req: Request) {
   try {
@@ -9,7 +10,7 @@ export async function POST(req: Request) {
     const leagueId = String(body.leagueId ?? "").trim();
     const week = Number(body.week ?? 0);
     const teamId = String(body.teamId ?? "").trim();
-        const lineup = body.lineup ?? null;
+    const lineup = body.lineup ?? null;
     const captainId = body.captainId ?? null;
     const viceId = body.viceId ?? null;
 
@@ -44,6 +45,25 @@ export async function POST(req: Request) {
     if (myTeamId !== teamId) {
       return NextResponse.json(
         { ok: false, error: "You can only pick your own team" },
+        { status: 403 }
+      );
+    }
+
+    // Lineups lock at the week's deadline (1 hour before its first kickoff), on the server's clock.
+    const { data: league, error: leagueErr } = await supabaseAdmin
+      .from("leagues")
+      .select("start_round")
+      .eq("id", leagueId)
+      .maybeSingle();
+    if (leagueErr) throw leagueErr;
+
+    const deadline = selectionDeadlineMs(league?.start_round, week);
+    if (deadline == null) {
+      return NextResponse.json({ ok: false, error: "That week has no fixtures" }, { status: 400 });
+    }
+    if (Date.now() >= deadline) {
+      return NextResponse.json(
+        { ok: false, error: "Lineups for this week are locked (the deadline has passed)" },
         { status: 403 }
       );
     }
