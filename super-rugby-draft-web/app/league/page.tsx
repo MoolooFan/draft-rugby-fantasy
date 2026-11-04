@@ -7,6 +7,7 @@ import type { League, PlayoffFormat } from "@/lib/league/types";
 import { buildLeagueSchedule } from "@/lib/league/schedule";
 import { AppMenu } from "@/components/AppMenu";
 import { usePlayersStore } from "@/lib/players/store";
+import { CAPTAIN_MULTIPLIER, pointsFromRow } from "@/lib/scoring";
 import { fantasyWeekToRealRound } from "@/lib/league/week";
 import fixturesData from "@/data/fixtures-2026.json";
 import type { Fixture } from "@/lib/fixtures/types";
@@ -171,7 +172,7 @@ const STARTER_SLOTS: SlotId[] = [
   "outsideback1","outsideback2","outsideback3",
 ];
 
-const CAP_MULT = 2;
+const CAP_MULT = CAPTAIN_MULTIPLIER;
 
 function normaliseId(x: any) {
   return String(x ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -202,24 +203,9 @@ function rowRound(row: any) {
   return Number.isFinite(n) ? n : 0;
 }
 
-// Sheet already contains POINTS per column → sum them
-function calcFantasyPoints(row: any): number {
-  const toNumber = (v: any) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  };
-
-  const POINT_COLUMNS = [
-    "Minutes played","Tries","Try Assists","Linebreaks","Linebreak assists","Defenders beaten",
-    "Carries (m)","Offloads","Tackles","Missed tackles","Turnover Forced","Interceptions",
-    "50:22 Kicks","Penalties Conceded","Errors","Lineouts won","Lineout steals","Lineout errors",
-    "Scrums won outright","Conversions","Conversions missed","Penalty scored","Penalty missed",
-    "Drop goal scored","Drop goal missed","Yellow cards","Red cards",
-  ];
-
-  let pts = 0;
-  for (const col of POINT_COLUMNS) pts += toNumber(pickValue(row, [col]));
-  return pts;
+// Stats are raw counts; the shared scoring rules (lib/scoring) turn them into fantasy points.
+function calcFantasyPoints(row: any, player?: any): number {
+  return pointsFromRow(row, player ?? null);
 }
 
 
@@ -685,13 +671,13 @@ const pointsByRealRound = useMemo(() => {
     if (!pidRaw) continue;
 
     const pid = normaliseId(pidRaw);
-    const pts = calcFantasyPoints(row);
+    const pts = calcFantasyPoints(row, sheetPlayerById.get(pid));
 
     if (!byRound.has(rr)) byRound.set(rr, new Map());
     byRound.get(rr)!.set(pid, pts);
   }
   return byRound;
-}, [roundRows]);
+}, [roundRows, sheetPlayerById]);
 
 function pointsForPlayerWeek(weekNo: number, p: PlayerLite | null) {
   const pid = getPlayerSheetId(p);

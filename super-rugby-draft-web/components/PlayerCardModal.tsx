@@ -8,6 +8,7 @@ import { useTransactionsStore } from "@/lib/transactions/store";
 import { useDraftStore } from "@/lib/draft/store";
 import { useLeagueStore } from "@/lib/league/store";
 import { usePlayersStore, usePlayers } from "@/lib/players/store";
+import { isFrontRow, pointsFromRow, statPoints, STATS, type StatKey } from "@/lib/scoring";
 
 
 
@@ -119,34 +120,6 @@ const POSITION_THEME: Record<
   FH: { primary: "#6d9efc", secondary: "#3c578b" },
   CE: { primary: "#937df8", secondary: "#514588" },
   OB: { primary: "#f78ef0", secondary: "#884e84" },
-};
-
-const POINTS_PER_EVENT: Record<string, number> = {
-  tries: 15,
-  tryAssists: 9,
-  lineBreaks: 7,
-  lineBreakAssists: 5,
-  defendersBeaten: 2,
-  offloads: 2,
-  tackles: 1,
-  tacklesMissed: -1,
-  turnoversForced: 4,
-  interceptions: 5,
-  fiftyTwentyTwos: 10,
-  penaltiesConceded: -1,
-  errors: -1,
-  lineoutsWon: 1,
-  lineoutSteals: 5,
-  lineoutErrors: -2,
-  scrumsWon: 3,
-  conversions: 2,
-  conversionsMissed: -1,
-  penaltyGoals: 3,
-  penaltyGoalsMissed: -1,
-  dropGoals: 3,
-  dropGoalsMissed: -1,
-  yellowCards: -5,
-  redCards: -10,
 };
 
 const HEADER_TO_KEY: Record<string, string> = {
@@ -453,40 +426,19 @@ function playerGetsScrumPointsForCard(player: {
   posAbbrev?: string;
   secondaryPosAbbrev?: string;
 }) {
-  const a = String(player?.posAbbrev ?? "").trim().toUpperCase();
-  const b = String(player?.secondaryPosAbbrev ?? "").trim().toUpperCase();
-  return a === "PR" || a === "HO" || b === "PR" || b === "HO";
+  return isFrontRow(player);
 }
 
-function getMinutesFantasyPoints(minutes: number) {
-  if (!minutes) return 0;
-  if (minutes >= 61) return 2;
-  return 1;
-}
+const SCORED_STAT_KEYS = new Set<string>(STATS.map((s) => s.key));
 
+// Points for one stat, using the shared scoring rules (lib/scoring).
 function getBreakdownPointsFromCount(
   key: string,
   count: number,
   player: { posAbbrev?: string; secondaryPosAbbrev?: string }
 ) {
-  if (!count) return 0;
-
-  if (key === "minutesPlayed") {
-    return getMinutesFantasyPoints(count);
-  }
-
-  if (key === "metresGained") {
-    return Math.floor(count / 10);
-  }
-
-  if (key === "scrumsWon" && !playerGetsScrumPointsForCard(player)) {
-    return 0;
-  }
-
-  const per = POINTS_PER_EVENT[key];
-  if (!per) return 0;
-
-  return count * per;
+  if (!count || !SCORED_STAT_KEYS.has(key)) return 0;
+  return statPoints(key as StatKey, count, isFrontRow(player));
 }
 
 function buildRoundsFromSheetRows(
@@ -508,9 +460,7 @@ function buildRoundsFromSheetRows(
         breakdown[internalKey] = count;
       }
 
-      const rowPoints =
-        toNum(pickAny(r, ["points", "Points"])) ||
-        0;
+      const rowPoints = pointsFromRow(r, player);
 
       const minutes = toNum(pickAny(r, ["Minutes played"]));
 
@@ -526,21 +476,6 @@ function buildRoundsFromSheetRows(
 }
 
 
-function pointsToCount(points: number, key: string) {
-  // Special rule: metres are 1pt per 10m (floor)
-  if (key === "metresGained") {
-    return Math.max(0, Math.floor(points) * 10);
-  }
-
-  const per = POINTS_PER_EVENT[key];
-  if (!per) return 0;
-
-  // Example: tries points 30 / 15 = 2
-  const raw = points / per;
-
-  // most are integer events
-  return Number.isFinite(raw) ? Math.round(raw) : 0;
-}
 
 function isFixtureCompleteAny(raw: any) {
   const s = String(raw?.status ?? raw?.Status ?? "").toLowerCase().trim();
@@ -1386,6 +1321,19 @@ function computePositionRank(args: {
   const wantPlayerId = normaliseIdForRounds(playerId);
   const wantPos = String(posAbbrev ?? "").trim().toUpperCase();
 
+  const primaryPosById = new Map<string, string>();
+  const playerMetaById = new Map<string, any>();
+  for (const pl of (playersData as any[])) {
+    const id = normaliseIdForRounds(pl?.id);
+    if (!id) continue;
+    playerMetaById.set(id, pl);
+
+    const pos =
+      String(pl?.posAbbrev ?? pl?.position ?? pl?.pos ?? "").trim().toUpperCase();
+
+    if (pos) primaryPosById.set(id, pos);
+  }
+
   const totalsById = new Map<string, number>();
 
   for (const r of roundRows) {
@@ -1396,19 +1344,8 @@ function computePositionRank(args: {
     const id = normaliseIdForRounds(idRaw);
     if (!id) continue;
 
-    const rowPoints = toNum(pickAny(r, ["points", "Points"]));
+    const rowPoints = pointsFromRow(r, playerMetaById.get(id));
     totalsById.set(id, (totalsById.get(id) ?? 0) + rowPoints);
-  }
-
-  const primaryPosById = new Map<string, string>();
-  for (const pl of (playersData as any[])) {
-    const id = normaliseIdForRounds(pl?.id);
-    if (!id) continue;
-
-    const pos =
-      String(pl?.posAbbrev ?? pl?.position ?? pl?.pos ?? "").trim().toUpperCase();
-
-    if (pos) primaryPosById.set(id, pos);
   }
 
   const samePosTotals: { id: string; total: number }[] = [];

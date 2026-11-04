@@ -17,6 +17,7 @@ import { getActiveUsername, getActiveTimezone } from "@/lib/session";
 import { usePlayersStore } from "@/lib/players/store";
 import playersData from "@/data/players.json";
 import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib/league/week";
+import { pointsFromRow } from "@/lib/scoring";
 
 type ViewMode = "Fixture" | "Latest Score" | "PPG" | "Form";
 
@@ -749,10 +750,6 @@ const sheetPlayerByPlayerId = useMemo(() => {
 
 
 
-function toNum(x: any) {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : 0;
-}
 
 
 
@@ -795,62 +792,7 @@ function rowRound(row: any) {
 }
 
 function calcFantasyPoints(row: any, player?: Player | null): number {
-  if (!row) return 0;
-
-  const minutes = toNum(pickValue(row, ["Minutes played"]));
-  if (!minutes) return 0;
-
-  let pts = 0;
-
-  // minutes played
-  pts += minutes >= 61 ? 2 : 1;
-
-  // attack
-  pts += toNum(pickValue(row, ["Tries"])) * 15;
-  pts += toNum(pickValue(row, ["Try Assists"])) * 9;
-  pts += toNum(pickValue(row, ["Linebreaks"])) * 7;
-  pts += toNum(pickValue(row, ["Linebreak assists"])) * 5;
-  pts += toNum(pickValue(row, ["Defenders beaten"])) * 2;
-  pts += Math.floor(toNum(pickValue(row, ["Carries (m)"])) / 10);
-  pts += toNum(pickValue(row, ["Offloads"])) * 2;
-
-  // defence
-  pts += toNum(pickValue(row, ["Tackles"])) * 1;
-  pts += toNum(pickValue(row, ["Missed tackles"])) * -1;
-  pts += toNum(pickValue(row, ["Turnover Forced"])) * 4;
-  pts += toNum(pickValue(row, ["Interceptions"])) * 5;
-  pts += toNum(pickValue(row, ["50:22 Kicks"])) * 10;
-
-  // discipline / errors
-  pts += toNum(pickValue(row, ["Penalties Conceded"])) * -1;
-  pts += toNum(pickValue(row, ["Errors"])) * -1;
-  pts += toNum(pickValue(row, ["Yellow cards"])) * -5;
-  pts += toNum(pickValue(row, ["Red cards"])) * -10;
-
-  // set piece
-  pts += toNum(pickValue(row, ["Lineouts won"])) * 1;
-  pts += toNum(pickValue(row, ["Lineout steals"])) * 5;
-  pts += toNum(pickValue(row, ["Lineout errors"])) * -2;
-
-  // scrum points: props + hookers only
-  const posA = String(player?.posAbbrev ?? "").toUpperCase();
-  const posB = String(player?.secondaryPosAbbrev ?? "").toUpperCase();
-  const isFrontRow =
-    posA === "PR" || posA === "HO" || posB === "PR" || posB === "HO";
-
-  if (isFrontRow) {
-    pts += toNum(pickValue(row, ["Scrums won outright"])) * 3;
-  }
-
-  // kicking
-  pts += toNum(pickValue(row, ["Conversions"])) * 2;
-  pts += toNum(pickValue(row, ["Conversions missed"])) * -1;
-  pts += toNum(pickValue(row, ["Penalty scored"])) * 3;
-  pts += toNum(pickValue(row, ["Penalty missed"])) * -1;
-  pts += toNum(pickValue(row, ["Drop goal scored"])) * 3;
-  pts += toNum(pickValue(row, ["Drop goal missed"])) * -1;
-
-  return pts;
+  return pointsFromRow(row, player ?? null);
 }
 
 const statsByPlayerId = useMemo(() => {

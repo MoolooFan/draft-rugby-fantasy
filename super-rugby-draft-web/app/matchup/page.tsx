@@ -18,6 +18,7 @@ import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 import { PointsBreakdownModal } from "@/components/PointsBreakdownModal";
 import { usePlayersStore } from "@/lib/players/store";
+import { CAPTAIN_MULTIPLIER, isFrontRow, pointsBreakdown, pointsFromRow, statCountsFromRow } from "@/lib/scoring";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 // =========================
 // Jersey assets (Matchup page uses ANGLED if available)
@@ -81,113 +82,22 @@ function rowRound(row: any) {
 }
 
 
-// ✅ sheet already contains POINTS per column → sum them
-function playerGetsScrumPoints(
-  p: Pick<Player, "posAbbrev" | "secondaryPosAbbrev"> | null
-) {
-  if (!p) return false;
 
-  const a = String(p.posAbbrev ?? "").trim().toUpperCase();
-  const b = String(p.secondaryPosAbbrev ?? "").trim().toUpperCase();
 
-  return a === "PR" || a === "HO" || b === "PR" || b === "HO";
-}
-
-// ✅ external stats now store RAW STAT COUNTS, so convert them to fantasy points here
+// Stats are raw counts; the shared scoring rules (lib/scoring) turn them into fantasy points.
 function calcFantasyPoints(
   row: any,
   player: Pick<Player, "posAbbrev" | "secondaryPosAbbrev"> | null
 ): number {
-  const n = (header: string) => {
-    const v = Number(pickValue(row, [header]));
-    return Number.isFinite(v) ? v : 0;
-  };
-
-  const minutes = n("Minutes played");
-
-  let total = 0;
-
-  // minutes
-  if (minutes > 0 && minutes < 61) total += 1;
-  if (minutes >= 61) total += 2;
-
-  // positive scoring
-  total += n("Tries") * 15;
-  total += n("Try Assists") * 9;
-  total += n("Linebreaks") * 7;
-  total += n("Linebreak assists") * 5;
-  total += n("Defenders beaten") * 2;
-  total += Math.floor(n("Carries (m)") / 10);
-  total += n("Offloads") * 2;
-  total += n("Tackles") * 1;
-  total += n("Turnover Forced") * 4;
-  total += n("Interceptions") * 5;
-  total += n("50:22 Kicks") * 10;
-  total += n("Lineouts won") * 1;
-  total += n("Lineout steals") * 5;
-  total += playerGetsScrumPoints(player) ? n("Scrums won outright") * 3 : 0;
-  total += n("Conversions") * 2;
-  total += n("Penalty scored") * 3;
-  total += n("Drop goal scored") * 3;
-
-  // negative scoring
-  total -= n("Missed tackles") * 1;
-  total -= n("Penalties Conceded") * 1;
-  total -= n("Errors") * 1;
-  total -= n("Lineout errors") * 2;
-  total -= n("Conversions missed") * 1;
-  total -= n("Penalty missed") * 1;
-  total -= n("Drop goal missed") * 1;
-  total -= n("Yellow cards") * 5;
-  total -= n("Red cards") * 10;
-
-  return total;
+  return pointsFromRow(row, player);
 }
 
 // Build breakdown rows for PointsBreakdownModal (matches Row: { label, right })
 function buildBreakdownRows(row: any, player: Player | null): Array<{ label: string; right?: string }> {
-  const n = (header: string) => {
-    const v = Number(pickValue(row, [header]));
-    return Number.isFinite(v) ? v : 0;
-  };
-
-  const minutes = n("Minutes played");
-  const scrumPoints = playerGetsScrumPoints(player) ? n("Scrums won outright") * 3 : 0;
-
-  const rows: Array<{ label: string; right?: string }> = [
-    {
-      label: "Minutes played",
-      right: String(minutes >= 61 ? 2 : minutes > 0 ? 1 : 0),
-    },
-    { label: "Tries", right: String(n("Tries") * 15) },
-    { label: "Try Assists", right: String(n("Try Assists") * 9) },
-    { label: "Linebreaks", right: String(n("Linebreaks") * 7) },
-    { label: "Linebreak assists", right: String(n("Linebreak assists") * 5) },
-    { label: "Defenders beaten", right: String(n("Defenders beaten") * 2) },
-    { label: "Carries (m)", right: String(Math.floor(n("Carries (m)") / 10)) },
-    { label: "Offloads", right: String(n("Offloads") * 2) },
-    { label: "Tackles", right: String(n("Tackles")) },
-    { label: "Missed tackles", right: String(-n("Missed tackles")) },
-    { label: "Turnover Forced", right: String(n("Turnover Forced") * 4) },
-    { label: "Interceptions", right: String(n("Interceptions") * 5) },
-    { label: "50:22 Kicks", right: String(n("50:22 Kicks") * 10) },
-    { label: "Penalties Conceded", right: String(-n("Penalties Conceded")) },
-    { label: "Errors", right: String(-n("Errors")) },
-    { label: "Lineouts won", right: String(n("Lineouts won")) },
-    { label: "Lineout steals", right: String(n("Lineout steals") * 5) },
-    { label: "Lineout errors", right: String(-n("Lineout errors") * 2) },
-    { label: "Scrums won outright", right: String(scrumPoints) },
-    { label: "Conversions", right: String(n("Conversions") * 2) },
-    { label: "Conversions missed", right: String(-n("Conversions missed")) },
-    { label: "Penalty scored", right: String(n("Penalty scored") * 3) },
-    { label: "Penalty missed", right: String(-n("Penalty missed")) },
-    { label: "Drop goal scored", right: String(n("Drop goal scored") * 3) },
-    { label: "Drop goal missed", right: String(-n("Drop goal missed")) },
-    { label: "Yellow cards", right: String(-n("Yellow cards") * 5) },
-    { label: "Red cards", right: String(-n("Red cards") * 10) },
-  ];
-
-  return rows;
+  return pointsBreakdown(statCountsFromRow(row), isFrontRow(player)).map((b) => ({
+    label: b.stat.header,
+    right: String(b.points),
+  }));
 }
 
 /**
@@ -1434,7 +1344,7 @@ const scoresLockAvailable = useMemo(() => {
 }, [nowMs, deadlineMs]);
 
 // Captain multiplier (for display + totals)
-const CAP_MULT = 2;
+const CAP_MULT = CAPTAIN_MULTIPLIER;
 
 const leftBase = leftLineup;
 const rightBase = rightLineup;

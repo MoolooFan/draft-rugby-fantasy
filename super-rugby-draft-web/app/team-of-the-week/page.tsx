@@ -14,6 +14,7 @@ import fixturesData from "@/data/fixtures-2026.json";
 import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib/league/week";
 import { getActiveTimezone, getActiveUsername } from "@/lib/session";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
+import { pointsFromRow } from "@/lib/scoring";
 
 // -----------------------
 // Types / helpers
@@ -238,66 +239,9 @@ function rowRound(row: any) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function toNum(v: any): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
 
 function calcFantasyPoints(row: any, player?: Player | null): number {
-  const minutes = toNum(row?.["Minutes played"]);
-  if (!minutes) return 0;
-
-  let pts = 0;
-
-  // minutes
-  pts += minutes >= 61 ? 2 : 1;
-
-  // attack
-  pts += toNum(row?.["Tries"]) * 15;
-  pts += toNum(row?.["Try Assists"]) * 9;
-  pts += toNum(row?.["Linebreaks"]) * 7;
-  pts += toNum(row?.["Linebreak assists"]) * 5;
-  pts += toNum(row?.["Defenders beaten"]) * 2;
-  pts += Math.floor(toNum(row?.["Carries (m)"]) / 10);
-  pts += toNum(row?.["Offloads"]) * 2;
-
-  // defence
-  pts += toNum(row?.["Tackles"]) * 1;
-  pts += toNum(row?.["Missed tackles"]) * -1;
-  pts += toNum(row?.["Turnover Forced"]) * 4;
-  pts += toNum(row?.["Interceptions"]) * 5;
-  pts += toNum(row?.["50:22 Kicks"]) * 10;
-
-  // discipline / errors
-  pts += toNum(row?.["Penalties Conceded"]) * -1;
-  pts += toNum(row?.["Errors"]) * -1;
-  pts += toNum(row?.["Yellow cards"]) * -5;
-  pts += toNum(row?.["Red cards"]) * -10;
-
-  // set piece
-  pts += toNum(row?.["Lineouts won"]) * 1;
-  pts += toNum(row?.["Lineout steals"]) * 5;
-  pts += toNum(row?.["Lineout errors"]) * -2;
-
-  // scrum points only for props + hookers
-  const posA = String(player?.posAbbrev ?? "").toUpperCase();
-  const posB = String(player?.secondaryPosAbbrev ?? "").toUpperCase();
-  const isFrontRow =
-    posA === "PR" || posA === "HO" || posB === "PR" || posB === "HO";
-
-  if (isFrontRow) {
-    pts += toNum(row?.["Scrums won outright"]) * 3;
-  }
-
-  // kicking
-  pts += toNum(row?.["Conversions"]) * 2;
-  pts += toNum(row?.["Conversions missed"]) * -1;
-  pts += toNum(row?.["Penalty scored"]) * 3;
-  pts += toNum(row?.["Penalty missed"]) * -1;
-  pts += toNum(row?.["Drop goal scored"]) * 3;
-  pts += toNum(row?.["Drop goal missed"]) * -1;
-
-  return pts;
+  return pointsFromRow(row, player ?? null);
 }
 
 // -----------------------

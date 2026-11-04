@@ -19,6 +19,7 @@ import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 
 import playersData from "@/data/players.json";
 import fixturesData from "@/data/fixtures-2026.json";
+import { isFrontRow, playedInRound, playerPoints, statCountsFromRow } from "@/lib/scoring";
 
 // -----------------------
 // Types (match your player shape)
@@ -2139,112 +2140,17 @@ function normaliseId(x: any) {
 }
 
 function playerGetsScrumPoints(p: Player): boolean {
-  const a = String(p.posAbbrev ?? "").trim().toUpperCase();
-  const b = String(p.secondaryPosAbbrev ?? "").trim().toUpperCase();
-  return a === "PR" || a === "HO" || b === "PR" || b === "HO";
+  return isFrontRow(p);
 }
 
-// =========================
-// SCORING (raw stat counts -> fantasy points)
-// =========================
-const SCORING = {
-  // minutes
-  min_1_to_60: 1,
-  min_61_plus: 2,
 
-  // attack
-  try: 15,
-  tryAssist: 9,
-  linebreak: 7,
-  linebreakAssist: 5,
-  defendersBeaten: 2,
-  metresPerPoint: 10, // 1 point per 10 metres
-  offload: 2,
-
-  // defence / playmaking
-  tackle: 1,
-  missedTackle: -1,
-  turnoverForced: 4,
-  interception: 5,
-  kick5022: 10,
-
-  // discipline / errors
-  penaltyConceded: -1,
-  error: -1,
-
-  // set piece
-  lineoutWon: 1,
-  lineoutSteal: 5,
-  lineoutError: -2,
-  scrumWon: 3, // front row only
-
-  // kicking
-  conversion: 2,
-  conversionMiss: -1,
-  penaltyGoal: 3,
-  penaltyMiss: -1,
-  dropGoal: 3,
-  dropGoalMiss: -1,
-
-  // cards
-  yellow: -5,
-  red: -10,
-};
-
+// Fantasy points for one stat row, using the shared scoring rules (lib/scoring).
+// Returns null when the player didn't get on the field.
 function getRoundPointsFromRow(row: any, p: Player): number | null {
   if (!row) return null;
-
-  const minutes = getRowNumber(row, "Minutes played");
-  if (!minutes) return null; // not played
-
-  let total = 0;
-
-  // minutes
-  if (minutes > 0 && minutes < 61) total += SCORING.min_1_to_60;
-  if (minutes >= 61) total += SCORING.min_61_plus;
-
-  // attack
-  total += getRowNumber(row, "Tries") * SCORING.try;
-  total += getRowNumber(row, "Try Assists") * SCORING.tryAssist;
-  total += getRowNumber(row, "Linebreaks") * SCORING.linebreak;
-  total += getRowNumber(row, "Linebreak assists") * SCORING.linebreakAssist;
-  total += getRowNumber(row, "Defenders beaten") * SCORING.defendersBeaten;
-  total += Math.floor(getRowNumber(row, "Carries (m)") / SCORING.metresPerPoint);
-  total += getRowNumber(row, "Offloads") * SCORING.offload;
-
-  // defence / playmaking
-  total += getRowNumber(row, "Tackles") * SCORING.tackle;
-  total += getRowNumber(row, "Missed tackles") * SCORING.missedTackle;
-  total += getRowNumber(row, "Turnover Forced") * SCORING.turnoverForced;
-  total += getRowNumber(row, "Interceptions") * SCORING.interception;
-  total += getRowNumber(row, "50:22 Kicks") * SCORING.kick5022;
-
-  // discipline / errors
-  total += getRowNumber(row, "Penalties Conceded") * SCORING.penaltyConceded;
-  total += getRowNumber(row, "Errors") * SCORING.error;
-
-  // set piece
-  total += getRowNumber(row, "Lineouts won") * SCORING.lineoutWon;
-  total += getRowNumber(row, "Lineout steals") * SCORING.lineoutSteal;
-  total += getRowNumber(row, "Lineout errors") * SCORING.lineoutError;
-
-  if (playerGetsScrumPoints(p)) {
-    total += getRowNumber(row, "Scrums won outright") * SCORING.scrumWon;
-  }
-
-  // kicking
-  total += getRowNumber(row, "Conversions") * SCORING.conversion;
-  total += getRowNumber(row, "Conversions missed") * SCORING.conversionMiss;
-  total += getRowNumber(row, "Penalty scored") * SCORING.penaltyGoal;
-  total += getRowNumber(row, "Penalty missed") * SCORING.penaltyMiss;
-  total += getRowNumber(row, "Drop goal scored") * SCORING.dropGoal;
-  total += getRowNumber(row, "Drop goal missed") * SCORING.dropGoalMiss;
-
-  // cards
-  total += getRowNumber(row, "Yellow cards") * SCORING.yellow;
-  total += getRowNumber(row, "Red cards") * SCORING.red;
-
-  return Number.isFinite(total) ? total : null;
+  const counts = statCountsFromRow(row);
+  if (!playedInRound(counts)) return null; // not played
+  return playerPoints(counts, isFrontRow(p));
 }
 
 

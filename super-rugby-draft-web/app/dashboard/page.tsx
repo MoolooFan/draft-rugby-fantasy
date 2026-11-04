@@ -16,6 +16,9 @@ import { usePlayersStore } from "@/lib/players/store";
 import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib/league/week";
 import { getActiveUsername } from "@/lib/session";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
+import { CAPTAIN_MULTIPLIER, pointsFromRow } from "@/lib/scoring";
+
+type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null } | null;
 
 type ActiveMenu =
   | "Dashboard"
@@ -243,7 +246,7 @@ const STARTER_SLOTS: SlotId[] = [
   "outsideback1","outsideback2","outsideback3",
 ];
 
-const CAP_MULT = 2;
+const CAP_MULT = CAPTAIN_MULTIPLIER;
 
 function effectiveCaptainId(lineup: Lineup | null, captainId: string | null, viceId: string | null) {
   if (!lineup) return null;
@@ -316,72 +319,14 @@ function getRowNumber(row: any, header: string): number {
   return 0;
 }
 
-function directPointsFromRow(row: any): number | null {
+
+
+
+// Fantasy points for one stat row, using the shared scoring rules (lib/scoring).
+// Pass the player so props/hookers get their scrum points.
+function getRoundPointsFromRow(row: any, player?: PositionInfo): number | null {
   if (!row) return null;
-
-  const v =
-    row?.points ??
-    row?.Points ??
-    row?.fantasyPoints ??
-    row?.totalPoints ??
-    null;
-
-  return toNum(v);
-}
-
-function fantasyPointsFromMinutes(minutes: number): number {
-  if (minutes <= 0) return 0;
-  if (minutes >= 61) return 2;
-  return 1;
-}
-
-function fantasyPointsFromRow(row: any): number | null {
-  if (!row) return null;
-
-  const minutes = getRowNumber(row, "Minutes played");
-  if (!minutes) return null; // not played
-
-  let total = 0;
-
-  total += fantasyPointsFromMinutes(minutes);
-
-  total += getRowNumber(row, "Tries") * 15;
-  total += getRowNumber(row, "Try Assists") * 9;
-  total += getRowNumber(row, "Conversions") * 2;
-  total += getRowNumber(row, "Conversions missed") * -1;
-  total += getRowNumber(row, "Penalty scored") * 3;
-  total += getRowNumber(row, "Penalty missed") * -1;
-  total += getRowNumber(row, "Drop goal scored") * 3;
-  total += getRowNumber(row, "Drop goal missed") * -1;
-
-  total += getRowNumber(row, "Yellow cards") * -5;
-  total += getRowNumber(row, "Red cards") * -10;
-
-  total += getRowNumber(row, "Turnover Forced") * 4;
-  total += getRowNumber(row, "Interceptions") * 5;
-  total += getRowNumber(row, "Offloads") * 2;
-  total += getRowNumber(row, "Linebreaks") * 7;
-  total += getRowNumber(row, "Linebreak assists") * 5;
-  total += Math.floor(getRowNumber(row, "Carries (m)") / 10);
-  total += getRowNumber(row, "Penalties Conceded") * -1;
-  total += getRowNumber(row, "Lineouts won") * 1;
-  total += getRowNumber(row, "Lineout steals") * 5;
-  total += getRowNumber(row, "Lineout errors") * -2;
-  total += getRowNumber(row, "Tackles") * 1;
-  total += getRowNumber(row, "Missed tackles") * -1;
-  total += getRowNumber(row, "Errors") * -1;
-  total += getRowNumber(row, "Defenders beaten") * 2;
-  total += getRowNumber(row, "Scrums won outright") * 3;
-  total += getRowNumber(row, "50:22 Kicks") * 10;
-
-  return total;
-}
-
-function getRoundPointsFromRow(row: any): number | null {
-  const direct = directPointsFromRow(row);
-  if (direct != null) return direct;
-
-  return fantasyPointsFromRow(row);
+  return pointsFromRow(row, player ?? null);
 }
 
 function rowRound(row: any) {
@@ -430,14 +375,14 @@ function rowPlayerId(row: any) {
   );
 }
 
-function getLatest3FormFromRoundRows(playerId: string, roundRows: any[]): number {
+function getLatest3FormFromRoundRows(playerId: string, roundRows: any[], player?: PositionInfo): number {
   const want = normaliseId(playerId);
 
   const rows = (roundRows ?? [])
     .filter((r: any) => normaliseId(rowPlayerId(r)) === want)
     .map((r: any) => ({
       round: rowRound(r),
-      points: Number(r?.points ?? getRoundPointsFromRow(r) ?? 0),
+      points: getRoundPointsFromRow(r, player) ?? 0,
     }))
     .filter((x: any) => Number.isFinite(x.round) && x.round > 0 && Number.isFinite(x.points))
     .sort((a: any, b: any) => b.round - a.round);
@@ -1103,12 +1048,17 @@ function selectionLineupForTeam(teamId: string | null) {
 
 
 
-function calcFantasyPoints(row: any): number {
-  return getRoundPointsFromRow(row) ?? 0;
+function calcFantasyPoints(row: any, player?: PositionInfo): number {
+  return getRoundPointsFromRow(row, player) ?? 0;
 }
 
 const weekPointsByPlayerId = useMemo(() => {
   const m = new Map<string, number>();
+  const metaById = new Map<string, any>();
+  for (const p of (Array.isArray(allPlayers) ? allPlayers : []) as any[]) {
+    const id = p?.id ?? p?.playerId ?? p?.player_id;
+    if (id != null) metaById.set(normaliseId(id), p);
+  }
 
   for (const row of roundRows ?? []) {
     if (rowRound(row) !== displayRealRound) continue;
@@ -1116,11 +1066,11 @@ const weekPointsByPlayerId = useMemo(() => {
     const pid = rowPlayerId(row);
     if (!pid) continue;
 
-    m.set(normaliseId(pid), calcFantasyPoints(row));
+    m.set(normaliseId(pid), calcFantasyPoints(row, metaById.get(normaliseId(pid)) ?? null));
   }
 
   return m;
-}, [roundRows, displayRealRound]);
+}, [roundRows, displayRealRound, allPlayers]);
 
 function findPlayerMetaById(allPlayersAny: any[], playerId: string) {
   const want = normaliseId(playerId);
@@ -1553,21 +1503,8 @@ const pos2 =
 
 const posName = pos2 ? `${posNamePrimary} / ${pos2}` : posNamePrimary;
 
-      const form = getLatest3FormFromRoundRows(id, roundRows);
+      const form = getLatest3FormFromRoundRows(id, roundRows, p);
 
-      if (normaliseId(id) === normaliseId("M.Jorgensen")) {
-  console.log("MAX FORM DEBUG", {
-    id,
-    form,
-    rows: (roundRows ?? [])
-      .filter((r: any) => normaliseId(rowPlayerId(r)) === normaliseId("M.Jorgensen"))
-      .map((r: any) => ({
-        round: rowRound(r),
-        points: Number(r?.points ?? getRoundPointsFromRow(r) ?? 0),
-      }))
-      .sort((a: any, b: any) => b.round - a.round),
-  });
-}
 
       return {
         id,
