@@ -1,0 +1,9 @@
+# Secrets
+.env*
+
+# Local database backups (contain user data, never commit)
+backups/
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/
