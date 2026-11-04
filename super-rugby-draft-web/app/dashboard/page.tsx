@@ -1740,7 +1740,8 @@ async function handleLogout() {
     localStorage.removeItem("sr-leagues-v3");      // your league zustand persist key
   } catch {}
 
-  router.replace("/");
+  // Full page load so the whole app forgets the signed-in player.
+  window.location.assign("/");
 }
   function MovementCircle({ movement }: { movement: Movement }) {
   const isUp = movement === "up";

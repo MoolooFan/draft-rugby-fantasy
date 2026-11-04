@@ -184,7 +184,8 @@ export default function TeamDetailsPage() {
       localStorage.removeItem("sr-leagues-v3");
     } catch {}
 
-    router.replace("/");
+    // Full page load so the whole app forgets the signed-in player.
+    window.location.assign("/");
   }
 
   function onMenuSelect(item: ActiveMenu) {

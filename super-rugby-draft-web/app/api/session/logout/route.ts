@@ -1,25 +1,18 @@
 import { NextResponse } from "next/server";
-
-const COOKIE = "sr_user";
-const SIG = "sr_sig";
+import { cookies } from "next/headers";
+import { createSupabaseAuthClient } from "@/lib/supabase/authServer";
+import { REMEMBER_COOKIE } from "@/lib/supabase/authCookies";
 
 export async function POST() {
-  const res = NextResponse.json({ ok: true });
+  const supabase = await createSupabaseAuthClient();
+  // "local" = sign out this browser only, not the player's other devices.
+  await supabase.auth.signOut({ scope: "local" });
 
-  // Clear BOTH cookies robustly
-  res.cookies.set(COOKIE, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0,
-  });
+  const jar = await cookies();
+  jar.delete(REMEMBER_COOKIE);
+  // Old pre-2027 login cookies, in case a browser still has them.
+  jar.delete("sr_user");
+  jar.delete("sr_sig");
 
-  res.cookies.set(SIG, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0,
-  });
-
-  return res;
+  return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
 }

@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import SessionProvider from "@/components/SessionProvider";
+import { getServerProfile } from "@/lib/serverSession";
 
 /**
  * Viewport configuration
@@ -30,11 +32,22 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const profile = await getServerProfile();
+  const sessionProfile = profile
+    ? {
+        username: profile.username,
+        displayName: profile.displayName,
+        firstName: profile.firstName ?? undefined,
+        lastName: profile.lastName ?? undefined,
+        timezone: profile.timezone ?? undefined,
+      }
+    : null;
+
   return (
     <html lang="en">
       <body
@@ -45,7 +58,7 @@ export default function RootLayout({
           background: "#0f172a",
         }}
       >
-        {children}
+        <SessionProvider profile={sessionProfile}>{children}</SessionProvider>
 
         {/* Portal target for modals / menus if needed later */}
         <div id="overlay-root" />
