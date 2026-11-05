@@ -141,10 +141,32 @@ export function leagueWeeksAfterDraft(s: SeasonConfig, draftMs: number): number[
   return out;
 }
 
-/** The season the site is running. Set CURRENT_SEASON in the env to override (e.g. for testing). */
+/**
+ * The season the site is running (one season at a time). Defaults to 2027; set
+ * NEXT_PUBLIC_CURRENT_SEASON in the env to override (the local test copy uses 2026 data).
+ */
 export function currentSeasonYear(): number {
-  const fromEnv = Number(process.env.CURRENT_SEASON);
-  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 2027;
+  const fromEnv = Number(process.env.NEXT_PUBLIC_CURRENT_SEASON);
+  return Number.isFinite(fromEnv) && fromEnv > 0 && SEASONS[fromEnv] ? fromEnv : 2027;
+}
+
+/** What users see a week called in the current season, e.g. "Round 10/11". */
+export function roundLabel(fantasyWeek: number, seasonYear: number = currentSeasonYear()): string {
+  return weekLabel(getSeason(seasonYear), fantasyWeek);
+}
+
+export type PageFixture = SeasonFixture & { realRound: number };
+
+/**
+ * The season's fixtures for the pages, numbered by FANTASY week: `week` is the fantasy week
+ * (2027: rounds 10 and 11 are both week 10, round 12 is week 11, ...) and `realRound` is the
+ * Super Rugby round. Pages work in fantasy weeks; show names with roundLabel().
+ */
+export function fixturesByFantasyWeek(seasonYear: number = currentSeasonYear()): PageFixture[] {
+  const s = getSeason(seasonYear);
+  return s.fixtures
+    .map((f) => ({ ...f, realRound: Number(f.week), week: fantasyWeekForRealRound(s, Number(f.week)) ?? 0 }))
+    .filter((f) => f.week > 0);
 }
 
 /** A game counts as live from kickoff until this long after (2h game + 1h for extra time/delays). */

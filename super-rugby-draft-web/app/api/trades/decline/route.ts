@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
-import fixturesData from "@/data/fixtures-2026.json";
+import { fixturesByFantasyWeek } from "@/lib/season";
+
+// This season's fixtures, numbered by fantasy week (see lib/season).
+const fixturesData = fixturesByFantasyWeek();
 
 const norm = (s: string) => s.trim().toLowerCase();
 

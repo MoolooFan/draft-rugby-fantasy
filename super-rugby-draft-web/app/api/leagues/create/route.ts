@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
+import { currentSeasonYear, getSeason, totalFantasyWeeks } from "@/lib/season";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -22,7 +23,10 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const name = String(body?.name ?? "").trim();
   const teamName = String(body?.teamName ?? "").trim();
-  const playoffFormat = body?.playoffFormat ?? "final4";
+  const allowedFormats = ["none", "final2", "final3", "final4", "final6"];
+  const playoffFormat = allowedFormats.includes(body?.playoffFormat) ? body.playoffFormat : "final4";
+  const season = currentSeasonYear();
+  const seasonWeeks = totalFantasyWeeks(getSeason(season));
   const draftDateTimeText = String(body?.draftDateTimeText ?? "");
   const draftAtRaw = body?.draftAt ?? null;
 
@@ -82,9 +86,10 @@ if (draftAtRaw !== null && draftAtRaw !== undefined && draftAtRaw !== "") {
     draft_date_time_text: draftDateTimeText || null,
     draft_at: draftAtIso,
     draft_status: "scheduled",
-    real_regular_season_rounds: 15,
+    season,
+    real_regular_season_rounds: seasonWeeks,
     start_round: 1,
-    total_weeks: 15,
+    total_weeks: seasonWeeks,
     current_week: 1,
   });
 
@@ -168,9 +173,9 @@ if (draftAtRaw !== null && draftAtRaw !== undefined && draftAtRaw !== "") {
 draftAt: draftAtIso, // ISO string or null
 draftStatus: "scheduled",
     playoffFormat,
-    realRegularSeasonRounds: 15,
+    realRegularSeasonRounds: seasonWeeks,
     startRound: 1,
-    totalWeeks: 15,
+    totalWeeks: seasonWeeks,
     currentWeek: 1,
   };
 

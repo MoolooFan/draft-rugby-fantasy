@@ -2,7 +2,10 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
-import fixturesData from "@/data/fixtures-2026.json";
+import { fixturesByFantasyWeek } from "@/lib/season";
+
+// This season's fixtures, numbered by fantasy week (see lib/season).
+const fixturesData = fixturesByFantasyWeek();
 
 type AnyFixture = {
   id: string;

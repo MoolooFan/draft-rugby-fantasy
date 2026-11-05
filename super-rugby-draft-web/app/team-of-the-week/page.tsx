@@ -10,7 +10,10 @@ import { useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
 import { usePlayersStore } from "@/lib/players/store";
 
-import fixturesData from "@/data/fixtures-2026.json";
+import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/season";
+
+// This season's fixtures, numbered by fantasy week (see lib/season).
+const fixturesData = fixturesByFantasyWeek();
 import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib/league/week";
 import { getActiveTimezone, getActiveUsername } from "@/lib/session";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
@@ -367,7 +370,7 @@ export default function TeamOfTheWeekPage() {
   const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
   useEffect(() => {
     if (!activeLeague?.id) return;
-    const season = 2026;
+    const season = currentSeasonYear();
 
     fetch(`/api/fixtures/leagueMatches?season=${season}&leagueId=${encodeURIComponent(activeLeague.id)}`, { cache: "no-store" })
       .then((r) => r.json())
@@ -1055,7 +1058,7 @@ useEffect(() => {
               ‹
             </button>
 
-            <div style={{ fontWeight: 900, fontSize: 12 }}>Week {week}</div>
+            <div style={{ fontWeight: 900, fontSize: 12 }}>{roundLabel(week)}</div>
 
             <button
               style={{

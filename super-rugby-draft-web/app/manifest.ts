@@ -1,8 +1,9 @@
 import type { MetadataRoute } from "next";
+import { currentSeasonYear } from "@/lib/season";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Draft Fantasy 2026",
+    name: `Draft Fantasy ${currentSeasonYear()}`,
     short_name: "Draft Fantasy",
     start_url: "/",
     display: "standalone",

@@ -18,7 +18,10 @@ import { usePlayersStore } from "@/lib/players/store";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 
 import playersData from "@/data/players.json";
-import fixturesData from "@/data/fixtures-2026.json";
+import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/season";
+
+// This season's fixtures, numbered by fantasy week (see lib/season).
+const fixturesData = fixturesByFantasyWeek();
 import { isFrontRow, playedInRound, playerPoints, statCountsFromRow } from "@/lib/scoring";
 
 // -----------------------
@@ -722,7 +725,7 @@ const watchlist = useMemo(() => {
 useEffect(() => {
   if (!activeLeague?.id) return;
 
-  const season = 2026;
+  const season = currentSeasonYear();
 
   fetch(
     `/api/fixtures/leagueMatches?season=${season}&leagueId=${encodeURIComponent(activeLeague.id)}`,
@@ -2888,7 +2891,7 @@ return list
             fontSize: 11,
           }}
         >
-          Week {selectionWeek} • {deadlineLabel}
+          {roundLabel(selectionWeek)} • {deadlineLabel}
         </div>
         <div
           style={{
@@ -3262,7 +3265,7 @@ const onDropOn = async (e: React.DragEvent, targetClaimId: string) => {
       <>
         <div style={{ ...listBox }}>
           <div style={{ padding: "10px 10px", fontSize: 14, fontWeight: 900 }}>
-            Your Week {claimsWeek} Claims
+            Your {roundLabel(claimsWeek)} Claims
 
             <div style={{ marginTop: 4, fontSize: 10, fontWeight: 800, opacity: 0.65 }}>
   Drag the handle to change claim order, wait a few seconds for the reorder to occur

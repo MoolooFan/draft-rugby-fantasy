@@ -9,7 +9,10 @@ import { useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
 
 
-import fixturesData from "@/data/fixtures-2026.json";
+import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/season";
+
+// This season's fixtures, numbered by fantasy week (see lib/season).
+const fixturesData = fixturesByFantasyWeek();
 import type { Fixture } from "@/lib/fixtures/types";
 
 import { AppMenu } from "@/components/AppMenu";
@@ -407,7 +410,7 @@ const selectedIsWatched = useMemo(() => {
 useEffect(() => {
   if (!activeLeague?.id) return;
 
-  const season = 2026;
+  const season = currentSeasonYear();
   fetch(`/api/fixtures/leagueMatches?season=${season}&leagueId=${encodeURIComponent(activeLeague.id)}`)
     .then((r) => r.json())
     .then((j) => {
@@ -1716,7 +1719,7 @@ return (
 <div style={{ marginTop: 10, fontSize: 16, fontWeight: 950, opacity: 0.95 }}>
   {!mounted
     ? "Loading…"
-    : (displayWeek <= 0 ? "Pre-season" : `Round ${displayRealRound}`)}
+    : (displayWeek <= 0 ? "Pre-season" : roundLabel(displayWeek))}
 </div>
 
         </div>
@@ -2319,7 +2322,7 @@ onClick: selectedIsWatched ? removeSelectedFromWatchlist : addSelectedToWatchlis
     playerName={selectedPlayer ? `${selectedPlayer.firstName} ${selectedPlayer.lastName}` : "Player"}
     jerseySrc={jerseySrcForPlayer(selectedPlayer, "angle") ?? undefined}
     teamCode={selectedPlayer?.teamCode ?? null}
-    weekLabel={`Week ${displayWeek}`}
+    weekLabel={roundLabel(displayWeek)}
     fixtureLabel={selectedFixtureLabel ? `v ${selectedFixtureLabel}` : "—"}
     rows={selectedRows}
     totalPoints={

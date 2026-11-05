@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { EXTERNAL_PLAYER_ID_MAP } from "@/lib/players/externalIdMap";
 import { fetchExternalPlayers } from "@/lib/players/externalPlayers";
+import { currentSeasonYear } from "@/lib/season";
 
 type SyncFailure = {
   internalId: string;
@@ -87,7 +88,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const season = Number(body?.season ?? 2026);
+    const season = Number(body?.season ?? currentSeasonYear());
 
     const result = await runImageSync(season);
     return NextResponse.json(result);
@@ -109,7 +110,7 @@ export async function GET(req: Request) {
     }
 
     const url = new URL(req.url);
-    const season = Number(url.searchParams.get("season") ?? 2026);
+    const season = Number(url.searchParams.get("season") ?? currentSeasonYear());
 
     const result = await runImageSync(season);
     return NextResponse.json(result);

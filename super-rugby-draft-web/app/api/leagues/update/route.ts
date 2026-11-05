@@ -53,7 +53,12 @@ export async function POST(req: Request) {
   // Map API patch -> DB columns
   const dbPatch: any = {};
   if ("name" in patch) dbPatch.name = patch.name ?? null;
-  if ("playoffFormat" in patch) dbPatch.playoff_format = patch.playoffFormat ?? null;
+  if ("playoffFormat" in patch) {
+    if (!["none", "final2", "final3", "final4", "final6"].includes(patch.playoffFormat)) {
+      return NextResponse.json({ ok: false, error: "Unknown finals format" }, { status: 400 });
+    }
+    dbPatch.playoff_format = patch.playoffFormat;
+  }
   if ("draftDateTimeText" in patch) dbPatch.draft_date_time_text = patch.draftDateTimeText ?? null;
   if ("draftAt" in patch) dbPatch.draft_at = patch.draftAt ?? null;
 

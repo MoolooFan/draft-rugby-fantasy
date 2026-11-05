@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { currentSeasonYear } from "@/lib/season";
 import {
   MIN_PASSWORD_LENGTH,
   validateEmail,
@@ -243,7 +244,7 @@ useEffect(() => {
     <main className="min-h-dvh w-full bg-gradient-to-b from-slate-900 via-teal-900 to-emerald-600 text-white">
       <div className="mx-auto flex min-h-dvh max-w-md flex-col px-6 py-14">
         <h1 className="mb-10 text-2xl font-semibold italic tracking-wide">
-          Draft Fantasy 2026
+          Draft Fantasy {currentSeasonYear()}
         </h1>
 
         <div className="rounded-2xl bg-white/25 p-5 backdrop-blur-md shadow-xl">

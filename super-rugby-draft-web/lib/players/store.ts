@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { currentSeasonYear } from "@/lib/season";
 
 export type PlayerFromSheet = {
   id: string;
@@ -57,7 +58,7 @@ export const usePlayersStore = create<PlayersState>((set, get) => ({
 
       const [playersRes, statsRes] = await Promise.all([
   fetch("/api/sheets/players", { cache: "no-store" }),
-  fetch("/api/players/round-stats?season=2026", { cache: "no-store" }),
+  fetch(`/api/players/round-stats?season=${currentSeasonYear()}`, { cache: "no-store" }),
 ]);
 
       const playersJson = await playersRes.json();

@@ -9,6 +9,7 @@ import { useDraftStore } from "@/lib/draft/store";
 import { useLeagueStore } from "@/lib/league/store";
 import { usePlayersStore, usePlayers } from "@/lib/players/store";
 import { isFrontRow, pointsFromRow, statPoints, STATS, type StatKey } from "@/lib/scoring";
+import { currentSeasonYear, roundLabel } from "@/lib/season";
 
 
 
@@ -702,8 +703,8 @@ useEffect(() => {
       setError(null);
 
       const [roundRes, fixRes] = await Promise.all([
-  fetch(`/api/players/round-stats?season=2026`),
-  fetch(`/api/sheets/fixtures`),
+  fetch(`/api/players/round-stats?season=${currentSeasonYear()}`),
+  fetch(`/api/fixtures/season`),
 ]);
 
 
@@ -716,7 +717,7 @@ const fixJson = await fixRes.json();
 // /api/players/round-stats -> { ok: true, rows: [...] }
 const roundRows: Record<string, any>[] = Array.isArray(roundJson?.rows) ? roundJson.rows : [];
 
-// /api/sheets/fixtures -> { ok: true, fixtures: [...] }
+// /api/fixtures/season -> { ok: true, fixtures: [...] }
 const allFixtures: any[] = Array.isArray(fixJson?.fixtures) ? fixJson.fixtures : [];
 // ✅ GLOBAL last completed week (from ALL fixtures, not team-only)
 const completedWeeksGlobal = allFixtures
@@ -1227,7 +1228,7 @@ const teamLabelFull =
   playerName={`${p.firstName} ${p.lastName}`}
   teamCode={p.teamCode}
 
-  weekLabel={selectedRound ? `Week ${selectedRound.week}` : ""}
+  weekLabel={selectedRound ? roundLabel(selectedRound.week) : ""}
   fixtureLabel={
     selectedRound
       ? (() => {

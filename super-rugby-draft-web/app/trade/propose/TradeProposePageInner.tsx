@@ -10,7 +10,10 @@ import { useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
 
 import playersData from "@/data/players.json";
-import fixturesData from "@/data/fixtures-2026.json";
+import { fixturesByFantasyWeek } from "@/lib/season";
+
+// This season's fixtures, numbered by fantasy week (see lib/season).
+const fixturesData = fixturesByFantasyWeek();
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 import { usePlayersStore } from "@/lib/players/store";

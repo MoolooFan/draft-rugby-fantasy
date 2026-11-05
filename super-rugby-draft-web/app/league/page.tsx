@@ -9,7 +9,10 @@ import { AppMenu } from "@/components/AppMenu";
 import { usePlayersStore } from "@/lib/players/store";
 import { CAPTAIN_MULTIPLIER, pointsFromRow } from "@/lib/scoring";
 import { fantasyWeekToRealRound } from "@/lib/league/week";
-import fixturesData from "@/data/fixtures-2026.json";
+import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/season";
+
+// This season's fixtures, numbered by fantasy week (see lib/season).
+const fixturesData = fixturesByFantasyWeek();
 import type { Fixture } from "@/lib/fixtures/types";
 
 type LeagueStoreActions = ReturnType<typeof useLeagueStore.getState>;
@@ -748,7 +751,7 @@ const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
 useEffect(() => {
   if (!league?.id) return;
 
-  const season = 2026; // or league.season if you have it
+  const season = currentSeasonYear();
   fetch(`/api/fixtures/leagueMatches?season=${season}&leagueId=${encodeURIComponent(league.id)}`)
     .then((r) => r.json())
     .then((j) => {
@@ -1428,7 +1431,7 @@ const finalsPlaceholderRowStyle: React.CSSProperties = {
     letterSpacing: 0.4,
   }}
 >
-  {`Week ${w.weekNo}`}
+  {roundLabel(w.weekNo)}
 </div>
 
             {w.rows.map((r, i) => {
@@ -1584,7 +1587,7 @@ function hasPlayedResult(w: FixtureWeek) {
     letterSpacing: 0.4,
   }}
 >
-  Week {w.weekNo}
+  {roundLabel(w.weekNo)}
 </div>
 
 

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { STATS } from "@/lib/scoring";
+import { fantasyWeekForRealRound, getSeason, SEASONS } from "@/lib/season";
+import { currentSeasonYear } from "@/lib/season";
 
 function toNum(v: any): number {
   const n = Number(v);
@@ -10,10 +12,14 @@ function toNum(v: any): number {
 function mapRawJsonToLegacyRow(row: any) {
   const raw = row?.raw_json ?? {};
   const stats = raw?.stats ?? {};
+  const realRound = toNum(raw.roundId ?? row.round);
+  const season = SEASONS[Number(row.season)] ? getSeason(Number(row.season)) : null;
 
   return {
     season: row.season,
-    round: toNum(raw.roundId ?? row.round),
+    // the FANTASY week (2027: rounds 10 and 11 are both week 10); realRound is Super Rugby's
+    round: season ? fantasyWeekForRealRound(season, realRound) ?? realRound : realRound,
+    realRound,
 
     // keep your app keyed by INTERNAL player id
     playerId: row.internal_player_id,
@@ -33,7 +39,7 @@ function mapRawJsonToLegacyRow(row: any) {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const season = Number(searchParams.get("season") ?? 2026);
+    const season = Number(searchParams.get("season") ?? currentSeasonYear());
     const round = Number(searchParams.get("round") ?? 0);
 
     const pageSize = 1000;

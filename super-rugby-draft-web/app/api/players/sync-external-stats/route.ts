@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { syncExternalStats } from "@/lib/players/syncStats";
+import { currentSeasonYear } from "@/lib/season";
 
 async function runSync(season: number) {
   return syncExternalStats(supabaseAdmin, season);
@@ -24,7 +25,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const season = Number(body?.season ?? 2026);
+    const season = Number(body?.season ?? currentSeasonYear());
 
     const result = await runSync(season);
     return NextResponse.json(result);
@@ -46,7 +47,7 @@ export async function GET(req: Request) {
     }
 
     const url = new URL(req.url);
-    const season = Number(url.searchParams.get("season") ?? 2026);
+    const season = Number(url.searchParams.get("season") ?? currentSeasonYear());
 
     const result = await runSync(season);
     return NextResponse.json(result);

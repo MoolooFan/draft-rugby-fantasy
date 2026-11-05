@@ -5,6 +5,8 @@
 // One row per matchup per week. A game played over several weeks (scores added together)
 // has a row for each week, with the week's scores, and `aggregate` totals on its last week.
 // scoreStatus: "final" once the week is finalised, otherwise "live" (pages show live scores).
+// Finals/consolation games come as two rows, like the old sheet: a heading row (label set,
+// no teams, e.g. "Semi Final 1") followed by the game row (label null, gameLabel set).
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
@@ -64,7 +66,11 @@ export async function GET(req: Request) {
       teamId ? (weekResults ?? []).find((r) => r.team_id === teamId && r.week === week)?.score ?? null : null;
 
     const rows: Array<Record<string, unknown> & { weekFantasy: number; kind: string }> = [];
-    for (const m of (matchups ?? []) as MatchupRow[]) {
+    // Finals in a sensible order within a week: the Grand Final first, then by name.
+    const ordered = ((matchups ?? []) as MatchupRow[]).slice().sort((x, y) =>
+      (x.decides === "champion" ? 0 : 1) - (y.decides === "champion" ? 0 : 1) || String(x.label ?? "").localeCompare(String(y.label ?? ""))
+    );
+    for (const m of ordered) {
       const weeks = [...m.weeks].sort((a, b) => a - b);
       weeks.forEach((week, i) => {
         const last = i === weeks.length - 1;
@@ -77,14 +83,33 @@ export async function GET(req: Request) {
           homeScore = m.home_score;
           awayScore = m.away_score;
         }
+        const name = weeks.length > 1 && m.label ? `${m.label} (week ${i + 1} of ${weeks.length})` : m.label;
+        const kind = KIND_FOR_PAGES[m.kind] ?? m.kind;
+        if (m.kind !== "regular" && name) {
+          rows.push({
+            id: `${m.id}_${week}_label`,
+            season: seasonYear,
+            weekFantasy: week,
+            weekReal: season ? realRoundsForWeek(season, week)[0] ?? null : week,
+            weekLabel: season ? weekLabel(season, week) : `Round ${week}`,
+            label: name,
+            kind,
+            homeTeamId: null,
+            awayTeamId: null,
+            status: final ? "complete" : "upcoming",
+            homeScore: null,
+            awayScore: null,
+          });
+        }
         rows.push({
           id: weeks.length > 1 ? `${m.id}_${week}` : m.id,
           season: seasonYear,
           weekFantasy: week,
           weekReal: season ? realRoundsForWeek(season, week)[0] ?? null : week,
           weekLabel: season ? weekLabel(season, week) : `Round ${week}`,
-          label: weeks.length > 1 && m.label ? `${m.label} (week ${i + 1} of ${weeks.length})` : m.label,
-          kind: KIND_FOR_PAGES[m.kind] ?? m.kind,
+          label: null,
+          gameLabel: name,
+          kind,
           homeTeamId: m.home_team_id,
           awayTeamId: m.away_team_id,
           status: final ? "complete" : "upcoming",
@@ -102,7 +127,9 @@ export async function GET(req: Request) {
         });
       });
     }
-    rows.sort((a, b) => a.weekFantasy - b.weekFantasy || String(a.kind).localeCompare(String(b.kind)));
+    // keep each heading directly above its game: regular games first, then finals/consolation in order
+    const order = (r: { kind: string }) => (r.kind === "regular" ? 0 : r.kind === "playoff" ? 1 : 2);
+    rows.sort((a, b) => a.weekFantasy - b.weekFantasy || order(a) - order(b));
 
     return NextResponse.json({ ok: true, rows });
   } catch (e) {

@@ -4,6 +4,7 @@
 // which has already signed them in with the one-time link).
 import { useState } from "react";
 import { MIN_PASSWORD_LENGTH, validateNewPassword } from "@/lib/auth/validate";
+import { currentSeasonYear } from "@/lib/season";
 
 const INPUT_CLASS =
   "h-11 w-full rounded-md bg-white px-3 text-sm text-slate-900 outline-none disabled:opacity-70";
@@ -47,7 +48,7 @@ export default function ResetPasswordPage() {
     <main className="min-h-dvh w-full bg-gradient-to-b from-slate-900 via-teal-900 to-emerald-600 text-white">
       <div className="mx-auto flex min-h-dvh max-w-md flex-col px-6 py-14">
         <h1 className="mb-10 text-2xl font-semibold italic tracking-wide">
-          Draft Fantasy 2026
+          Draft Fantasy {currentSeasonYear()}
         </h1>
 
         <div className="rounded-2xl bg-white/25 p-5 backdrop-blur-md shadow-xl">

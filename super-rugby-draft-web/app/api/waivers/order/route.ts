@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
+import { currentSeasonYear } from "@/lib/season";
 
 type SheetFixtureRow = {
   season: number;
@@ -197,7 +198,7 @@ async function buildAndUpsertWaiverOrder(req: Request, leagueId: string, week: n
   if (!teamIds.length) return [];
 
   // 2) sheet fixtures/results (Google Sheet)
-  const season = 2026; // set to league.season later if you store it
+  const season = currentSeasonYear();
   const rows = await fetchSheetFixtures(req, { season, leagueId });
 
   // Standings should reflect results "before the week starts"

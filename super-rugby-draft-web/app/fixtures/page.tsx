@@ -8,6 +8,7 @@ import type { Fixture } from "@/lib/fixtures/types";
 
 import { AppMenu } from "@/components/AppMenu";
 import { useLeagueStore } from "@/lib/league/store";
+import { roundLabel } from "@/lib/season";
 
 type TabKey = "Fixtures" | "Results" | "FDR";
 
@@ -300,7 +301,7 @@ useEffect(() => {
   async function load() {
     try {
       setLoading(true);
-      const res = await fetch("/api/sheets/fixtures", { cache: "no-store" });
+      const res = await fetch("/api/fixtures/season", { cache: "no-store" });
       const json = await res.json();
       console.log("fixtures sample kickoffAt:", json?.fixtures?.[0]?.kickoffAt);
 console.log("fixtures sample keys:", Object.keys(json?.fixtures?.[0] ?? {}));
@@ -498,7 +499,7 @@ if (!Number.isFinite(w) || w <= 0) continue;
           borderBottom: "1px solid rgba(0,0,0,0.08)",
         }}
       >
-        Week {week}
+        {roundLabel(week)}
       </div>
     );
   }

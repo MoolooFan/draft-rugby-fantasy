@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import SessionProvider from "@/components/SessionProvider";
 import { getServerProfile } from "@/lib/serverSession";
+import { currentSeasonYear } from "@/lib/season";
 
 /**
  * Viewport configuration
@@ -19,14 +20,14 @@ export const viewport: Viewport = {
  * Keep this minimal — Next.js is strict about where certain fields live
  */
 export const metadata: Metadata = {
-  title: "Draft Fantasy 2026",
+  title: `Draft Fantasy ${currentSeasonYear()}`,
   description: "Super Rugby fantasy draft app",
-  applicationName: "Draft Fantasy 2026",
+  applicationName: `Draft Fantasy ${currentSeasonYear()}`,
 
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Draft Fantasy 2026",
+    title: `Draft Fantasy ${currentSeasonYear()}`,
   },
 
   manifest: "/manifest.webmanifest",

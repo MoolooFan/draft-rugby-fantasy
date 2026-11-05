@@ -10,7 +10,10 @@ import { useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
 import { useTransactionsStore } from "@/lib/transactions/store";
 
-import fixturesData from "@/data/fixtures-2026.json";
+import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/season";
+
+// This season's fixtures, numbered by fantasy week (see lib/season).
+const fixturesData = fixturesByFantasyWeek();
 import type { Fixture } from "@/lib/fixtures/types";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { getActiveUsername, getActiveTimezone } from "@/lib/session";
@@ -583,7 +586,7 @@ useEffect(() => {
 useEffect(() => {
   if (!activeLeague?.id) return;
 
-  const season = 2026;
+  const season = currentSeasonYear();
 
   fetch(`/api/fixtures/leagueMatches?season=${season}&leagueId=${encodeURIComponent(activeLeague.id)}`, {
     cache: "no-store",
@@ -1933,7 +1936,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
       fontSize: 11,
     }}
   >
-   Week {selectionWeek} • Team Selection Deadline
+   {roundLabel(selectionWeek)} • Team Selection Deadline
 
   </div>
 

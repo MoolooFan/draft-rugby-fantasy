@@ -3,6 +3,7 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import type { League } from "@/lib/league/types";
+import { currentSeasonYear } from "@/lib/season";
 
 type ActiveMenu =
   | "Dashboard"
@@ -89,7 +90,7 @@ export function AppMenu({
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <div style={{ fontWeight: 800, fontStyle: "italic", fontSize: 16 }}>
-            Draft Fantasy 2026
+            Draft Fantasy {currentSeasonYear()}
           </div>
           <button
             onClick={onClose}

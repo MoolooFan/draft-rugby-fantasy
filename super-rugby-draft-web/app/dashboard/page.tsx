@@ -9,7 +9,10 @@ import { useLeagueStore } from "@/lib/league/store";
 import type { League } from "@/lib/league/types";
 import { useDraftStore } from "@/lib/draft/store";
 
-import fixturesData from "@/data/fixtures-2026.json";
+import { currentSeasonYear, fixturesByFantasyWeek, getSeason, roundLabel, totalFantasyWeeks } from "@/lib/season";
+
+// This season's fixtures, numbered by fantasy week (see lib/season).
+const fixturesData = fixturesByFantasyWeek();
 import { getActiveTimezone } from "@/lib/session";
 
 import { usePlayersStore } from "@/lib/players/store";
@@ -543,7 +546,7 @@ const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
 useEffect(() => {
   if (!activeLeague?.id) return;
 
-  const season = 2026;
+  const season = currentSeasonYear();
   fetch(`/api/fixtures/leagueMatches?season=${season}&leagueId=${encodeURIComponent(activeLeague.id)}`)
     .then((r) => r.json())
     .then((j) => {
@@ -1101,7 +1104,7 @@ function totalForSlots(lineup: Lineup | null, effCaptain: string | null, slots: 
 }
 
 // Live values to replace the placeholders
-const weekLabelLive = displayWeek > 0 ? `Week ${displayWeek}` : "Pre-season";
+const weekLabelLive = displayWeek > 0 ? roundLabel(displayWeek) : "Pre-season";
 
 const leftSel = useMemo(() => selectionLineupForTeam(leftTeamId), [leftTeamId, selectionByTeamId, rosterByTeamId]);
 const rightSel = useMemo(() => selectionLineupForTeam(rightTeamId), [rightTeamId, selectionByTeamId, rosterByTeamId]);
@@ -1239,7 +1242,7 @@ const windowMode = useMemo<"WAIVERS" | "TEAM_SELECTION">(() => {
 const bannerTitle = useMemo(() => {
   if (!nowMs) return "Loading Deadline…";
   const label = windowMode === "WAIVERS" ? "Waiver Deadline" : "Team Selection Deadline";
-  return `Week ${bannerWeek} • ${label}`;
+  return `${roundLabel(bannerWeek)} • ${label}`;
 }, [windowMode, bannerWeek, nowMs]);
 
 const bannerTime = useMemo(() => {
@@ -1333,9 +1336,11 @@ const upcomingMatch = useMemo(() => {
 }, [sheetFixtures, upcomingWeekNo, yourLeagueTeamId, nameByTeamId]);
 
 // These are what your JSX already expects
-const upcomingWeek = upcomingMatch ? `Week ${upcomingMatch.weekNo}` : `Week ${upcomingWeekNo}`;
-const upcomingHome = upcomingMatch ? upcomingMatch.leftName : "Loading…";
-const upcomingAway = upcomingMatch ? upcomingMatch.rightName : "Loading…";
+// After the last round there is nothing upcoming.
+const seasonOver = upcomingWeekNo > totalFantasyWeeks(getSeason(currentSeasonYear()));
+const upcomingWeek = seasonOver ? "Season complete" : upcomingMatch ? roundLabel(upcomingMatch.weekNo) : roundLabel(upcomingWeekNo);
+const upcomingHome = seasonOver ? "—" : upcomingMatch ? upcomingMatch.leftName : "Loading…";
+const upcomingAway = seasonOver ? "—" : upcomingMatch ? upcomingMatch.rightName : "Loading…";
 
   // -----------------------
 // Standings (LIVE from sheetFixtures + activeLeague teams)

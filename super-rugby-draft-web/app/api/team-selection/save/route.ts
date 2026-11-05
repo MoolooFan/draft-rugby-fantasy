@@ -52,12 +52,12 @@ export async function POST(req: Request) {
     // Lineups lock at the week's deadline (1 hour before its first kickoff), on the server's clock.
     const { data: league, error: leagueErr } = await supabaseAdmin
       .from("leagues")
-      .select("start_round")
+      .select("season")
       .eq("id", leagueId)
       .maybeSingle();
     if (leagueErr) throw leagueErr;
 
-    const deadline = selectionDeadlineMs(league?.start_round, week);
+    const deadline = selectionDeadlineMs(Number(league?.season), week);
     if (deadline == null) {
       return NextResponse.json({ ok: false, error: "That week has no fixtures" }, { status: 400 });
     }
