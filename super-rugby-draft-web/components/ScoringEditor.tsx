@@ -35,6 +35,47 @@ export const STAT_LABELS: Record<EventStatKey, string> = {
   redCards: "Red card",
 };
 
+/**
+ * A box you type a number into (no up/down arrows; a decimal keypad on phones). While typing it
+ * keeps exactly what you typed (so "-", "0." and "2.5" all work); the value is saved as you go.
+ */
+function NumberBox({
+  value,
+  onChange,
+  disabled,
+  wholeNumber,
+  style,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  disabled?: boolean;
+  wholeNumber?: boolean;
+  style: React.CSSProperties;
+}) {
+  const [editing, setEditing] = React.useState(false);
+  const [text, setText] = React.useState("");
+  return (
+    <input
+      type="text"
+      inputMode={wholeNumber ? "numeric" : "decimal"}
+      disabled={disabled}
+      value={editing ? text : String(Number.isFinite(value) ? value : 0)}
+      onFocus={() => {
+        setText(String(value));
+        setEditing(true);
+      }}
+      onBlur={() => setEditing(false)}
+      onChange={(e) => {
+        const t = e.target.value.replace(/[^0-9.-]/g, "");
+        setText(t);
+        const n = Number(t);
+        if (t !== "" && t !== "-" && t !== "." && t !== "-." && Number.isFinite(n)) onChange(wholeNumber ? Math.round(n) : n);
+      }}
+      style={style}
+    />
+  );
+}
+
 export function ScoringEditor({
   value,
   onChange,
@@ -54,21 +95,10 @@ export function ScoringEditor({
   const box: React.CSSProperties = { width: 72, height: 30, borderRadius: 8, border: "1px solid rgba(0,0,0,0.15)", padding: "0 6px", fontSize: 13, fontWeight: 800, textAlign: "right", ...inputStyle };
   const label: React.CSSProperties = { fontSize: 12, fontWeight: 800, ...labelStyle };
   const row: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 8, padding: "3px 0" };
-  const num = (v: string) => (v === "" || v === "-" ? 0 : Number(v));
   const field = (text: string, v: number, set: (n: number) => void, step = 0.1) => (
     <label style={row} key={text}>
       <span style={label}>{text}</span>
-      <input
-        type="number"
-        step={step}
-        disabled={readOnly}
-        value={Number.isFinite(v) ? v : 0}
-        onChange={(e) => {
-          const n = num(e.target.value);
-          if (Number.isFinite(n)) set(n);
-        }}
-        style={box}
-      />
+      <NumberBox value={v} onChange={set} disabled={readOnly} wholeNumber={step === 1} style={box} />
     </label>
   );
 
