@@ -1397,8 +1397,8 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     >
       {/* Corner badges are relative to the TILE */}
       <div style={{ position: "absolute", top: -6, left: -2, zIndex: 3 }}>
-        {isCaptain ? <CaptainBadge kind="C" /> : null}
-        {!isCaptain && isVice ? <CaptainBadge kind="V" /> : null}
+        {isCaptain ? CaptainBadge({ kind: "C" }) : null}
+        {!isCaptain && isVice ? CaptainBadge({ kind: "V" }) : null}
       </div>
 
       <div
@@ -1587,7 +1587,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
                 transform: "translate(-50%, -50%)",
               }}
             >
-              <PlayerTile slotId={id} />
+              {PlayerTile({ slotId: id })}
             </div>
           );
         })}
@@ -1629,7 +1629,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
           transform: "translate(-50%, -50%)",
         }}
       >
-        <PlayerTile slotId={id} />
+        {PlayerTile({ slotId: id })}
       </div>
     );
   })}
@@ -1722,7 +1722,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
         {/* Header + Hamburger */}
         <div style={{ ...card35, padding: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Hamburger />
+            {Hamburger()}
            
             <div style={{ flex: 1 }} />
             {/* DEV dropdown (you said remove later) */}
@@ -1836,10 +1836,10 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
 </div>
 
         {/* Starters on field */}
-        <FieldStarters />
+        {FieldStarters()}
 
     {/* Bench */}
-    <BenchPanel />
+    {BenchPanel()}
   </div>
 )}
 

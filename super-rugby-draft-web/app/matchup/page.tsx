@@ -1544,7 +1544,7 @@ return (
 
           {/* Top row (just hamburger) */}
 <div style={{ display: "flex", alignItems: "center" }}>
-  <Hamburger />
+  {Hamburger()}
 </div>
 {/* Large page title */}
 <div

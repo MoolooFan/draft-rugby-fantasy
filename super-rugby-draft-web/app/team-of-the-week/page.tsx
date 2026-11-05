@@ -997,7 +997,7 @@ useEffect(() => {
                 transform: "translate(-50%, -50%)",
               }}
             >
-              <PlayerTile slotId={id} />
+              {PlayerTile({ slotId: id })}
             </div>
           );
         })}
@@ -1092,7 +1092,7 @@ useEffect(() => {
           </div>
         </div>
 
-        <Field />
+        {Field()}
       </div>
 
       {/* Player modal */}
