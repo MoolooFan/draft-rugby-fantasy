@@ -191,6 +191,20 @@ export function realRoundsAwaitingFinalStats(s: SeasonConfig, nowMs: number): nu
   return roundsWithGameBetween(s, nowMs, GAME_LIVE_MS, FINALISE_AFTER_LAST_KICKOFF_MS);
 }
 
+/**
+ * Real rounds whose team lists / injury lists may be out: from 3 days before the round's first
+ * kickoff (the articles come out Wednesday 4pm NZT) until that kickoff.
+ */
+export function realRoundsAwaitingTeamLists(s: SeasonConfig, nowMs: number): number[] {
+  const firstByRound = new Map<number, number>();
+  for (const f of s.fixtures) {
+    const k = kickoffMs(f);
+    const r = Number(f.week);
+    if (k > 0 && (!firstByRound.has(r) || k < firstByRound.get(r)!)) firstByRound.set(r, k);
+  }
+  return [...firstByRound].filter(([, k]) => nowMs < k && nowMs >= k - 3 * 24 * HOUR).map(([r]) => r);
+}
+
 /** True while any game is between its kickoff and 13.5h after it (the only time stats need syncing). */
 export function isStatsSyncWindow(s: SeasonConfig, nowMs: number): boolean {
   return s.fixtures.some((f) => {

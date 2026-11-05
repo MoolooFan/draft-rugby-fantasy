@@ -481,8 +481,130 @@ function RoundsTab({ setMsg }: { setMsg: (m: string | null) => void }) {
 }
 
 // ---------------------------------------------------------------------------
+// Status: the Wednesday team-list / injury-list reader
 
-type Tab = "Players" | "Difficulty" | "Rounds";
+type StatusFlag = { id: string; weekLabel: string; source: string; team: string; text: string; problem: string; suggestionId: string | null; suggestionName: string | null };
+type StatusImport = { id: string; real_round: number; kind: string; url: string; matched: number; flagged: number; imported_at: string };
+
+function StatusTab({ setMsg }: { setMsg: (m: string | null) => void }) {
+  const [rounds, setRounds] = useState<number[]>([]);
+  const [round, setRound] = useState(1);
+  const [teamsUrl, setTeamsUrl] = useState("");
+  const [injuriesUrl, setInjuriesUrl] = useState("");
+  const [flags, setFlags] = useState<StatusFlag[]>([]);
+  const [imports, setImports] = useState<StatusImport[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api<{ rounds: number[]; flags: StatusFlag[]; imports: StatusImport[] }>("/api/admin/status");
+      setRounds(r.rounds);
+      setFlags(r.flags);
+      setImports(r.imports);
+      setLoaded(true);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't load");
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function runImport() {
+    setBusy("import");
+    setErr(null);
+    try {
+      const r = await api<{ report: { teamList: { matched: number; flagged: number } | null; injuryList: { matched: number; flagged: number } | null } }>(
+        "/api/admin/status",
+        { action: "import", realRound: round, teamsUrl, injuriesUrl }
+      );
+      const t = r.report.teamList, i = r.report.injuryList;
+      setMsg(
+        !t && !i
+          ? `No articles found for round ${round} yet. If they're out, paste their links and try again.`
+          : `Round ${round}: team lists ${t ? `${t.matched} players, ${t.flagged} to check` : "not found"}; injuries ${i ? `${i.matched} players, ${i.flagged} to check` : "not found"}.`
+      );
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function resolve(f: StatusFlag, apply: boolean) {
+    setBusy(f.id);
+    try {
+      await api("/api/admin/status", { action: "resolve", flagId: f.id, apply });
+      setMsg(apply ? `Gave ${f.suggestionName} that status.` : "Ignored.");
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ ...whiteBox, display: "grid", gap: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75 }}>
+          Player statuses are read from the official team lists and injury list (out Wednesday 4pm NZT), checked
+          every hour until kickoff. Late changes: edit the player in the Players tab.
+        </div>
+        <select aria-label="Super Rugby round" style={inputStyle} value={round} onChange={(e) => setRound(Number(e.target.value))}>
+          {rounds.map((r) => <option key={r} value={r}>Super Rugby round {r}</option>)}
+        </select>
+        <input style={inputStyle} placeholder="Team lists article link (optional)" value={teamsUrl} onChange={(e) => setTeamsUrl(e.target.value)} />
+        <input style={inputStyle} placeholder="Injury list article link (optional)" value={injuriesUrl} onChange={(e) => setInjuriesUrl(e.target.value)} />
+        <button style={primaryButton} disabled={!!busy} onClick={runImport}>{busy === "import" ? "Reading articles…" : "Read articles now"}</button>
+        {err ? <div style={{ color: "#b91c1c", fontWeight: 800, fontSize: 12 }}>{err}</div> : null}
+      </div>
+
+      <div style={{ ...whiteBox, display: "grid", gap: 6 }}>
+        <div style={{ fontWeight: 900, fontSize: 14 }}>{loaded ? `To check (${flags.length})` : "To check"}</div>
+        {!loaded ? <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.7 }}>Loading…</div> : null}
+        {loaded && !flags.length ? <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.7 }}>Nothing to check.</div> : null}
+        {flags.map((f) => (
+          <div key={f.id} style={{ borderTop: "1px solid rgba(0,0,0,0.08)", paddingTop: 6, display: "grid", gap: 4 }}>
+            <div style={{ fontSize: 13, fontWeight: 900 }}>{f.problem}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.65 }}>
+              {f.weekLabel} · {f.team} · {f.source === "team-list" ? "team list" : "injury list"} · {f.text}
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {f.suggestionId ? (
+                <button disabled={busy === f.id} onClick={() => resolve(f, true)} style={{ ...primaryButton, height: 30, fontSize: 12 }}>
+                  Use {f.suggestionName}
+                </button>
+              ) : null}
+              <button disabled={busy === f.id} onClick={() => resolve(f, false)} style={{ ...primaryButton, height: 30, fontSize: 12, background: "rgba(15,23,42,0.35)" }}>
+                Ignore
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {imports.length ? (
+        <div style={{ ...whiteBox, display: "grid", gap: 4 }}>
+          <div style={{ fontWeight: 900, fontSize: 14 }}>Recently read</div>
+          {imports.map((i) => (
+            <div key={i.id} style={{ fontSize: 11, fontWeight: 700, opacity: 0.8 }}>
+              Round {i.real_round} {i.kind === "team-list" ? "team lists" : "injury list"}: {i.matched} players, {i.flagged} to check ·{" "}
+              {new Date(i.imported_at).toLocaleString("en-AU", { weekday: "short", hour: "numeric", minute: "2-digit" })}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+type Tab = "Players" | "Status" | "Difficulty" | "Rounds";
 
 export default function AdminPage() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -514,9 +636,9 @@ export default function AdminPage() {
           <div style={cardStyle}>
             <div style={{ textAlign: "center", fontWeight: 900, fontSize: 22 }}>Admin</div>
             <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 800, opacity: 0.9 }}>
-              Players, difficulty ratings and rounds
+              Players, statuses, difficulty ratings and rounds
             </div>
-            {tab !== "Rounds" ? (
+            {tab === "Players" || tab === "Difficulty" ? (
               <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 10 }}>
                 {Object.keys(SEASONS).map(Number).sort().map((y) => (
                   <button key={y} style={{ ...tabButton(y === season), flex: "0 0 auto", padding: "0 16px" }} onClick={() => setSeason(y)}>
@@ -526,7 +648,7 @@ export default function AdminPage() {
               </div>
             ) : null}
             <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-              {(["Players", "Difficulty", "Rounds"] as Tab[]).map((t) => (
+              {(["Players", "Status", "Difficulty", "Rounds"] as Tab[]).map((t) => (
                 <button key={t} style={tabButton(t === tab)} onClick={() => { setTab(t); setMsg(null); }}>{t}</button>
               ))}
             </div>
@@ -543,6 +665,7 @@ export default function AdminPage() {
             {tab === "Players" ? <PlayersTab key={season} season={season} setMsg={setMsg} /> : null}
             {tab === "Difficulty" ? <DifficultyTab key={season} season={season} setMsg={setMsg} /> : null}
             {tab === "Rounds" ? <RoundsTab setMsg={setMsg} /> : null}
+            {tab === "Status" ? <StatusTab setMsg={setMsg} /> : null}
           </div>
         </div>
       </div>
