@@ -367,7 +367,8 @@
     "awayTeam": "Force",
     "status": "scheduled",
     "homeScore": null,
-    "awayScore": null
+    "awayScore": null,
+    "neutralVenue": true
   },
   {
     "id": "w8-003",
@@ -377,7 +378,8 @@
     "awayTeam": "Waratahs",
     "status": "scheduled",
     "homeScore": null,
-    "awayScore": null
+    "awayScore": null,
+    "neutralVenue": true
   },
   {
     "id": "w8-004",
@@ -387,7 +389,8 @@
     "awayTeam": "Drua",
     "status": "scheduled",
     "homeScore": null,
-    "awayScore": null
+    "awayScore": null,
+    "neutralVenue": true
   },
   {
     "id": "w8-005",
@@ -397,7 +400,8 @@
     "awayTeam": "Reds",
     "status": "scheduled",
     "homeScore": null,
-    "awayScore": null
+    "awayScore": null,
+    "neutralVenue": true
   },
   {
     "id": "w9-001",

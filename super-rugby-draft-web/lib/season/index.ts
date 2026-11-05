@@ -15,6 +15,8 @@ export type SeasonFixture = {
   status?: string;
   homeScore?: number | null;
   awayScore?: number | null;
+  /** Neither team is at home (e.g. Super Round). */
+  neutralVenue?: boolean;
 };
 
 export type SeasonConfig = {
@@ -114,6 +116,29 @@ export function weekDeadlineMs(s: SeasonConfig, fantasyWeek: number): number | n
 export function weekFinaliseAtMs(s: SeasonConfig, fantasyWeek: number): number | null {
   const r = weekKickoffRange(s, fantasyWeek);
   return r ? r.lastMs + FINALISE_AFTER_LAST_KICKOFF_MS : null;
+}
+
+/**
+ * What users see a fantasy week called. Weeks are named after their real round(s) so they
+ * line up with Super Rugby, e.g. "Round 9", "Round 10/11", "Round 12".
+ */
+export function weekLabel(s: SeasonConfig, fantasyWeek: number): string {
+  const rounds = realRoundsForWeek(s, fantasyWeek);
+  if (!rounds.length) return `Week ${fantasyWeek}`;
+  return `Round ${rounds.join("/")}`;
+}
+
+/**
+ * The weeks a league plays when its draft is at draftMs: from the first week whose lineup
+ * deadline is after the draft, to the end of the season. (Leagues can start mid-season.)
+ */
+export function leagueWeeksAfterDraft(s: SeasonConfig, draftMs: number): number[] {
+  const out: number[] = [];
+  for (let w = 1; w <= totalFantasyWeeks(s); w++) {
+    const dl = weekDeadlineMs(s, w);
+    if (dl != null && dl > draftMs) out.push(w);
+  }
+  return out;
 }
 
 /** True while any game is between its kickoff and 13.5h after it (the only time stats need syncing). */

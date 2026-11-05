@@ -1,5 +1,5 @@
 // Run: npx tsx scripts/tests/schedule.test.ts  — checks the schedule maker for 4-12 teams and every finals option.
-import { buildLeagueSchedule, resolveSource, type FinalsSize, type PlayoffResult } from "../../lib/league/schedule";
+import { buildLeagueSchedule, pickRoundForWeek, resolveSource, type FinalsSize, type PlayoffResult, type RegularGame } from "../../lib/league/schedule";
 const weeks = Array.from({ length: 16 }, (_, i) => i + 1);
 let failures = 0;
 const fail = (m: string) => { failures++; if (failures < 30) console.log("FAIL", m); };
@@ -9,14 +9,30 @@ for (let n = 4; n <= 12; n++) {
     if (F > n) continue;
     const teams = Array.from({ length: n }, (_, i) => `T${i + 1}`);
     const sch = buildLeagueSchedule({ teamIds: teams, weeks, finals: F });
+    // fill in the ladder-decided weeks using a fixed ladder (T1 top ... Tn bottom)
+    const regular: RegularGame[] = [...sch.regular];
+    if (sch.regularToDecide) {
+      if (n % 2 === 0) fail(`n=${n} F=${F}: even league has weeks to decide`);
+      const used: number[] = [];
+      for (const w of sch.regularToDecide.weeks) {
+        const p = pickRoundForWeek(sch.regularToDecide, w, teams, used);
+        used.push(p.roundIndex); regular.push(...p.games);
+      }
+    }
+    // byes: in odd leagues counts differ by at most 1, and extra byes go to the top of the ladder
+    if (n % 2 === 1) {
+      const byes = teams.map((t) => regular.filter((x) => x.homeTeamId === t && x.awayTeamId === null).length);
+      if (Math.max(...byes) - Math.min(...byes) > 1) fail(`n=${n} F=${F}: byes ${byes}`);
+      for (let i = 1; i < n; i++) if (byes[i] > byes[i - 1]) fail(`n=${n} F=${F}: extra bye went to a lower team ${byes}`);
+    }
     // regular season: every team exactly once per week (bye counts), all pairs met roughly evenly
     for (const w of sch.regularWeeks) {
-      const g = sch.regular.filter((x) => x.week === w);
+      const g = regular.filter((x) => x.week === w);
       const seen = g.flatMap((x) => [x.homeTeamId, x.awayTeamId]).filter(Boolean) as string[];
       if (seen.length !== n || new Set(seen).size !== n) fail(`n=${n} F=${F} week ${w}: ${seen.length} slots`);
     }
     const meet = new Map<string, number>();
-    for (const x of sch.regular) if (x.awayTeamId) { const k = [x.homeTeamId, x.awayTeamId].sort().join("-"); meet.set(k, (meet.get(k) ?? 0) + 1); }
+    for (const x of regular) if (x.awayTeamId) { const k = [x.homeTeamId, x.awayTeamId].sort().join("-"); meet.set(k, (meet.get(k) ?? 0) + 1); }
     const counts = [...meet.values()];
     const pairsTotal = (n * (n - 1)) / 2;
     if (Math.max(...counts) - (meet.size < pairsTotal ? 0 : Math.min(...counts)) > 1 + 0) {
@@ -47,6 +63,7 @@ for (let n = 4; n <= 12; n++) {
         if (new Set(playing).size !== playing.length) fail(`n=${n} F=${F} week ${w}: a team has two games`);
         // byes this week among teams out of contention in finals are expected; count consolation idles
         const consTeams = ladder.slice(F);
+        if (F === 4 || F === 6) { const finalsIdle = ladder.slice(0, F).filter((t) => !playing.includes(t)).length; const allowed = F === 6 && w === sch.playoffWeeks[0] ? 2 : 0; if (finalsIdle > allowed) fail(`n=${n} F=${F} week ${w}: ${finalsIdle} finals teams without a game`); }
         const idle = consTeams.filter((t) => !playing.includes(t)).length;
         maxIdle = Math.max(maxIdle, idle);
         for (const g of active) if (Math.max(...g.weeks) === w && teamsIn.has(g.key)) {
@@ -73,4 +90,8 @@ const show = (n: number, F: FinalsSize) => {
   for (const g of sch.playoffs) console.log(`  wk ${g.weeks.join("+")}  ${g.key.padEnd(4)} ${g.label}: ${fmt(g.home)} v ${fmt(g.away)}`);
   if (sch.spoonSeedWithoutGame) console.log(`  ${sch.spoonSeedWithoutGame}th gets the spoon (no game)`);
 };
-show(7, 4); show(6, 4); show(9, 6); show(10, 4); show(8, 2); show(8, 6);
+show(7, 4); show(6, 6);
+// bye example: 5 teams, 14 regular weeks (rotation of 5 doesn't divide 14)
+const five = buildLeagueSchedule({ teamIds: ["T1", "T2", "T3", "T4", "T5"], weeks, finals: 2 });
+console.log(`
+5 teams, 2-team final: ${five.regular.length ? five.regularWeeks.length : 0} regular weeks, last ${five.regularToDecide?.weeks.length ?? 0} decided from the ladder`);

@@ -11,7 +11,13 @@
 //     weeks with the scores added together.
 //   - If it needs MORE weeks, the top consolation seeds sit out of the spoon race and play
 //     "fill-in" games (each other, then the teams that have escaped the spoon) instead.
+// - Knocked-out finalists keep playing: semi-final losers play a 3rd place game; in 6-team
+//   finals the elimination-final losers play for 5th over the last two weeks (scores added).
 // - No finals: champion and spoon are the top and bottom of the ladder.
+// - Regular season: everyone plays everyone once before playing anyone again. With an odd
+//   number of teams, if the weeks don't divide evenly, the last partial rotation is decided
+//   week by week from the ladder so the extra byes go to the teams highest on the ladder
+//   (and the extra games to the teams lower down).
 
 export type FinalsSize = 0 | 2 | 3 | 4 | 6;
 
@@ -43,10 +49,19 @@ export type RegularGame = {
   awayTeamId: string | null;
 };
 
+/** One round of the rotation: a game for every team (one bye if the number of teams is odd). */
+export type RotationRound = { byeTeamId: string | null; games: Array<{ homeTeamId: string; awayTeamId: string }> };
+
+/** Regular-season weeks whose matchups are picked from the ladder when the week comes up. */
+export type WeeksToDecide = { weeks: number[]; rounds: RotationRound[] };
+
 export type LeagueSchedule = {
   regularWeeks: number[];
   playoffWeeks: number[];
+  /** Fixed regular-season games (includes byes as awayTeamId: null). */
   regular: RegularGame[];
+  /** Odd leagues only, when byes can't come out even: see pickRoundForWeek. */
+  regularToDecide: WeeksToDecide | null;
   playoffs: PlayoffGame[];
   /** Set when exactly one team misses the finals: that seed gets the spoon without a game. */
   spoonSeedWithoutGame: number | null;
@@ -61,39 +76,74 @@ export function finalsWeekCount(size: FinalsSize): number {
 // ---------------------------------------------------------------------------
 // Regular season: round-robin (circle method). Odd number of teams = one bye per week.
 
-export function buildRoundRobin(teamIds: string[], weeks: number[]): RegularGame[] {
+/** The full rotation: n-1 rounds (n rounds with a bye when the number of teams is odd). */
+export function rotationRounds(teamIds: string[]): RotationRound[] {
   if (teamIds.length < 2) return [];
   const ids: Array<string | null> = [...teamIds];
   if (ids.length % 2 === 1) ids.push(null);
   const n = ids.length;
-
-  const cycle: Array<Array<[string | null, string | null]>> = [];
+  const rounds: RotationRound[] = [];
   let wheel = [...ids];
   for (let round = 0; round < n - 1; round++) {
-    const pairs: Array<[string | null, string | null]> = [];
+    const r: RotationRound = { byeTeamId: null, games: [] };
     for (let i = 0; i < n / 2; i++) {
-      const a = wheel[i];
-      const b = wheel[n - 1 - i];
-      pairs.push(round % 2 === 0 ? [a, b] : [b, a]);
+      const [x, y] = round % 2 === 0 ? [wheel[i], wheel[n - 1 - i]] : [wheel[n - 1 - i], wheel[i]];
+      if (x == null || y == null) r.byeTeamId = (x ?? y) as string;
+      else r.games.push({ homeTeamId: x, awayTeamId: y });
     }
-    cycle.push(pairs);
+    rounds.push(r);
     // keep the first team fixed, rotate the rest
     wheel = [wheel[0], wheel[n - 1], ...wheel.slice(1, n - 1)];
   }
+  return rounds;
+}
 
-  const out: RegularGame[] = [];
-  weeks.forEach((week, i) => {
-    const pairs = cycle[i % cycle.length];
-    // swap home/away on every second pass through the cycle
-    const flip = Math.floor(i / cycle.length) % 2 === 1;
-    for (const [x, y] of pairs) {
-      const [home, away] = flip ? [y, x] : [x, y];
-      if (home == null && away == null) continue;
-      if (home == null) out.push({ week, homeTeamId: away as string, awayTeamId: null });
-      else out.push({ week, homeTeamId: home, awayTeamId: away });
-    }
-  });
+function roundToGames(r: RotationRound, week: number, flip: boolean): RegularGame[] {
+  const out: RegularGame[] = r.games.map((g) =>
+    flip ? { week, homeTeamId: g.awayTeamId, awayTeamId: g.homeTeamId } : { week, homeTeamId: g.homeTeamId, awayTeamId: g.awayTeamId }
+  );
+  if (r.byeTeamId) out.push({ week, homeTeamId: r.byeTeamId, awayTeamId: null });
   return out;
+}
+
+export function buildRoundRobin(teamIds: string[], weeks: number[]): { fixed: RegularGame[]; toDecide: WeeksToDecide | null } {
+  const rounds = rotationRounds(teamIds);
+  if (!rounds.length) return { fixed: [], toDecide: null };
+  const odd = teamIds.length % 2 === 1;
+  const fullWeeks = odd ? weeks.length - (weeks.length % rounds.length) : weeks.length;
+
+  const fixed: RegularGame[] = [];
+  weeks.slice(0, fullWeeks).forEach((week, i) => {
+    // swap home/away on every second pass through the rotation
+    const flip = Math.floor(i / rounds.length) % 2 === 1;
+    fixed.push(...roundToGames(rounds[i % rounds.length], week, flip));
+  });
+
+  const rest = weeks.slice(fullWeeks);
+  if (!rest.length) return { fixed, toDecide: null };
+  const flip = Math.floor(fullWeeks / rounds.length) % 2 === 1;
+  const flipped = rounds.map((r) => ({
+    byeTeamId: r.byeTeamId,
+    games: flip ? r.games.map((g) => ({ homeTeamId: g.awayTeamId, awayTeamId: g.homeTeamId })) : r.games,
+  }));
+  return { fixed, toDecide: { weeks: rest, rounds: flipped } };
+}
+
+/**
+ * Picks the matchups for one of the regularToDecide weeks: of the rotation rounds not used
+ * yet, the one whose bye goes to the team highest on the ladder.
+ * ladder: team ids, top first. usedRounds: indexes already picked for earlier weeks.
+ */
+export function pickRoundForWeek(toDecide: WeeksToDecide, week: number, ladder: string[], usedRounds: number[]): { roundIndex: number; games: RegularGame[] } {
+  const used = new Set(usedRounds);
+  const pos = (id: string | null) => (id == null ? 999 : ladder.indexOf(id) < 0 ? 999 : ladder.indexOf(id));
+  let best = -1;
+  toDecide.rounds.forEach((r, i) => {
+    if (used.has(i)) return;
+    if (best < 0 || pos(r.byeTeamId) < pos(toDecide.rounds[best].byeTeamId)) best = i;
+  });
+  if (best < 0) throw new Error("No rotation rounds left to pick");
+  return { roundIndex: best, games: roundToGames(toDecide.rounds[best], week, false) };
 }
 
 // ---------------------------------------------------------------------------
@@ -118,6 +168,7 @@ function finalsLayout(size: FinalsSize): Draft[] {
         { key: "SF1", bracket: "finals", label: "Semi Final 1", weeks: [1], home: s(1), away: s(4) },
         { key: "SF2", bracket: "finals", label: "Semi Final 2", weeks: [1], home: s(2), away: s(3) },
         { key: "GF", bracket: "finals", label: "Grand Final", weeks: [2], home: { winnerOf: "SF1" }, away: { winnerOf: "SF2" }, decides: "champion" },
+        { key: "3P", bracket: "finals", label: "3rd Place Playoff", weeks: [2], home: { loserOf: "SF1" }, away: { loserOf: "SF2" } },
       ];
     case 6:
       return [
@@ -126,6 +177,8 @@ function finalsLayout(size: FinalsSize): Draft[] {
         { key: "SF1", bracket: "finals", label: "Semi Final 1", weeks: [2], home: s(1), away: { winnerOf_: ["EF1", "EF2"], pick: "worst" } },
         { key: "SF2", bracket: "finals", label: "Semi Final 2", weeks: [2], home: s(2), away: { winnerOf_: ["EF1", "EF2"], pick: "best" } },
         { key: "GF", bracket: "finals", label: "Grand Final", weeks: [3], home: { winnerOf: "SF1" }, away: { winnerOf: "SF2" }, decides: "champion" },
+        { key: "3P", bracket: "finals", label: "3rd Place Playoff", weeks: [3], home: { loserOf: "SF1" }, away: { loserOf: "SF2" } },
+        { key: "5P", bracket: "finals", label: "5th Place Playoff (2 weeks, scores added together)", weeks: [2, 3], home: { loserOf: "EF1" }, away: { loserOf: "EF2" } },
       ];
   }
 }
@@ -245,10 +298,12 @@ export function buildLeagueSchedule(params: {
   const regularWeeks = weeks.slice(0, weeks.length - layout.weeks);
   const playoffWeeks = weeks.slice(weeks.length - layout.weeks);
 
+  const rr = buildRoundRobin(teamIds, regularWeeks);
   return {
     regularWeeks,
     playoffWeeks,
-    regular: buildRoundRobin(teamIds, regularWeeks),
+    regular: rr.fixed,
+    regularToDecide: rr.toDecide,
     playoffs: layout.games.map((g) => ({ ...g, weeks: g.weeks.map((w) => playoffWeeks[w - 1]) })),
     spoonSeedWithoutGame: layout.spoonSeedWithoutGame,
   };
