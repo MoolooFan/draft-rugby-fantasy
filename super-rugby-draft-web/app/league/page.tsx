@@ -739,6 +739,8 @@ type SheetFixtureRow = {
   status: string; // upcoming | complete
   homeScore: number | null;
   awayScore: number | null;
+  homeBonus?: number; // bonus ladder points (from the database)
+  awayBonus?: number;
 };
 
 const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
@@ -747,7 +749,7 @@ useEffect(() => {
   if (!league?.id) return;
 
   const season = 2026; // or league.season if you have it
-  fetch(`/api/fixtures/leagueMatches?season=${season}`)
+  fetch(`/api/fixtures/leagueMatches?season=${season}&leagueId=${encodeURIComponent(league.id)}`)
     .then((r) => r.json())
     .then((j) => {
       if (j?.ok) setSheetFixtures(j.rows ?? []);
@@ -1026,6 +1028,10 @@ function buildStandingsFromResults(uptoWeekInclusive: number): Omit<StandingRow,
     home.pts += 2;
     away.pts += 2;
   }
+
+  // bonus ladder points (win by a lot / lose by a little), if the league uses them
+  home.pts += Number(m.homeBonus ?? 0);
+  away.pts += Number(m.awayBonus ?? 0);
 
   home.pd = home.pf - home.pa;
   away.pd = away.pf - away.pa;

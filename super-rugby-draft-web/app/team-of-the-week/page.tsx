@@ -369,7 +369,7 @@ export default function TeamOfTheWeekPage() {
     if (!activeLeague?.id) return;
     const season = 2026;
 
-    fetch(`/api/fixtures/leagueMatches?season=${season}`, { cache: "no-store" })
+    fetch(`/api/fixtures/leagueMatches?season=${season}&leagueId=${encodeURIComponent(activeLeague.id)}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
         if (j?.ok) setSheetFixtures(j.rows ?? []);

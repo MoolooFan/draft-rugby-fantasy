@@ -83,14 +83,17 @@ export function finalsSizeFromFormat(format: string | null | undefined): FinalsS
 }
 
 // ---------------------------------------------------------------------------
-// Players (positions). TODO(item 13): players move into the database for 2027.
+// Players (name, team, positions). TODO(item 13): players move into the database for 2027.
 
 let positionCache: Map<string, LineupPlayer> | null = null;
 export function playerInfo(id: string): LineupPlayer {
   if (!positionCache) {
     positionCache = new Map();
-    for (const p of playersData as Array<{ id: string; posAbbrev?: string; secondaryPosAbbrev?: string }>) {
-      positionCache.set(normId(p.id), { id: p.id, posAbbrev: p.posAbbrev ?? null, secondaryPosAbbrev: p.secondaryPosAbbrev ?? null });
+    // Everything the pages show about a player (name, team, positions), without season stats.
+    for (const p of playersData as Array<Record<string, unknown> & { id: string }>) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { stats, ...info } = p;
+      positionCache.set(normId(p.id), { ...info, id: p.id, posAbbrev: (p.posAbbrev as string) ?? null, secondaryPosAbbrev: (p.secondaryPosAbbrev as string) ?? null });
     }
   }
   return positionCache.get(normId(id)) ?? { id, posAbbrev: null, secondaryPosAbbrev: null };

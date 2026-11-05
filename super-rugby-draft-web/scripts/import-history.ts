@@ -93,6 +93,10 @@ async function main() {
 
   must(await db.from("league_matchups").delete().eq("league_id", leagueId));
   must(await db.from("league_matchups").insert(matchups));
+  // The imported weeks are finished: mark them final so pages show them as results, not live.
+  const weeks = [...new Set(matchups.flatMap((m) => m.weeks as number[]))];
+  must(await db.from("league_week_finalisations").delete().eq("league_id", leagueId));
+  must(await db.from("league_week_finalisations").insert(weeks.map((week) => ({ league_id: leagueId, week }))));
   must(
     await db
       .from("leagues")

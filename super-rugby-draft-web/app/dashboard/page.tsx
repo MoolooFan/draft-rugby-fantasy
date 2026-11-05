@@ -544,7 +544,7 @@ useEffect(() => {
   if (!activeLeague?.id) return;
 
   const season = 2026;
-  fetch(`/api/fixtures/leagueMatches?season=${season}`)
+  fetch(`/api/fixtures/leagueMatches?season=${season}&leagueId=${encodeURIComponent(activeLeague.id)}`)
     .then((r) => r.json())
     .then((j) => {
       if (j?.ok) setSheetFixtures(j.rows ?? []);

@@ -408,7 +408,7 @@ useEffect(() => {
   if (!activeLeague?.id) return;
 
   const season = 2026;
-  fetch(`/api/fixtures/leagueMatches?season=${season}`)
+  fetch(`/api/fixtures/leagueMatches?season=${season}&leagueId=${encodeURIComponent(activeLeague.id)}`)
     .then((r) => r.json())
     .then((j) => {
       if (j?.ok) setSheetFixtures(j.rows ?? []);
@@ -848,30 +848,7 @@ if (yourLeagueTeamId && (leftTeamId === yourLeagueTeamId || rightTeamId === your
   }
 }
 
-type PosGroup = "PROP" | "HOOKER" | "LOCK" | "LOOSE" | "HB" | "FH" | "CENTRE" | "OB" | "WC";
 
-const SLOT_GROUP: Record<SlotId, PosGroup> = {
-  prop1: "PROP",
-  hooker1: "HOOKER",
-  prop2: "PROP",
-  lock1: "LOCK",
-  lock2: "LOCK",
-  looseforward1: "LOOSE",
-  looseforward2: "LOOSE",
-  looseforward3: "LOOSE",
-  halfback1: "HB",
-  flyhalf1: "FH",
-  centre1: "CENTRE",
-  centre2: "CENTRE",
-  outsideback1: "OB",
-  outsideback2: "OB",
-  outsideback3: "OB",
-  bench1: "WC",
-  bench2: "WC",
-  bench3: "WC",
-  bench4: "WC",
-  bench5: "WC",
-};
 
 const STARTER_SLOTS: SlotId[] = [
   "prop1","hooker1","prop2",
@@ -884,95 +861,11 @@ const STARTER_SLOTS: SlotId[] = [
 
 const BENCH_SLOTS: SlotId[] = ["bench1","bench2","bench3","bench4","bench5"];
 
-function playerCanCoverGroup(player: Player | null, group: PosGroup) {
-  if (!player) return false;
-  if (group === "WC") return true;
-
-  const a = String(player.posAbbrev ?? "").toUpperCase();
-  const b = String(player.secondaryPosAbbrev ?? "").toUpperCase();
-
-  if (group === "PROP") return a === "PR" || b === "PR";
-  if (group === "HOOKER") return a === "HO" || b === "HO";
-  if (group === "LOCK") return a === "LK" || b === "LK";
-  if (group === "LOOSE") return a === "LF" || b === "LF";
-  if (group === "HB") return a === "HB" || b === "HB";
-  if (group === "FH") return a === "FH" || b === "FH";
-  if (group === "CENTRE") return a === "CE" || b === "CE";
-  if (group === "OB") return a === "OB" || b === "OB";
-
-  return false;
-}
-
-function starterGroupsStillValid(lineup: Lineup) {
-  for (const starterSlot of STARTER_SLOTS) {
-    const p = lineup[starterSlot];
-    const group = SLOT_GROUP[starterSlot];
-    if (!p) return false;
-    if (!playerCanCoverGroup(p, group)) return false;
-  }
-  return true;
-}
-
-function applyAutoSubs(base: Lineup) {
-  const next: Lineup = { ...base };
-
-  const startersNeedingHelp = () =>
-    STARTER_SLOTS.filter((sid) => {
-      const p = next[sid];
-      if (!p?.id) return false;
-      return pointsForPlayer(p) === 0;
-    });
-
-  for (const benchSlot of BENCH_SLOTS) {
-    const benchPlayer = next[benchSlot];
-    if (!benchPlayer?.id) continue;
-
-    // bench player must have actually scored
-    if (pointsForPlayer(benchPlayer) <= 0) continue;
-
-    const candidates = startersNeedingHelp();
-
-    let chosenStarter: SlotId | null = null;
-
-    for (const starterSlot of candidates) {
-      const starterPlayer = next[starterSlot];
-      if (!starterPlayer) continue;
-
-      const trial: Lineup = { ...next };
-      trial[starterSlot] = benchPlayer;
-      trial[benchSlot] = starterPlayer;
-
-      if (starterGroupsStillValid(trial)) {
-        chosenStarter = starterSlot;
-        break;
-      }
-    }
-
-    if (!chosenStarter) continue;
-
-    const starterPlayer = next[chosenStarter];
-    next[chosenStarter] = benchPlayer;
-    next[benchSlot] = starterPlayer ?? null;
-  }
-
-  return next;
-}
 
 
 
-function finalizedLineupKey(leagueId: string | null, week: number, teamId: string | null) {
-  return `mu_final_${leagueId ?? "no-league"}_wk${week}_${teamId ?? "no-team"}`;
-}
 
-function scoresLockedKey(leagueId: string | null, week: number) {
-  return `mu_scores_locked_${leagueId ?? "no-league"}_wk${week}`;
-}
 
-function readScoresLocked(leagueId: string | null, week: number): boolean {
-  if (typeof window === "undefined") return false;
-  if (!leagueId || week <= 0) return false;
-  return window.localStorage.getItem(scoresLockedKey(leagueId, week)) === "1";
-}
 
 const leftName = nameByTeamId(leftTeamId);
 const rightName = nameByTeamId(rightTeamId);
@@ -1135,50 +1028,37 @@ useEffect(() => {
     .catch((e) => console.error(e));
 }, [leagueId, displayWeek]);
 
-const [scoresLockedTick, setScoresLockedTick] = useState(0);
+// Finalised results for the week (saved by the server when the round is finalised).
+type WeekResultRow = { team_id: string; final_lineup: Lineup | null; captain_used_id: string | null; score: number; tries: number };
+const [weekResults, setWeekResults] = useState<{ week: number; finalised: boolean; byTeam: Map<string, WeekResultRow> }>({
+  week: 0,
+  finalised: false,
+  byTeam: new Map(),
+});
 
-function unlockScoresForWeek() {
-  if (typeof window === "undefined") return;
-  if (!hasLeagueId) return;
-  if (displayWeek <= 0) return;
-  if (!activeLeague?.teams?.length) return;
+useEffect(() => {
+  if (!hasLeagueId || displayWeek <= 0) return;
+  let cancelled = false;
+  fetch(`/api/matchups/week-results?leagueId=${encodeURIComponent(leagueId)}&week=${displayWeek}`, { cache: "no-store", credentials: "include" })
+    .then((r) => r.json())
+    .then((j) => {
+      if (cancelled || !j?.ok) return;
+      const byTeam = new Map<string, WeekResultRow>();
+      for (const row of (j.rows ?? []) as WeekResultRow[]) byTeam.set(String(row.team_id), row);
+      setWeekResults({ week: displayWeek, finalised: !!j.finalised, byTeam });
+    })
+    .catch((e) => console.error(e));
+  return () => {
+    cancelled = true;
+  };
+}, [hasLeagueId, leagueId, displayWeek]);
 
-  const ok = window.confirm(
-    `UNLOCK Week ${displayWeek}?\n\nThis will remove the locked flag and delete ALL finalized lineups for this week.`
-  );
-  if (!ok) return;
+// The week is final once the server has finalised it (auto-subs done, scores locked in).
+const scoresLocked = weekResults.week === displayWeek && weekResults.finalised;
 
-  // remove league/week lock
-  window.localStorage.removeItem(scoresLockedKey(leagueId, displayWeek));
-
-  // remove all finals for that week
-  for (const t of activeLeague.teams) {
-    window.localStorage.removeItem(finalizedLineupKey(leagueId, displayWeek, t.id));
-  }
-
-  setScoresLockedTick((x) => x + 1);
-}
-
-const scoresLocked = useMemo(() => {
-  return readScoresLocked(leagueId, displayWeek);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [leagueId, displayWeek, scoresLockedTick]);
-
-function readFinalized(teamId: string | null) {
-  if (!mounted) return null;            // ✅ ADD
-  if (typeof window === "undefined") return null;
-  if (!hasLeagueId) return null;
-  if (!teamId) return null;
-
-  const key = finalizedLineupKey(leagueId, displayWeek, teamId);
-  const raw = window.localStorage.getItem(key);
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw) as Lineup;
-  } catch {
-    return null;
-  }
+function readFinalized(teamId: string | null): Lineup | null {
+  if (!scoresLocked || !teamId) return null;
+  return weekResults.byTeam.get(teamId)?.final_lineup ?? null;
 }
 
 function rosterFallbackSnapshot(teamId: string | null): LockedSnapshot | null {
@@ -1271,13 +1151,13 @@ const readSnapshot = (teamId: string | null): LockedSnapshot | null => {
 };
 
 const leftSnap = useMemo(() => {
-  // 1) locked snapshot (mu_snapshot) – still highest priority
-  const snap = readSnapshot(leftTeamId);
-  if (snap) return snap;
-
-  // 2) server stored team selection (Supabase) – required for opponents
+  // 1) the lineup saved on the server (locked by the server at the deadline)
   const supa = serverSelectionSnapshot(leagueId, displayWeek, leftTeamId);
   if (supa) return supa;
+
+  // 2) this browser's saved copy (older seasons)
+  const snap = readSnapshot(leftTeamId);
+  if (snap) return snap;
 
   // 3) local TS (legacy / convenience)
   const ts = teamSelectionFallbackSnapshot(leagueId, displayWeek, leftTeamId, mounted);
@@ -1298,11 +1178,11 @@ const leftSnap = useMemo(() => {
 ]);
 
 const rightSnap = useMemo(() => {
-  const snap = readSnapshot(rightTeamId);
-  if (snap) return snap;
-
   const supa = serverSelectionSnapshot(leagueId, displayWeek, rightTeamId);
   if (supa) return supa;
+
+  const snap = readSnapshot(rightTeamId);
+  if (snap) return snap;
 
   const ts = teamSelectionFallbackSnapshot(leagueId, displayWeek, rightTeamId, mounted);
   if (ts) return ts;
@@ -1338,10 +1218,6 @@ const srWeekComplete = useMemo(() => {
   return wk.length ? wk.every(isFixtureComplete) : false;
 }, [normalizedFixtures, displayRealRound]);
 
-const scoresLockAvailable = useMemo(() => {
-  if (!deadlineMs) return false;
-  return nowMs >= deadlineMs + 2 * 24 * 60 * 60 * 1000; // 2 days after selection deadline
-}, [nowMs, deadlineMs]);
 
 // Captain multiplier (for display + totals)
 const CAP_MULT = CAPTAIN_MULTIPLIER;
@@ -1349,15 +1225,8 @@ const CAP_MULT = CAPTAIN_MULTIPLIER;
 const leftBase = leftLineup;
 const rightBase = rightLineup;
 
-const leftFinal = useMemo(
-  () => readFinalized(leftTeamId),
-  [leagueId, displayWeek, leftTeamId, scoresLockedTick]
-);
-
-const rightFinal = useMemo(
-  () => readFinalized(rightTeamId),
-  [leagueId, displayWeek, rightTeamId, scoresLockedTick]
-);
+const leftFinal = readFinalized(leftTeamId);
+const rightFinal = readFinalized(rightTeamId);
 
 const effectiveLeftLineup = leftFinal ?? leftBase;
 const effectiveRightLineup = rightFinal ?? rightBase;
@@ -1369,34 +1238,6 @@ function pointsWithCaptain(p: Player | null, effCaptainId: string | null) {
 }
 
 
-// If captain isn't in the lineup, vice becomes "active captain"
-function effectiveCaptainId(
-  lineup: Lineup | null,
-  captainId: string | null,
-  viceId: string | null,
-  allowViceFallback: boolean
-) {
-  if (!lineup) return null;
-
-  const cap = Object.values(lineup).find((x) => x?.id === captainId) ?? null;
-  const vice = Object.values(lineup).find((x) => x?.id === viceId) ?? null;
-
-  // Before scores are locked, ALWAYS keep captain as the doubled player
-  if (!allowViceFallback) {
-    return captainId;
-  }
-
-  // After scores are locked / auto-subs finalized:
-  // captain keeps multiplier if they scored anything above 0
-  const capPts = cap ? pointsForPlayer(cap) : 0;
-  if (cap && capPts > 0) return cap.id;
-
-  // otherwise vice takes over only if vice scored above 0
-  const vicePts = vice ? pointsForPlayer(vice) : 0;
-  if (vice && vicePts > 0) return vice.id;
-
-  return captainId;
-}
 
 
 const selectedLive = useMemo(() => {
@@ -1442,105 +1283,7 @@ useEffect(() => {
 
 
 
-useEffect(() => {
-  if (typeof window === "undefined") return;
-  if (!hasLeagueId) return;
 
-  // ✅ only finalize when YOU lock scores (manual)
-  if (!scoresLocked) return;
-
-  // Only finalize if we have real locked lineups
-  if (!leftBase || !rightBase) return;
-
-  if (leftBase && leftTeamId) {
-    const k = finalizedLineupKey(leagueId, displayWeek, leftTeamId);
-    if (!window.localStorage.getItem(k)) {
-      const final = applyAutoSubs(leftBase);
-      window.localStorage.setItem(k, JSON.stringify(final));
-    }
-  }
-
-  if (rightBase && rightTeamId) {
-    const k = finalizedLineupKey(leagueId, displayWeek, rightTeamId);
-    if (!window.localStorage.getItem(k)) {
-      const final = applyAutoSubs(rightBase);
-      window.localStorage.setItem(k, JSON.stringify(final));
-    }
-  }
-}, [scoresLocked, hasLeagueId, leagueId, displayWeek, leftTeamId, rightTeamId, leftBase, rightBase]);
-
-const getIsCreator = useLeagueStore((s) => s.isActiveLeagueCreator);
-const isLeagueCreator = getIsCreator();
-
-async function lockScoresAndFinalize() {
-  if (typeof window === "undefined") return;
-  if (!hasLeagueId) return;
-  if (displayWeek <= 0) return;
-  if (!activeLeague?.teams?.length) return;
-  if (scoresLocked) return;
-
-  if (!displayLocked) {
-    alert("Deadline not passed yet — lineups aren’t locked.");
-    return;
-  }
-
-  if (!scoresLockAvailable) {
-    alert("Scores can only be locked 2 days after the team selection deadline.");
-    return;
-  }
-
-  const ok = window.confirm(
-    `Lock scores for Week ${displayWeek} (Round ${displayRealRound})?\n\n` +
-    `This will run auto-subs and overwrite the Week ${displayWeek} team selection lineups for all teams in the league.`
-  );
-  if (!ok) return;
-
-  try {
-    const payload = {
-      leagueId,
-      week: displayWeek,
-      pointsByPlayerId: Object.fromEntries(weekPointsByPlayerId.entries()),
-    };
-
-    const res = await fetch("/api/matchups/finalize-week", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const json = await res.json().catch(() => null);
-
-    if (!res.ok || !json?.ok) {
-      alert(json?.error ?? "Failed to finalize lineups.");
-      return;
-    }
-
-    // local lock flag still controls the button state in this browser
-    window.localStorage.setItem(scoresLockedKey(leagueId, displayWeek), "1");
-
-    // refresh selections from Supabase
-    const selRes = await fetch(
-      `/api/team-selection/get?leagueId=${encodeURIComponent(leagueId)}&week=${displayWeek}`,
-      { cache: "no-store", credentials: "include" }
-    );
-    const selJson = await selRes.json().catch(() => null);
-
-    if (selRes.ok && selJson?.ok) {
-      const m = new Map<string, any>();
-      for (const row of (selJson.rows ?? [])) {
-        const tid = String(row.team_id ?? row.teamId ?? "");
-        if (tid) m.set(tid, row);
-      }
-      setSelectionByTeamId(m);
-    }
-
-    setTsTick((x) => x + 1);
-    setScoresLockedTick((x) => x + 1);
-  } catch (e) {
-    console.error(e);
-    alert("Failed to finalize lineups.");
-  }
-}
 
 async function addSelectedToWatchlist() {
   if (!activeLeague?.id) {
@@ -1646,19 +1389,13 @@ function goToTradeWithSelected(e?: any) {
   router.push(`/trade/propose?${qs.toString()}`, { scroll: false });
 }
 
-// Effective captain (vice activates if captain not playing)
-const leftEffC = effectiveCaptainId(
-  effectiveLeftLineup,
-  leftC,
-  leftV,
-  scoresLocked
-);
-const rightEffC = effectiveCaptainId(
-  effectiveRightLineup,
-  rightC,
-  rightV,
-  scoresLocked
-);
+// Who gets the captain's x2: the captain while the round is live; once final, the server's
+// record (the vice-captain only if the captain didn't play).
+// (Imported history weeks have no per-team record, so they keep the picked captain.)
+const leftRes = scoresLocked && leftTeamId ? weekResults.byTeam.get(leftTeamId) : undefined;
+const rightRes = scoresLocked && rightTeamId ? weekResults.byTeam.get(rightTeamId) : undefined;
+const leftEffC = leftRes ? leftRes.captain_used_id : leftC;
+const rightEffC = rightRes ? rightRes.captain_used_id : rightC;
 
 function totalForSlots(lineup: Lineup | null, effCaptain: string | null, slots: SlotId[]) {
   if (!lineup) return 0;
@@ -2029,7 +1766,14 @@ return (
     <div style={{ fontSize: 26, fontWeight: 900 }}>{leftScore}</div>
   </div>
 
-  <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.7 }}>vs</div>
+  <div style={{ textAlign: "center" }}>
+    <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.7 }}>vs</div>
+    {scoresLocked || displayLocked ? (
+      <div style={{ marginTop: 2, fontSize: 9, fontWeight: 900, letterSpacing: 0.6, opacity: 0.6 }}>
+        {scoresLocked ? "FINAL" : "LIVE"}
+      </div>
+    ) : null}
+  </div>
 
   {/* Right total pulled inward */}
   <div style={{ display: "flex", justifyContent: "flex-start", paddingLeft: 20 }}>
@@ -2523,81 +2267,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
     </div>
   );
 })}
-{isLeagueCreator && displayWeek > 0 ? (
-  <div style={{ marginTop: 12, ...listBox, padding: 10 }}>
-    <button
-  onClick={lockScoresAndFinalize}
-  disabled={scoresLocked || !displayLocked || !scoresLockAvailable}
-  style={{
-    width: "100%",
-    border: "none",
-    borderRadius: 12,
-    padding: "12px 14px",
-    fontSize: 14,
-    fontWeight: 950,
-    cursor: scoresLocked || !displayLocked || !scoresLockAvailable ? "not-allowed" : "pointer",
-    background: scoresLocked ? "rgba(15,23,42,0.15)" : "rgba(15,23,42,0.95)",
-    color: scoresLocked ? "rgba(15,23,42,0.6)" : "white",
-  }}
->
-  {scoresLocked ? "Scores locked • Auto-subs applied" : "Lock scores & run auto-subs"}
-</button>
 
-    {/* ✅ SECOND BUTTON GOES EXACTLY HERE */}
-    {scoresLocked ? (
-      <button
-        onClick={unlockScoresForWeek}
-        style={{
-          marginTop: 8,
-          width: "100%",
-          border: "none",
-          borderRadius: 12,
-          padding: "10px 14px",
-          fontSize: 13,
-          fontWeight: 950,
-          cursor: "pointer",
-          background: "rgba(220,38,38,0.92)",
-          color: "white",
-        }}
-      >
-        Undo lock (admin)
-      </button>
-    ) : null}
-
-    {scoresLocked ? (
-  <button
-    onClick={unlockScoresForWeek}
-    style={{
-      width: "100%",
-      marginTop: 8,
-      border: "none",
-      borderRadius: 12,
-      padding: "12px 14px",
-      fontSize: 14,
-      fontWeight: 950,
-      cursor: "pointer",
-      background: "rgba(220,38,38,0.95)",
-      color: "white",
-    }}
-  >
-    Undo lock (delete finalized lineups)
-  </button>
-) : null}
-
-    {!displayLocked ? (
-      <div style={{ marginTop: 8, fontSize: 12, fontWeight: 800, opacity: 0.7 }}>
-        Lineups aren’t locked yet for this week (deadline not passed).
-      </div>
-    ) : null}
-
-    {displayLocked && !scoresLockAvailable ? (
-  <div style={{ marginTop: 8, fontSize: 12, fontWeight: 800, opacity: 0.7 }}>
-    Scores can be locked 2 days after the team selection deadline.
-  </div>
-) : null}
-
-  </div>
-) : null}
         </div>
       </div>
 
