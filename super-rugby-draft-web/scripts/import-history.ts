@@ -9,14 +9,10 @@
 // Uses the keys in .env.development.local (local test database) unless told otherwise.
 import fs from "node:fs";
 import path from "node:path";
-import { loadEnvConfig } from "@next/env";
-import { createClient } from "@supabase/supabase-js";
+import { scriptDb } from "./lib/db";
 
-loadEnvConfig(process.cwd(), true);
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!url || !key) throw new Error("Missing Supabase URL / service role key in the env files");
-const db = createClient(url, key, { auth: { persistSession: false } });
+
+const { db } = scriptDb(); // local test database, or --live --confirm=<project> for the real one
 
 const BACKUPS = path.resolve(process.cwd(), "../backups");
 const history = JSON.parse(fs.readFileSync(path.join(BACKUPS, "history.json"), "utf8"));
@@ -34,8 +30,14 @@ async function main() {
   // --- 2026 league + its teams
   const rows = sheetCsv.split(/\r?\n/).filter(Boolean).slice(1).map((l) => l.split(","));
   const someTeamId = rows[0][6];
-  const team = must(await db.from("teams").select("league_id").eq("id", someTeamId).single()) as { league_id: string };
-  const leagueId = team.league_id;
+  const { data: team } = await db.from("teams").select("league_id").eq("id", someTeamId).maybeSingle();
+  if (!team) {
+    // A fresh project (everyone makes new accounts): the 2026 league isn't there, so just
+    // record the honours (champion, runner-up, ...) by name.
+    await importHonoursOnly();
+    return;
+  }
+  const leagueId = (team as { league_id: string }).league_id;
   const league = must(await db.from("leagues").select("id, name").eq("id", leagueId).single()) as { id: string; name: string };
   const teams = must(await db.from("teams").select("id, owner_username").eq("league_id", leagueId)) as Array<{ id: string; owner_username: string }>;
   const teamByOwner = new Map(teams.map((t) => [t.owner_username, t.id]));
@@ -119,6 +121,20 @@ async function main() {
   const regular = matchups.filter((m) => m.kind === "regular").length;
   console.log(`2026 league "${league.name}": ${regular} regular-season rows (weeks ${firstWeek}-${lastRegularWeek}), ${h26.playoffs.length} finals`);
   console.log(`Honours: ${honours.length} rows (2025 and 2026)`);
+}
+
+async function importHonoursOnly() {
+  must(await db.from("honours").delete().in("season", [2025, 2026]));
+  const rows = [
+    ...history["2026"].honours.map((x: { person: string; place: string }) => ({
+      season: 2026, league_id: null, league_name: history["2026"].leagueName ?? "2026 league", person_name: x.person, place: x.place,
+    })),
+    ...history["2025"].honours.map((x: { person: string; place: string }) => ({
+      season: 2025, league_id: null, league_name: history["2025"].leagueName, person_name: x.person, place: x.place,
+    })),
+  ];
+  must(await db.from("honours").insert(rows));
+  console.log(`No 2026 league in this database: imported the honours only (${rows.length} rows).`);
 }
 
 main().catch((e) => {

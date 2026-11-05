@@ -1,16 +1,15 @@
 // scripts/make-admin.ts
 // Makes an account a site admin (gets the Admin page). Run once for Ethan's account after
 // he signs up on the new site:
-//   npx tsx scripts/make-admin.ts you@example.com
+//   npx tsx scripts/make-admin.ts you@example.com            (local test database)
+//   npx tsx scripts/make-admin.ts you@example.com --live     (the real project; it says how to confirm)
 // Add --remove to take admin away. (On Node 20, first set NODE_OPTIONS=--experimental-websocket.)
-import { loadEnvConfig } from "@next/env";
-import { createClient } from "@supabase/supabase-js";
+import { scriptDb } from "./lib/db";
 
-loadEnvConfig(process.cwd(), true);
-const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
+const { db } = scriptDb(); // local test database, or --live --confirm=<project> for the real one
 
 async function main() {
-  const email = (process.argv[2] ?? "").trim().toLowerCase();
+  const email = (process.argv.slice(2).find((a) => !a.startsWith("--")) ?? "").trim().toLowerCase();
   const remove = process.argv.includes("--remove");
   if (!email.includes("@")) throw new Error("Usage: npx tsx scripts/make-admin.ts you@example.com [--remove]");
 

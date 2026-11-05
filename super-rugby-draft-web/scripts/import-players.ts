@@ -8,15 +8,14 @@
 // Safe to run again: it replaces both seasons' players (and 2026 statuses).
 //
 // Run (from super-rugby-draft-web): npx tsx scripts/import-players.ts
+// Real project: npx tsx scripts/import-players.ts --live  (it then says what to add to confirm)
 // (On Node 20, first set NODE_OPTIONS=--experimental-websocket.)
 import fs from "node:fs";
 import path from "node:path";
-import { loadEnvConfig } from "@next/env";
-import { createClient } from "@supabase/supabase-js";
+import { scriptDb } from "./lib/db";
 import { EXTERNAL_PLAYER_ID_MAP } from "../lib/players/externalIdMap";
 
-loadEnvConfig(process.cwd(), true);
-const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
+const { db } = scriptDb(); // local test database, or --live --confirm=<project> for the real one
 const CSV = path.resolve(process.cwd(), "../backups/2026-11-04/sheet-playersCsv.csv");
 const POS = new Set(["PR", "HO", "LK", "LF", "HB", "FH", "CE", "OB"]);
 const NOT_IN_2027 = new Set(["MOA", "MOP"]); // Moana Pasifika

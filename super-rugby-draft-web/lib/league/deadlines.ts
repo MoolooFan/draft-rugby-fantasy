@@ -8,3 +8,12 @@ export function selectionDeadlineMs(seasonYear: number, fantasyWeek: number): nu
   if (!SEASONS[seasonYear]) return null;
   return weekDeadlineMs(getSeason(seasonYear), fantasyWeek);
 }
+
+/** Waiver claims for a week are processed from 24 hours before that week's lineup deadline. */
+export const WAIVERS_BEFORE_SELECTION_MS = 24 * 60 * 60 * 1000;
+
+/** When a week's waiver claims can be processed (ms), or null if that week has no fixtures. */
+export function waiverProcessFromMs(seasonYear: number, fantasyWeek: number): number | null {
+  const d = selectionDeadlineMs(seasonYear, fantasyWeek);
+  return d == null ? null : d - WAIVERS_BEFORE_SELECTION_MS;
+}

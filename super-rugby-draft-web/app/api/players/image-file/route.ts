@@ -21,7 +21,7 @@ const playerId = rawPlayerId.toLowerCase();
 
     const imageUrl = String(data?.image_profile ?? "").trim();
 
-    if (!imageUrl) {
+    if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
       return new NextResponse("No image found", { status: 404 });
     }
 
@@ -40,13 +40,19 @@ const playerId = rawPlayerId.toLowerCase();
       });
     }
 
+    // Only pass on real pictures: anything else (a web page, an SVG with scripts in it) would be
+    // served as if it came from this site.
+    const contentType = (upstream.headers.get("content-type") || "image/png").split(";")[0].trim().toLowerCase();
+    if (!/^image\/(png|jpe?g|gif|webp|avif)$/.test(contentType)) {
+      return new NextResponse("Not an image", { status: 415 });
+    }
     const buffer = await upstream.arrayBuffer();
-    const contentType = upstream.headers.get("content-type") || "image/png";
 
     return new NextResponse(buffer, {
       status: 200,
       headers: {
         "content-type": contentType,
+        "x-content-type-options": "nosniff",
         "cache-control": "public, max-age=3600",
       },
     });
