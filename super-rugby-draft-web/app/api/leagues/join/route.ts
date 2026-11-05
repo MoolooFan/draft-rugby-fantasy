@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
+import { refreshDraftOrder } from "@/lib/draft/engine";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -67,20 +68,12 @@ export async function POST(req: Request) {
     team = created;
   }
 
-  // 4) Ensure draft_state exists (for older leagues)
-  const { error: stateErr } = await supabaseAdmin.from("draft_state").upsert(
-    {
-      league_id: league.id,
-      phase: league.draft_status === "live" ? "live" : "scheduled",
-      pick_index: 1,
-      is_draft_order_set: false,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "league_id" }
-  );
-
-  if (stateErr) {
-    return NextResponse.json({ ok: false, error: stateErr.message }, { status: 500 });
+  // 4) Draft order: shuffled again now a team has joined (unless the commissioner has set it,
+  //    or the draft has started). (This used to reset the whole draft to pick 1 on every join.)
+  try {
+    await refreshDraftOrder(supabaseAdmin, league.id, { reshuffle: true });
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "Couldn't update the draft order" }, { status: 500 });
   }
 
   // 5) Ensure roster row exists for this team

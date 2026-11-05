@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
 import { currentSeasonYear, getSeason, totalFantasyWeeks } from "@/lib/season";
+import { getDraftState } from "@/lib/draft/engine";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -115,20 +116,11 @@ if (draftAtRaw !== null && draftAtRaw !== undefined && draftAtRaw !== "") {
     return NextResponse.json({ ok: false, error: teamErr?.message ?? "Failed to create team" }, { status: 500 });
   }
 
-  // 3) Ensure draft_state exists (pick_index starts at 1)
-  const { error: stateErr } = await supabaseAdmin.from("draft_state").upsert(
-    {
-      league_id: leagueId,
-      phase: "scheduled",
-      pick_index: 1,
-      is_draft_order_set: false,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "league_id" }
-  );
-
-  if (stateErr) {
-    return NextResponse.json({ ok: false, error: stateErr.message }, { status: 500 });
+  // 3) Draft state (pick 1, the order starts with this team; reshuffled as teams join)
+  try {
+    await getDraftState(supabaseAdmin, leagueId);
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "Couldn't set up the draft" }, { status: 500 });
   }
 
   // 4) Create empty roster row for creator (optional but recommended)

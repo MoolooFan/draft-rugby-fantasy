@@ -1,10 +1,13 @@
 // lib/draft/store.ts
+// The draft room's view of the draft. The draft itself runs on the server (lib/draft/engine):
+// this store asks the server for the state, sends picks, and keeps the draft watchlist in step.
+// It never decides a pick or saves a roster itself.
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { DraftPhase, Player, Team, TeamRosterState } from "./types";
 import { getSlotCaps, getWcCap } from "./constants";
 
-import { fetchRosters, saveRoster } from "@/lib/rosters/api";
+import { fetchRosters } from "@/lib/rosters/api";
 import { playerPositions } from "@/lib/players/positions";
 
 type DraftState = {
@@ -58,8 +61,17 @@ type DraftState = {
     createdAtMs: number;
   }>;
 
-  // Watchlist
+  // Watchlist (the server keeps the order; auto-pick takes from it first)
   watchlist: Record<string, true>;
+  watchlistOrder: string[];
+  moveWatchlist: (playerId: string, delta: number) => void;
+
+  // From the server
+  draftLeagueId: string | null;
+  myTeamId: string | null;
+  deadlineMs: number | null; // this device's clock
+  draftComplete: boolean;
+  lastError: string | null;
 
   // Rosters
   rosters: Record<string, TeamRosterState>;
@@ -137,17 +149,6 @@ function sameIdOrder(a: Team[], b: Team[]) {
 }
 
 
-function finalizeLeagueDraftIfComplete(
-  pickNo: number,
-  total: number,
-  leagueId: string | undefined,
-  onDraftComplete?: (leagueId: string) => void
-) {
-  if (pickNo !== total) return;
-  if (!leagueId) return;
-  if (leagueId === "local") return;
-  onDraftComplete?.(leagueId);
-}
 type Pos = string;
 
 
@@ -268,85 +269,70 @@ export const useDraftStore = create<DraftState>()(
     (set, get) => ({
       refreshFromServer: async (leagueId: string) => {
   if (!leagueId) return;
-
   try {
-    const res = await fetch(`/api/draft/get?leagueId=${encodeURIComponent(leagueId)}`, {
-  cache: "no-store",
-});
+    const res = await fetch(`/api/draft/get?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
     const json = await res.json().catch(() => null);
     if (!res.ok || !json?.ok) return;
+    const st = json.state;
+    const rows: any[] = json.picks ?? [];
+    const order: string[] = (st?.draft_order_team_ids ?? []).map(String);
+    // the server's clock vs this device's, so the countdown is right even if the device clock is off
+    const offset = Number(json.serverNow) - Date.now();
+    const deadline = st?.pick_deadline_at ? new Date(st.pick_deadline_at).getTime() - offset : null;
 
-    const stateRow = json.state;   // draft_state row (or null)
-    const pickRows = json.picks;   // array of draft_picks rows
-
-    set({
-  draftPicks: (pickRows ?? []).map((r: any) => ({
-    id: String(r.id),
-    leagueId: String(r.league_id),
-    week: Number(r.week ?? 1),
-    teamId: String(r.team_id),
-    playerId: String(r.player_id),
-    pickNumber: Number(r.pick_number),
-    round: Number(r.round),
-    createdAtMs: new Date(r.created_at).getTime(),
-  })),
-});
-
-    // Ensure picks array is correct length before inserting into it
-    get().ensurePicksLength();
-
-    // 1) draft_state -> phase/pickIndex/isDraftOrderSet
-    if (stateRow) {
-      set({
-        phase: stateRow.phase === "live" ? "liveDraft" : "preDraft",
-        pickIndex: Number(stateRow.pick_index ?? 1),
-        isDraftOrderSet: !!stateRow.is_draft_order_set,
-      });
-    }
-// ✅ Apply server draft order by reordering teams array
-// Requires draft_state.draft_order_team_ids (text[]) to exist
-if (stateRow?.draft_order_team_ids && Array.isArray(stateRow.draft_order_team_ids)) {
-  const order = stateRow.draft_order_team_ids
-    .map((x: any) => String(x ?? "").trim())
-    .filter(Boolean);
-
-  if (order.length) {
     set((prev) => {
+      // teams in draft order
       const byId = new Map(prev.teams.map((t) => [t.id, t]));
-      const ordered: Team[] = [];
+      const teams = [...order.map((id) => byId.get(id)).filter((t): t is Team => !!t), ...prev.teams.filter((t) => !order.includes(t.id))];
+      const total = Number(st?.total_picks) || teams.length * prev.roundsPerTeam;
 
-      // add teams in server order
-      for (const id of order) {
-        const t = byId.get(id);
-        if (t) ordered.push(t);
+      // picks and rosters, from the server's picks
+      const picks: Array<Player | null> = Array.from({ length: total }, () => null);
+      const byTeam = new Map<string, Player[]>();
+      for (const r of rows) {
+        const n = Number(r.pick_number);
+        const player = prev.playersById?.[String(r.player_id)] ?? ({ id: String(r.player_id) } as Player);
+        if (n >= 1 && n <= total) picks[n - 1] = player;
+        byTeam.set(String(r.team_id), [...(byTeam.get(String(r.team_id)) ?? []), player]);
+      }
+      const rosters: Record<string, TeamRosterState> = {};
+      for (const t of teams) {
+        const players = byTeam.get(t.id) ?? [];
+        rosters[t.id] = rebalanceRoster(players, getSlotCaps(), getWcCap()) ?? { slots: {}, wildcards: players };
       }
 
-      // append any teams not in server list (safety)
-      for (const t of prev.teams) {
-        if (!order.includes(t.id)) ordered.push(t);
+      const last = rows[rows.length - 1];
+      let latestPickText = prev.latestPickText;
+      if (last) {
+        const p = prev.playersById?.[String(last.player_id)];
+        const teamName = byId.get(String(last.team_id))?.name ?? "TBC";
+        const who = p ? `${p.firstName?.[0] ?? ""}. ${p.lastName ?? ""}` : String(last.player_id);
+        latestPickText = `${teamName} ${last.auto ? "auto-drafted" : "took"} ${who} with the ${ordinal(Number(last.pick_number))} Pick`;
+      } else {
+        latestPickText = "No picks yet.";
       }
 
-      return { ...prev, teams: ordered };
-    });
-  }
-}
-    // 2) draft_picks -> picks[]
-    set((s) => {
-      const next = [...s.picks];
-
-      for (const r of pickRows ?? []) {
-        const pickNo = Number(r.pick_number);
-        if (!Number.isFinite(pickNo) || pickNo <= 0) continue;
-
-        const pid = String(r.player_id ?? "");
-        const player =
-  s.playersById?.[pid] ??
-  ({ id: pid } as Player); // placeholder, will be hydrated later
-
-next[pickNo - 1] = player;
-      }
-
-      return { ...s, picks: next };
+      const queue: string[] = (json.queue ?? []).map(String);
+      return {
+        ...prev,
+        teams,
+        isDraftOrderSet: order.length > 0,
+        phase: st?.phase === "live" || st?.phase === "complete" ? "liveDraft" : "preDraft",
+        draftComplete: st?.phase === "complete",
+        pickIndex: Number(st?.pick_index ?? 1),
+        picks,
+        rosters,
+        latestPickText,
+        deadlineMs: deadline,
+        myTeamId: json.myTeamId ?? null,
+        draftLeagueId: leagueId,
+        watchlistOrder: queue,
+        watchlist: Object.fromEntries(queue.map((id) => [id, true as const])),
+        draftPicks: rows.map((r) => ({
+          id: String(r.id), leagueId: String(r.league_id), week: 1, teamId: String(r.team_id), playerId: String(r.player_id),
+          pickNumber: Number(r.pick_number), round: Number(r.round), createdAtMs: new Date(r.created_at).getTime(),
+        })),
+      };
     });
   } catch (e) {
     console.log("refreshFromServer error", e);
@@ -372,6 +358,12 @@ setHasHydrated: (v) => set({ hasHydrated: v }),
       latestPickText: "No picks yet.",
 
       watchlist: {},
+      watchlistOrder: [],
+      draftLeagueId: null,
+      myTeamId: null,
+      deadlineMs: null,
+      draftComplete: false,
+      lastError: null,
       rosters: {},
       hydratedLeagueIds: {},
       isHydratingLeagueId: null,
@@ -485,21 +477,8 @@ setHasHydrated: (v) => set({ hasHydrated: v }),
       },
 
       // ✅ Save one team roster to Supabase
-      persistRosterToDb: async (leagueId: string, teamId: string) => {
-        if (!leagueId || !teamId) return;
-
-        try {
-          const roster = get().rosters[teamId];
-          if (!roster) return;
-
-          const res = await saveRoster(leagueId, teamId, roster);
-          if (!res?.ok) {
-            console.log("persistRosterToDb failed:", res?.error ?? res);
-          }
-        } catch (e) {
-          console.log("persistRosterToDb exception:", e);
-        }
-      },
+      // Rosters are saved by the server (draft, free agency, waivers, trades), never the browser.
+      persistRosterToDb: async () => {},
             rehydratePlayersFromPool: (allPlayers) => {
   const byId = new Map(allPlayers.map((p) => [p.id, p]));
   const byIdObj: Record<string, Player> = {};
@@ -574,12 +553,7 @@ addPlayerToRoster: (teamId, player, leagueId) => {
     };
   });
 
-// ✅ persist to Supabase (fire-and-forget)
-if (leagueId && leagueId !== "local" && nextRoster) {
-  saveRoster(leagueId, teamId, nextRoster).catch((e) =>
-    console.log("saveRoster failed", e)
-  );
-}
+void leagueId; // rosters are saved by the server
 },
 
 
@@ -678,234 +652,32 @@ if (success && leagueId && leagueId !== "local") {
 return success;
 },
 
+      // Send the pick; the server checks it (your turn, player free, positions) and saves it.
       confirmDraft: async (player, leagueId, onDraftComplete) => {
-        const s = get();
-        if (s.phase !== "liveDraft") return;
-
-        s.ensurePicksLength();
-
-        const total = s.totalPicks();
-        if (s.pickIndex > total) return;
-
-        if (s.isDrafted(player.id)) return;
-
-        const pickNo = s.pickIndex;
-        const owner = s.ownerForPickSnake(pickNo);
-        const teamId = owner?.id;
-        if (!teamId) return;
-
-                const lid = leagueId ?? "local";
-        const nowMs = Date.now();
-        const nTeams = s.teams.length || 1;
-        const round = Math.floor((pickNo - 1) / nTeams) + 1;
-
-        if (!s.canTeamDraftPlayer(teamId, player)) return;
-const picked: Player = { ...player, secondaryPosAbbrev: player.secondaryPosAbbrev ?? "" } as Player;
-
-// ✅ SERVER MODE: write pick to Supabase via API, then refresh local state from server
-if (lid !== "local") {
-  try {
-    const res = await fetch("/api/draft/pick", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        leagueId: lid,
-        teamId,
-        playerId: picked.id,
-        pickNumber: pickNo,
-        round,
-      }),
-    });
-
-    const json = await res.json().catch(() => null);
-    if (!res.ok || !json?.ok) {
-      console.log("confirmDraft server pick failed:", json?.error ?? res.statusText);
-      return;
-    }
-
-    // Update roster locally
-s.addPlayerToRoster(teamId, picked, lid);
-
-// ✅ Force persist from current state (more reliable than fire-and-forget nextRoster)
-await get().persistRosterToDb(lid, teamId);
-
-    // Pull latest draft_state + draft_picks (source of truth)
-    await get().refreshFromServer(lid);
-
-    const teamName = owner?.name ?? "TBC";
-    set((prev) => ({
-      ...prev,
-      latestPickText: `${teamName} took ${picked.firstName[0]}. ${picked.lastName} with the ${ordinal(pickNo)} Pick`,
-    }));
-
-    finalizeLeagueDraftIfComplete(pickNo, total, lid, onDraftComplete);
-    return; // IMPORTANT: stop here, don’t run the local-only code below
-  } catch (e) {
-    console.log("confirmDraft server pick exception:", e);
-    return;
-  }
-}
-
-        // Write the pick (track if it was actually written)
-        let wrote = false;
-
-                set((prev) => {
-          const nextPicks = [...prev.picks];
-          if (nextPicks[pickNo - 1]) return prev;
-          nextPicks[pickNo - 1] = picked;
-
-          // ✅ write draft pick transaction (forward-only)
-          const nextDraftPicks = [...(prev.draftPicks ?? [])];
-          const alreadyLogged = nextDraftPicks.some((dp) => dp.pickNumber === pickNo);
-          if (!alreadyLogged) {
-            nextDraftPicks.push({
-              id: `dp_${pickNo}_${nowMs}`,
-              leagueId: lid,
-              week: 1, // keep 1 for drafts, or change if you have a league week concept
-              teamId,
-              playerId: picked.id,
-              pickNumber: pickNo,
-              round,
-              createdAtMs: nowMs,
-            });
-          }
-
-          wrote = true;
-          return { ...prev, picks: nextPicks, draftPicks: nextDraftPicks };
-        });
-
-
-        if (!wrote) return;
-
-        s.addPlayerToRoster(teamId, picked, lid);
-if (lid !== "local") get().persistRosterToDb(lid, teamId);
-
-        const teamName = owner?.name ?? "TBC";
-        set((prev) => ({
-          ...prev,
-          latestPickText: `${teamName} took ${player.firstName[0]}. ${player.lastName} with the ${ordinal(
-            pickNo
-          )} Pick`,
-          pickIndex: Math.min(prev.pickIndex + 1, total),
-        }));
-
-        finalizeLeagueDraftIfComplete(pickNo, total, lid, onDraftComplete);
+        const lid = leagueId ?? get().draftLeagueId;
+        if (!lid) return;
+        set({ lastError: null });
+        try {
+          const res = await fetch("/api/draft/pick", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ leagueId: lid, playerId: player.id }),
+          });
+          const json = await res.json().catch(() => null);
+          if (!res.ok || !json?.ok) set({ lastError: json?.error ?? "That pick didn't go through" });
+        } catch {
+          set({ lastError: "That pick didn't go through" });
+        }
+        await get().refreshFromServer(lid);
+        if (get().draftComplete) onDraftComplete?.(lid);
       },
 
-      autoDraft: async (allPlayers, leagueId, onDraftComplete) => {
-        const s = get();
-        s.ensurePicksLength();
-
-        const total = s.totalPicks();
-        if (s.pickIndex > total) return;
-
-        const owner = s.ownerForPickSnake(s.pickIndex);
-        const teamId = owner?.id;
-        if (!teamId) return;
-
-        const drafted = new Set(s.picks.filter(Boolean).map((p) => (p as Player).id));
-
-        const best = allPlayers
-          .slice()
-          .sort((a, b) => a.draftRank - b.draftRank)
-          .find((p) => !drafted.has(p.id) && s.canTeamDraftPlayer(teamId, p));
-
-          
-
-        if (!best) {
-          set((prev) => ({ ...prev, pickIndex: Math.min(prev.pickIndex + 1, total) }));
-          return;
-        }
-const picked: Player = { ...best, secondaryPosAbbrev: best.secondaryPosAbbrev ?? "" } as Player;
-
-        const pickNo = s.pickIndex;
-        const lid = leagueId ?? "local";
-        const nowMs = Date.now();
-        const nTeams = s.teams.length || 1;
-        const round = Math.floor((pickNo - 1) / nTeams) + 1;
-
-        // ✅ SERVER MODE: write pick to Supabase via API, then refresh local state from server
-if (lid !== "local") {
-  try {
-    const res = await fetch("/api/draft/pick", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        leagueId: lid,
-        teamId,
-        playerId: picked.id,
-        pickNumber: pickNo,
-        round,
-      }),
-    });
-
-    const json = await res.json().catch(() => null);
-    if (!res.ok || !json?.ok) {
-      console.log("autoDraft server pick failed:", json?.error ?? res.statusText);
-      return;
-    }
-
-    // Update roster locally
-s.addPlayerToRoster(teamId, picked, lid);
-
-// ✅ Force persist from current state (more reliable than fire-and-forget nextRoster)
-await get().persistRosterToDb(lid, teamId);
-
-    // Pull latest draft_state + draft_picks (source of truth)
-    await get().refreshFromServer(lid);
-
-    const teamName = owner?.name ?? "TBC";
-    set((prev) => ({
-      ...prev,
-      latestPickText: `${teamName} auto-drafted ${picked.firstName[0]}. ${picked.lastName} with the ${ordinal(pickNo)} Pick`,
-    }));
-
-    finalizeLeagueDraftIfComplete(pickNo, total, lid, onDraftComplete);
-    return; // IMPORTANT: stop here, don’t run the local-only code below
-  } catch (e) {
-    console.log("autoDraft server pick exception:", e);
-    return;
-  }
-}
-
-                set((prev) => {
-          const nextPicks = [...prev.picks];
-          if (nextPicks[pickNo - 1]) return prev;
-          nextPicks[pickNo - 1] = picked;
-
-          const nextDraftPicks = [...(prev.draftPicks ?? [])];
-          const alreadyLogged = nextDraftPicks.some((dp) => dp.pickNumber === pickNo);
-          if (!alreadyLogged) {
-            nextDraftPicks.push({
-              id: `dp_${pickNo}_${nowMs}`,
-              leagueId: lid,
-              week: 1,
-              teamId,
-              playerId: picked.id,
-              pickNumber: pickNo,
-              round,
-              createdAtMs: nowMs,
-            });
-          }
-
-          return { ...prev, picks: nextPicks, draftPicks: nextDraftPicks };
-        });
-
-
-        s.addPlayerToRoster(teamId, picked, lid);
-
-if (lid !== "local") get().persistRosterToDb(lid, teamId);
-
-        const teamName = owner?.name ?? "TBC";
-        set((prev) => ({
-          ...prev,
-          latestPickText: `${teamName} auto-drafted ${best.firstName[0]}. ${best.lastName} with the ${ordinal(
-            pickNo
-          )} Pick`,
-          pickIndex: Math.min(prev.pickIndex + 1, total),
-        }));
-
-        finalizeLeagueDraftIfComplete(pickNo, total, lid, onDraftComplete);
+      // Auto-picks happen on the server when the time runs out; this just refreshes.
+      autoDraft: async (_allPlayers, leagueId, onDraftComplete) => {
+        const lid = leagueId ?? get().draftLeagueId;
+        if (!lid) return;
+        await get().refreshFromServer(lid);
+        if (get().draftComplete) onDraftComplete?.(lid);
       },
 
       isDrafted: (playerId) => get().picks.some((p) => p?.id === playerId),
@@ -923,12 +695,19 @@ if (lid !== "local") get().persistRosterToDb(lid, teamId);
       },
 
       toggleWatchlist: (playerId) => {
-        set((s) => {
-          const next = { ...s.watchlist };
-          if (next[playerId]) delete next[playerId];
-          else next[playerId] = true;
-          return { ...s, watchlist: next };
-        });
+        const order = get().watchlistOrder.includes(playerId)
+          ? get().watchlistOrder.filter((id) => id !== playerId)
+          : [...get().watchlistOrder, playerId];
+        saveWatchlist(get, set, order);
+      },
+
+      moveWatchlist: (playerId, delta) => {
+        const order = [...get().watchlistOrder];
+        const i = order.indexOf(playerId);
+        const j = i + delta;
+        if (i < 0 || j < 0 || j >= order.length) return;
+        [order[i], order[j]] = [order[j], order[i]];
+        saveWatchlist(get, set, order);
       },
 
       setPhase: (phase) => set({ phase }),
@@ -962,8 +741,7 @@ syncFromLeague: (leagueTeams, isOrderSet = true) => {
     {
       name: "sr-draft-store-v4",
       partialize: (s) => ({
-  // ✅ Only persist "preferences" or harmless UI state
-  watchlist: s.watchlist,
+  // (the watchlist now lives on the server)
 
   // Optional: keep this text if you want, but it can also be removed
   latestPickText: s.latestPickText,
@@ -977,6 +755,22 @@ syncFromLeague: (leagueTeams, isOrderSet = true) => {
     }
   )
 );
+
+/** Update the watchlist here straight away, then save it on the server (in order). */
+function saveWatchlist(
+  get: () => DraftState,
+  set: (partial: Partial<DraftState>) => void,
+  order: string[]
+) {
+  set({ watchlistOrder: order, watchlist: Object.fromEntries(order.map((id) => [id, true as const])) });
+  const leagueId = get().draftLeagueId;
+  if (!leagueId) return;
+  fetch("/api/draft/queue", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ leagueId, playerIds: order }),
+  }).catch((e) => console.log("watchlist save failed", e));
+}
 
 function ordinal(n: number) {
   const s = ["th", "st", "nd", "rd"];

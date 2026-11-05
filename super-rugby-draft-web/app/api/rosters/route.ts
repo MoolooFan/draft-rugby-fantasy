@@ -107,73 +107,8 @@ return NextResponse.json({ ok: true, data: fixed });
 
 }
 
-export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const leagueId = normalizeLeagueId(body?.leagueId);
-  const teamId = String(body?.teamId ?? "").trim();
-  const data = body?.data;
-
-  if (!leagueId || !teamId || data == null) {
-    return NextResponse.json({ ok: false, error: "Missing leagueId/teamId/data" }, { status: 400 });
-  }
-
-  const username = await getServerUsername();
-  if (!username) {
-    return NextResponse.json({ ok: false, error: "Not logged in" }, { status: 401 });
-  }
-
-  const usernameNorm = norm(username);
-
-  // Ensure team exists + requester owns it
-  const { data: team, error: teamErr } = await supabaseAdmin
-    .from("teams")
-    .select("id, league_id, owner_username")
-    .eq("id", teamId)
-    .maybeSingle();
-
-  if (teamErr) {
-    return NextResponse.json({ ok: false, error: teamErr.message }, { status: 500 });
-  }
-  if (!team) {
-    return NextResponse.json({ ok: false, error: "Team not found" }, { status: 404 });
-  }
-
-  if (String(team.league_id) !== leagueId) {
-    return NextResponse.json({ ok: false, error: "Team not in league" }, { status: 400 });
-  }
-
-  const owner = norm(String(team.owner_username ?? ""));
-  if (!owner) {
-    return NextResponse.json({ ok: false, error: "Team has no owner_username" }, { status: 500 });
-  }
-  if (owner !== usernameNorm) {
-    return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
-  }
-
-  // ✅ Preserve canonical playerIds if caller provided them.
-// Only derive from slots/wildcards if playerIds is missing.
-const existing = Array.isArray((data as any)?.playerIds)
-  ? (data as any).playerIds.map((x: any) => String(x ?? "").trim()).filter(Boolean)
-  : [];
-
-const playerIds = existing.length ? existing : derivePlayerIdsFromRosterData(data);
-const dataToSave = { ...(data ?? {}), playerIds };
-
-  const { error } = await supabaseAdmin
-  .from("rosters")
-  .upsert(
-    {
-      league_id: leagueId,
-      team_id: teamId,
-      data: dataToSave, // ✅
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "league_id,team_id" }
-  );
-
-  if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true });
+// Rosters are only ever changed by the server (the draft, free agency, waivers and trades),
+// so a browser can't save a made-up roster for its team.
+export async function POST() {
+  return NextResponse.json({ ok: false, error: "Rosters are updated by the server" }, { status: 405 });
 }

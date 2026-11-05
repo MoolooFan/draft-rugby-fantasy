@@ -5,6 +5,7 @@
 // - Reads each round's official team-list and injury articles once, from Wednesday 4:30pm NZT
 //   (retrying every call until they're out); clears Starting/Benched once a game has finished.
 // - Locks lineups at each deadline and finalises each round when it's due (lib/results/engine).
+// - Keeps live drafts moving (auto-picks) even with nobody in the draft room.
 // Outside game weekends it does almost nothing, so it's cheap to call often.
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -12,6 +13,7 @@ import { syncExternalStats } from "@/lib/players/syncStats";
 import { runResultsTick } from "@/lib/results/engine";
 import { currentSeasonYear, getSeason, liveRealRounds, realRoundsAwaitingFinalStats, realRoundsAwaitingTeamLists } from "@/lib/season";
 import { clearFinishedGameStatuses, importRoundStatus, type ImportReport } from "@/lib/status/import";
+import { advanceDraft } from "@/lib/draft/engine";
 
 export const maxDuration = 60; // seconds (Vercel)
 
@@ -53,12 +55,29 @@ async function tick() {
   // Once a game has finished, its players' Starting / Benched statuses are cleared.
   const statusesCleared = await clearFinishedGameStatuses(supabaseAdmin, seasonYear, now).catch(() => -1);
 
+  // Drafts: start any that are due and make overdue auto-picks (so a draft keeps going even
+  // if nobody has the draft room open).
+  const drafts: Array<{ leagueId: string; autoPicks?: number; error?: string }> = [];
+  const { data: dueDrafts } = await supabaseAdmin
+    .from("leagues")
+    .select("id")
+    .in("draft_status", ["scheduled", "live"])
+    .lte("draft_at", new Date(now).toISOString());
+  for (const l of dueDrafts ?? []) {
+    try {
+      const r = await advanceDraft(supabaseAdmin, l.id, now);
+      if (r.autoPicks) drafts.push({ leagueId: l.id, autoPicks: r.autoPicks });
+    } catch (e) {
+      drafts.push({ leagueId: l.id, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   // Before finalising a week, pull its final stats (all of its real rounds).
   const results = await runResultsTick(supabaseAdmin, seasonYear, now, {
     beforeFinalise: (realRounds) => sync(realRounds),
   });
 
-  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, statusImports, statusesCleared, ...results };
+  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, statusImports, statusesCleared, drafts, ...results };
 }
 
 async function handle(req: Request) {

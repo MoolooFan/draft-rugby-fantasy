@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
+import { refreshDraftOrder } from "@/lib/draft/engine";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -106,31 +107,9 @@ const teamsRaw = (teamRows ?? []).map((t: any) => {
   };
 });
 
-// 3.1) draft order (always compute a stable order)
-const orderFromDb: string[] | null = Array.isArray(leagueRow.draft_order)
-  ? leagueRow.draft_order.map((x: any) => String(x ?? "").trim()).filter(Boolean)
-  : null;
-
-// If no draft order saved yet, default to team creation order (teamsRaw is already created_at ASC)
-const computedOrder: string[] = (orderFromDb && orderFromDb.length)
-  ? orderFromDb
-  : teamsRaw.map((t) => t.id);
-
-// Optional but recommended: persist the default order once so it never flips
-if (!orderFromDb || !orderFromDb.length) {
-  const { error: orderSaveErr } = await supabaseAdmin
-    .from("leagues")
-    .update({ draft_order: computedOrder })
-    .eq("id", leagueId);
-
-  // if it fails, we still continue using computedOrder
-  if (orderSaveErr) {
-    console.log("Failed to persist draft_order:", orderSaveErr.message);
-  } else {
-    // keep response consistent
-    leagueRow.draft_order = computedOrder;
-  }
-}
+// 3.1) draft order: from the draft itself (snake order; shuffled as teams join, the commissioner
+//      can rearrange it until the draft starts)
+const computedOrder: string[] = await refreshDraftOrder(supabaseAdmin, leagueId);
 
 // Build teamsOrdered using computedOrder
 let teamsOrdered = teamsRaw;

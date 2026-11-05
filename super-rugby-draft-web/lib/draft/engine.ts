@@ -29,6 +29,11 @@ export type DraftState = {
   order_edited: boolean;
 };
 
+/** Before the draft: any phase that isn't live or complete (older rows say "scheduled"). */
+export function isPreDraft(state: Pick<DraftState, "phase">): boolean {
+  return state.phase !== "live" && state.phase !== "complete";
+}
+
 export class DraftError extends Error {
   constructor(message: string, public status = 400) {
     super(message);
@@ -61,7 +66,7 @@ export async function getDraftState(db: Db, leagueId: string): Promise<DraftStat
  */
 export async function refreshDraftOrder(db: Db, leagueId: string, opts: { reshuffle?: boolean } = {}) {
   const state = await getDraftState(db, leagueId);
-  if (state.phase !== "preDraft") return state.draft_order_team_ids ?? [];
+  if (!isPreDraft(state)) return state.draft_order_team_ids ?? [];
   const teams = await teamIds(db, leagueId);
   const current = (state.draft_order_team_ids ?? []).filter((t) => teams.includes(t));
   const missing = teams.filter((t) => !current.includes(t));
@@ -73,7 +78,7 @@ export async function refreshDraftOrder(db: Db, leagueId: string, opts: { reshuf
 /** Commissioner sets the order (before the draft starts). */
 export async function setDraftOrder(db: Db, leagueId: string, order: string[]) {
   const state = await getDraftState(db, leagueId);
-  if (state.phase !== "preDraft") throw new DraftError("The draft has started, so the order can't change", 409);
+  if (!isPreDraft(state)) throw new DraftError("The draft has started, so the order can't change", 409);
   const teams = await teamIds(db, leagueId);
   if (order.length !== teams.length || !teams.every((t) => order.includes(t))) throw new DraftError("The order must include every team once");
   await q(db.from("draft_state").update({ draft_order_team_ids: order, order_edited: true, updated_at: new Date().toISOString() }).eq("league_id", leagueId));

@@ -342,10 +342,10 @@ await syncMyTeamToSupabase(league);
   // 2) persist to server + refresh league from source-of-truth
   (async () => {
     try {
-      const res = await fetch("/api/leagues/setDraftOrder", {
+      const res = await fetch("/api/draft/order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leagueId, orderedTeamIds }),
+        body: JSON.stringify({ leagueId, teamIds: orderedTeamIds }),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {

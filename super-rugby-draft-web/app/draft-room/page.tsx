@@ -254,20 +254,17 @@ const yourTeamId =
   // -----------------------
   // ✅ TIMING
   // -----------------------
-  const liveDeadlineRef = useRef<number | null>(null);
-  
-  const PICK_MS = 90_000;
+  // The pick clock comes from the server (90s a pick, 10s after 3 missed picks in a row);
+  // when it runs out the server makes the pick, so nothing here has to.
+  const serverDeadlineMs = useDraftStore((s) => s.deadlineMs);
+  const storeDraftComplete = useDraftStore((s) => s.draftComplete);
+  const lastDraftError = useDraftStore((s) => s.lastError);
+  const watchlistOrder = useDraftStore((s) => s.watchlistOrder);
+  const moveWatchlist = useDraftStore((s) => s.moveWatchlist);
 
   useEffect(() => {
-    if (liveDeadlineRef.current == null) {
-      liveDeadlineRef.current = Date.now() + PICK_MS;
-    }
-    
-  }, []);
-
-  function resetLiveTimer() {
-    liveDeadlineRef.current = Date.now() + PICK_MS;
-  }
+    if (lastDraftError) window.alert(lastDraftError);
+  }, [lastDraftError]);
 
 const preDraftDeadlineMs = useMemo(() => {
   const v = activeLeague?.draftAt ?? null; // number | null
@@ -296,7 +293,6 @@ const preDraftDeadlineMs = useMemo(() => {
   const latestPickText = useDraftStore((s) => s.latestPickText);
 
   const confirmDraft = useDraftStore((s) => s.confirmDraft);
-  const autoDraft = useDraftStore((s) => s.autoDraft);
   const ensurePicksLength = useDraftStore((s) => s.ensurePicksLength);
   const rehydratePlayersFromPool = useDraftStore((s) => s.rehydratePlayersFromPool);
 
@@ -310,7 +306,7 @@ const preDraftDeadlineMs = useMemo(() => {
   }, [ensurePicksLength, teams.length]);
 
   const draftComplete =
-    totalPicks > 0 && picks.length === totalPicks && picks[totalPicks - 1] !== null;
+    storeDraftComplete || (totalPicks > 0 && picks.length === totalPicks && picks[totalPicks - 1] !== null);
 
   const currentPick = Math.min(pickIndex, totalPicks);
 
@@ -398,9 +394,11 @@ function resolvePlayer(x: any): Player | null {
     return filteredPlayers.filter((p) => canTeamDraftPlayer(yourTeamId, p));
   }, [filteredPlayers, canTeamDraftPlayer, yourTeamId]);
 
+  // In the order you set (auto-pick takes the first that's still free and fits)
   const watchlistPlayers = useMemo(() => {
-    return filteredPlayers.filter((p) => !!watchlist[p.id]);
-  }, [filteredPlayers, watchlist]);
+    const byId = new Map(filteredPlayers.map((p) => [p.id, p]));
+    return watchlistOrder.map((id) => byId.get(id)).filter((p): p is Player => !!p);
+  }, [filteredPlayers, watchlistOrder]);
 
   function hydrateForModal(p: Player): Player {
   const live: any = getLivePlayerById(p.id);
@@ -424,32 +422,7 @@ function resolvePlayer(x: any): Player | null {
     setModal({ type: "draftConfirm", player: p });
   }
 
-  // -----------------------
-  // ✅ AUTO DRAFT when timer expires
-  // -----------------------
-  const autoPickGuardRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    autoPickGuardRef.current = null;
-  }, [pickIndex]);
-
-  useEffect(() => {
-    const t = window.setInterval(() => {
-      if (phase !== "liveDraft") return;
-      if (draftComplete) return;
-      if (!liveDeadlineRef.current) return;
-      if (pickIndex > totalPicks) return;
-      if (autoPickGuardRef.current === pickIndex) return;
-      if (Date.now() < liveDeadlineRef.current) return;
-
-      autoPickGuardRef.current = pickIndex;
-      if (!leagueId) return;
-autoDraft(allPlayers, leagueId, (lid) => completeDraft?.(lid));
-      resetLiveTimer();
-    }, 300);
-
-    return () => window.clearInterval(t);
- }, [phase, draftComplete, pickIndex, totalPicks, autoDraft, allPlayers, leagueId, completeDraft]);
+  // (Auto-picks happen on the server when the clock runs out.)
 
   const draftResults: Pick[] = useMemo(() => {
     return Array.from({ length: totalPicks }).map((_, idx) => {
@@ -661,7 +634,7 @@ const isTbd = !deadline;
 
   function LiveHeader() {
   
-    const deadline = liveDeadlineRef.current ?? 0;
+    const deadline = serverDeadlineMs ?? 0;
 
     const secondsLeft = mounted ? Math.max(0, Math.floor((deadline - now) / 1000)) : 0;
 
@@ -855,8 +828,9 @@ const isTbd = !deadline;
     );
   }
 
-  function PlayerRow({ p, draftEnabled }: { p: Player; draftEnabled: boolean }) {
+  function PlayerRow({ p, draftEnabled, reorder }: { p: Player; draftEnabled: boolean; reorder?: { index: number; count: number } }) {
     const isStar = !!watchlist[p.id];
+    const arrow: React.CSSProperties = { border: "none", background: "transparent", fontSize: 12, fontWeight: 900, padding: "0 2px", cursor: "pointer", lineHeight: "12px" };
 
     return (
       <div
@@ -871,6 +845,13 @@ const isTbd = !deadline;
       >
         <div onClick={() => openPlayerCard(p)} style={{ cursor: "pointer", userSelect: "none" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {reorder ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 18 }} onClick={(e) => e.stopPropagation()}>
+                <button aria-label="Move up" style={{ ...arrow, opacity: reorder.index === 0 ? 0.25 : 1 }} onClick={() => moveWatchlist(p.id, -1)}>▲</button>
+                <div style={{ fontSize: 10, fontWeight: 900 }}>{reorder.index + 1}</div>
+                <button aria-label="Move down" style={{ ...arrow, opacity: reorder.index === reorder.count - 1 ? 0.25 : 1 }} onClick={() => moveWatchlist(p.id, 1)}>▼</button>
+              </div>
+            ) : null}
             <JerseyTile teamCode={p.teamCode} size={32} />
 
             <div>
@@ -882,6 +863,7 @@ const isTbd = !deadline;
                 {" — "}
                 {p.posName}
                 {p.secondaryPosName ? ` / ${p.secondaryPosName}` : ""}
+                {(p as { thirdPosName?: string }).thirdPosName ? ` / ${(p as { thirdPosName?: string }).thirdPosName}` : ""}
               </div>
             </div>
           </div>
@@ -943,7 +925,9 @@ const isTbd = !deadline;
               No players in your watchlist yet.
             </div>
           ) : (
-            watchlistPlayers.map((p) => <PlayerRow key={p.id} p={p} draftEnabled={draftEnabledFor(p)} />)
+            watchlistPlayers.map((p, i) => (
+              <PlayerRow key={p.id} p={p} draftEnabled={draftEnabledFor(p)} reorder={{ index: i, count: watchlistPlayers.length }} />
+            ))
           )}
         </div>
       </>
@@ -1254,7 +1238,6 @@ const entry = resolvePlayer(rawEntry);
                 setModal(null);
                 if (!leagueId) return;
 confirmDraft(player, leagueId, (lid) => completeDraft?.(lid));
-                resetLiveTimer();
               }}
               style={{
                 height: 34,
