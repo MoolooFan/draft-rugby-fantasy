@@ -4,6 +4,7 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import type { League } from "@/lib/league/types";
 import { currentSeasonYear } from "@/lib/season";
+import { getActiveUserProfile } from "@/lib/session";
 
 type ActiveMenu =
   | "Dashboard"
@@ -13,7 +14,8 @@ type ActiveMenu =
   | "League"
   | "Draft Room"
   | "Fixtures"
-  | "Team Details";
+  | "Team Details"
+  | "Admin";
 
 export function AppMenu({
   open,
@@ -46,6 +48,7 @@ export function AppMenu({
     if (item === "Team Selection") router.push("/team-selection");
     if (item === "Fixtures") router.push("/fixtures");
     if (item === "Team Details") router.push("/team-details");
+    if (item === "Admin") router.push("/admin");
 
   }
 
@@ -58,6 +61,8 @@ export function AppMenu({
     "Draft Room",
     "Fixtures",
     "Team Details",
+    // only for the site admin (the server checks again on the admin page)
+    ...(getActiveUserProfile()?.isSiteAdmin ? (["Admin"] as ActiveMenu[]) : []),
   ];
 
   return (

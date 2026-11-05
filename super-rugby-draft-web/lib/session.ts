@@ -12,6 +12,8 @@ export type UserProfile = {
   firstName?: string;
   lastName?: string;
   timezone?: string;
+  /** Shows the Admin menu item; the server still checks on every admin request. */
+  isSiteAdmin?: boolean;
 };
 
 /** @deprecated Kept for older code; profiles are always objects now. */

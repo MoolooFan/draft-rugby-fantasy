@@ -15,6 +15,8 @@ export type ServerProfile = {
   firstName: string | null;
   lastName: string | null;
   timezone: string | null;
+  /** Site admin (Ethan): can use the admin page. */
+  isSiteAdmin: boolean;
 };
 
 /** The signed-in player's profile, or null. Cached for the rest of the request. */
@@ -26,7 +28,7 @@ export const getServerProfile = cache(async (): Promise<ServerProfile | null> =>
 
   const { data: row, error: rowError } = await supabaseAdmin
     .from("users")
-    .select("username, username_norm, first_name, last_name, timezone")
+    .select("username, username_norm, first_name, last_name, timezone, is_site_admin")
     .eq("auth_user_id", claims.sub)
     .maybeSingle();
 
@@ -40,6 +42,7 @@ export const getServerProfile = cache(async (): Promise<ServerProfile | null> =>
     firstName: row.first_name,
     lastName: row.last_name,
     timezone: row.timezone,
+    isSiteAdmin: !!row.is_site_admin,
   };
 });
 

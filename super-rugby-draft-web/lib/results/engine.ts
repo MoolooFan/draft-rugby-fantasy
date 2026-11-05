@@ -233,14 +233,26 @@ async function regularSeasonSeeds(db: Db, league: LeagueRow, matchups: MatchupRo
   return buildLadder(teams.map((t) => t.id), matchups).map((r) => r.teamId);
 }
 
+export type WeekPreview = {
+  week: number;
+  teams: Array<{ teamId: string; before: number | null; after: number; beforeCaptain: string | null; afterCaptain: string | null }>;
+};
+
 /**
  * Finalises one week for a league: scores every team, records results.
  * force = redo a week that was already finalised (admin "finalise again").
+ * dryRun = work out the scores and return what would change, without saving anything.
  */
-export async function finaliseWeek(db: Db, leagueId: string, week: number, nowMs: number, opts: { force?: boolean } = {}) {
+export async function finaliseWeek(
+  db: Db,
+  leagueId: string,
+  week: number,
+  nowMs: number,
+  opts: { force?: boolean; dryRun?: boolean } = {}
+): Promise<{ skipped?: boolean; finalised?: boolean; teams?: number; preview?: WeekPreview }> {
   const league = await q<LeagueRow>(db.from("leagues").select("*").eq("id", leagueId).single());
   const done = await q<Array<{ week: number }>>(db.from("league_week_finalisations").select("week").eq("league_id", leagueId).eq("week", week));
-  if (done.length && !opts.force) return { skipped: true };
+  if (done.length && !opts.force && !opts.dryRun) return { skipped: true };
 
   const season = getSeason(league.season);
   await loadPlayers(db, league.season);
@@ -270,6 +282,28 @@ export async function finaliseWeek(db: Db, leagueId: string, week: number, nowMs
       score: r.score, tries: r.tries, finalised_at: nowIso,
     };
   });
+  if (opts.dryRun) {
+    const before = await q<Array<{ team_id: string; score: number; captain_used_id: string | null }>>(
+      db.from("team_week_results").select("team_id, score, captain_used_id").eq("league_id", leagueId).eq("week", week)
+    );
+    // imported history (e.g. 2026) only has scores on the matchups themselves
+    const ms = await q<MatchupRow[]>(db.from("league_matchups").select("*").eq("league_id", leagueId).contains("weeks", [week]));
+    const matchupScore = (teamId: string) => {
+      const m = ms.find((x) => x.weeks.length === 1 && (x.home_team_id === teamId || x.away_team_id === teamId));
+      if (!m || m.status !== "final") return null;
+      return m.home_team_id === teamId ? m.home_score : m.away_score;
+    };
+    return {
+      preview: {
+        week,
+        teams: results.map((r) => {
+          const b = before.find((x) => x.team_id === r.team_id);
+          return { teamId: r.team_id, before: b?.score ?? matchupScore(r.team_id), after: r.score, beforeCaptain: b?.captain_used_id ?? null, afterCaptain: r.captain_used_id };
+        }),
+      },
+    };
+  }
+
   if (results.length) await q(db.from("team_week_results").upsert(results, { onConflict: "league_id,week,team_id" }));
 
   // 2. Matchups that finish this week.

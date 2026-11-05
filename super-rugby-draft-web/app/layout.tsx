@@ -46,6 +46,7 @@ export default async function RootLayout({
         firstName: profile.firstName ?? undefined,
         lastName: profile.lastName ?? undefined,
         timezone: profile.timezone ?? undefined,
+        isSiteAdmin: profile.isSiteAdmin || undefined,
       }
     : null;
 
