@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
-import { normalizeLeagueId } from "@/lib/ids";
+
 import { cancelPendingTradesTouchingPlayers, cancelInvalidPendingTradesForTeams } from "@/lib/trades/cancelPendingTrades";
 
 function extractIds(data: any): string[] {
@@ -143,8 +143,6 @@ if (String(runRow.status).toUpperCase() === "RUNNING" && runRow.started_at_ms !=
 
     if (lErr) throw lErr;
     const lockedSet = new Set((locks ?? []).map((l: any) => String(l.player_id)));
-
-
 
     // group pending claims per team by (priority asc, created asc)
 const pendingByTeam = new Map<string, any[]>();

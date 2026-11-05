@@ -123,13 +123,6 @@ function toMs(x: any): number {
   return 0;
 }
 
-
-
-function pad2(n: number) {
-  const s = String(n);
-  return s.length === 1 ? `0${s}` : s;
-}
-
 function formatKickoffCompact(kickoffMs: number, timeZone?: string) {
   const d = new Date(kickoffMs);
   return d.toLocaleString(undefined, {
@@ -157,7 +150,6 @@ function fdrText(rating: number) {
     : "#0f172a";
 }
 
-
 function isFixtureComplete(f: AnyFixture) {
   const s = String(f.status ?? "").toLowerCase().trim();
 
@@ -172,7 +164,6 @@ function isFixtureComplete(f: AnyFixture) {
 
   return false;
 }
-
 
 function toScore(x: any): number | null {
   if (x == null) return null;
@@ -246,7 +237,6 @@ function normalizeFixture(raw: any): AnyFixture {
     awayTeam: String(awayRaw ?? raw.awayTeam ?? ""),
   };
 }
-
 
 // -----------------------
 // Team logos (public/images/logos)
@@ -323,7 +313,6 @@ console.log("fixtures sample keys:", Object.keys(json?.fixtures?.[0] ?? {}));
   };
 }, []);
 
-
   const normalized = useMemo(() => {
   return fixtures
     .map((f) => {
@@ -343,7 +332,6 @@ console.log("fixtures sample keys:", Object.keys(json?.fixtures?.[0] ?? {}));
     .sort((a: any, b: any) => a.kickoffMs - b.kickoffMs);
 }, [fixtures]);
 
-
 const allWeeks = useMemo(() => {
   const set = new Set<number>();
   for (const f of normalized) {
@@ -352,8 +340,6 @@ const allWeeks = useMemo(() => {
   }
   return Array.from(set).sort((a, b) => a - b);
 }, [normalized]);
-
-
 
   // Determine which weeks are complete (all fixtures complete)
   const weekMeta = useMemo(() => {
@@ -391,7 +377,6 @@ if (!Number.isFinite(w) || w <= 0) continue;
     .slice()
     .sort((a, b) => b - a); // newest first
 }, [allWeeks, weekMeta]);
-
 
   const [tab, setTab] = useState<TabKey>("Fixtures");
 
@@ -470,7 +455,6 @@ if (!Number.isFinite(w) || w <= 0) continue;
   );
 }
 
-
   function Tabs() {
     const tabs: TabKey[] = ["Fixtures", "Results", "FDR"];
     return (
@@ -519,10 +503,8 @@ const mid =
     ? `${f.homeScore} - ${f.awayScore}`
     : "-  v  -";
 
-
     const kickoffMs = (f as any).kickoffMs as number;
 const sub = mode === "fixtures" ? (kickoffMs ? formatKickoffCompact(kickoffMs, userTz) : "TBC") : "";
-
 
     return (
       <div

@@ -47,7 +47,6 @@ type Player = {
   playerStats?: any;
 };
 
-
 type AnyFixture = {
   id: string;
   week: number;
@@ -60,7 +59,6 @@ type AnyFixture = {
 
 type Step = "REQUESTING" | "OFFERING" | "REVIEW";
 type InfoMode = "DRAFT_RANK" | "AVG_PPG" | "TOTAL_PTS" | "FORM";
-
 
 const JERSEYS: Record<string, { angle?: string; front?: string; single?: string }> = {
   BLU: { angle: "/images/jerseys/BLUJerseyAngle.png", front: "/images/jerseys/BLUJerseyFront.png" },
@@ -122,7 +120,6 @@ function getWeekDeadlineMs(fixtures: AnyFixture[], week: number) {
 function getWeeksSorted(fixtures: AnyFixture[]) {
   return Array.from(new Set(fixtures.map((f) => f.week))).sort((a, b) => a - b);
 }
-
 
 // -----------------------
 // Position + roster validity helpers (matches your waiver validity logic)
@@ -192,11 +189,6 @@ function canFillRequiredSlots(players: Player[]) {
   return dfs(0);
 }
 
-function asNum(x: any): number | null {
-  if (typeof x === "number" && Number.isFinite(x)) return x;
-  if (typeof x === "string" && x.trim() !== "" && Number.isFinite(Number(x))) return Number(x);
-  return null;
-}
 function toNum(v: any): number | null {
   if (typeof v === "number") return Number.isFinite(v) ? v : null;
   if (typeof v === "string") {
@@ -398,7 +390,6 @@ function metricValue(p: Player, mode: InfoMode, roundRows: any[]): string {
   return "—";
 }
 
-
 function fullTeamName(teamCode: string) {
   const code = normalizeTeamCode(teamCode);
 
@@ -412,7 +403,6 @@ function fullTeamName(teamCode: string) {
 
   return code;
 }
-
 
 function shortName(p: { firstName?: string; lastName?: string } | null | undefined) {
   const first = (p?.firstName ?? "").trim();
@@ -474,7 +464,6 @@ const [apiRostersByTeam, setApiRostersByTeam] = useState<Record<string, any>>({}
 const watchlist = useDraftStore((s) => (s as any).watchlist ?? {});
 const toggleWatchlist = useDraftStore((s) => (s as any).toggleWatchlist ?? (() => {}));
 
-
   type ModalContext = "REQUESTING" | "OFFERING";
 
 const [modalPlayer, setModalPlayer] = useState<Player | null>(null);
@@ -484,7 +473,6 @@ function openPlayerCard(p: Player, ctx: ModalContext) {
   setModalContext(ctx);
   setModalPlayer(hydratePlayer(p));
 }
-
 
   // Query params
   const returnTo = sp.get("returnTo") || "";
@@ -519,7 +507,6 @@ const yourLeagueTeamId = useMemo(() => {
   // if we can't identify, don't guess someone else's team
   return null;
 }, [activeLeague, userId]);
-
 
   const yourDraftTeamId = useMemo(() => {
   if (yourLeagueTeamId) return yourLeagueTeamId;
@@ -558,7 +545,6 @@ const livePlayersLoaded = usePlayersStore((s) => s.loaded);
 const refreshLivePlayers = usePlayersStore((s) => s.refresh);
 const roundRows = usePlayersStore((s) => s.roundRows);
 const getLivePlayerById = usePlayersStore((s) => s.getById);
-
 
 useEffect(() => {
   if (!livePlayersLoaded) refreshLivePlayers();
@@ -631,9 +617,6 @@ const avgPointsPerMatch = getAvgPPGFromRounds(p, roundRows ?? []);
   };
 }
 
-
-
-
   // Fixtures + week info (for deadline UI + auto-decline rules)
   const fixtures = useMemo(
     () => (fixturesData as AnyFixture[]).map((f) => ({ ...f, kickoffMs: toMs(f.kickoffAt) })),
@@ -662,7 +645,6 @@ useEffect(() => {
     return weeksSorted[weeksSorted.length - 1] ?? 1;
   }, [weeksSorted, normalizedFixtures, nowMs]);
 
-
   // HARD trade deadline = final team selection deadline before playoffs.
   // We’ll look for a league setting; if it doesn’t exist, we assume playoffs start AFTER the final fixture week (so last week is trade-deadline).
   const playoffStartWeek =
@@ -682,7 +664,6 @@ useEffect(() => {
     if (!hardTradeDeadlineMs) return false;
     return nowMs >= hardTradeDeadlineMs;
   }, [nowMs, hardTradeDeadlineMs]);
-
 
   const yourTeamName = useMemo(() => {
   return (activeLeague as any)?.teams?.find((t: any) => t.id === yourLeagueTeamId)?.name ?? "";
@@ -742,11 +723,8 @@ const [proposeError, setProposeError] = useState<string | null>(null);
   return [addToWatchlistAction, tradeAction];
 }, [modalPlayer, modalContext, watchlist, toggleWatchlist]);
 
-
-
   // Info mode
   const [infoMode, setInfoMode] = useState<InfoMode>("AVG_PPG");
-
 
   // When partner team changes: clear selections + go back to REQUESTING
   useEffect(() => {
@@ -808,7 +786,6 @@ const rosterPlayersForTeam = useMemo(() => {
   return partnerRoster.map((p) => hydratePlayer(p));
 }, [partnerRoster, livePlayersLoaded, getLivePlayerById, roundRows]);
 
-
 const yourRosterLive = useMemo(() => {
   return yourRoster.map((p) => hydratePlayer(p));
 }, [yourRoster, livePlayersLoaded, getLivePlayerById, roundRows]);
@@ -861,7 +838,6 @@ useEffect(() => {
 
 const offPlayers = offeringIds
   .map((id) => yourRosterLive.find((p) => p.id === id) ?? yourRoster.find((p) => p.id === id) ?? allPlayers.find((p) => p.id === id))
-
 
   .filter(Boolean) as Player[];
 
@@ -1039,7 +1015,6 @@ if (step === "REVIEW") {
   );
 }
 
-
   return null;
 
 }
@@ -1132,9 +1107,6 @@ if (step === "REVIEW") {
   </div>
 )}
 
-
-
-
           {/* View selector */}
           <div style={{ ...inputWrap, position: "relative" }}>
             <select
@@ -1215,7 +1187,6 @@ function PlayerRow({
   infoMode: InfoMode;
 }) {
 
-
   return (
     <div
       onClick={onOpen}
@@ -1258,7 +1229,6 @@ function PlayerRow({
   {metricValue(p, infoMode, roundRows ?? [])}
 
 </div>
-
 
       <button
         onClick={(e) => {
@@ -1304,9 +1274,6 @@ function GroupedList({
   hidePositionHeaders?: boolean;
 }) {
 
-
-
-
     const groups = groupByPosition(players);
     return (
       <div style={listBox}>
@@ -1335,9 +1302,6 @@ function GroupedList({
   onOpen={() => openPlayerCard(p, context)}
   infoMode={infoMode}
 />
-
-
-
 
             ))}
           </div>
@@ -1389,8 +1353,6 @@ function Footer() {
   );
 }
 
-
-
   // Render the correct list
   const requestingCount = requestingIds.length;
   const offeringCount = offeringIds.length;
@@ -1404,7 +1366,6 @@ const reviewOfferPlayers = offeringIds
   .map((id) => yourRosterLive.find((p) => p.id === id) ?? yourRoster.find((p) => p.id === id) ?? allPlayers.find((p) => p.id === id))
   .filter(Boolean)
   .map((p) => hydratePlayer(p as Player));
-
 
   return (
     <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
@@ -1436,9 +1397,6 @@ const reviewOfferPlayers = offeringIds
   </div>
 )}
 
-
-
-
         {step === "REQUESTING" && (
 <GroupedList
   title="Requesting:"
@@ -1450,7 +1408,6 @@ const reviewOfferPlayers = offeringIds
 
   infoMode={infoMode}
 />
-
 
         )}
 
@@ -1465,7 +1422,6 @@ const reviewOfferPlayers = offeringIds
 
   infoMode={infoMode}
 />
-
 
         )}
 
@@ -1483,7 +1439,6 @@ const reviewOfferPlayers = offeringIds
   infoMode={infoMode}
 />
 
-
 <GroupedList
   title="Requesting:"
   titleColor="#EF4444"
@@ -1495,8 +1450,6 @@ const reviewOfferPlayers = offeringIds
 
   infoMode={infoMode}
 />
-
-
 
 <div style={{ ...inputWrap, marginTop: 10 }}>
   {/* Valid / Invalid message */}
@@ -1524,7 +1477,6 @@ const reviewOfferPlayers = offeringIds
   </div>
 </div>
 
-
           </>
         )}
 
@@ -1539,8 +1491,6 @@ const reviewOfferPlayers = offeringIds
     actions={modalActions}
   />
 ) : null}
-
-
 
     </main>
   );

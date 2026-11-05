@@ -267,63 +267,11 @@ function effectiveCaptainId(lineup: Lineup | null, captainId: string | null, vic
 const EMPTY_ARR: any[] = [];
 const NOOP = () => {};
 
-function toNum(v: any): number | null {
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  if (typeof v === "string") {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
-}
-
 function normaliseId(x: any) {
   return String(x ?? "")
     .trim()
     .toLowerCase();
 }
-
-function getPlayerRounds(playerId: string, roundRows: any[]) {
-  const want = normaliseId(playerId);
-
-  const idKeys = ["playerId", "player_id", "playerID", "id", "player"];
-
-  return (roundRows ?? []).filter((r: any) => {
-    if (!r) return false;
-
-    for (const k of idKeys) {
-      if (r[k] != null && normaliseId(r[k]) === want) return true;
-    }
-
-    const ks = Object.keys(r);
-    const maybe = ks.find(
-      (kk) => String(kk).toLowerCase().includes("player") && String(kk).toLowerCase().includes("id")
-    );
-    if (maybe && r[maybe] != null && normaliseId(r[maybe]) === want) return true;
-
-    return false;
-  });
-}
-
-function getRowNumber(row: any, header: string): number {
-  if (!row) return 0;
-
-  if (row[header] != null) {
-    const n = toNum(row[header]);
-    return n != null ? n : 0;
-  }
-
-  const keys = Object.keys(row);
-  const found = keys.find((k) => String(k).trim().toLowerCase() === header.trim().toLowerCase());
-  if (found && row[found] != null) {
-    const n = toNum(row[found]);
-    return n != null ? n : 0;
-  }
-
-  return 0;
-}
-
-
-
 
 // Fantasy points for one stat row, using the shared scoring rules (lib/scoring).
 // Pass the player so props/hookers get their scrum points.
@@ -337,33 +285,6 @@ function rowRound(row: any) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-
-// Form = avg points across last 3 PLAYED rounds
-function getFormLast3Avg(playerId: string, roundRows: any[]): number | null {
-  const rounds = getPlayerRounds(playerId, roundRows);
-  if (!rounds.length) return null;
-
-  const played = rounds
-    .map((r: any) => ({
-      r,
-      pts: getRoundPointsFromRow(r),
-      minutes: getRowNumber(r, "Minutes played"),
-      round: rowRound(r),
-    }))
-    .filter((x: any) => typeof x.pts === "number" && x.minutes > 0 && x.round > 0);
-
-  if (!played.length) return null;
-
-  // newest round first
-  played.sort((a: any, b: any) => b.round - a.round);
-
-  // most recent 3 played rounds
-  const last3 = played.slice(0, 3);
-
-  const sum = last3.reduce((acc: number, x: any) => acc + (x.pts as number), 0);
-  return sum / last3.length;
-}
-
 
 // Points mapping for this displayed round
 function rowPlayerId(row: any) {
@@ -914,7 +835,6 @@ const ownerTeamIdByPlayerId = useMemo(() => {
   return m;
 }, [rosterByTeamId]);
 
-
 const modalStatus = useMemo<PlayerStatus | undefined>(() => {
   if (modal?.type !== "playerCard") return undefined;
 
@@ -1049,8 +969,6 @@ function selectionLineupForTeam(teamId: string | null) {
   };
 }
 
-
-
 function calcFantasyPoints(row: any, player?: PositionInfo): number {
   return getRoundPointsFromRow(row, player) ?? 0;
 }
@@ -1164,8 +1082,6 @@ useEffect(() => {
   void useDraftStore.getState().hydrateRostersFromDb(activeLeagueId);
 }, [activeLeagueId]);
 
-
-
 const dashState: DashboardState = useMemo(() => {
   if (!activeLeague) return "noLeague";
   if (activeLeague.draftStatus === "complete") return "postDraft";
@@ -1191,7 +1107,6 @@ const effectiveDashState: DashboardState = activeLeague ? "postDraft" : "noLeagu
   // -----------------------
   const leagueName = activeLeague?.name ?? "League";
 const draftText = activeLeague?.draftDateTimeText ?? "TBC";
-
 
 const weeksSorted = useMemo(() => getWeeksSorted(fixtures), [fixtures]);
 
@@ -1484,7 +1399,6 @@ const standings: StandingRow[] = useMemo(() => {
     .slice(0, 10); // safety cap for dashboard
 }, [activeLeague?.teams, sheetFixtures]);
 
-
 const bestAvailablePlayers: Player[] = useMemo(() => {
   const src = Array.isArray(allPlayers) ? allPlayers : [];
 
@@ -1509,7 +1423,6 @@ const pos2 =
 const posName = pos2 ? `${posNamePrimary} / ${pos2}` : posNamePrimary;
 
       const form = getLatest3FormFromRoundRows(id, roundRows, p);
-
 
       return {
         id,
@@ -1589,16 +1502,6 @@ const posName = pos2 ? `${posNamePrimary} / ${pos2}` : posNamePrimary;
 
   return mapped;
 }, [allPlayers, weekPointsByPlayerId, displayWeek]);
-
-
-  function onMenuSelect(item: ActiveMenu) {
-    setActiveMenu(item);
-    setMenuOpen(false);
-
-    if (item === "Dashboard") router.replace("/dashboard");
-    if (item === "League") router.push("/league");
-    if (item === "Draft Room") router.push("/draft-room");
-  }
 
 function goToTransactionsForAdd(playerId: string) {
   router.push(`/transactions?addPlayerId=${encodeURIComponent(playerId)}`);
@@ -1803,8 +1706,6 @@ function JerseyTile({
     return (
       <>
 
-
-
         {/* Hamburger */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
   <button
@@ -1901,45 +1802,6 @@ function JerseyTile({
 
           </div>
         </div>
-      </div>
-    );
-  }
-
-  function PreDraft() {
-    return (
-      <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
-        <div style={cardStyle}>
-          <div style={{ textAlign: "center", fontWeight: 900, fontSize: 16 }}>
-            {leagueName}
-          </div>
-          <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 800 }}>
-            Pre Draft
-          </div>
-
-          <div
-            style={{
-              marginTop: 10,
-              borderTop: "1px solid rgba(255,255,255,0.28)",
-              paddingTop: 10,
-            }}
-          >
-            <div style={{ textAlign: "center", fontSize: 12, fontWeight: 900 }}>Draft Date</div>
-            <div style={{ textAlign: "center", marginTop: 6, fontSize: 20, fontWeight: 900 }}>
-              {draftText}
-
-            </div>
-
-            <button
-              style={{ ...primaryButton, marginTop: 12 }}
-              onClick={() => router.push("/draft-room")}
-            >
-              Go to Draftroom
-            </button>
-          </div>
-        </div>
-
-        <StandingsCard />
-        <CurrentTeamSelector />
       </div>
     );
   }
@@ -2286,7 +2148,6 @@ onClick={() => {
           </div>
         </div>
 
-
       </div>
     );
   }
@@ -2381,215 +2242,6 @@ onClick={() => {
     );
   }
 
-  function CurrentTeamSelector() {
-    return (
-      <div style={{ marginTop: 2 }}>
-        <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Current Team</div>
-
-        <div
-          style={{
-            background: "rgba(255,255,255,0.92)",
-            borderRadius: 10,
-            padding: "8px 10px",
-            boxShadow: "0 10px 20px rgba(0,0,0,0.12)",
-          }}
-        >
-          <select
-            value={currentTeam}
-            onChange={(e) => setCurrentTeam(e.target.value)}
-            style={{
-              width: "100%",
-              height: 34,
-              borderRadius: 8,
-              border: "none",
-              outline: "none",
-              background: "transparent",
-              fontSize: 14,
-              fontWeight: 700,
-              color: "#0f172a",
-            }}
-          >
-            {teams.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-    );
-  }
-
-
-
-  // -----------------------
-  // Popups (keep Add Player here for now)
-  // -----------------------
-  function ModalOverlay({
-    children,
-    onClose,
-  }: {
-    children: React.ReactNode;
-    onClose: () => void;
-  }) {
-    return (
-      <div style={{ position: "fixed", inset: 0, zIndex: 10000 }}>
-        <div
-          style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)" }}
-          onClick={onClose}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: "50%",
-            top: "50%",
-            transform: "translate(-50%, -50%)",
-            width: "92%",
-            maxWidth: 420,
-          }}
-        >
-          {children}
-        </div>
-      </div>
-    );
-  }
-
-  function AddPlayerPopup({ player }: { player: Player }) {
-    const replaceOptions = Array.from({ length: 6 }).map((_, i) => ({
-      id: `r-${i}`,
-      firstName: "Damian",
-      lastName: "McKenzie",
-      teamCode: "CHI",
-      posName: "Flyhalf",
-      value: 200,
-    }));
-
-    return (
-      <div
-        style={{
-          borderRadius: 14,
-          background: "rgba(255,255,255,0.20)",
-          border: "1px solid rgba(255,255,255,0.16)",
-          backdropFilter: "blur(12px)",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
-          overflow: "hidden",
-          color: "white",
-        }}
-      >
-        <div style={{ padding: 12, fontWeight: 900, fontSize: 12 }}>You have requested to sign:</div>
-
-        <div
-          style={{
-            margin: "0 12px 12px 12px",
-            borderRadius: 10,
-            background: "rgba(255,255,255,0.92)",
-            color: "#0f172a",
-            padding: 10,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 10,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <JerseyTile size={34} />
-            <div>
-              <div style={{ fontWeight: 900, fontSize: 12 }}>
-                {player.firstName[0]}. {player.lastName}
-              </div>
-              <div style={{ fontSize: 11, opacity: 0.7 }}>
-                {fullTeamNameFromCode(player.teamCode)} — {singularPosLabel(player.posName)}
-              </div>
-            </div>
-          </div>
-          <div style={{ fontWeight: 900, fontSize: 12 }}>200</div>
-        </div>
-
-        <div style={{ padding: "0 12px 10px 12px", fontWeight: 900, fontSize: 12 }}>
-          Which player would you like to replace?
-        </div>
-
-        <div
-          style={{
-            margin: "0 12px 12px 12px",
-            borderRadius: 10,
-            background: "rgba(255,255,255,0.92)",
-            color: "#0f172a",
-            overflow: "hidden",
-            border: "1px solid rgba(0,0,0,0.08)",
-          }}
-        >
-          {replaceOptions.map((r, idx) => (
-            <div
-              key={r.id}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr auto",
-                gap: 10,
-                alignItems: "center",
-                padding: "10px",
-                borderBottom:
-                  idx === replaceOptions.length - 1 ? "none" : "1px solid rgba(0,0,0,0.08)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <JerseyTile size={30} />
-                <div>
-                  <div style={{ fontWeight: 900, fontSize: 12 }}>
-                    {r.firstName[0]}. {r.lastName}
-                  </div>
-                  <div style={{ fontSize: 11, opacity: 0.7 }}>
-                    {r.teamCode} — {r.posName}
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={() => alert("Replace selection later")}
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 8,
-                  border: "none",
-                  background: "#EF4444",
-                  color: "white",
-                  fontWeight: 900,
-                  fontSize: 20,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                }}
-                aria-label="Select to replace"
-              >
-                –
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ padding: "0 12px 12px 12px", display: "flex", justifyContent: "flex-end" }}>
-          <button
-            onClick={() => setModal(null)}
-            style={{
-              height: 34,
-              borderRadius: 999,
-              padding: "0 14px",
-              background: "rgba(0,0,0,0.18)",
-              border: "2px solid rgba(255,255,255,0.9)",
-              color: "white",
-              fontWeight: 800,
-              fontSize: 12,
-              cursor: "pointer",
-            }}
-          >
-            Cancel Transfer
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // -----------------------
   // Render
   // -----------------------
@@ -2629,8 +2281,6 @@ onClick={() => {
   setActiveLeague={setActiveLeague}
   activeItem="Dashboard"
 />
-
-
 
       {/* MODALS */}
 

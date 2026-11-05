@@ -108,7 +108,6 @@ autoDraft: (
   onDraftComplete?: (leagueId: string) => void
 ) => Promise<void>;
 
-
   // Info helpers
   isDrafted: (playerId: string) => boolean;
   getPlayerPickNumber: (playerId: string) => number | null;
@@ -126,8 +125,6 @@ autoDraft: (
   syncFromLeague: (leagueTeams: Team[], isDraftOrderSet?: boolean) => void;
 };
 
-
-
 function makeEmptyRoster(): TeamRosterState {
   const slotCaps = getSlotCaps();
   const slots: Record<string, Player[]> = {};
@@ -135,22 +132,7 @@ function makeEmptyRoster(): TeamRosterState {
   return { slots, wildcards: [] };
 }
 
-function sameIdSet(a: Team[], b: Team[]) {
-  if (a.length !== b.length) return false;
-  const sa = new Set(a.map((t) => t.id));
-  for (const t of b) if (!sa.has(t.id)) return false;
-  return true;
-}
-
-function sameIdOrder(a: Team[], b: Team[]) {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i]?.id !== b[i]?.id) return false;
-  return true;
-}
-
-
 type Pos = string;
-
 
 function eligiblePositions(p: any): Pos[] {
   return playerPositions(p) as Pos[];
@@ -255,14 +237,9 @@ function rebalanceRoster(
   return { slots, wildcards };
 }
 
-function isTeamRosterState(x: any): x is TeamRosterState {
-  return x && typeof x === "object" && ("slots" in x) && ("wildcards" in x);
-}
-
 function normId(x: any) {
   return String(x ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
-
 
 export const useDraftStore = create<DraftState>()(
   persist(
@@ -514,7 +491,6 @@ setHasHydrated: (v) => set({ hasHydrated: v }),
     currentPlayers.push(...(r.wildcards ?? []));
   }
 
-
   // already drafted by this team? (optional safeguard)
   if (currentPlayers.some((p) => p?.id === player?.id)) return false;
 
@@ -555,8 +531,6 @@ addPlayerToRoster: (teamId, player, leagueId) => {
 
 void leagueId; // rosters are saved by the server
 },
-
-
 
 canApplyRosterMove: ({ teamId, addPlayer, dropPlayerId }) => {
   const slotCaps = getSlotCaps();
@@ -735,7 +709,6 @@ syncFromLeague: (leagueTeams, isOrderSet = true) => {
   // keep arrays sized correctly as team count changes
   get().ensurePicksLength();
 },
-
 
     }),
     {

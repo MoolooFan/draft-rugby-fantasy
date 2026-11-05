@@ -1,5 +1,4 @@
 // lib/draft/constants.ts
-import type { Player } from "./types";
 
 // You already have TEAM_OPTIONS / POSITION_OPTIONS in lib/constants
 export { TEAM_OPTIONS, POSITION_OPTIONS } from "../constants";

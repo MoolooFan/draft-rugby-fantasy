@@ -3,11 +3,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { getActiveUser, getActiveUsername } from "@/lib/session";
+import { getActiveUsername } from "@/lib/session";
 
 import { useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
-
 
 import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/season";
 
@@ -63,7 +62,6 @@ function pickValue(row: any, candidates: string[]) {
   return null;
 }
 
-
 function normaliseId(x: any) {
   return String(x ?? "")
     .toLowerCase()
@@ -83,9 +81,6 @@ function rowRound(row: any) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-
-
-
 
 // Stats are raw counts; the shared scoring rules (lib/scoring) turn them into fantasy points.
 function calcFantasyPoints(
@@ -233,7 +228,6 @@ type AnyFixture = Fixture & {
   awayScore?: number | null;
 };
 
-
 function toMs(x: any): number {
   const n = typeof x === "number" ? x : new Date(x).getTime();
   return Number.isFinite(n) ? n : 0;
@@ -249,15 +243,6 @@ function isFixtureComplete(f: AnyFixture) {
   if (f.homeScore != null && f.awayScore != null) return true;
 
   return false;
-}
-
-
-
-
-
-function abbrevTeam(name: string) {
-  const s = (name ?? "").trim();
-  return s ? s.slice(0, 3).toUpperCase() : "TBD";
 }
 
 // Storage keys (must match Team Selection page)
@@ -341,8 +326,6 @@ function useNowTick(ms = 1000) {
 export default function MatchupPage() {
   useRequireSession();
   const router = useRouter();
-
-
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [cardOpen, setCardOpen] = useState(false);
@@ -542,8 +525,6 @@ function isFantasyWeekCompleteFromSheet(weekNo: number) {
   return rows.every((r) => String(r.status ?? "").toLowerCase() === "complete");
 }
 
-
-
 function latestCompletedWeekFromSheet() {
   const weeks = Array.from(
     new Set(
@@ -607,8 +588,6 @@ const getLivePlayerById = useDraftStore((s) => (s as any).getLivePlayerById ?? n
       ?? "TBC";
   };
 
-
-
   // --- Determine "current week" and deadline from fixtures JSON ---
   const fixtures = useMemo(() => fixturesData as AnyFixture[], []);
   const normalizedFixtures = useMemo(() => {
@@ -616,7 +595,6 @@ const getLivePlayerById = useDraftStore((s) => (s as any).getLivePlayerById ?? n
       .map((f) => ({ ...f, kickoffMs: toMs(f.kickoffAt) }))
       .sort((a, b) => (a as any).kickoffMs - (b as any).kickoffMs);
   }, [fixtures]);
-
 
   const nowMs = useNowTick(10_000);
 
@@ -665,7 +643,6 @@ const displayLocked = useMemo(() => {
   if (displayWeek <= 0) return false;
   return displayWeek < selectionWeek ? true : deadlineLocked;
 }, [displayWeek, selectionWeek, deadlineLocked]);
-
 
   // --- Live sheet data (must be inside component) ---
 const livePlayersLoaded = usePlayersStore((s) => s.loaded);
@@ -731,7 +708,6 @@ const weekPointsByPlayerId = useMemo(() => {
   return m;
 }, [roundRows, displayRealRound, playersByInternalId]);
 
-
 const weekMinutesByPlayerId = useMemo(() => {
   const m = new Map<string, number>();
 
@@ -764,20 +740,6 @@ function pointsForPlayer(p: Player | null) {
 
   if (norm && weekPointsByPlayerId.has(norm)) {
     return weekPointsByPlayerId.get(norm) ?? 0;
-  }
-
-  return 0;
-}
-
-function minutesForPlayer(p: Player | null) {
-  const { exact, norm } = getPlayerInternalIds(p);
-
-  if (exact && weekMinutesByPlayerId.has(exact)) {
-    return weekMinutesByPlayerId.get(exact) ?? 0;
-  }
-
-  if (norm && weekMinutesByPlayerId.has(norm)) {
-    return weekMinutesByPlayerId.get(norm) ?? 0;
   }
 
   return 0;
@@ -851,8 +813,6 @@ if (yourLeagueTeamId && (leftTeamId === yourLeagueTeamId || rightTeamId === your
   }
 }
 
-
-
 const STARTER_SLOTS: SlotId[] = [
   "prop1","hooker1","prop2",
   "lock1","lock2",
@@ -864,15 +824,8 @@ const STARTER_SLOTS: SlotId[] = [
 
 const BENCH_SLOTS: SlotId[] = ["bench1","bench2","bench3","bench4","bench5"];
 
-
-
-
-
-
-
 const leftName = nameByTeamId(leftTeamId);
 const rightName = nameByTeamId(rightTeamId);
-
 
   // --- Read locked snapshots for both teams (or blank) ---
 const leagueId = activeLeague?.id ?? null;
@@ -1221,7 +1174,6 @@ const srWeekComplete = useMemo(() => {
   return wk.length ? wk.every(isFixtureComplete) : false;
 }, [normalizedFixtures, displayRealRound]);
 
-
 // Captain multiplier (for display + totals)
 const CAP_MULT = CAPTAIN_MULTIPLIER;
 
@@ -1239,9 +1191,6 @@ function pointsWithCaptain(p: Player | null, effCaptainId: string | null) {
   const base = pointsForPlayer(p);
   return p.id === effCaptainId ? base * CAP_MULT : base;
 }
-
-
-
 
 const selectedLive = useMemo(() => {
   if (!selectedPlayer?.id) return null;
@@ -1283,10 +1232,6 @@ useEffect(() => {
     console.log("selectedStatus", selectedStatus);
   }
 }, [cardOpen, selectedPlayer?.id, selectedStatus]);
-
-
-
-
 
 async function addSelectedToWatchlist() {
   if (!activeLeague?.id) {
@@ -1411,11 +1356,9 @@ const rightScore = totalForSlots(effectiveRightLineup, rightEffC, STARTER_SLOTS)
 const leftBenchScore = totalForSlots(effectiveLeftLineup, leftEffC, BENCH_SLOTS);
 const rightBenchScore = totalForSlots(effectiveRightLineup, rightEffC, BENCH_SLOTS);
 
-
 // -----------------------
 // RECORD + STREAK (TEMP MOCK)
 // -----------------------
-
 
 function streakColor(s: Streak) {
   if (!s) return "rgba(15,23,42,0.55)";
@@ -1501,7 +1444,6 @@ return (
   setPointsOpen(true);
 }
 
-
   // --- Styling (match your app vibe) ---
   const card35: React.CSSProperties = {
     borderRadius: 18,
@@ -1541,10 +1483,7 @@ return (
     );
   }
 
-
-
   
-
 
   
   // Row order (matches your design)
@@ -1576,7 +1515,6 @@ return (
   { slot: "bench5", label: "5" },
 ];
 
-
   const canGo = matchupsThisWeek.length > 1;
 
   return (
@@ -1603,7 +1541,6 @@ return (
     minHeight: 92,          // ✅ ensures space for arrows
   }}
 >
-
 
           {/* Top row (just hamburger) */}
 <div style={{ display: "flex", alignItems: "center" }}>
@@ -1737,7 +1674,6 @@ return (
   </span>
 </div>
 
-
             </div>
 
             <div style={{ fontSize: 18, fontWeight: 900, opacity: 0.85 }}></div>
@@ -1751,7 +1687,6 @@ return (
     {streakText(rightStreak)}
   </span>
 </div>
-
 
             </div>
           </div>
@@ -1792,9 +1727,6 @@ return (
           {ROWS.map((r) => {
             const lp = effectiveLeftLineup ? effectiveLeftLineup[r.slot] : null;
 const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
-
-
-
 
             return (
               <div
@@ -1838,8 +1770,6 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 )}
 </button>
 
-
-
                   <div style={{ minWidth: 0 }}>
                     <div
   onClick={() => lp && openPlayerCard(lp, leftTeamId === yourLeagueTeamId, "left")
@@ -1855,7 +1785,6 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 >
   {lp ? lp.lastName : "—"}
 </div>
-
 
                     <div style={{ fontSize: 10, fontWeight: 800, opacity: 0.55 }}>
                       {lp ? fixtureTagForPlayer(lp) : "—"}
@@ -1967,9 +1896,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
   );
 })()}
 
-
 </div>
-
 
                   <div style={{ minWidth: 0, textAlign: "right" }}>
                     <div
@@ -1986,7 +1913,6 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 >
   {rp ? rp.lastName : "—"}
 </div>
-
 
                     <div style={{ fontSize: 10, fontWeight: 800, opacity: 0.55 }}>
                       {rp ? fixtureTagForPlayer(rp) : "—"}
@@ -2028,8 +1954,6 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
   <div style={{ width: 28, height: 28 }} />
 )}
 </button>
-
-
 
                 </div>
               </div>
@@ -2114,7 +2038,6 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 )}
 </button>
 
-
         <div style={{ minWidth: 0 }}>
           <div
   onClick={() => lp && openPlayerCard(lp, leftTeamId === yourLeagueTeamId, "left")
@@ -2161,7 +2084,6 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 >
   {lp?.id ? (hasScoreForPlayer(lp) ? pointsWithCaptain(lp, leftEffC) : "-") : "—"}
 </div>
-
 
           
         </div>
@@ -2314,7 +2236,6 @@ onClick: selectedIsWatched ? removeSelectedFromWatchlist : addSelectedToWatchlis
   />
 ) : null}
 
-
 {pointsOpen ? (
   <PointsBreakdownModal
     open={pointsOpen}
@@ -2338,8 +2259,6 @@ onClick: selectedIsWatched ? removeSelectedFromWatchlist : addSelectedToWatchlis
     }
   />
 ) : null}
-
-
 
     </main>
   );

@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 
-
 import { AppMenu } from "@/components/AppMenu";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 
@@ -47,7 +46,6 @@ type SlotId =
   | "bench3"
   | "bench4"
   | "bench5";
-
 
 type PosGroup =
   | "PROP"
@@ -116,38 +114,6 @@ const JERSEYS: Record<
   WAR: { single: "/images/jerseys/WARJersey.png" },
 };
 
-function extractPlayerIdsFromRosterData(data: any): string[] {
-  if (!data || typeof data !== "object") return [];
-
-  // ✅ preferred modern shape
-  const pidArr = data.playerIds;
-  if (Array.isArray(pidArr)) {
-    return pidArr.map((x: any) => String(x)).filter(Boolean);
-  }
-
-  // ✅ legacy/other shape: { slots: { CE: [{id}], PR: [{id}], ... } }
-  const slots = data.slots;
-  if (slots && typeof slots === "object") {
-    const out: string[] = [];
-    for (const v of Object.values(slots)) {
-      if (Array.isArray(v)) {
-        for (const item of v) {
-          const id = item?.id;
-          if (id) out.push(String(id));
-        }
-      } else if (v && typeof v === "object") {
-        // if a slot ever stored a single object instead of array
-        const id = (v as any).id;
-        if (id) out.push(String(id));
-      }
-    }
-    // unique
-    return Array.from(new Set(out)).filter(Boolean);
-  }
-
-  return [];
-}
-
 function normalizeTeamCode(teamCodeOrName: string) {
   const raw = (teamCodeOrName ?? "").trim();
   if (!raw) return "TBD";
@@ -164,7 +130,6 @@ function normalizeTeamCode(teamCodeOrName: string) {
   // Otherwise derive a 3-letter abbrev from the name (moana -> MOA)
   return abbrevTeam(raw).toUpperCase();
 }
-
 
 function jerseySrcForTeam(teamCodeOrName: string) {
   const code = normalizeTeamCode(teamCodeOrName);
@@ -207,7 +172,6 @@ const SLOT_DEFS: SlotDef[] = [
 
 ];
 
-
 const STARTER_IDS: SlotId[] = SLOT_DEFS.filter((s) => s.starter).map((s) => s.id);
 const BENCH_IDS: SlotId[] = SLOT_DEFS.filter((s) => !s.starter).map((s) => s.id);
 
@@ -227,21 +191,6 @@ function isFixtureComplete(f: AnyFixture) {
 //  return firstKickoffMs - 1 * 60 * 60 * 1000;
 // }
 
-function pad2(n: number) {
-  const s = String(n);
-  return s.length === 1 ? `0${s}` : s;
-}
-
-function formatCountdown(totalSeconds: number) {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  return `${pad2(h)}:${pad2(m)}`;
-}
-
-function matchupSnapshotKey(leagueId: string | null, week: number, teamId: string | null) {
-  return `mu_snapshot_${leagueId ?? "no-league"}_wk${week}_${teamId ?? "no-team"}`;
-}
-
 function getWeekFirstKickoffMs(fixtures: AnyFixture[], week: number) {
   const wk = fixtures.filter((f) => f.week === week);
   if (!wk.length) return 0;
@@ -252,20 +201,6 @@ function getWeekDeadlineMs(fixtures: AnyFixture[], realWeek: number) {
   const first = getWeekFirstKickoffMs(fixtures, realWeek);
   return first ? selectionDeadlineFromFirstKickoff(first) : 0;
 }
-
-function getWeeksSorted(fixtures: AnyFixture[]) {
-  return Array.from(new Set(fixtures.map((f) => f.week))).sort((a, b) => a - b);
-}
-
-
-type LockedSnapshot = {
-  week: number;
-  teamId: string;
-  lockedAtMs: number;
-  lineup: Lineup;
-  captainId: string | null;
-  viceId: string | null;
-};
 
 function formatDeadline(dtMs: number, timeZone?: string) {
   const d = new Date(dtMs);
@@ -376,7 +311,6 @@ function canPlayerFitSlot(player: Player, slot: SlotDef) {
   return false;
 }
 
-
 function abbrevTeam(name: string) {
   const s = (name ?? "").trim();
   if (!s) return "TBD";
@@ -410,63 +344,6 @@ function normaliseId(x: any) {
 
 function fixtureTeamCode(nameOrCode: string) {
   return normalizeTeamCode(nameOrCode ?? "");
-}
-
-function lineupDraftStorageKey(leagueId: string, teamId: string) {
-  return `ts_lineup_${leagueId}_${teamId}`;
-}
-
-function syncLineupToRoster(prev: Lineup, rosterPool: Player[]) {
-  const ownedById = new Map(rosterPool.map((p) => [p.id, p]));
-  const used = new Set<string>();
-
-  // start with empty lineup
-  const empty = Object.fromEntries(SLOT_DEFS.map((s) => [s.id, null])) as Lineup;
-  const next: Lineup = { ...empty };
-
-  // 1) Keep existing players where possible (still owned + still fits slot)
-  for (const s of SLOT_DEFS) {
-    const p = prev[s.id];
-    if (!p?.id) continue;
-
-    const owned = ownedById.get(p.id);
-    if (!owned) continue; // dropped
-
-    if (!canPlayerFitSlot(owned, s)) continue; // doesn’t fit anymore (rare, but safe)
-
-    next[s.id] = owned;
-    used.add(owned.id);
-  }
-
-  // remaining players not yet placed
-  const remaining: Player[] = rosterPool.filter((p) => !used.has(p.id));
-
-  const takeForSlot = (slot: SlotDef) => {
-    const idx = remaining.findIndex((p) => canPlayerFitSlot(p, slot));
-    if (idx >= 0) return remaining.splice(idx, 1)[0];
-    return null;
-  };
-
-  // 2) Fill STARTERS with best-fitting remaining players
-  for (const s of SLOT_DEFS) {
-    if (!s.starter) continue;
-    if (next[s.id]) continue;
-    next[s.id] = takeForSlot(s);
-  }
-
-  // 3) Fill BENCH (wildcards = any position)
-  for (const s of SLOT_DEFS) {
-    if (s.starter) continue;
-    if (next[s.id]) continue;
-    next[s.id] = remaining.shift() ?? null;
-  }
-
-  // Did anything actually change?
-  const changed =
-    JSON.stringify(Object.values(prev).map((p) => p?.id ?? null)) !==
-    JSON.stringify(Object.values(next).map((p) => p?.id ?? null));
-
-  return { next, changed };
 }
 
 type SheetFixtureRow = {
@@ -534,7 +411,6 @@ const [txnHydrated, setTxnHydrated] = useState(() =>
 );
 const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
 
-
 useEffect(() => {
   // @ts-ignore
   const p = useLeagueStore.persist;
@@ -575,7 +451,6 @@ useEffect(() => {
 
   const ready = mounted && leagueHydrated && draftHydrated && txnHydrated;
 
-
   // Determine your team in the active league
   const leagueTeams = useMemo(() => {
   return Array.isArray(activeLeague?.teams) ? activeLeague!.teams : [];
@@ -597,8 +472,6 @@ useEffect(() => {
     })
     .catch((e) => console.error(e));
 }, [activeLeague?.id]);
-
-type RosterData = { slots?: Record<string, Array<{ id: string }>>; wildcards?: Array<{ id: string }> };
 
 const [serverRosters, setServerRosters] = useState<Map<string, { playerIds: string[] }>>(new Map());
 
@@ -728,7 +601,6 @@ useEffect(() => {
   if (!livePlayersLoaded) refreshLivePlayers();
 }, [livePlayersLoaded, refreshLivePlayers]);
 
-
 // ✅ subscribe to actual data so the page re-renders when sheet data arrives
 const sheetPlayerByDraftId = useMemo(() => {
   const m = new Map<string, any>();
@@ -749,12 +621,6 @@ const sheetPlayerByPlayerId = useMemo(() => {
   }
   return m;
 }, [sheetPlayers]);
-
-
-
-
-
-
 
 // Best-effort: find the round/week index (so we can sort)
 function rowPlayerId(row: any) {
@@ -984,7 +850,6 @@ const deadlineText = useMemo(() => {
       filled[id] = remaining.shift() ?? null;
     }
 
-
     return filled;
   }, [rosterPool]);
 
@@ -1187,9 +1052,6 @@ useEffect(() => {
   setIsDirty(true);
 }, [lineup, captainId, viceId]);
 
-
-
-
 function hydratePlayer(p: Player): Player & { status?: any; weeklyStatus?: any } {
   const live = getLivePlayerById(p.id);
   if (!live) return p as any;
@@ -1207,7 +1069,6 @@ function hydratePlayer(p: Player): Player & { status?: any; weeklyStatus?: any }
   const [swapFromSlot, setSwapFromSlot] = useState<SlotId | null>(null);
 
   const openPlayer = (p: Player) => setModalPlayer(hydratePlayer(p) as any);
-
 
   const slotOfPlayer = useMemo(() => {
     const map = new Map<string, SlotId>();
@@ -1303,7 +1164,6 @@ function adjustBadgeAfterLineupChange(prev: Lineup, next: Lineup, badgeId: strin
   return null;
 }
 
-
   function onTilePress(slotId: SlotId) {
     const p = lineup[slotId];
 
@@ -1341,14 +1201,12 @@ if (swapFromSlot) {
   setViceId((vid) => adjustBadgeAfterLineupChange(prev, next, vid));
 setIsDirty(true);
 
-
   return next;
 });
 
   setSwapFromSlot(null);
   return;
 }
-
 
     // Normal tap: open player card
     if (p) openPlayer(p);
@@ -1378,36 +1236,6 @@ function getUpcomingFixtureTag(teamCodeOrName: string) {
   return `${oppCode} (${isHome ? "H" : "A"})`;
 }
 
-
-  function getLatestScoreTag(teamCodeOrName: string) {
-  const teamCode = normalizeTeamCode(teamCodeOrName);
-
-  const completed = normalizedFixtures
-    .filter((f) => isFixtureComplete(f))
-    .sort((a, b) => (b as any).kickoffMs - (a as any).kickoffMs);
-
-  const f = completed.find((x) => {
-    const homeCode = fixtureTeamCode(x.homeTeam ?? "");
-    const awayCode = fixtureTeamCode(x.awayTeam ?? "");
-    return homeCode === teamCode || awayCode === teamCode;
-  });
-
-  if (!f) return "—";
-
-  const homeCode = fixtureTeamCode(f.homeTeam ?? "");
-  const awayCode = fixtureTeamCode(f.awayTeam ?? "");
-
-  const isHome = homeCode === teamCode;
-  const oppCode = isHome ? awayCode : homeCode;
-
-  const hs = f.homeScore ?? 0;
-  const as = f.awayScore ?? 0;
-  const score = `${hs}-${as}`;
-
-  return `${oppCode} ${score}`;
-}
-
-
 function tileSubtext(p: Player | null) {
   
   if (!p) return "";
@@ -1433,10 +1261,7 @@ function tileSubtext(p: Player | null) {
   return Number(v).toFixed(1);
 }
 
-
-
   
-
 
   // -----------------------
   // Styles (match your app)
@@ -1491,7 +1316,6 @@ const pulseStyle: React.CSSProperties = {
           color: "white",
           border: "1px solid rgba(255,255,255,0.9)",
 
-
           fontSize: 10,
           fontWeight: 900,
           display: "grid",
@@ -1510,7 +1334,6 @@ const pulseStyle: React.CSSProperties = {
 
   const isCaptain = !!p?.id && captainId === p.id && slot.starter;
 const isVice = !!p?.id && viceId === p.id && slot.starter;
-
 
   const swapping = !!swapFromSlot;
   const isSwapSource = swapFromSlot === slotId;
@@ -1549,7 +1372,6 @@ const boxShadow = isSwapSource
   : "0 10px 22px rgba(0,0,0,0.16)";
 
 const jerseyUrl = p ? jerseySrcForTeam(p.teamCode) : "";
-
 
   return (
     <button
@@ -1719,12 +1541,10 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
   )}
 </div>
 
-
       )}
     </button>
   );
 }
-
 
   function FieldStarters() {
     return (
@@ -1814,7 +1634,6 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     );
   })}
 </div>
-
 
       </div>
     );
@@ -2015,8 +1834,6 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     {saveToast ? saveToast : "Save"}
 </button>
 </div>
-
-
 
         {/* Starters on field */}
         <FieldStarters />

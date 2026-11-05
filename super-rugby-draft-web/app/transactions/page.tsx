@@ -173,12 +173,6 @@ function toMs(x: any): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function isFixtureComplete(f: AnyFixture) {
-  if ((f.status ?? "").toLowerCase() === "complete") return true;
-  if (f.homeScore != null && f.awayScore != null) return true;
-  return false;
-}
-
 function getSelectionDeadlineMs(firstKickoffMs: number) {
   return firstKickoffMs - 1 * 60 * 60 * 1000; // 1h before first kickoff
 }
@@ -223,73 +217,6 @@ function useNowTick(ms = 30_000) {
   return now;
 }
 
-
-// -----------------------
-// Standings replication (matches League page placeholder logic)
-// This is ONLY for waiver order until standings are real.
-// -----------------------
-function hashInt(input: string) {
-  let h = 2166136261;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-function seeded01(seed: number) {
-  const x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
-}
-
-function buildStandingsRows(teams: { id: string; name: string }[], playedWeeks: number) {
-  const rows = teams.map((t) => {
-    const base = hashInt(t.id);
-
-    let wins = 0;
-    let draws = 0;
-    let losses = 0;
-    let pf = 0;
-    let pa = 0;
-
-    for (let w = 1; w <= playedWeeks; w++) {
-      const r = seeded01(base + w * 101);
-
-      if (r < 0.45) wins++;
-      else if (r < 0.55) draws++;
-      else losses++;
-
-      const pfw = 20 + Math.floor(seeded01(base + w * 911) * 41);
-      const paw = 20 + Math.floor(seeded01(base + w * 733) * 41);
-      pf += pfw;
-      pa += paw;
-    }
-
-    const pd = pf - pa;
-    const pts = wins * 4 + draws * 2;
-
-    return {
-      teamId: t.id,
-      teamName: t.name,
-      played: playedWeeks,
-      wins,
-      draws,
-      losses,
-      pf,
-      pa,
-      pd,
-      pts,
-    };
-  });
-
-  rows.sort((a, b) => b.pts - a.pts || b.pd - a.pd || b.pf - a.pf);
-
-  return rows.map((r, idx) => ({
-    rank: idx + 1,
-    ...r,
-  }));
-}
-
 function getInitials(name: string | null | undefined) {
   const s = String(name ?? "").trim();
   if (!s) return "??";
@@ -302,12 +229,6 @@ function getInitials(name: string | null | undefined) {
   const first = parts[0]?.[0] ?? "?";
   const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : (parts[0]?.[1] ?? "");
   return (first + last).toUpperCase();
-}
-
-function initialsForTeamId(teamId: string, activeLeague: any) {
-  const t = activeLeague?.teams?.find((x: any) => x.id === teamId);
-  const base = t?.userInitials || t?.userId || t?.name || teamId;
-  return getInitials(String(base));
 }
 
 function normUser(x: any) {
@@ -646,7 +567,6 @@ function TransactionsPageInner() {
     return qs ? `${pathname}?${qs}` : pathname;
   }, [pathname, searchParams]);
 
-
   // Menu + league
   const [menuOpen, setMenuOpen] = useState(false);
 const leagues = useLeagueStore((s) => s.leagues);
@@ -660,7 +580,6 @@ const activeLeague = useMemo(() => {
   if (activeLeagueId) return leagues.find((l: any) => l.id === activeLeagueId) ?? leagues[0];
   return leagues[0];
 }, [leagues, activeLeagueId]);
-
 
   const userId = useMemo(() => normUser(getActiveUsername()), []);
   const userTz = useMemo(() => getActiveTimezone(), []);
@@ -786,7 +705,6 @@ const refreshLivePlayers = usePlayersStore((s) => s.refresh);
 const roundRows = usePlayersStore((s) => s.roundRows);
 const getLivePlayerById = usePlayersStore((s) => s.getById); // keep for modal status only
 
-
 useEffect(() => {
   if (!livePlayersLoaded) refreshLivePlayers();
 }, [livePlayersLoaded, refreshLivePlayers]);
@@ -865,8 +783,6 @@ const yourDraftTeamId = useMemo(() => {
 
   return null;
 }, [activeLeague, userId, draftTeams]);
-
-
 
   const yourTeamName = useMemo(() => {
     if (!yourDraftTeamId) return "Your Team";
@@ -953,11 +869,9 @@ const deadlineText = useMemo(() => {
   return ms ? formatDeadline(ms, userTz) : "TBC";
 }, [nowMs, windowMode, waiverDeadlineMs, selectionDeadlineMs, userTz]);
 
-
   // -----------------------
   // Drop-lock cleanup (GUARDED to prevent render loops)
   // -----------------------
-
 
 const hasExpiredDropLocks = useMemo(() => {
   if (!activeLeague?.id) return false;
@@ -1097,7 +1011,6 @@ function openAcceptConfirm(trade: any) {
   setConfirmOpen(true);
 }
 
-
 useEffect(() => {
   const leagueId = String(activeLeague?.id ?? "");
 if (!leagueId) return;
@@ -1210,11 +1123,9 @@ function confirmAcceptTrade() {
     return;
   }
 
-
 apiAcceptTrade(confirmTrade.id);
 closeConfirm();
 }
-
 
 function ConfirmAcceptTradeModal() {
   if (!confirmOpen || !confirmTrade) return null;
@@ -1338,8 +1249,6 @@ function ConfirmAcceptTradeModal() {
   );
 }
 
-
-
   // Prevent double-tap duplicate submissions (per-player short cooldown)
   const [addCooldownByPlayerId, setAddCooldownByPlayerId] = useState<Record<string, number>>({});
 
@@ -1415,7 +1324,6 @@ useEffect(() => {
   | "RED_CARDS";
 
 const [infoMode, setInfoMode] = useState<InfoMode>("TOTAL_PTS");
-
 
     // =========================
   // Drop-select modal (Claim / Add)
@@ -1578,7 +1486,6 @@ candidates.sort((a, b) => {
   return an.localeCompare(bn);
 });
 
-
     return candidates;
   }, [proposedAddPlayer, yourRosterPlayers]);
 
@@ -1622,7 +1529,6 @@ setSelectedDropPlayerId(null);
 setDropModalOpen(true);
 
   }
-
 
     function closeDropModal() {
     setDropModalOpen(false);
@@ -1985,7 +1891,6 @@ async function submitProposedTransaction() {
   </div>
 </div>
 
-
 <div
   className="drop-scroll"
   style={{
@@ -1995,7 +1900,6 @@ async function submitProposedTransaction() {
     msOverflowStyle: "none", // IE/Edge legacy
   }}
 >
-
 
             {droppableCandidates.length === 0 ? (
               <div style={{ padding: 12, fontSize: 12, fontWeight: 800, opacity: 0.75 }}>
@@ -2121,7 +2025,6 @@ function playerGetsScrumPoints(p: Player): boolean {
   return isFrontRow(p);
 }
 
-
 // Fantasy points for one stat row, using the shared scoring rules (lib/scoring).
 // Returns null when the player didn't get on the field.
 function getRoundPointsFromRow(row: any, p: Player): number | null {
@@ -2130,7 +2033,6 @@ function getRoundPointsFromRow(row: any, p: Player): number | null {
   if (!playedInRound(counts)) return null; // not played
   return playerPoints(counts, isFrontRow(p));
 }
-
 
 // Find rows belonging to this player.
 // We check a wider set of possible ID column names.
@@ -2216,7 +2118,6 @@ function getRowNumber(row: any, header: string): number {
   return 0;
 }
 
-
 function getMetresGainedTotal(p: Player): number | null {
   const rounds = getPlayerRounds(p.id);
   if (!rounds.length) return null;
@@ -2233,7 +2134,6 @@ function getMetresGainedTotal(p: Player): number | null {
 
   return any ? totalMetres : null;
 }
-
 
 // Player "Form" = average total score over last 3 PLAYED rounds (most recent by round number)
 function getFormLast3Avg(p: Player): number | null {
@@ -2289,7 +2189,6 @@ function getStatTotalCount(p: Player, header: string): number | null {
   return any ? total : null;
 }
 
-
   function metricLabel(mode: InfoMode) {
   switch (mode) {
     case "DRAFT_RANK": return "Draft Rk";
@@ -2325,7 +2224,6 @@ function getStatTotalCount(p: Player, header: string): number | null {
     default: return "—";
   }
 }
-
 
   function metricValue(p: Player, mode: InfoMode): string {
   // Basic score-derived stats
@@ -2517,8 +2415,6 @@ case "RED_CARDS": return stat("Red cards");
       return null;
   }
 }
-
-
 
   // =========================
 // DEV MOCKS (hoisted so badge + tab both see them)
@@ -2728,9 +2624,6 @@ return list
     });
 }, [claims, txClaims, txLoaded, activeLeague?.id, claimsWeek, yourDraftTeamId]);
 
-
-
-
   // -----------------------
   // UI styles (match your vibe + Draft Room list styling)
   // -----------------------
@@ -2841,7 +2734,6 @@ return list
   );
 }
 
-
   function DeadlineBanner() {
     return (
       <div
@@ -2882,8 +2774,6 @@ return list
       </div>
     );
   }
-
-
 
   function StarButton({ active, onClick }: { active: boolean; onClick: () => void }) {
   return (
@@ -3004,7 +2894,6 @@ function hydratePlayer(p: Player): Player & { status?: any; weeklyStatus?: any }
   };
 }
 
-
 function PlayerRow({ p }: { p: Player }) {
   // Ownership
   const ownerTeamId = ownerByPlayerId.get(p.id) ?? null;
@@ -3018,7 +2907,6 @@ function PlayerRow({ p }: { p: Player }) {
   const enabled = !isOwned && !locked && !coolingDown;
 
   const isStar = !!(watchlist as any)[p.id];
-
 
 let btnLabel = "+";
 let btnBg = windowMode === "WAIVERS" ? "#FACC15" : "#22C55E";
@@ -3127,7 +3015,6 @@ function shortName(p: { firstName?: string; lastName?: string } | null | undefin
   return last ? `${initial}. ${last}` : `${initial}.`;
 }
 
-
   function WaiverClaimsTab() {
     const [draggingId, setDraggingId] = useState<string | null>(null);
 const [overId, setOverId] = useState<string | null>(null);
@@ -3188,7 +3075,6 @@ const onDragStart = (e: React.DragEvent, claimId: string) => {
   setDraggingId(claimId);
 };
 
-
 const onDragEnd = () => {
   setDraggingId(null);
   setOverId(null);
@@ -3230,9 +3116,6 @@ const onDropOn = async (e: React.DragEvent, targetClaimId: string) => {
   setDraggingId(null);
   setOverId(null);
 };
-
-
-
 
     return (
       <>
@@ -3290,7 +3173,6 @@ const dropP = allPlayers.find((x) => x.id === c.dropPlayerId) ?? null;
   }}
 >
 
-
 <div
   style={{
     display: "flex",
@@ -3329,10 +3211,6 @@ const dropP = allPlayers.find((x) => x.id === c.dropPlayerId) ?? null;
   </div>
 </div>
 
-
-
-
-
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
   {addP ? <JerseyTile teamCode={addP.teamCode} size={22} /> : null}
@@ -3341,7 +3219,6 @@ const dropP = allPlayers.find((x) => x.id === c.dropPlayerId) ?? null;
     {addP ? shortName(addP) : c.addPlayerId}
   </div>
 </div>
-
 
                     <div style={{ marginTop: 2, fontSize: 10, fontWeight: 800, opacity: 0.65 }}>OUT: {dropP ? shortName(dropP) : c.dropPlayerId ?? "—"}
 </div>
@@ -3420,10 +3297,6 @@ const userInitials = (teamId: string) => {
     // --------------------
 // Confirm modal (Trades)
 // --------------------
-
-
-
-
 
 function LeagueTradeRow({ t }: { t: any }) {
   const from = teamName(t.fromTeamId);
@@ -3556,7 +3429,6 @@ function LeagueTradeRow({ t }: { t: any }) {
    const pendingTradesAll = (tradesForUi as any[])
   .filter((t) => t.leagueId === leagueId)
   .filter((t) => String(t.status ?? "").toLowerCase() === "pending");
-
 
     const offersReceived = pendingTradesAll
       .filter((t) => t.toTeamId === yourId)
@@ -3761,7 +3633,6 @@ const waiverClaimsFeed = useMemo(() => {
   );
 }
 
-
     function InitialBadge({ text }: { text: string }) {
       return (
         <div
@@ -3942,7 +3813,6 @@ const waiverClaimsFeed = useMemo(() => {
   )}
 </div>
 
-
         {/* League Trades since last team selection deadline */}
         <div style={{ ...listBox, marginTop: 10 }}>
           <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 900 }}>League Trades</div>
@@ -4051,7 +3921,6 @@ const waiverClaimsFeed = useMemo(() => {
     );
   }
 
-
   // Player modal actions: keep blank placeholder buttons at bottom (for now)
   // Player modal actions
 const modalActions = useMemo(() => {
@@ -4138,7 +4007,6 @@ const url =
   `&prefillRequestPlayerId=${encodeURIComponent(playerId)}` +
   `&returnTo=${encodeURIComponent(returnTo)}`;
 
-
     // Navigate on next tick so the modal unmount doesn't fight routing
     window.setTimeout(() => router.push(url), 0);
   },
@@ -4159,8 +4027,6 @@ const url =
   activeLeague?.id,
   selectionWeek,
 ]);
-
-
 
   return (
     <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
@@ -4300,7 +4166,6 @@ const url =
     );
   })()
 ) : null}
-
 
             <DropSelectModal />
 <ConfirmAcceptTradeModal />

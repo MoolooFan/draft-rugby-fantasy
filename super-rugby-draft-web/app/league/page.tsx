@@ -4,13 +4,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { useLeagueStore } from "@/lib/league/store";
 import type { League, PlayoffFormat } from "@/lib/league/types";
-import { buildLeagueSchedule } from "@/lib/league/schedule";
+
 import { AppMenu } from "@/components/AppMenu";
 import { usePlayersStore } from "@/lib/players/store";
 import { ScoringEditor } from "@/components/ScoringEditor";
 import { completeRules, STANDARD_SCORING, type ScoringRules } from "@/lib/scoring";
-import { CAPTAIN_MULTIPLIER, pointsFromRow, roundPoints } from "@/lib/scoring";
-import { fantasyWeekToRealRound } from "@/lib/league/week";
+import { CAPTAIN_MULTIPLIER, pointsFromRow } from "@/lib/scoring";
+
 import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/season";
 
 // This season's fixtures, numbered by fantasy week (see lib/season).
@@ -43,7 +43,6 @@ type Modal =
   kind?: "regular" | "playoffs" | "consolation" | string | null;
 };
 
-
 type FixtureWeek = {
   weekNo: number;
   rows: FixtureRow[];
@@ -65,76 +64,7 @@ function toMs(x: any): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function isFixtureComplete(f: AnyFixture) {
-  const st = String(f.status ?? "").toLowerCase();
-  if (st === "final" || st === "complete") return true;
-  if (f.homeScore != null && f.awayScore != null) return true;
-  return false;
-}
-
-function resultsKey(leagueId: string | null) {
-  return `league_results_${leagueId ?? "no-league"}`;
-}
-
-type StoredMatchResult = {
-  weekNo: number;             // fantasy week
-  kind: "match" | "bye";
-  homeTeamId: string | null;
-  awayTeamId: string | null;
-  homeScore: number;          // fantasy score
-  awayScore: number;          // fantasy score
-  finalizedAtMs: number;
-};
-
-type RemoteMatchResult = {
-  league_id: string;
-  week_no: number;
-  kind: "match" | "bye";
-  home_team_id: string;
-  away_team_id: string; // '__BYE__' for byes
-  home_score: number;
-  away_score: number;
-  finalized_at_ms: number;
-};
-
 const BYE_SENTINEL = "__BYE__";
-
-function rrKey(r: Pick<RemoteMatchResult, "week_no" | "kind" | "home_team_id" | "away_team_id">) {
-  return `${r.week_no}|${r.kind}|${r.home_team_id}|${r.away_team_id}`;
-}
-
-function readLeagueResults(leagueId: string | null): StoredMatchResult[] {
-  if (typeof window === "undefined") return [];
-  const raw = window.localStorage.getItem(resultsKey(leagueId));
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as StoredMatchResult[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeLeagueResults(leagueId: string | null, rows: StoredMatchResult[]) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(resultsKey(leagueId), JSON.stringify(rows));
-}
-
-function upsertResult(leagueId: string | null, next: StoredMatchResult) {
-  if (typeof window === "undefined") return;
-  const existing = readLeagueResults(leagueId);
-  const idx = existing.findIndex(
-    (r) =>
-      r.weekNo === next.weekNo &&
-      r.kind === next.kind &&
-      r.homeTeamId === next.homeTeamId &&
-      r.awayTeamId === next.awayTeamId
-  );
-
-  if (idx >= 0) return; // ✅ already finalized — don’t change it
-
-  writeLeagueResults(leagueId, [...existing, next]);
-}
 
 // ---------- Live scoring helpers (same logic as Matchup page) ----------
 type SlotId =
@@ -155,17 +85,6 @@ type PlayerLite = {
   secondaryPosAbbrev?: string | null;
   posName?: string;
   secondaryPosName?: string | null;
-};
-
-type Lineup = Record<SlotId, PlayerLite | null>;
-
-type LockedSnapshot = {
-  week: number;
-  teamId: string;
-  lockedAtMs: number;
-  lineup: Lineup;
-  captainId: string | null;
-  viceId: string | null;
 };
 
 const STARTER_SLOTS: SlotId[] = [
@@ -212,37 +131,6 @@ function rowRound(row: any) {
 function calcFantasyPoints(row: any, player?: any): number {
   return pointsFromRow(row, player ?? null);
 }
-
-
-function matchupSnapshotKey(leagueId: string | null, week: number, teamId: string | null) {
-  return `mu_snapshot_${leagueId ?? "no-league"}_wk${week}_${teamId ?? "no-team"}`;
-}
-
-function finalizedLineupKey(leagueId: string | null, week: number, teamId: string | null) {
-  return `mu_final_${leagueId ?? "no-league"}_wk${week}_${teamId ?? "no-team"}`;
-}
-
-function effectiveCaptainId(
-  lineup: Lineup | null,
-  captainId: string | null,
-  viceId: string | null,
-  pointsForPlayer: (p: PlayerLite | null) => number
-) {
-  if (!lineup) return null;
-
-  const cap = Object.values(lineup).find((x) => x?.id === captainId) ?? null;
-  const vice = Object.values(lineup).find((x) => x?.id === viceId) ?? null;
-
-  const capPts = cap ? pointsForPlayer(cap) : 0;
-  if (cap && capPts > 0) return cap.id;
-
-  const vicePts = vice ? pointsForPlayer(vice) : 0;
-  if (vice && vicePts > 0) return vice.id;
-
-  return captainId;
-}
-
-
 
 function toDatetimeLocal(ts: number) {
   const d = new Date(ts);
@@ -406,8 +294,6 @@ setDraftOrderIds((prev) => {
 });
 }
 
-
-
   return (
     <ModalOverlay onClose={() => onClose()}>
       <div
@@ -523,9 +409,6 @@ setDraftOrderIds((prev) => {
   style={inputStyle(readOnly)}
 />
 </Field>
-
-
-
 
         <div style={{ marginTop: 10, fontSize: 12, fontWeight: 900, opacity: 0.9 }}>
           Draft Order
@@ -683,7 +566,6 @@ useEffect(() => {
   setMounted(true);
 }, []);
 
-
     // ---- Live sheet feed (MUST be inside component) ----
   const livePlayersLoaded = usePlayersStore((s) => s.loaded);
   const refreshLivePlayers = usePlayersStore((s) => s.refresh);
@@ -709,14 +591,6 @@ useEffect(() => {
     return m;
   }, [sheetPlayers]);
 
-  function getPlayerSheetId(p: PlayerLite | null) {
-    if (!p) return null;
-    const sheetPlayer = sheetPlayerById.get(normaliseId(p.id));
-    const sheetPid =
-      pickValue(sheetPlayer, ["playerId", "player_id", "player id", "Player ID", "id"]) ?? null;
-    return sheetPid != null ? normaliseId(sheetPid) : normaliseId(p.id);
-  }
-
   // Build: REAL round -> (playerId -> points)
 const pointsByRealRound = useMemo(() => {
   const byRound = new Map<number, Map<string, number>>();
@@ -736,23 +610,11 @@ const pointsByRealRound = useMemo(() => {
   return byRound;
 }, [roundRows, sheetPlayerById]);
 
-function pointsForPlayerWeek(weekNo: number, p: PlayerLite | null) {
-  const pid = getPlayerSheetId(p);
-  if (!pid) return 0;
-
-  const startRound = league?.startRound ?? 1;
-  const realRound = fantasyWeekToRealRound(startRound, weekNo);
-
-  return pointsByRealRound.get(realRound)?.get(pid) ?? 0;
-}
-
   const leagues = useLeagueStore((s) => s.leagues);
 const activeLeagueId = useLeagueStore((s: any) => s.activeLeagueId ?? null);
 
-
 const refreshLeague = useLeagueStore((s) => s.refreshLeague);
 const startLeagueRealtime = useLeagueStore((s) => s.startLeagueRealtime);
-
 
 useEffect(() => {
   if (!mounted) return;
@@ -814,7 +676,6 @@ useEffect(() => {
     .catch((e) => console.error(e));
 }, [league?.id]);
 
-
 function isSheetLabelRow(r: SheetFixtureRow) {
   return !!(r.label && String(r.label).trim());
 }
@@ -858,10 +719,6 @@ function shouldInjectPlaceholder(r: FixtureRow) {
   }
 
   return true;
-}
-
-function isLabelOnlyRow(r: FixtureRow) {
-  return !!r.label; // your label rows are rendered as r.home = label text
 }
 
 // Week is "complete" only when ALL non-label regular rows are complete
@@ -928,11 +785,6 @@ const normalizedFixtures = useMemo(() => {
     .sort((a, b) => (a as any).kickoffMs - (b as any).kickoffMs);
 }, [realFixtures]);
 
-function isRealRoundComplete(realRound: number) {
-  const wk = normalizedFixtures.filter((f) => f.week === realRound);
-  return wk.length ? wk.every(isFixtureComplete) : false;
-}
-
   const setActiveLeague = useLeagueStore((s) => s.setActiveLeague);
   const getIsCreator = useLeagueStore((s) => s.isActiveLeagueCreator);
 const isCreator = getIsCreator();
@@ -955,8 +807,6 @@ useEffect(() => {
   const [tab, setTab] = useState<LeagueTab>("Standings");
   const [menuOpen, setMenuOpen] = useState(false);
   const [modal, setModal] = useState<Modal>(null);
-
-
 
   const leagueName = league?.name ?? "League";
   const leagueCode = league?.code ?? "—";
@@ -1003,7 +853,6 @@ const regularWeeks = Math.max(
 
 // ✅ Total season weeks = regular + playoffs
 const totalWeeks = regularWeeks + playoffWeeks;
-
 
 function buildStandingsFromResults(uptoWeekInclusive: number): Omit<StandingRow, "rank" | "movement">[] {
   const teams = league?.teams ?? [];
@@ -1126,43 +975,6 @@ const standings = useMemo<StandingRow[]>(() => {
   });
 }, [sheetFixtures, league?.teams]);
 
-function readSnapshot(leagueId: string | null, teamId: string | null, weekNo: number): LockedSnapshot | null {
-  if (typeof window === "undefined") return null;
-  if (!teamId) return null;
-  const raw = window.localStorage.getItem(matchupSnapshotKey(leagueId, weekNo, teamId));
-  if (!raw) return null;
-  try { return JSON.parse(raw) as LockedSnapshot; } catch { return null; }
-}
-
-function readFinalLineup(leagueId: string | null, teamId: string | null, weekNo: number): Lineup | null {
-  if (typeof window === "undefined") return null;
-  if (!teamId) return null;
-  const raw = window.localStorage.getItem(finalizedLineupKey(leagueId, weekNo, teamId));
-  if (!raw) return null;
-  try { return JSON.parse(raw) as Lineup; } catch { return null; }
-}
-
-function teamWeekScore(leagueId: string | null, teamId: string | null, weekNo: number): number | null {
-  const snap = readSnapshot(leagueId, teamId, weekNo);
-  if (!snap) return null;
-
-  const lineup = readFinalLineup(leagueId, teamId, weekNo) ?? snap.lineup;
-  const pointsFor = (p: PlayerLite | null) => pointsForPlayerWeek(weekNo, p);
-
-  const effC = effectiveCaptainId(lineup, snap.captainId, snap.viceId, pointsFor);
-
-  let sum = 0;
-  for (const slot of STARTER_SLOTS) {
-    const p = lineup[slot];
-    if (!p?.id) continue;
-    const base = pointsFor(p);
-    sum += (p.id === effC ? base * CAP_MULT : base);
-  }
-  return roundPoints(sum);
-}
-
-
-
   // ------- fixtures/results (generated placeholder) -------
 
     const teamNameById = (id: string | null | undefined, opts?: { tbcIfMissing?: boolean }) => {
@@ -1215,9 +1027,6 @@ const kind = r.kind ? String(r.kind).toLowerCase() : null;
   const weeks = Array.from(byWeek.keys()).sort((a, b) => a - b);
   return weeks.map((w) => ({ weekNo: w, rows: byWeek.get(w)! }));
 }, [league?.teams, sheetFixtures]);
-
-
-
 
   // ------- styles (match your vibe) -------
   const card35: React.CSSProperties = {
@@ -1602,19 +1411,12 @@ if (isBye) {
   );
 })}
 
-
           </div>
         );
       })}
       </div>
     );
   }
-
-function hasPlayedResult(w: FixtureWeek) {
-  return isFantasyWeekComplete(w.weekNo);
-}
-
-
 
   function ResultsTab() {
     const past = fixtures
@@ -1642,8 +1444,6 @@ function hasPlayedResult(w: FixtureWeek) {
 >
   {roundLabel(w.weekNo)}
 </div>
-
-
 
   {/* existing match rows below */}
 {w.rows.map((r, i) => {
@@ -1812,14 +1612,11 @@ if (isLabelRow) {
   );
 })}
 
-
           </div>
         ))}
       </div>
     );
   }
-
-
 
 function JoinLeagueModal() {
   const [code, setCode] = useState("");
@@ -1873,7 +1670,6 @@ function JoinLeagueModal() {
             placeholder="Team Name"
           />
 
-
           {error && (
             <div style={{ marginTop: 4, color: "#FCA5A5", fontSize: 12, fontWeight: 800 }}>
               {error}
@@ -1899,8 +1695,6 @@ function JoinLeagueModal() {
     </ModalOverlay>
   );
 }
-
-
 
   function CreateLeagueModal() {
   const [name, setName] = useState("");
@@ -1965,7 +1759,6 @@ function JoinLeagueModal() {
             placeholder="Your Team Name"
           />
 
-
           <select
             value={playoffs}
             onChange={(e) => setPlayoffs(e.target.value as PlayoffFormat)}
@@ -2006,7 +1799,6 @@ function JoinLeagueModal() {
   style={inputStyle()}
 />
 
-
           <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, lineHeight: "14px" }}>
             League Commissioner can change/set draft order in league settings prior to the draft
           </div>
@@ -2043,45 +1835,6 @@ function JoinLeagueModal() {
   );
 }
 
-
-
-
-  function ModalCard({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-    return (
-      <div
-        style={{
-          borderRadius: 14,
-          background: "rgba(255,255,255,0.20)",
-          border: "1px solid rgba(255,255,255,0.16)",
-          backdropFilter: "blur(12px)",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
-          overflow: "hidden",
-          color: "white",
-        }}
-      >
-        <div style={{ padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontWeight: 900, fontSize: 12 }}>{title}</div>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "white",
-              fontSize: 20,
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            ×
-          </button>
-        </div>
-        <div style={{ padding: 12, display: "grid", gap: 10 }}>{children}</div>
-      </div>
-    );
-  }
-
-
   function pillButton(bg: string): React.CSSProperties {
     return {
       height: 40,
@@ -2110,25 +1863,6 @@ function JoinLeagueModal() {
       cursor: "pointer",
     };
   }
-
-  function menuItem(active: boolean): React.CSSProperties {
-    return {
-      textAlign: "left",
-      padding: "10px 12px",
-      borderRadius: 10,
-      background: active ? "rgba(255,255,255,0.25)" : "transparent",
-      border: "none",
-      color: "white",
-      fontSize: 14,
-      fontWeight: active ? 800 : 600,
-      cursor: "pointer",
-    };
-  }
-
-
-
-
-
 
   // Still booting → show loading
 if (!mounted || !leagueHydrated) {
@@ -2232,8 +1966,6 @@ if (!league) {
   setActiveLeague={setActiveLeague}
   activeItem="League"
 />
-
-
 
       {modal?.type === "join" && <JoinLeagueModal />}
       {modal?.type === "create" && <CreateLeagueModal />}

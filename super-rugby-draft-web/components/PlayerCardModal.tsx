@@ -4,19 +4,13 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { getPlayerPool } from "@/lib/players/pool";
 import { PointsBreakdownModal } from "@/components/PointsBreakdownModal";
 
-import { useTransactionsStore } from "@/lib/transactions/store";
-import { useDraftStore } from "@/lib/draft/store";
-import { useLeagueStore } from "@/lib/league/store";
 import { usePlayersStore, usePlayers } from "@/lib/players/store";
 import { isFrontRow, pointsFromRow, statPoints, STATS, type StatKey, roundPoints } from "@/lib/scoring";
 import { currentSeasonYear, roundLabel } from "@/lib/season";
 
-
-
 export type PlayerStatus = "starting" | "benched" | "out" | null;
 
 export type PlayerCardTab = "Results" | "Stats" | "Fixtures";
-
 
 export type PlayerCardPlayer = {
   id: string;
@@ -35,11 +29,8 @@ export type PlayerCardPlayer = {
   status?: "starting" | "benched" | string | null;
   weeklyStatus?: Record<string, string>; // can be {W1:..} or {statusW1:..}
 
-
   stats?: Record<string, number>;
 };
-
-
 
 export type PlayerCardAction = {
   label: string;
@@ -59,10 +50,6 @@ type PlayerRound = {
   minutes?: number;
 };
 
-type PlayerRoundStatsResponse =
-  | { rounds: PlayerRound[] }
-  | PlayerRound[];
-
 type FixtureRow = {
   week: number;
   opponent?: string;         // undefined = bye
@@ -79,10 +66,6 @@ type FixtureRow = {
 
 };
 
-
-type FixturesResponse =
-  | { fixtures: FixtureRow[] }
-  | FixtureRow[];
 /**
  * =========================
  * CHIP TUNING KNOBS
@@ -238,7 +221,6 @@ function teamLogoSrc(codeOrName: string | null | undefined) {
   return TEAM_LOGOS[code] ?? TEAM_LOGO_PLACEHOLDER;
 }
 
-
 /**
  * =========================
  * TEAM THEMES
@@ -333,7 +315,6 @@ MOA: "MOA",     // explicit
   if (lettersOnly.includes("MOANA")) return "MOA";
 if (lettersOnly.includes("PASIFIKA")) return "MOA";
 
-
   if (lettersOnly.includes("HIGHLANDERS")) return "HIG";
   if (lettersOnly.includes("HURRICANES")) return "HUR";
   if (lettersOnly.includes("WARATAHS")) return "WAR";
@@ -350,7 +331,6 @@ if (lettersOnly.includes("PASIFIKA")) return "MOA";
   return JERSEYS[guess] ? guess : null;
 }
 
-
 function jerseySrcForTeam(code: string | null, prefer: "angle" | "front" = "angle") {
   if (!code) return JERSEY_PLACEHOLDER;
   const j = JERSEYS[code];
@@ -366,25 +346,6 @@ type ChipTheme = {
   borderWidth: number;
   minWidth: number;
 };
-
-function chipStyle(theme: ChipTheme): React.CSSProperties {
-  return {
-    minWidth: theme.minWidth,
-
-    height: 28,
-    padding: "0 10px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 10,
-    background: theme.bg,
-    border: `${theme.borderWidth}px solid ${theme.text}`,
-    color: theme.text,
-    fontWeight: 900,
-    fontSize: 12,
-    lineHeight: "12px",
-  };
-}
 
 function toNum(x: any): number {
   const n = Number(x);
@@ -476,8 +437,6 @@ function buildRoundsFromSheetRows(
     .sort((a, b) => (b.week ?? 0) - (a.week ?? 0));
 }
 
-
-
 function isFixtureCompleteAny(raw: any) {
   const s = String(raw?.status ?? raw?.Status ?? "").toLowerCase().trim();
   if (s === "final" || s === "complete" || s === "completed") return true;
@@ -495,7 +454,6 @@ function isFixtureCompleteAny(raw: any) {
 
 function buildFixturesForTeam(all: any[], teamCode: string): FixtureRow[] {
   const myCode = normalizeTeamCodeLocal(teamCode) ?? teamCode;
-
 
   const mine = all.filter((f) => {
     const h = normalizeTeamCodeLocal(f.homeTeam ?? f.homeTeamCode ?? f.home);
@@ -558,10 +516,6 @@ return mine
     .sort((a, b) => (a.week ?? 0) - (b.week ?? 0));
 }
 
-
-
-
-
 type PlayerCardModalProps = {
   open?: boolean;
   player: PlayerCardPlayer | null;
@@ -591,7 +545,6 @@ function PlayerCardModalInner({
   status = null,
   stats = {},
 
-
   teamLabel = "Stouty's Studs",
   initialTab = "Stats",
   actions = [
@@ -602,8 +555,6 @@ function PlayerCardModalInner({
   onClose,
 }: PlayerCardModalProps & { player: PlayerCardPlayer }) {
 
-
-
 const [loading, setLoading] = useState(false);
 const [error, setError] = useState<string | null>(null);
 
@@ -612,7 +563,6 @@ const [fixtures, setFixtures] = useState<FixtureRow[]>([]);
 const [allRoundRows, setAllRoundRows] = useState<Record<string, any>[]>([]);
 const [seasonWeeks, setSeasonWeeks] = useState<number[]>([]);
 const [lastCompletedWeek, setLastCompletedWeek] = useState<number>(0);
-
 
 // for the Results score breakdown popup
 const [openBreakdown, setOpenBreakdown] = useState(false);
@@ -656,14 +606,8 @@ const effectiveStatus: PlayerStatus = useMemo(() => {
   return "out";
 }, [status, statusFromSheet]);
 
-
-
-
-
-
 const computed = useMemo(() => {
   const ws = weeklyFromSheet ?? p.weeklyStatus ?? {};
-
 
   // Support BOTH:
   //  - new API format: { W1: "starting", W2: "benched", ... }
@@ -686,8 +630,6 @@ const computed = useMemo(() => {
   return { gamesPlayed, starts };
 }, [weeklyFromSheet, p.weeklyStatus]);
 
-
-
 useEffect(() => {
   setTab(initialTab);
 }, [initialTab, open, p.id]);
@@ -707,7 +649,6 @@ useEffect(() => {
   fetch(`/api/fixtures/season`),
 ]);
 
-
       if (!roundRes.ok) throw new Error("Failed to load player stats");
       if (!fixRes.ok) throw new Error("Failed to load fixtures");
 
@@ -726,7 +667,6 @@ const completedWeeksGlobal = allFixtures
   .filter((w) => w > 0);
 
 const lastW = completedWeeksGlobal.length ? Math.max(...completedWeeksGlobal) : 0;
-
 
 // ✅ season weeks = every week number that exists in the fixtures sheet
 const weeks = Array.from(
@@ -748,8 +688,6 @@ if (!cancelled) {
   setSeasonWeeks(weeks);
   setLastCompletedWeek(lastW); // ✅ add this
 }
-
-
 
     } catch (e: any) {
       if (!cancelled) setError(e?.message ?? "Failed to load data");
@@ -775,8 +713,6 @@ const outReason = useMemo(() => {
   return raw;
 }, [statusFromSheet]);
 
-
-
 // Status strip (optional)
 const statusStyle =
   effectiveStatus === "starting"
@@ -793,9 +729,6 @@ const statusStyle =
       }
     : null;
 
-
-
-
   const posTheme = POSITION_THEME[p.posAbbrev] ?? {
   primary: "rgba(0,0,0,0.25)",
   secondary: "rgba(255,255,255,0.95)",
@@ -805,7 +738,6 @@ const teamTheme = TEAM_THEME[p.teamCode] ?? {
   primary: "#f97316",
   secondary: "rgba(255,255,255,0.95)",
 };
-
 
   const posChip: ChipTheme = {
     bg: posTheme.primary,
@@ -839,7 +771,6 @@ const TEAM_NAME_BY_CODE: Record<string, string> = {
   RED: "Reds",
   WAR: "Waratahs",
 };
-
 
 const teamLabelFull =
   (p.teamName?.trim() ? p.teamName.trim() : TEAM_NAME_BY_CODE[p.teamCode]) ?? p.teamCode;
@@ -898,8 +829,6 @@ const teamLabelFull =
   </div>
 )}
 
-
-
           {/* Header */}
           <div
   style={{
@@ -946,7 +875,6 @@ const teamLabelFull =
 <div style={{ marginTop: 0, fontSize: 12, fontWeight: 500, opacity: 0.95, color: "#000000" }}>
   {positionLabel}
 </div>
-
 
                 <div
   style={{
@@ -995,7 +923,6 @@ const teamLabelFull =
   }}
 />
 </div>
-
 
             </div>
           </div>
@@ -1053,7 +980,6 @@ const teamLabelFull =
     overflow: "hidden",
   }}
 >
-
 
             <div
               style={{
@@ -1121,7 +1047,6 @@ const teamLabelFull =
     setOpenBreakdown(true);
   }}
 />
-
 
 ) : tab === "Stats" ? (
   <StatsTab
@@ -1218,7 +1143,6 @@ const teamLabelFull =
     right: String(x.pts),
   }));
 
-
   return (
     <PointsBreakdownModal
   open={openBreakdown}
@@ -1261,12 +1185,10 @@ rows={
     : []
 }
 
-
 />
 
   );
 })()}
-
 
     </div>
   );
@@ -1367,11 +1289,6 @@ function computePositionRank(args: {
   return { rank: idx + 1, outOf: samePosTotals.length };
 }
 
-// Alias so your existing UI code works (missedRows uses perGame(...))
-function perGame(rounds: any[], key: string) {
-  return perGameDerived(rounds, key);
-}
-
 function TabCard({ children }: { children: ReactNode }) {
 
   return (
@@ -1388,10 +1305,6 @@ function TabCard({ children }: { children: ReactNode }) {
       {children}
     </div>
   );
-}
-
-function totalPointsForKey(rounds: any[], key: string) {
-  return rounds.reduce((sum, r) => sum + (Number(r?.breakdown?.[key]) || 0), 0);
 }
 
 function totalDerived(rounds: any[], key: string) {
@@ -1670,19 +1583,6 @@ function StatRow({
   );
 }
 
-
-
-
-
-function StatLine({ label, left, right }: { label: string; left: string; right: string }) {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 50px 60px", gap: 8 }}>
-      <div style={{ opacity: 0.7 }}>{label}</div>
-      <div style={{ textAlign: "right" }}>{left}</div>
-      <div style={{ textAlign: "right", opacity: 0.6 }}>{right}</div>
-    </div>
-  );
-}
 function ResultsTab({
   rounds,
   fixtures,
@@ -1721,7 +1621,6 @@ function ResultsTab({
 
   // Build one row per season week
 const rows = useMemo(() => {
-
 
   // ✅ Only show weeks up to last completed week
   const weeks = (seasonWeeks ?? [])
@@ -1779,9 +1678,6 @@ const rows = useMemo(() => {
     };
   });
 }, [fixtures, seasonWeeks, fixtureByWeek, roundByWeek]);
-
-
-
 
   if (!rows.length) return <TabCard>No results yet.</TabCard>;
 
@@ -1846,7 +1742,6 @@ const rows = useMemo(() => {
   ) : null}
 </div>
 
-
             {/* opponent / bye */}
             <div style={{ opacity: 0.75 }}>
   <div>{row.opponentLabel}</div>
@@ -1856,7 +1751,6 @@ const rows = useMemo(() => {
     </div>
   ) : null}
 </div>
-
 
             {/* points (hidden on BYE rows) */}
 {row.isBye ? null : (
@@ -1896,14 +1790,6 @@ function fdrTheme(val: number | null) {
   if (val === 3) return { bg: "#E7E7E7", text: "#000000" };   // amber
   if (val === 4) return { bg: "#FF1751", text: "white" };   // green
   return { bg: "#80072D", text: "white" };                   // red
-}
-
-
-
-function fdrText(rating: number) {
-  return rating === 1 || rating === 4 || rating === 5
-    ? "white"
-    : "#0f172a";
 }
 
 function formatKickoffLocal(input: any): string {
@@ -1956,7 +1842,6 @@ function FixturesTab({
     WAR: "Waratahs",
   };
 
-
   // Weeks AFTER the last completed week (upcoming period)
   const weeksToShow = useMemo(() => {
   return (seasonWeeks ?? [])
@@ -1964,7 +1849,6 @@ function FixturesTab({
     .filter((w) => w > lastCompletedWeek)
     .sort((a, b) => a - b);
 }, [seasonWeeks, lastCompletedWeek]);
-
 
   // Map non-complete fixtures by week (upcoming fixtures)
   const upcomingByWeek = useMemo(() => {
@@ -1983,7 +1867,6 @@ function FixturesTab({
       {weeksToShow.map((w) => {
         const fx = upcomingByWeek.get(w);
         const isBye = !fx || fx.isBye || !fx.opponent;
-
 
         // ✅ BYE rows: ONLY week + BYE
         if (isBye) {

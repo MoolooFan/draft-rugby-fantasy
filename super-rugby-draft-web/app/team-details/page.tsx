@@ -188,16 +188,6 @@ export default function TeamDetailsPage() {
     window.location.assign("/");
   }
 
-  function onMenuSelect(item: ActiveMenu) {
-    setActiveMenu(item);
-    setMenuOpen(false);
-
-    if (item === "Dashboard") router.replace("/dashboard");
-    if (item === "League") router.push("/league");
-    if (item === "Draft Room") router.push("/draft-room");
-    if (item === "Team Details") router.push("/team-details");
-  }
-
   return (
     <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
       <div

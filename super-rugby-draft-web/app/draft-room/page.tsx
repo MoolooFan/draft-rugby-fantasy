@@ -20,12 +20,8 @@ import { usePlayersStore } from "@/lib/players/store";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { canPlayPosition } from "@/lib/players/positions";
 
-
 type DraftTab = "Player Pool" | "Watchlist" | "Teams" | "Draft Results";
 type DraftPhase = "preDraft" | "liveDraft";
-
-
-
 
 type Pick = {
   pickNumber: number;
@@ -33,22 +29,6 @@ type Pick = {
   ownerInitials?: string; // prefilled if order set
   ownerTeamId?: string;
 };
-
-type TeamRosterSlot = {
-  slotId: string;
-  label: string;
-  count: number;
-  posAbbrev: string | "WC";
-};
-
-type Team = {
-  id: string;
-  name: string;
-  initials: string;        // team initials
-  userId?: string;
-  userInitials?: string;   // ✅ user initials (owner)
-};
-
 
 type Modal =
   | null
@@ -107,7 +87,6 @@ useEffect(() => {
 
   return () => window.clearInterval(t);
 }, [activeLeagueId, refreshLeague]);
-
 
   const [activeTab, setActiveTab] = useState<DraftTab>("Player Pool");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1351,8 +1330,3 @@ function formatMMSS(total: number) {
   return `${m}:${pad2(s)}`;
 }
 
-function ordinal(n: number) {
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
-}

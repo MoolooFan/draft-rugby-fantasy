@@ -2,7 +2,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { League, LeagueTeam, PlayoffFormat } from "./types";
-import { getActiveUserProfile, getUserInitialsFromProfile } from "@/lib/session";
+import { getActiveUserProfile } from "@/lib/session";
 import { supabase } from "@/lib/supabase/client";
 function normalizeUserId(u: string) {
   return u.trim().toLowerCase();
@@ -47,7 +47,6 @@ joinLeagueByCode: (params: {
   setCurrentWeek: (leagueId: string, week: number) => void;
   advanceWeek: (leagueId: string) => void;
 
-
   updateLeagueSettings: (
     leagueId: string,
     patch: Partial<
@@ -78,30 +77,6 @@ function sendablePatch(league: League | undefined, patch: Record<string, unknown
   const out = { ...patch };
   for (const k of ["playoffFormat", "scoringSystem", "scoringCustom", "bonusPoints", "draftAt", "draftDateTimeText"]) delete out[k];
   return out;
-}
-
-function uid(prefix = "id") {
-  return `${prefix}-${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
-}
-
-function makeCode() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let out = "";
-  for (let i = 0; i < 5; i++) out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
-}
-
-function parseDraftAt(input: string): number | null {
-  // Accept:
-  // - datetime-local format: "YYYY-MM-DDTHH:mm"
-  // - fallback: Date-parsable strings (best effort)
-  const s = (input ?? "").trim();
-  if (!s) return null;
-
-  // datetime-local has no timezone — JS treats it as local time.
-  const t = Date.parse(s);
-  if (!Number.isFinite(t)) return null;
-  return t;
 }
 
 async function syncMyTeamToSupabase(league: League) {
