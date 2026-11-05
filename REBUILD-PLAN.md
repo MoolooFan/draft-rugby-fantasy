@@ -50,6 +50,8 @@ Status key: ⬜ not started · 🔶 in progress · ✅ done
 - **Leagues can start mid-season:** the first matchup is the first round whose deadline is after the draft; finals stay at the end of the season.
 - **Fixture difficulty (1–5):** 2027 starting ratings agreed 6 Nov (worked out from 2026 results, then adjusted by Ethan; stored in the database). Super Round (round 8) games count as neutral. During the season they update from results, but slowly, so a couple of flukey results don't swing them; Ethan can change or pin any rating on the admin page (item 13).
 - **League settings** (scoring system, bonus points, finals): the commissioner can change them until the draft, then they lock. The schedule is built after the draft.
+- **No lineup saved:** at each deadline the site locks every team's lineup: the one saved for that round, or else their most recent one, updated for adds/drops/trades since (new players fill the gaps by position). Trades during the round don't change the locked lineup.
+- **Late stat corrections:** the admin page gets a "regather scores and finalise again" button for a round (shows what would change before confirming).
 - **Scoring options:** Standard / Alternate / Custom. Custom can change every stat's points and the minutes points, but not the x2 captain.
 - **History:** 2026: Ethan champion, Sam runner-up, Logan and Will semi-finalists (weeks 15 and 16 were the playoffs). 2025 (Sam, Ethan, Josh, Jake): Sam champion, Ethan runner-up, Jake last. Stored by person and linked to the new accounts once people sign up.
 
