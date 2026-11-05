@@ -7,6 +7,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AppMenu } from "@/components/AppMenu";
 import { useLeagueStore } from "@/lib/league/store";
 import { currentSeasonYear, getSeason, SEASONS, totalFantasyWeeks, weekLabel } from "@/lib/season";
+import { ScoringEditor } from "@/components/ScoringEditor";
+import type { ScoringRules } from "@/lib/scoring";
 
 // ---------------------------------------------------------------------------
 // Styles (same look as the other pages)
@@ -612,8 +614,62 @@ function StatusTab({ setMsg }: { setMsg: (m: string | null) => void }) {
 }
 
 // ---------------------------------------------------------------------------
+// Scoring: the Standard and Alternate point values
 
-type Tab = "Players" | "Status" | "Difficulty" | "Rounds";
+function ScoringTab({ setMsg }: { setMsg: (m: string | null) => void }) {
+  const [systems, setSystems] = useState<{ standard: ScoringRules; alternate: ScoringRules } | null>(null);
+  const [which, setWhich] = useState<"standard" | "alternate">("alternate");
+  const [draft, setDraft] = useState<ScoringRules | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ systems: { standard: ScoringRules; alternate: ScoringRules } }>("/api/admin/scoring")
+      .then((r) => setSystems(r.systems))
+      .catch((e) => setErr(e instanceof Error ? e.message : "Couldn't load scoring"));
+  }, []);
+  useEffect(() => {
+    if (systems) setDraft(systems[which]);
+  }, [systems, which]);
+
+  async function save() {
+    if (!draft) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await api<{ rules: ScoringRules }>("/api/admin/scoring", { id: which, rules: draft });
+      setSystems((s) => (s ? { ...s, [which]: r.rules } : s));
+      setMsg(`Saved ${which === "standard" ? "Standard" : "Alternate"} scoring. Leagues that haven't drafted yet will use it.`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ ...whiteBox, display: "grid", gap: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75 }}>
+        Point values for the Standard and Alternate systems. A league&apos;s scoring is frozen when its draft
+        starts, so changes here only affect leagues that haven&apos;t drafted yet.
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        {(["standard", "alternate"] as const).map((id) => (
+          <button key={id} style={{ ...tabButton(which === id), color: which === id ? "white" : "#0f172a", background: which === id ? "rgb(29,78,216)" : "rgba(0,0,0,0.06)" }} onClick={() => setWhich(id)}>
+            {id === "standard" ? "Standard" : "Alternate"}
+          </button>
+        ))}
+      </div>
+      {err ? <div style={{ color: "#b91c1c", fontWeight: 800, fontSize: 12 }}>{err}</div> : null}
+      {draft ? <ScoringEditor value={draft} onChange={setDraft} admin /> : <div style={{ fontWeight: 800 }}>Loading…</div>}
+      <button style={primaryButton} disabled={busy || !draft} onClick={save}>{busy ? "Saving…" : `Save ${which === "standard" ? "Standard" : "Alternate"} scoring`}</button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+type Tab = "Players" | "Status" | "Difficulty" | "Rounds" | "Scoring";
 
 export default function AdminPage() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -645,7 +701,7 @@ export default function AdminPage() {
           <div style={cardStyle}>
             <div style={{ textAlign: "center", fontWeight: 900, fontSize: 22 }}>Admin</div>
             <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 800, opacity: 0.9 }}>
-              Players, statuses, difficulty ratings and rounds
+              Players, statuses, difficulty, rounds and scoring
             </div>
             {tab === "Players" || tab === "Difficulty" ? (
               <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 10 }}>
@@ -657,7 +713,7 @@ export default function AdminPage() {
               </div>
             ) : null}
             <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-              {(["Players", "Status", "Difficulty", "Rounds"] as Tab[]).map((t) => (
+              {(["Players", "Status", "Difficulty", "Rounds", "Scoring"] as Tab[]).map((t) => (
                 <button key={t} style={tabButton(t === tab)} onClick={() => { setTab(t); setMsg(null); }}>{t}</button>
               ))}
             </div>
@@ -675,6 +731,7 @@ export default function AdminPage() {
             {tab === "Difficulty" ? <DifficultyTab key={season} season={season} setMsg={setMsg} /> : null}
             {tab === "Rounds" ? <RoundsTab setMsg={setMsg} /> : null}
             {tab === "Status" ? <StatusTab setMsg={setMsg} /> : null}
+            {tab === "Scoring" ? <ScoringTab setMsg={setMsg} /> : null}
           </div>
         </div>
       </div>

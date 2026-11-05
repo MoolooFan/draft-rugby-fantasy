@@ -34,6 +34,9 @@ createLeague: (params: {
   playoffFormat: PlayoffFormat;
   draftDateTimeText: string;
   draftAt?: number | null;
+  scoringSystem?: "standard" | "alternate" | "custom";
+  scoringCustom?: unknown;
+  bonusPoints?: boolean;
 }) => Promise<{ ok: true } | { ok: false; error: string }>;
 
 joinLeagueByCode: (params: {
@@ -58,12 +61,24 @@ joinLeagueByCode: (params: {
         | "draftStatus"
         | "startRound"
         | "totalWeeks"
+        | "scoringSystem"
+        | "scoringCustom"
+        | "bonusPoints"
       >
     >
   ) => void;
 
   setDraftOrder: (leagueId: string, orderedTeamIds: string[]) => void;
 };
+
+/** Once the draft has started, finals / scoring / bonus points / draft time can't change, so don't send them. */
+function sendablePatch(league: League | undefined, patch: Record<string, unknown>) {
+  const started = league?.draftStatus === "live" || league?.draftStatus === "complete";
+  if (!started) return patch;
+  const out = { ...patch };
+  for (const k of ["playoffFormat", "scoringSystem", "scoringCustom", "bonusPoints", "draftAt", "draftDateTimeText"]) delete out[k];
+  return out;
+}
 
 function uid(prefix = "id") {
   return `${prefix}-${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
@@ -190,7 +205,7 @@ startLeagueRealtime: (leagueId: string) => {
         }));
       },
 
-      createLeague: async ({ name, teamName, playoffFormat, draftDateTimeText, draftAt }) => {
+      createLeague: async ({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints }) => {
   const userId = getActiveUserId();
   if (!userId) return { ok: false, error: "Not signed in." };
 
@@ -198,7 +213,7 @@ startLeagueRealtime: (leagueId: string) => {
     const res = await fetch("/api/leagues/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, teamName, playoffFormat, draftDateTimeText, draftAt }),
+      body: JSON.stringify({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints }),
     });
 
     const json = await res.json().catch(() => null);
@@ -291,7 +306,7 @@ await syncMyTeamToSupabase(league);
       const res = await fetch("/api/leagues/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leagueId, patch }),
+        body: JSON.stringify({ leagueId, patch: sendablePatch(get().leagues.find((l) => l.id === leagueId), patch) }),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {

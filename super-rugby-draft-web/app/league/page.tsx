@@ -7,6 +7,8 @@ import type { League, PlayoffFormat } from "@/lib/league/types";
 import { buildLeagueSchedule } from "@/lib/league/schedule";
 import { AppMenu } from "@/components/AppMenu";
 import { usePlayersStore } from "@/lib/players/store";
+import { ScoringEditor } from "@/components/ScoringEditor";
+import { completeRules, STANDARD_SCORING, type ScoringRules } from "@/lib/scoring";
 import { CAPTAIN_MULTIPLIER, pointsFromRow, roundPoints } from "@/lib/scoring";
 import { fantasyWeekToRealRound } from "@/lib/league/week";
 import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/season";
@@ -272,6 +274,9 @@ function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClos
           transform: "translate(-50%, -50%)",
           width: "92%",
           maxWidth: 420,
+          // tall pop-ups (e.g. Custom scoring) scroll instead of running off the screen
+          maxHeight: "90svh",
+          overflowY: "auto",
         }}
       >
         {children}
@@ -371,6 +376,15 @@ playoffs === "final2" ? 1 :
 const computedSeasonWeeks = computedRegularWeeks + selectedPlayoffWeeks;
 
   const readOnly = !isCreator;
+  // finals, scoring, bonus points and the draft order lock once the draft starts
+  const draftStarted = league.draftStatus === "live" || league.draftStatus === "complete";
+  const settingsLocked = readOnly || draftStarted;
+  const [scoringSystem, setScoringSystem] = useState<"standard" | "alternate" | "custom">(league.scoringSystem ?? "standard");
+  const [bonusPoints, setBonusPoints] = useState<boolean>(league.bonusPoints !== false);
+  const [customRules, setCustomRules] = useState<ScoringRules>(() =>
+    // Custom starts from the league's current values (e.g. Alternate), so switching keeps them
+    completeRules((league.scoringCustom as Partial<ScoringRules> | null) ?? (league.scoringRules as Partial<ScoringRules> | undefined) ?? STANDARD_SCORING)
+  );
 
   // Draft order (editable)
 const [draftOrderIds, setDraftOrderIds] = useState<string[]>(() =>
@@ -437,10 +451,10 @@ setDraftOrderIds((prev) => {
 
 <Field label="Change Playoff Format">
 <select
-  disabled={readOnly}
+  disabled={settingsLocked}
   value={playoffs}
   onChange={(e) => setPlayoffs(e.target.value as PlayoffFormat)}
-  style={selectStyle(readOnly)}
+  style={selectStyle(settingsLocked)}
 >
   <option value="none">None</option>
   <option value="final2">2 Teams (Final only)</option>
@@ -449,6 +463,40 @@ setDraftOrderIds((prev) => {
   <option value="final6">6 Teams (Top 2 get a bye)</option>
 </select>
 </Field>
+
+<Field label="Scoring System">
+<select
+  disabled={settingsLocked}
+  value={scoringSystem}
+  onChange={(e) => setScoringSystem(e.target.value as "standard" | "alternate" | "custom")}
+  style={selectStyle(settingsLocked)}
+>
+  <option value="standard">Standard</option>
+  <option value="alternate">Alternate</option>
+  <option value="custom">Custom</option>
+</select>
+</Field>
+
+{scoringSystem === "custom" ? (
+  <Field label="Custom Points">
+    <div style={{ background: "rgba(255,255,255,0.92)", color: "#0f172a", borderRadius: 12, padding: 10 }}>
+      <ScoringEditor value={customRules} onChange={setCustomRules} readOnly={settingsLocked} />
+    </div>
+  </Field>
+) : null}
+
+<Field label="Bonus Points">
+<label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 800 }}>
+  <input type="checkbox" disabled={settingsLocked} checked={bonusPoints} onChange={(e) => setBonusPoints(e.target.checked)} />
+  Win by 140+ or lose by 40 or less: +1 ladder point
+</label>
+</Field>
+
+{draftStarted ? (
+  <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>
+    Finals, scoring, bonus points and the draft order are locked now the draft has started.
+  </div>
+) : null}
 
 <Field label="Start Round (Real Super Rugby Round)">
 <input
@@ -577,10 +625,15 @@ draftDateTimeText: draftLocal,
 draftAt,
 startRound,
 totalWeeks: computedSeasonWeeks, // ✅ IMPORTANT: includes finals weeks
+scoringSystem,
+bonusPoints,
+...(scoringSystem === "custom" ? { scoringCustom: customRules } : {}),
 });
 
-
-              setDraftOrder(league.id, draftOrderIds);
+              // the order can only change before the draft (and only send it if it changed)
+              if (!draftStarted && draftOrderIds.join("|") !== league.teams.map((t) => t.id).join("|")) {
+                setDraftOrder(league.id, draftOrderIds);
+              }
 
               onClose();
             }}
@@ -1860,6 +1913,9 @@ function JoinLeagueModal() {
 });
 
   const [playoffs, setPlayoffs] = useState<PlayoffFormat>("final4");
+  const [scoringSystem, setScoringSystem] = useState<"standard" | "alternate" | "custom">("standard");
+  const [bonusPoints, setBonusPoints] = useState(true);
+  const [customRules, setCustomRules] = useState<ScoringRules>(STANDARD_SCORING);
   const [error, setError] = useState<string | null>(null);
 
   return (
@@ -1922,6 +1978,27 @@ function JoinLeagueModal() {
             <option value="final6">6 Teams (Top 2 get a bye)</option>
           </select>
 
+          <select
+            value={scoringSystem}
+            onChange={(e) => setScoringSystem(e.target.value as "standard" | "alternate" | "custom")}
+            style={selectStyle()}
+          >
+            <option value="standard">Scoring: Standard</option>
+            <option value="alternate">Scoring: Alternate</option>
+            <option value="custom">Scoring: Custom</option>
+          </select>
+
+          {scoringSystem === "custom" ? (
+            <div style={{ background: "rgba(255,255,255,0.92)", color: "#0f172a", borderRadius: 12, padding: 10 }}>
+              <ScoringEditor value={customRules} onChange={setCustomRules} />
+            </div>
+          ) : null}
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 800 }}>
+            <input type="checkbox" checked={bonusPoints} onChange={(e) => setBonusPoints(e.target.checked)} />
+            Bonus points (win by 140+ / lose by 40 or less)
+          </label>
+
           <input
   type="datetime-local"
   value={draftLocal}
@@ -1947,6 +2024,9 @@ function JoinLeagueModal() {
     playoffFormat: playoffs,
     draftDateTimeText: draftLocal,
     draftAt,
+    scoringSystem,
+    bonusPoints,
+    ...(scoringSystem === "custom" ? { scoringCustom: customRules } : {}),
   });
 
   if (!res.ok) setError(res.error);

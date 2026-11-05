@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
+import { cleanScoringRules } from "@/lib/scoring/validate";
+import { getSystemRules } from "@/lib/scoring/leagueRules";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -60,7 +62,28 @@ export async function POST(req: Request) {
     dbPatch.playoff_format = patch.playoffFormat;
   }
   if ("draftDateTimeText" in patch) dbPatch.draft_date_time_text = patch.draftDateTimeText ?? null;
-  if ("draftAt" in patch) dbPatch.draft_at = patch.draftAt ?? null;
+  if ("draftAt" in patch) {
+    // the settings pop-up sends a timestamp in ms; the database wants a date
+    if (patch.draftAt == null || patch.draftAt === "") dbPatch.draft_at = null;
+    else {
+      const d = new Date(typeof patch.draftAt === "number" ? patch.draftAt : String(patch.draftAt));
+      if (Number.isNaN(d.getTime())) return NextResponse.json({ ok: false, error: "Draft time isn't a valid date" }, { status: 400 });
+      dbPatch.draft_at = d.toISOString();
+    }
+  }
+
+  if ("scoringSystem" in patch) {
+    if (!["standard", "alternate", "custom"].includes(patch.scoringSystem)) {
+      return NextResponse.json({ ok: false, error: "Unknown scoring system" }, { status: 400 });
+    }
+    dbPatch.scoring_system = patch.scoringSystem;
+  }
+  if ("scoringCustom" in patch && patch.scoringCustom) {
+    const { rules, error } = cleanScoringRules(patch.scoringCustom, { allowStructure: false, base: await getSystemRules(supabaseAdmin, "standard") });
+    if (!rules) return NextResponse.json({ ok: false, error }, { status: 400 });
+    dbPatch.scoring_custom = rules;
+  }
+  if ("bonusPoints" in patch) dbPatch.bonus_points = patch.bonusPoints !== false;
 
   if ("startRound" in patch) dbPatch.start_round = patch.startRound ?? null;
   if ("totalWeeks" in patch) dbPatch.total_weeks = patch.totalWeeks ?? null;

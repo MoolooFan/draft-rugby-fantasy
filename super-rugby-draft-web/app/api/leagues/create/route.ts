@@ -4,6 +4,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
 import { currentSeasonYear, getSeason, totalFantasyWeeks } from "@/lib/season";
 import { getDraftState } from "@/lib/draft/engine";
+import { cleanScoringRules } from "@/lib/scoring/validate";
+import { getSystemRules } from "@/lib/scoring/leagueRules";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -27,6 +29,15 @@ export async function POST(req: Request) {
   const allowedFormats = ["none", "final2", "final3", "final4", "final6"];
   const playoffFormat = allowedFormats.includes(body?.playoffFormat) ? body.playoffFormat : "final4";
   const season = currentSeasonYear();
+  // scoring (Standard / Alternate / Custom) and bonus points
+  const scoringSystem = ["standard", "alternate", "custom"].includes(body?.scoringSystem) ? body.scoringSystem : "standard";
+  let scoringCustom = null;
+  if (scoringSystem === "custom") {
+    const { rules, error } = cleanScoringRules(body?.scoringCustom, { allowStructure: false, base: await getSystemRules(supabaseAdmin, "standard") });
+    if (!rules) return NextResponse.json({ ok: false, error }, { status: 400 });
+    scoringCustom = rules;
+  }
+  const bonusPoints = body?.bonusPoints !== false;
   const seasonWeeks = totalFantasyWeeks(getSeason(season));
   const draftDateTimeText = String(body?.draftDateTimeText ?? "");
   const draftAtRaw = body?.draftAt ?? null;
@@ -88,6 +99,9 @@ if (draftAtRaw !== null && draftAtRaw !== undefined && draftAtRaw !== "") {
     draft_at: draftAtIso,
     draft_status: "scheduled",
     season,
+    scoring_system: scoringSystem,
+    scoring_custom: scoringCustom,
+    bonus_points: bonusPoints,
     real_regular_season_rounds: seasonWeeks,
     start_round: 1,
     total_weeks: seasonWeeks,
