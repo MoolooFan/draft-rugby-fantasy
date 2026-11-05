@@ -1,5 +1,5 @@
 // lib/transactions/rosterValidate.ts
-import playersData from "@/data/players.json";
+import { getPlayerPool } from "@/lib/players/pool";
 
 // Minimal Player shape based on your players.json usage
 type Player = {
@@ -8,12 +8,20 @@ type Player = {
   position?: string;
 };
 
-const playersById = new Map<string, Player>(
-  (playersData as any[]).map((p) => [String(p.id), p])
-);
+// The player pool from the database (loaded by the pages); rebuilt when it changes.
+let poolRef: unknown[] | null = null;
+let poolById = new Map<string, Player>();
+function playersByIdNow(): Map<string, Player> {
+  const pool = getPlayerPool();
+  if (pool !== poolRef) {
+    poolRef = pool;
+    poolById = new Map<string, Player>((pool as any[]).map((p) => [String(p.id), p]));
+  }
+  return poolById;
+}
 
 function getPos(playerId: string): string | null {
-  const p = playersById.get(String(playerId));
+  const p = playersByIdNow().get(String(playerId));
   const pos = (p as any)?.pos ?? (p as any)?.position;
   return pos ? String(pos) : null;
 }

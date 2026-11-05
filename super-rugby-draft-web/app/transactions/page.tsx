@@ -17,7 +17,7 @@ import { usePlayersStore } from "@/lib/players/store";
 
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 
-import playersData from "@/data/players.json";
+import { usePlayerPool } from "@/lib/players/pool";
 import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/season";
 
 // This season's fixtures, numbered by fantasy week (see lib/season).
@@ -873,12 +873,13 @@ const yourDraftTeamId = useMemo(() => {
   }, [draftTeams, yourDraftTeamId]);
 
     // Players (normalize teamCode like Draft Room)
+  const playerPool = usePlayerPool();
   const allPlayers: Player[] = useMemo(() => {
-    return (playersData as Player[]).map((p) => ({
+    return (playerPool as unknown as Player[]).map((p) => ({
       ...p,
       teamCode: normalizeTeamCode(p.teamCode),
     }));
-  }, []);
+  }, [playerPool]);
 
   // Fixtures + week logic (matches Team Selection)
   const fixtures = useMemo(

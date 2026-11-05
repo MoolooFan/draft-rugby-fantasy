@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import playersData from "@/data/players.json";
+import { getPlayerPool } from "@/lib/players/pool";
 import { PointsBreakdownModal } from "@/components/PointsBreakdownModal";
 
 import { useTransactionsStore } from "@/lib/transactions/store";
@@ -1324,7 +1324,7 @@ function computePositionRank(args: {
 
   const primaryPosById = new Map<string, string>();
   const playerMetaById = new Map<string, any>();
-  for (const pl of (playersData as any[])) {
+  for (const pl of getPlayerPool() as any[]) {
     const id = normaliseIdForRounds(pl?.id);
     if (!id) continue;
     playerMetaById.set(id, pl);

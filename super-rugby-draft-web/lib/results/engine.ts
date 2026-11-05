@@ -9,7 +9,7 @@
 // The database client is passed in, so the website, the scheduled job and test scripts
 // all run exactly the same code.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import playersData from "@/data/players.json";
+import { loadSeasonPlayers } from "@/lib/players/db";
 import { statCountsFromRaw, isFrontRow, STATS, type StatCounts } from "@/lib/scoring";
 import { scoreTeamWeek, type Lineup, type LineupPlayer } from "@/lib/scoring/week";
 import { reconcileLineup } from "@/lib/league/lineup";
@@ -83,20 +83,21 @@ export function finalsSizeFromFormat(format: string | null | undefined): FinalsS
 }
 
 // ---------------------------------------------------------------------------
-// Players (name, team, positions). TODO(item 13): players move into the database for 2027.
+// Players (name, team, positions) from the database, loaded at the start of each step.
 
-let positionCache: Map<string, LineupPlayer> | null = null;
-export function playerInfo(id: string): LineupPlayer {
-  if (!positionCache) {
-    positionCache = new Map();
-    // Everything the pages show about a player (name, team, positions), without season stats.
-    for (const p of playersData as Array<Record<string, unknown> & { id: string }>) {
+let playerCache = new Map<string, LineupPlayer>();
+async function loadPlayers(db: Db, season: number) {
+  const players = await loadSeasonPlayers(db, season, { includeInactive: true });
+  playerCache = new Map(
+    players.map((p) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { stats, ...info } = p;
-      positionCache.set(normId(p.id), { ...info, id: p.id, posAbbrev: (p.posAbbrev as string) ?? null, secondaryPosAbbrev: (p.secondaryPosAbbrev as string) ?? null });
-    }
-  }
-  return positionCache.get(normId(id)) ?? { id, posAbbrev: null, secondaryPosAbbrev: null };
+      const { stats, weeklyStatus, ...info } = p;
+      return [normId(p.id), { ...info, secondaryPosAbbrev: p.secondaryPosAbbrev ?? null } as LineupPlayer];
+    })
+  );
+}
+export function playerInfo(id: string): LineupPlayer {
+  return playerCache.get(normId(id)) ?? { id, posAbbrev: null, secondaryPosAbbrev: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +165,8 @@ async function lockedTeamCount(db: Db, leagueId: string, week: number) {
 
 /** Locks every team's lineup for a week: their saved one, or their latest one, matched to the current roster. */
 export async function lockWeek(db: Db, leagueId: string, week: number, nowMs: number) {
+  const { data: lg } = await db.from("leagues").select("season").eq("id", leagueId).single();
+  await loadPlayers(db, Number(lg?.season));
   const teams = await q<Array<{ id: string }>>(db.from("teams").select("id").eq("league_id", leagueId));
   const rosters = await q<Array<{ team_id: string; data: { playerIds?: string[] } }>>(
     db.from("rosters").select("team_id, data").eq("league_id", leagueId)
@@ -240,6 +243,7 @@ export async function finaliseWeek(db: Db, leagueId: string, week: number, nowMs
   if (done.length && !opts.force) return { skipped: true };
 
   const season = getSeason(league.season);
+  await loadPlayers(db, league.season);
   const stats = await weekStats(db, season, week);
   const selections = await q<Array<{ team_id: string; lineup: Lineup; captain_id: string | null; vice_id: string | null }>>(
     db.from("team_selections").select("team_id, lineup, captain_id, vice_id").eq("league_id", leagueId).eq("week", week)

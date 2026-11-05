@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { EXTERNAL_PLAYER_ID_MAP } from "@/lib/players/externalIdMap";
 import { fetchExternalPlayers } from "@/lib/players/externalPlayers";
 import { currentSeasonYear } from "@/lib/season";
 
@@ -32,14 +31,16 @@ async function runImageSync(season: number) {
   const failures: SyncFailure[] = [];
   let updatedPlayers = 0;
 
-  for (const [internalId, externalId] of Object.entries(EXTERNAL_PLAYER_ID_MAP)) {
+  const { data: players, error: pErr } = await supabaseAdmin.from("players").select("id, external_id").eq("season", season).not("external_id", "is", null);
+  if (pErr) throw pErr;
+  for (const { id: internalId, external_id: externalId } of (players ?? []) as Array<{ id: string; external_id: number }>) {
     try {
       const externalPlayer = byExternalId.get(Number(externalId));
       if (!externalPlayer) {
         failures.push({
           internalId,
           externalId,
-          error: "External player not found in players.json",
+          error: "Player not found in playfantasyrugby's player list",
         });
         continue;
       }
@@ -56,7 +57,7 @@ async function runImageSync(season: number) {
           updated_at: new Date().toISOString(),
         })
         .eq("season", season)
-        .eq("internal_player_id", internalId);
+        .eq("internal_player_id", internalId.toLowerCase());
 
       if (error) throw error;
 

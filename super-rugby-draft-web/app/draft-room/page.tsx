@@ -8,7 +8,7 @@ import { PlayerCardModal } from "@/components/PlayerCardModal";
 import { TEAM_OPTIONS, POSITION_OPTIONS } from "@/lib/constants";
 import { useDraftStore } from "@/lib/draft/store";
 
-import playersData from "@/data/players.json";
+import { usePlayerPool } from "@/lib/players/pool";
 import { rosterSlots, derivePosName } from "@/lib/draft/constants";
 
 import { AppMenu } from "@/components/AppMenu";
@@ -335,12 +335,13 @@ const preDraftDeadlineMs = useMemo(() => {
   // -----------------------
   // Players
   // -----------------------
+  const playerPool = usePlayerPool();
   const allPlayers: Player[] = useMemo(() => {
-    return (playersData as Player[]).map((p) => ({
+    return (playerPool as unknown as Player[]).map((p) => ({
       ...p,
       teamCode: normalizeTeamCode(p.teamCode),
     }));
-  }, []);
+  }, [playerPool]);
 
 const allPlayersById = useMemo(() => {
   const m: Record<string, Player> = {};

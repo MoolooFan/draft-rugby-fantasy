@@ -12,7 +12,7 @@ import type {
   WaiverClaimStatus,
 } from "./types";
 
-import playersData from "@/data/players.json";
+import { getPlayerPool } from "@/lib/players/pool";
 import { useDraftStore } from "@/lib/draft/store";
 
 type AddFreeAgentTransferFn = (input: {
@@ -241,7 +241,7 @@ function toDbClaim(c: WaiverClaim): DbWaiverClaim {
 }
 
 function getPlayerById(playerId: string): AnyPlayer | null {
-  return (playersData as AnyPlayer[]).find((p) => p.id === playerId) ?? null;
+  return (getPlayerPool() as unknown as AnyPlayer[]).find((p) => p.id === playerId) ?? null;
 }
 
 /** Mutates teamRoster by removing playerId from any slot/wildcard arrays */

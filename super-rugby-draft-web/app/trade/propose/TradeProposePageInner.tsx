@@ -9,7 +9,7 @@ import { getActiveUser, getActiveUsername } from "@/lib/session";
 import { useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
 
-import playersData from "@/data/players.json";
+import { usePlayerPool } from "@/lib/players/pool";
 import { fixturesByFantasyWeek } from "@/lib/season";
 
 // This season's fixtures, numbered by fantasy week (see lib/season).
@@ -547,14 +547,15 @@ const yourLeagueTeamId = useMemo(() => {
   }, [partnerTeamId, activeLeague, yourDraftTeamId]);
 
   // Players
+  const playerPool = usePlayerPool();
   const allPlayers: Player[] = useMemo(() => {
-  return (playersData as any[]).map((p) => ({
+  return (playerPool as any[]).map((p) => ({
     ...p,
     teamCode: normalizeTeamCode(p.teamCode),
     secondaryPosAbbrev: p.secondaryPosAbbrev ?? undefined,
     secondaryPosName: p.secondaryPosName ?? undefined,
   })) as Player[];
-}, []);
+}, [playerPool]);
 
 const livePlayersLoaded = usePlayersStore((s) => s.loaded);
 const refreshLivePlayers = usePlayersStore((s) => s.refresh);

@@ -2,9 +2,8 @@
 // Pulls player stats from playfantasyrugby.com into player_round_stats.
 // Fetches several players at once (it used to do ~450 one after another) and can be told to
 // save only the rounds currently in play.
-// TODO(items 9/13): the player id map is still 2026's; 2027 players come from the database.
+// Which players to fetch: the season's players in the database that have a playfantasyrugby id.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { EXTERNAL_PLAYER_ID_MAP } from "@/lib/players/externalIdMap";
 import { fetchExternalPlayerStatsByExternalId } from "@/lib/players/externalStats";
 
 export type SyncResult = { ok: true; insertedOrUpdated: number; failedPlayers: number; failures: Array<{ internalId: string; externalId: number; error: string }> };
@@ -14,7 +13,10 @@ export async function syncExternalStats(
   season: number,
   opts: { onlyRounds?: number[]; concurrency?: number } = {}
 ): Promise<SyncResult> {
-  const entries = Object.entries(EXTERNAL_PLAYER_ID_MAP) as Array<[string, number]>;
+  const { data: players, error: pErr } = await db.from("players").select("id, external_id").eq("season", season).not("external_id", "is", null);
+  if (pErr) throw pErr;
+  // stats are stored under lower-case ids (e.g. "d.mckenzie"), as they always have been
+  const entries = (players ?? []).map((p) => [String(p.id).toLowerCase(), Number(p.external_id)] as [string, number]);
   const only = opts.onlyRounds ? new Set(opts.onlyRounds) : null;
   const upserts: Record<string, unknown>[] = [];
   const failures: SyncResult["failures"] = [];

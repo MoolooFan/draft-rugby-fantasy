@@ -18,7 +18,7 @@ import type { Fixture } from "@/lib/fixtures/types";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { getActiveUsername, getActiveTimezone } from "@/lib/session";
 import { usePlayersStore } from "@/lib/players/store";
-import playersData from "@/data/players.json";
+import { usePlayerPool } from "@/lib/players/pool";
 import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib/league/week";
 import { pointsFromRow } from "@/lib/scoring";
 
@@ -604,14 +604,15 @@ type RosterData = { slots?: Record<string, Array<{ id: string }>>; wildcards?: A
 
 const [serverRosters, setServerRosters] = useState<Map<string, { playerIds: string[] }>>(new Map());
 
+const playerPool = usePlayerPool();
 const playersById = useMemo(() => {
   const m = new Map<string, Player>();
-  for (const p of (playersData as any[])) {
+  for (const p of (playerPool as any[])) {
     if (!p?.id) continue;
     m.set(String(p.id), p as Player);
   }
   return m;
-}, []);
+}, [playerPool]);
 
 function rosterRowToPlayerIds(data: any): string[] {
   const ids: string[] = [];
