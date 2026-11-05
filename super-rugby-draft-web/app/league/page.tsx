@@ -443,6 +443,7 @@ setDraftOrderIds((prev) => {
   <option value="final2">2 Teams (Final only)</option>
   <option value="final3">3 Teams (Qualifying Final)</option>
   <option value="final4">4 Teams (Semi + Final)</option>
+  <option value="final6">6 Teams (Top 2 get a bye)</option>
 </select>
 </Field>
 
@@ -1909,6 +1910,7 @@ function JoinLeagueModal() {
             <option value="final2">2 Teams (Final only)</option>
             <option value="final3">3 Teams (Qualifying Final)</option>
             <option value="final4">4 Teams (Semi + Final)</option>
+            <option value="final6">6 Teams (Top 2 get a bye)</option>
           </select>
 
           <input

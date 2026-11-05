@@ -70,7 +70,7 @@ if (
 ) {
   const { error: autoErr } = await supabaseAdmin
     .from("leagues")
-    .update({ draft_status: "live" })
+    .update({ draft_status: "live", settings_locked_at: new Date().toISOString() })
     .eq("id", leagueId);
 
   if (!autoErr) {

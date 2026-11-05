@@ -141,6 +141,22 @@ export function leagueWeeksAfterDraft(s: SeasonConfig, draftMs: number): number[
   return out;
 }
 
+/** The season the site is running. Set CURRENT_SEASON in the env to override (e.g. for testing). */
+export function currentSeasonYear(): number {
+  const fromEnv = Number(process.env.CURRENT_SEASON);
+  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 2027;
+}
+
+/** Real rounds with a game between its kickoff and 13.5h after it (the rounds worth syncing now). */
+export function realRoundsInPlay(s: SeasonConfig, nowMs: number): number[] {
+  const rounds = new Set<number>();
+  for (const f of s.fixtures) {
+    const k = kickoffMs(f);
+    if (k > 0 && nowMs >= k && nowMs <= k + FINALISE_AFTER_LAST_KICKOFF_MS) rounds.add(Number(f.week));
+  }
+  return [...rounds];
+}
+
 /** True while any game is between its kickoff and 13.5h after it (the only time stats need syncing). */
 export function isStatsSyncWindow(s: SeasonConfig, nowMs: number): boolean {
   return s.fixtures.some((f) => {

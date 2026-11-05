@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
+import { rosterSlots } from "@/lib/draft/constants";
+import { buildScheduleForLeague } from "@/lib/results/engine";
+
+const ROSTER_SIZE = rosterSlots.reduce((n, s) => n + s.count, 0);
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -96,6 +100,19 @@ export async function POST(req: Request) {
 
   if (stateErr) {
     return NextResponse.json({ ok: false, error: stateErr.message }, { status: 500 });
+  }
+
+  // Last pick of the draft: mark it complete and build the season schedule.
+  const { count: teamCount } = await supabaseAdmin
+    .from("teams")
+    .select("id", { count: "exact", head: true })
+    .eq("league_id", leagueId);
+  if (teamCount && pickNumber >= teamCount * ROSTER_SIZE) {
+    try {
+      await buildScheduleForLeague(supabaseAdmin, leagueId, Date.now());
+    } catch (e) {
+      console.error("Building the schedule failed", leagueId, e);
+    }
   }
 
   return NextResponse.json({ ok: true });

@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   // which is read-only for everyone else).
   const { data: leagueRow, error: leagueErr } = await supabaseAdmin
     .from("leagues")
-    .select("created_by")
+    .select("created_by, settings_locked_at, draft_status")
     .eq("id", leagueId)
     .maybeSingle();
 
@@ -36,6 +36,16 @@ export async function POST(req: Request) {
   if (norm(String(leagueRow.created_by ?? "")) !== username) {
     return NextResponse.json(
       { ok: false, error: "Only the league creator can change settings" },
+      { status: 403 }
+    );
+  }
+
+  // Finals, scoring and bonus points lock once the draft starts.
+  const lockedKeys = ["playoffFormat", "bonusPoints", "scoringSystem", "scoringCustom"];
+  const locked = !!leagueRow.settings_locked_at || (leagueRow.draft_status ?? "scheduled") !== "scheduled";
+  if (locked && lockedKeys.some((k) => k in patch)) {
+    return NextResponse.json(
+      { ok: false, error: "These settings are locked once the draft has started" },
       { status: 403 }
     );
   }

@@ -1,5 +1,5 @@
 // lib/league/types.ts
-export type PlayoffFormat = "none" | "final2" | "final3" | "final4";
+export type PlayoffFormat = "none" | "final2" | "final3" | "final4" | "final6";
 
 export type LeagueTeam = {
   id: string;
