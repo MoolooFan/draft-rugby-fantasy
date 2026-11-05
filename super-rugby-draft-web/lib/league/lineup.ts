@@ -9,14 +9,13 @@
 //   his bench spot.
 // - Otherwise the new player goes into the gap anyway (auto-subs can still fix it).
 import { BENCH_SLOTS, SLOT_POSITION, STARTER_SLOTS, type Lineup, type LineupPlayer, type SlotId } from "@/lib/scoring/week";
+import { canPlayPosition } from "@/lib/players/positions";
 
 const ALL_SLOTS: SlotId[] = [...STARTER_SLOTS, ...BENCH_SLOTS];
 
 function canPlay(p: LineupPlayer | null | undefined, pos: string): boolean {
   if (!p) return false;
-  const a = String(p.posAbbrev ?? "").trim().toUpperCase();
-  const b = String(p.secondaryPosAbbrev ?? "").trim().toUpperCase();
-  return a === pos || b === pos;
+  return canPlayPosition(p, pos);
 }
 
 /**

@@ -5,6 +5,7 @@ import type { DraftPhase, Player, Team, TeamRosterState } from "./types";
 import { getSlotCaps, getWcCap } from "./constants";
 
 import { fetchRosters, saveRoster } from "@/lib/rosters/api";
+import { playerPositions } from "@/lib/players/positions";
 
 type DraftState = {
   phase: DraftPhase;
@@ -149,16 +150,9 @@ function finalizeLeagueDraftIfComplete(
 }
 type Pos = string;
 
-function upper(x: any) {
-  return String(x ?? "").toUpperCase().trim();
-}
 
 function eligiblePositions(p: any): Pos[] {
-  const a = upper(p.posAbbrev);
-  const b = upper(p.secondaryPosAbbrev);
-  const out = [a];
-  if (b && b !== a) out.push(b);
-  return out.filter(Boolean);
+  return playerPositions(p) as Pos[];
 }
 
 /**

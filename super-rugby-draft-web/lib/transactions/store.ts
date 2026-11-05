@@ -14,6 +14,7 @@ import type {
 
 import { getPlayerPool } from "@/lib/players/pool";
 import { useDraftStore } from "@/lib/draft/store";
+import { canPlayPosition } from "@/lib/players/positions";
 
 type AddFreeAgentTransferFn = (input: {
   leagueId: string;
@@ -410,9 +411,7 @@ const REQUIRED_POS_SLOTS: string[] = [
 ];
 
 function playerCanPlayPos(p: any, pos: string) {
-  const a = String(p?.posAbbrev ?? "").toUpperCase();
-  const b = String(p?.secondaryPosAbbrev ?? "").toUpperCase();
-  return a === pos || b === pos;
+  return canPlayPosition(p, pos);
 }
 
 function canFillRequiredSlots(players: AnyPlayer[]) {

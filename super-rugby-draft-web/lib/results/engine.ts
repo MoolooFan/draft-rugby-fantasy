@@ -92,7 +92,7 @@ async function loadPlayers(db: Db, season: number) {
     players.map((p) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { stats, weeklyStatus, ...info } = p;
-      return [normId(p.id), { ...info, secondaryPosAbbrev: p.secondaryPosAbbrev ?? null } as LineupPlayer];
+      return [normId(p.id), { ...info, secondaryPosAbbrev: p.secondaryPosAbbrev ?? null, thirdPosAbbrev: p.thirdPosAbbrev ?? null } as LineupPlayer];
     })
   );
 }

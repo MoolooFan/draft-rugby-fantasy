@@ -1,6 +1,6 @@
 // Run: npx tsx scripts/tests/status.test.ts — reading team lists / injury lists and matching names.
 // Uses small made-up articles in the same layout as the official ones.
-import { injuryStatus, parseInjuryList, parseTeamLists } from "../../lib/status/articles";
+import { injuryStatus, parseInjuryList, parseTeamLists, splitInjury } from "../../lib/status/articles";
 import { matchName, type MatchPlayer } from "../../lib/status/match";
 
 let failures = 0;
@@ -29,7 +29,18 @@ check("replacements, curly apostrophe kept", lists[0].replacements[1] === "Eli F
 const inj = parseInjuryList(injuryHtml);
 check("injury list team from a long name", inj.length === 1 && inj[0].team === "RED");
 check("injury + timeframe", injuryStatus(inj[0].players[0]) === "Knee - Season");
-check("injury without timeframe", injuryStatus(inj[0].players[1]) === "Concussion");
+check("injury without timeframe gets TBC", injuryStatus(inj[0].players[1]) === "Concussion - TBC");
+// the many ways teams write injuries all come out the same shape
+const std = (inner: string) => injuryStatus({ name: "x", ...splitInjury(inner) });
+for (const [inner, want] of [
+  ["knee/season", "Knee - Season"], ["Knee, Season", "Knee - Season"], ["Hamstring/ 6-8 weeks", "Hamstring - 6-8 weeks"],
+  ["concussion 1-2 weeks", "Concussion - 1-2 weeks"], ["foot/4weeks", "Foot - 4 weeks"], ["calf/1 weeks", "Calf - 1 week"],
+  ["ankle/Rd 12", "Ankle - Round 12"], ["hamstring/rnd 8-10", "Hamstring - Rounds 8-10"], ["HIA", "Concussion - TBC"],
+  ["head knock", "Concussion - TBC"], ["nkle", "Ankle - TBC"], ["concussion/ min 12 days", "Concussion - 12+ days"],
+  ["birth of first child", "Paternity leave - TBC"], ["resting policy", "Rested - TBC"], ["ACL/season", "ACL - Season"],
+  ["foot - integrating back into team units this week", "Foot - Returning"], ["shoulder/medium term", "Shoulder - Medium term"],
+  ["head injury/return to play protocols", "Concussion - TBC"], ["hamstring tightness", "Hamstring - TBC"],
+] as const) check(`"${inner}" -> "${want}"`, std(inner) === want, std(inner));
 check("no reason given = Out", injuryStatus(inj[0].players[2]) === "Out");
 
 const players: MatchPlayer[] = [

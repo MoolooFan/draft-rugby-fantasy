@@ -44,6 +44,7 @@ export async function POST(req: Request) {
     const teamCode = String(p.teamCode ?? "").trim().toUpperCase();
     const pos = String(p.posAbbrev ?? "").trim().toUpperCase();
     const pos2 = String(p.secondaryPosAbbrev ?? "").trim().toUpperCase() || null;
+    const pos3 = String(p.thirdPosAbbrev ?? "").trim().toUpperCase() || null;
     const draftRank = p.draftRank === "" || p.draftRank == null ? null : Number(p.draftRank);
     const externalId = p.externalId === "" || p.externalId == null ? null : Number(p.externalId);
 
@@ -52,6 +53,7 @@ export async function POST(req: Request) {
     if (!TEAMS.includes(teamCode)) problems.push("Unknown team");
     if (!POS.includes(pos)) problems.push("Unknown position");
     if (pos2 && (!POS.includes(pos2) || pos2 === pos)) problems.push("Second position must be a different position");
+    if (pos3 && (!pos2 || !POS.includes(pos3) || pos3 === pos || pos3 === pos2)) problems.push("Third position must be different from the other two (and needs a second position)");
     if (draftRank != null && (!Number.isInteger(draftRank) || draftRank < 1)) problems.push("Draft rank must be a whole number from 1");
     if (externalId != null && (!Number.isInteger(externalId) || externalId < 1)) problems.push("playfantasyrugby id must be a whole number");
     if (problems.length) return NextResponse.json({ ok: false, error: problems.join(". ") }, { status: 400 });
@@ -77,6 +79,7 @@ export async function POST(req: Request) {
         team_code: teamCode,
         pos,
         pos2,
+        pos3,
         draft_rank: draftRank,
         external_id: externalId,
         status: String(p.status ?? "").trim() || null,

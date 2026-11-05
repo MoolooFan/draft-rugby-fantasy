@@ -21,6 +21,7 @@ import { usePlayersStore } from "@/lib/players/store";
 import { usePlayerPool } from "@/lib/players/pool";
 import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib/league/week";
 import { pointsFromRow } from "@/lib/scoring";
+import { playerPositions } from "@/lib/players/positions";
 
 type ViewMode = "Fixture" | "Latest Score" | "PPG" | "Form";
 
@@ -358,11 +359,8 @@ function reconcileLineupWithRoster(prev: Lineup, rosterPool: Player[]): Lineup {
 function canPlayerFitSlot(player: Player, slot: SlotDef) {
   if (slot.group === "WC") return true;
 
-  const primary = (player.posAbbrev ?? "").toUpperCase();
-  const secondary = (player.secondaryPosAbbrev ?? "").toUpperCase();
-
-  // Helper: true if either primary or secondary matches the rule
-  const either = (fn: (p: string) => boolean) => fn(primary) || fn(secondary);
+  // any of the player's positions (up to three)
+  const either = (fn: (p: string) => boolean) => playerPositions(player).some(fn);
 
   if (slot.group === "PROP") return either((p) => p.includes("PROP") || p === "PR");
   if (slot.group === "HOOKER") return either((p) => p.includes("HOOK") || p === "HO");

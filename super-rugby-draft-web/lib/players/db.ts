@@ -24,6 +24,7 @@ export type PlayerRow = {
   team_code: string;
   pos: string;
   pos2: string | null;
+  pos3: string | null;
   draft_rank: number | null;
   external_id: number | null;
   status: string | null;
@@ -40,6 +41,8 @@ export type SitePlayer = {
   posName: string;
   secondaryPosAbbrev?: string;
   secondaryPosName?: string;
+  thirdPosAbbrev?: string;
+  thirdPosName?: string;
   draftRank: number;
   externalId: number | null;
   active: boolean;
@@ -60,6 +63,7 @@ export function toSitePlayer(p: PlayerRow, weekly: Record<string, string> = {}):
     posAbbrev: p.pos,
     posName: POS_NAME[p.pos] ?? p.pos,
     ...(p.pos2 ? { secondaryPosAbbrev: p.pos2, secondaryPosName: POS_NAME[p.pos2] ?? p.pos2 } : {}),
+    ...(p.pos3 ? { thirdPosAbbrev: p.pos3, thirdPosName: POS_NAME[p.pos3] ?? p.pos3 } : {}),
     draftRank: p.draft_rank ?? 9999,
     externalId: p.external_id,
     active: p.active,

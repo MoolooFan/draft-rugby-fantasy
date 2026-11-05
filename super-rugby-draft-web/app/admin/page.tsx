@@ -72,6 +72,7 @@ type AdminPlayer = {
   teamCode: string;
   posAbbrev: string;
   secondaryPosAbbrev?: string;
+  thirdPosAbbrev?: string;
   draftRank: number;
   externalId: number | null;
   status: string | null;
@@ -114,6 +115,7 @@ function PlayerForm({
     teamCode: player?.teamCode ?? "CHI",
     posAbbrev: player?.posAbbrev ?? "PR",
     secondaryPosAbbrev: player?.secondaryPosAbbrev ?? "",
+    thirdPosAbbrev: player?.thirdPosAbbrev ?? "",
     draftRank: player?.draftRank && player.draftRank < 9999 ? String(player.draftRank) : "",
     externalId: player?.externalId ? String(player.externalId) : "",
     status: player?.status ?? "",
@@ -180,6 +182,13 @@ function PlayerForm({
         <div>
           <div style={labelStyle}>Second position</div>
           <select style={inputStyle} value={f.secondaryPosAbbrev} onChange={set("secondaryPosAbbrev")}>
+            <option value="">None</option>
+            {POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div>
+          <div style={labelStyle}>Third position</div>
+          <select style={inputStyle} value={f.thirdPosAbbrev} onChange={set("thirdPosAbbrev")}>
             <option value="">None</option>
             {POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
@@ -299,7 +308,7 @@ function PlayersTab({ season, setMsg }: { season: number; setMsg: (m: string | n
                 {p.firstName} {p.lastName} {p.active ? "" : "(hidden)"}
               </div>
               <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.65 }}>
-                {p.teamCode} · {p.posAbbrev}{p.secondaryPosAbbrev ? `/${p.secondaryPosAbbrev}` : ""} · rank {p.draftRank < 9999 ? p.draftRank : "—"}
+                {p.teamCode} · {p.posAbbrev}{p.secondaryPosAbbrev ? `/${p.secondaryPosAbbrev}` : ""}{p.thirdPosAbbrev ? `/${p.thirdPosAbbrev}` : ""} · rank {p.draftRank < 9999 ? p.draftRank : "—"}
                 {p.status ? ` · ${p.status}` : ""}
               </div>
             </div>
@@ -551,8 +560,8 @@ function StatusTab({ setMsg }: { setMsg: (m: string | null) => void }) {
     <div style={{ display: "grid", gap: 10 }}>
       <div style={{ ...whiteBox, display: "grid", gap: 8 }}>
         <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75 }}>
-          Player statuses are read from the official team lists and injury list (out Wednesday 4pm NZT), checked
-          every hour until kickoff. Late changes: edit the player in the Players tab.
+          Player statuses are read from the official team lists and injury list (out Wednesday 4pm NZT),
+          once at 4:30pm NZT on Wednesday. Late changes: edit the player in the Players tab.
         </div>
         <select aria-label="Super Rugby round" style={inputStyle} value={round} onChange={(e) => setRound(Number(e.target.value))}>
           {rounds.map((r) => <option key={r} value={r}>Super Rugby round {r}</option>)}

@@ -23,6 +23,7 @@ import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/seas
 // This season's fixtures, numbered by fantasy week (see lib/season).
 const fixturesData = fixturesByFantasyWeek();
 import { isFrontRow, playedInRound, playerPoints, statCountsFromRow } from "@/lib/scoring";
+import { canPlayPosition } from "@/lib/players/positions";
 
 // -----------------------
 // Types (match your player shape)
@@ -1471,9 +1472,7 @@ const [infoMode, setInfoMode] = useState<InfoMode>("TOTAL_PTS");
 }
 
   function playerCanPlayPos(p: any, pos: string) {
-    const a = String(p?.posAbbrev ?? "").toUpperCase();
-    const b = String(p?.secondaryPosAbbrev ?? "").toUpperCase();
-    return a === pos || b === pos;
+    return canPlayPosition(p, pos);
   }
 
   // Required squad composition (non-wildcard slots only)
@@ -2699,9 +2698,7 @@ const pendingOffersCount = useMemo(() => {
       .filter((p) => (teamFilter ? p.teamCode === teamFilter : true))
       .filter((p) => {
         if (!posFilter) return true;
-        const a = (p.posAbbrev ?? "").toUpperCase();
-        const b = (p.secondaryPosAbbrev ?? "").toUpperCase();
-        return a === posFilter || b === posFilter;
+        return canPlayPosition(p, posFilter);
       })
       .sort((a, b) => {
   const av = metricSortValue(a as any, infoMode);

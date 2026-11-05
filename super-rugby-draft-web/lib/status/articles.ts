@@ -66,14 +66,80 @@ export function parseTeamLists(html: string): TeamList[] {
   return out;
 }
 
-/** "Cameron Christie (knee, season)" -> name, injury "knee", timeframe "season" */
+/** "Cameron Christie (knee/season)" -> name + the bracket text, standardised below. */
 function parseInjuryLine(line: string): InjuryEntry | null {
   const m = line.match(/^(.+?)\s*(?:\((.*)\))?\s*$/);
   if (!m) return null;
   const name = cleanName(m[1]);
   if (!name) return null;
-  const parts = (m[2] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  return { name, injury: parts[0] ?? null, timeframe: parts.slice(1).join(", ") || null };
+  const { injury, timeframe } = splitInjury(m[2] ?? "");
+  return { name, injury, timeframe };
+}
+
+// Teams write injuries many ways: "knee/season", "knee, season", "Hamstring/ 6-8 weeks",
+// "concussion 1-2 weeks", "ankle/Rd 12", "HIA", "head knock", even typos ("nkle", "food").
+// Everything is turned into one shape: "Injury - Timeframe" (e.g. "Hamstring - 6-8 weeks").
+
+const INJURY_WORDS: Array<[RegExp, string]> = [
+  [/^(hia|hia protocols?|head knock|head injury|concussion)$/i, "Concussion"],
+  [/^(rest|rested|all rested|resting policy|rest policy)$/i, "Rested"],
+  [/^(paternity leave|birth of (first |second |third )?child)$/i, "Paternity leave"],
+  [/^compassionate( grounds| leave)?$/i, "Compassionate leave"],
+  [/^nkle$/i, "Ankle"],
+  [/^food$/i, "Foot"],
+  [/^cork(ed)?( thigh)?$/i, "Corked thigh"],
+  [/^hands$/i, "Hand"],
+  [/^(\w+) (tightness|strain|contusion|soreness)$/i, "$1"],
+  [/^acl$/i, "ACL"],
+  [/^sc joint$/i, "SC joint"],
+];
+
+function standardInjuryWord(raw: string): string {
+  const s = raw.trim().replace(/\s+/g, " ");
+  for (const [re, out] of INJURY_WORDS) if (re.test(s)) return s.replace(re, out).replace(/^\w/, (c) => c.toUpperCase());
+  if (/^[A-Z]{2,4}$/.test(s)) return s; // other abbreviations, as written
+  const lower = s.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
+const ROUND_WORD = /\b(?:rd|rnd|round)s?\.?\s*/gi;
+
+function standardTimeframe(raw: string): string {
+  let s = raw.trim().replace(/[\u2013\u2014]/g, "-").replace(/\s+/g, " ").toLowerCase();
+  if (!s || /^(tbc|tba|unknown|rtp protocols?|return to play protocols?)$/.test(s)) return "TBC";
+  if (/^(season|rest of (the )?season|season-ending|out for (the )?season)$/.test(s)) return "Season";
+  if (/^(short|medium|long)[ -]term$/.test(s)) return s.charAt(0).toUpperCase() + s.slice(1).replace("-", " ");
+  s = s.replace(/(\d)\s*-\s*(\d)/g, "$1-$2");
+  // weeks / days: "4weeks", "1 weeks", "1-2 week", "min 12 days"
+  const wk = s.match(/^(?:min(?:imum)?\.?\s*)?(\d+(?:-\d+)?)\s*(week|day)s?$/);
+  if (wk) {
+    const min = /^min/.test(s) ? "+" : "";
+    const plural = wk[1] === "1" && !min ? "" : "s";
+    return `${wk[1]}${min} ${wk[2]}${plural}`;
+  }
+  // rounds: "rd 8", "rnd 8-10", "round 16-finals", "round 16/quarter-finals"
+  if (/^(rd|rnd|round)/.test(s)) {
+    const rest = s.replace(ROUND_WORD, "").replace(/\//g, "-").replace(/quarter[- ]?finals?/g, "quarter-finals").replace(/semi[- ]?finals?/g, "semi-finals");
+    const range = /\d+-\d+|-(finals|quarter-finals|semi-finals)/.test(rest);
+    return `${range ? "Rounds" : "Round"} ${rest.replace(/-(finals|quarter-finals|semi-finals)/, (m) => m.replace(/\b\w/g, (c) => c.toUpperCase()))}`;
+  }
+  if (/^(quarter|semi)[- ]?finals?$/.test(s)) return s.startsWith("quarter") ? "Quarter-finals" : "Semi-finals";
+  if (/^(grand )?final$/.test(s)) return "Final";
+  // free text about coming back ("integrating back into team units this week")
+  if (/integrat|return|back in|back into|available|this week|next week/.test(s)) return "Returning";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Split the bracket text into injury + timeframe, however the team wrote it. */
+export function splitInjury(inner: string): { injury: string | null; timeframe: string | null } {
+  const s = inner.trim();
+  if (!s) return { injury: null, timeframe: null };
+  // "knee/season", "knee, season", "foot - back in training this week"
+  let m = s.match(/^([^/,]+?)\s*(?:\/|,|\s-\s)\s*(.+)$/);
+  // "concussion 1-2 weeks", "knee season"
+  if (!m) m = s.match(/^(.+?)\s+((?:min(?:imum)?\.?\s*)?\d[\d\s-]*\s*(?:weeks?|days?)|season|tbc|(?:rd|rnd|round)s?\.?\s*\d.*)$/i);
+  if (m) return { injury: standardInjuryWord(m[1]), timeframe: standardTimeframe(m[2]) };
+  return { injury: standardInjuryWord(s), timeframe: null };
 }
 
 /** Injured / unavailable players from an "Injury List: Round N" article. */
@@ -95,11 +161,10 @@ export function parseInjuryList(html: string): InjuryList[] {
   return out;
 }
 
-/** How an injury shows as a status, like the 2026 sheet: "Knee - Season", "Concussion", "Out". */
+/** The status shown for an injury, always "Injury - Timeframe" (e.g. "Knee - Season", "Knee - TBC"), or "Out" if no reason is given. */
 export function injuryStatus(e: InjuryEntry): string {
-  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   if (!e.injury) return "Out";
-  return e.timeframe ? `${cap(e.injury)} - ${cap(e.timeframe)}` : cap(e.injury);
+  return `${e.injury} - ${e.timeframe ?? "TBC"}`;
 }
 
 const ROUND_WORDS = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen"];

@@ -18,6 +18,7 @@ import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib
 import { getActiveTimezone, getActiveUsername } from "@/lib/session";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { pointsFromRow } from "@/lib/scoring";
+import { playerPositions } from "@/lib/players/positions";
 
 // -----------------------
 // Types / helpers
@@ -185,10 +186,8 @@ function pickStr(v: any) {
 
 // Same position matching rules as Team Selection
 function canPlayerFitSlot(player: Player, slot: SlotDef) {
-  const primary = (player.posAbbrev ?? "").toUpperCase();
-  const secondary = (player.secondaryPosAbbrev ?? "").toUpperCase();
-
-  const either = (fn: (p: string) => boolean) => fn(primary) || fn(secondary);
+  // any of the player's positions (up to three)
+  const either = (fn: (p: string) => boolean) => playerPositions(player).some(fn);
 
   if (slot.group === "PROP") return either((p) => p.includes("PROP") || p === "PR");
   if (slot.group === "HOOKER") return either((p) => p.includes("HOOK") || p === "HO");

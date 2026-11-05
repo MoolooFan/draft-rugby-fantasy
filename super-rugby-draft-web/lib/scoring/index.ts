@@ -123,13 +123,13 @@ export const CAPTAIN_MULTIPLIER = 2;
 
 export type StatCounts = Partial<Record<StatKey, number>>;
 
-type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null } | null | undefined;
+type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null; thirdPosAbbrev?: string | null } | null | undefined;
 
 /** Only props (PR) and hookers (HO) get scrum points. */
 export function isFrontRow(player: PositionInfo): boolean {
-  const a = String(player?.posAbbrev ?? "").trim().toUpperCase();
-  const b = String(player?.secondaryPosAbbrev ?? "").trim().toUpperCase();
-  return a === "PR" || a === "HO" || b === "PR" || b === "HO";
+  // any of the player's positions (main, second or third)
+  const all = [player?.posAbbrev, player?.secondaryPosAbbrev, player?.thirdPosAbbrev].map((v) => String(v ?? "").trim().toUpperCase());
+  return all.includes("PR") || all.includes("HO");
 }
 
 function num(v: unknown): number {

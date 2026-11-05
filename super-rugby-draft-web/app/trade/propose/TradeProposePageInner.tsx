@@ -17,6 +17,7 @@ const fixturesData = fixturesByFantasyWeek();
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 import { usePlayersStore } from "@/lib/players/store";
+import { canPlayPosition } from "@/lib/players/positions";
 
 // -----------------------
 // Types
@@ -138,9 +139,7 @@ const POSITION_ORDER: Record<string, number> = {
 };
 
 function playerCanPlayPos(p: any, pos: string) {
-  const a = String(p?.posAbbrev ?? "").toUpperCase();
-  const b = String(p?.secondaryPosAbbrev ?? "").toUpperCase();
-  return a === pos || b === pos;
+  return canPlayPosition(p, pos);
 }
 
 function buildRequiredSlots() {
@@ -232,9 +231,7 @@ function normaliseId(x: any) {
 }
 
 function playerGetsScrumPoints(p: Player): boolean {
-  const a = String(p.posAbbrev ?? "").trim().toUpperCase();
-  const b = String(p.secondaryPosAbbrev ?? "").trim().toUpperCase();
-  return a === "PR" || a === "HO" || b === "PR" || b === "HO";
+  return canPlayPosition(p, "PR") || canPlayPosition(p, "HO");
 }
 
 function getRoundPointsFromRow(row: any, p: Player): number | null {

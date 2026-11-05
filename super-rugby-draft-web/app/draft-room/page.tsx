@@ -18,6 +18,7 @@ import type { Player } from "@/lib/draft/types";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { usePlayersStore } from "@/lib/players/store";
 import { useRequireSession } from "@/lib/session/useRequireSession";
+import { canPlayPosition } from "@/lib/players/positions";
 
 
 type DraftTab = "Player Pool" | "Watchlist" | "Teams" | "Draft Results";
@@ -388,9 +389,7 @@ function resolvePlayer(x: any): Player | null {
       .filter((p) => (teamFilter ? p.teamCode === teamFilter : true))
       .filter((p) => {
         if (!posFilter) return true;
-        const a = (p.posAbbrev ?? "").toUpperCase();
-        const b = (p.secondaryPosAbbrev ?? "").toUpperCase();
-        return a === posFilter || b === posFilter;
+        return canPlayPosition(p, posFilter);
       })
       .sort((a, b) => a.draftRank - b.draftRank);
   }, [allPlayers, draftedIds, search, teamFilter, posFilter]);
@@ -1043,7 +1042,7 @@ const entry = resolvePlayer(rawEntry);
                             {TEAM_OPTIONS.find((t) => t.value === entry.teamCode)?.label ?? entry.teamCode}
                             {" — "}
                             {derivePosName(entry.posAbbrev)}
-                            {entry.secondaryPosAbbrev ? ` / ${derivePosName(entry.secondaryPosAbbrev)}` : ""}
+                            {entry.secondaryPosAbbrev ? ` / ${derivePosName(entry.secondaryPosAbbrev)}` : ""}{(entry as { thirdPosAbbrev?: string }).thirdPosAbbrev ? ` / ${derivePosName(String((entry as { thirdPosAbbrev?: string }).thirdPosAbbrev))}` : ""}
                           </div>
                         </div>
                       </div>
@@ -1147,7 +1146,7 @@ const entry = resolvePlayer(rawEntry);
                           </div>
                           <div style={{ fontSize: 10, opacity: 0.7 }}>
                             {teamLabel} {" — "} {derivePosName(player.posAbbrev)}
-                            {player.secondaryPosAbbrev ? ` / ${derivePosName(player.secondaryPosAbbrev)}` : ""}
+                            {player.secondaryPosAbbrev ? ` / ${derivePosName(player.secondaryPosAbbrev)}` : ""}{(player as { thirdPosAbbrev?: string }).thirdPosAbbrev ? ` / ${derivePosName(String((player as { thirdPosAbbrev?: string }).thirdPosAbbrev))}` : ""}
                           </div>
                         </div>
                       </div>

@@ -191,18 +191,62 @@ export function realRoundsAwaitingFinalStats(s: SeasonConfig, nowMs: number): nu
   return roundsWithGameBetween(s, nowMs, GAME_LIVE_MS, FINALISE_AFTER_LAST_KICKOFF_MS);
 }
 
-/**
- * Real rounds whose team lists / injury lists may be out: from 3 days before the round's first
- * kickoff (the articles come out Wednesday 4pm NZT) until that kickoff.
- */
-export function realRoundsAwaitingTeamLists(s: SeasonConfig, nowMs: number): number[] {
-  const firstByRound = new Map<number, number>();
+/** Minutes New Zealand is ahead of UTC at a moment (handles daylight saving). */
+function nzOffsetMinutes(utcMs: number): number {
+  const parts = new Intl.DateTimeFormat("en-NZ", {
+    timeZone: "Pacific/Auckland", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+  }).formatToParts(new Date(utcMs));
+  const n = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  const asUtc = Date.UTC(n("year"), n("month") - 1, n("day"), n("hour"), n("minute"));
+  return Math.round((asUtc - Math.floor(utcMs / 60000) * 60000) / 60000);
+}
+
+/** UTC ms of a New Zealand local date and time. */
+function nzLocalToUtc(y: number, m: number, d: number, h: number, min: number): number {
+  const guess = Date.UTC(y, m - 1, d, h, min);
+  return guess - nzOffsetMinutes(guess - nzOffsetMinutes(guess) * 60000) * 60000;
+}
+
+/** First kickoff (ms) of each real round. */
+function firstKickoffByRound(s: SeasonConfig): Map<number, number> {
+  const first = new Map<number, number>();
   for (const f of s.fixtures) {
     const k = kickoffMs(f);
     const r = Number(f.week);
-    if (k > 0 && (!firstByRound.has(r) || k < firstByRound.get(r)!)) firstByRound.set(r, k);
+    if (k > 0 && (!first.has(r) || k < first.get(r)!)) first.set(r, k);
   }
-  return [...firstByRound].filter(([, k]) => nowMs < k && nowMs >= k - 3 * 24 * HOUR).map(([r]) => r);
+  return first;
+}
+
+/** When the official team-list / injury articles are read: 4:30pm NZT on the Wednesday before the round. */
+export const TEAM_LISTS_READ_AT_NZ = { weekday: 3, hour: 16, minute: 30 };
+
+export function teamListsReadAtMs(s: SeasonConfig, realRound: number): number | null {
+  const k = firstKickoffByRound(s).get(realRound);
+  if (k == null) return null;
+  // the round's first kickoff, as a New Zealand date, then back to the Wednesday on or before it
+  const nz = new Date(k + nzOffsetMinutes(k) * 60000);
+  const back = (nz.getUTCDay() - TEAM_LISTS_READ_AT_NZ.weekday + 7) % 7;
+  const wed = new Date(Date.UTC(nz.getUTCFullYear(), nz.getUTCMonth(), nz.getUTCDate() - back));
+  return nzLocalToUtc(wed.getUTCFullYear(), wed.getUTCMonth() + 1, wed.getUTCDate(), TEAM_LISTS_READ_AT_NZ.hour, TEAM_LISTS_READ_AT_NZ.minute);
+}
+
+/** Real rounds whose articles are due to be read now: from Wednesday 4:30pm NZT until the round's first kickoff. */
+export function realRoundsAwaitingTeamLists(s: SeasonConfig, nowMs: number): number[] {
+  return [...firstKickoffByRound(s)]
+    .filter(([r, k]) => {
+      const at = teamListsReadAtMs(s, r);
+      return at != null && nowMs >= at && nowMs < k;
+    })
+    .map(([r]) => r);
+}
+
+/** Fixtures whose game has finished (3 hours after kickoff) at nowMs, within the last few days. */
+export function recentlyFinishedFixtures(s: SeasonConfig, nowMs: number, withinMs = 4 * 24 * HOUR): SeasonFixture[] {
+  return s.fixtures.filter((f) => {
+    const end = kickoffMs(f) + GAME_LIVE_MS;
+    return kickoffMs(f) > 0 && nowMs >= end && nowMs - end <= withinMs;
+  });
 }
 
 /** True while any game is between its kickoff and 13.5h after it (the only time stats need syncing). */

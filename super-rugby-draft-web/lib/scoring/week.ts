@@ -8,6 +8,7 @@
 //   fit, but every starter who played stays in the XV.
 // - The captain scores x2. The vice-captain takes the x2 only if the captain didn't play.
 import { CAPTAIN_MULTIPLIER, STANDARD_SCORING, playerPoints, type ScoringRules, type StatCounts } from "@/lib/scoring";
+import { canPlayPosition } from "@/lib/players/positions";
 
 export type SlotId =
   | "prop1" | "hooker1" | "prop2"
@@ -38,13 +39,11 @@ export const SLOT_POSITION: Record<string, string> = {
   outsideback1: "OB", outsideback2: "OB", outsideback3: "OB",
 };
 
-export type LineupPlayer = { id: string; posAbbrev?: string | null; secondaryPosAbbrev?: string | null; [k: string]: unknown };
+export type LineupPlayer = { id: string; posAbbrev?: string | null; secondaryPosAbbrev?: string | null; thirdPosAbbrev?: string | null; [k: string]: unknown };
 export type Lineup = Partial<Record<SlotId, LineupPlayer | null>>;
 
 function canPlay(p: LineupPlayer, pos: string): boolean {
-  const a = String(p.posAbbrev ?? "").trim().toUpperCase();
-  const b = String(p.secondaryPosAbbrev ?? "").trim().toUpperCase();
-  return a === pos || b === pos;
+  return canPlayPosition(p, pos);
 }
 
 /** Put 15 players into the starting slots by position, or null if they can't make a valid XV. */

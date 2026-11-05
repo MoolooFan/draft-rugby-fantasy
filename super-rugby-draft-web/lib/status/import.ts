@@ -3,12 +3,15 @@
 // for the fantasy week: named in the XV -> "Starting", replacements -> "Benched", injury list ->
 // e.g. "Knee - Season". Names that don't clearly match a player are flagged for the admin page.
 // - Statuses Ethan set by hand ("manual") are never overwritten.
-// - Safe to run again (it runs hourly until kickoff to pick up article updates): it replaces
-//   its own earlier statuses and unresolved flags for the teams in the article.
+// - Each article is read once (the articles aren't updated afterwards; late changes are made by
+//   Ethan by hand). Running it again is safe: it replaces its own earlier statuses and flags.
+// - Injuries carry on until the next injury list: each new list replaces the current injuries of
+//   the teams in it (a team not in the list, e.g. on a bye, keeps its injuries).
+// - Starting / Benched are cleared once that team's game has finished (clearFinishedGameStatuses).
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { candidateArticleUrls, injuryStatus, parseInjuryList, parseTeamLists, type InjuryList, type TeamList } from "@/lib/status/articles";
+import { candidateArticleUrls, injuryStatus, parseInjuryList, parseTeamLists, teamCodeFromName, type InjuryList, type TeamList } from "@/lib/status/articles";
 import { matchName, type MatchPlayer } from "@/lib/status/match";
-import { fantasyWeekForRealRound, getSeason } from "@/lib/season";
+import { fantasyWeekForRealRound, getSeason, recentlyFinishedFixtures } from "@/lib/season";
 
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36";
 
@@ -22,6 +25,31 @@ async function fetchFirst(urls: string[]): Promise<{ url: string; html: string }
     }
   }
   return null;
+}
+
+const ROUND_WORDS = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen"];
+
+/** Find a round's two articles on the official news page (their addresses aren't consistent). */
+async function findOnNewsPage(season: number, realRound: number): Promise<{ teams: string[]; injuries: string[] }> {
+  const found = { teams: [] as string[], injuries: [] as string[] };
+  try {
+    const res = await fetch("https://super.rugby/superrugby/news/", { headers: { "User-Agent": BROWSER_UA, Accept: "text/html" }, cache: "no-store" });
+    if (!res.ok) return found;
+    const html = await res.text();
+    const tokens = new Set([String(realRound), ROUND_WORDS[realRound]].filter(Boolean));
+    for (const m of html.matchAll(/href="(\/superrugby\/news\/([a-z0-9-]+)\/)"/g)) {
+      const slug = m[2];
+      if (!slug.includes(String(season))) continue;
+      const round = slug.match(/round-([a-z0-9]+)$/)?.[1];
+      if (!round || !tokens.has(round)) continue;
+      const url = `https://super.rugby${m[1]}`;
+      if (/injur|unavailab/.test(slug)) found.injuries.push(url);
+      else if (/teams/.test(slug)) found.teams.push(url);
+    }
+  } catch {
+    // fall back to the usual addresses
+  }
+  return found;
 }
 
 export type ImportReport = {
@@ -39,8 +67,10 @@ export async function importRoundStatus(
   db: SupabaseClient,
   seasonYear: number,
   realRound: number,
-  urls: { teams?: string; injuries?: string } = {}
+  urls: { teams?: string; injuries?: string } = {},
+  opts: { kinds?: Array<"team-list" | "injury-list"> } = {}
 ): Promise<ImportReport> {
+  const want = new Set(opts.kinds ?? ["team-list", "injury-list"]);
   const season = getSeason(seasonYear);
   const week = fantasyWeekForRealRound(season, realRound);
   const report: ImportReport = { realRound, week, teamList: null, injuryList: null };
@@ -64,8 +94,9 @@ export async function importRoundStatus(
   const manual = new Set((manualRows ?? []).map((r) => r.player_id));
 
   const cand = candidateArticleUrls(seasonYear, realRound);
-  const teamsDoc = await fetchFirst(urls.teams ? [urls.teams] : cand.teams);
-  const injuryDoc = await fetchFirst(urls.injuries ? [urls.injuries] : cand.injuries);
+  const listed = urls.teams && urls.injuries ? { teams: [], injuries: [] } : await findOnNewsPage(seasonYear, realRound);
+  const teamsDoc = want.has("team-list") ? await fetchFirst(urls.teams ? [urls.teams] : [...listed.teams, ...cand.teams]) : null;
+  const injuryDoc = want.has("injury-list") ? await fetchFirst(urls.injuries ? [urls.injuries] : [...listed.injuries, ...cand.injuries]) : null;
   const now = new Date().toISOString();
 
   async function apply(
@@ -154,24 +185,55 @@ export async function importRoundStatus(
     if (lists.length) {
       const entries = lists.flatMap((t) => t.players.map((p) => ({ team: t.team, name: p.name, status: injuryStatus(p) })));
       report.injuryList = await apply("injury-list", injuryDoc.url, lists.map((t) => t.team), entries);
-      // The player card's "current status": injured players get their injury; named players
-      // are cleared (skipping any Ethan changed by hand this week).
+      // The player card's current status: for each team in this list, its injuries are replaced
+      // (players no longer listed are cleared). Teams not in the list keep theirs.
+      const listTeams = lists.map((t) => t.team);
+      const { error: cErr } = await db
+        .from("players")
+        .update({ status: null, updated_at: now, updated_by: "articles" })
+        .eq("season", seasonYear)
+        .in("team_code", listTeams)
+        .not("status", "is", null);
+      if (cErr) throw cErr;
       const injured = new Map<string, string>();
       for (const e of entries) {
         const m = matchName(e.name, e.team, players);
-        if (m.kind === "match" && !manual.has(m.player.id)) injured.set(m.player.id, e.status);
+        if (m.kind === "match") injured.set(m.player.id, e.status);
       }
       for (const [id, status] of injured) {
         await db.from("players").update({ status, updated_at: now, updated_by: "articles" }).eq("season", seasonYear).eq("id", id);
       }
     }
   }
-  if (report.teamList) {
-    const { data: named } = await db.from("player_week_status").select("player_id").eq("season", seasonYear).eq("week", week).eq("source", "team-list");
-    const ids = (named ?? []).map((r) => r.player_id).filter((id) => !manual.has(id));
-    for (let i = 0; i < ids.length; i += 200) {
-      await db.from("players").update({ status: null, updated_at: now, updated_by: "articles" }).eq("season", seasonYear).in("id", ids.slice(i, i + 200));
+  return report;
+}
+
+/**
+ * Once a game has finished, its two teams' "Starting" / "Benched" statuses for that week are
+ * cleared (injuries stay until the next injury list). Safe to run every few minutes.
+ */
+export async function clearFinishedGameStatuses(db: SupabaseClient, seasonYear: number, nowMs: number): Promise<number> {
+  const season = getSeason(seasonYear);
+  let cleared = 0;
+  for (const f of recentlyFinishedFixtures(season, nowMs)) {
+    const week = fantasyWeekForRealRound(season, Number(f.week));
+    const teams = [teamCodeFromName(f.homeTeam), teamCodeFromName(f.awayTeam)].filter((t): t is string => !!t);
+    if (week == null || !teams.length) continue;
+    const { data: ids, error } = await db.from("players").select("id").eq("season", seasonYear).in("team_code", teams);
+    if (error) throw error;
+    const playerIds = (ids ?? []).map((p) => p.id);
+    for (let i = 0; i < playerIds.length; i += 200) {
+      const { data: gone, error: dErr } = await db
+        .from("player_week_status")
+        .delete()
+        .eq("season", seasonYear)
+        .eq("week", week)
+        .in("status", ["Starting", "Benched", "starting", "benched"])
+        .in("player_id", playerIds.slice(i, i + 200))
+        .select("player_id");
+      if (dErr) throw dErr;
+      cleared += gone?.length ?? 0;
     }
   }
-  return report;
+  return cleared;
 }
