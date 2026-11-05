@@ -21,7 +21,7 @@ import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 import { PointsBreakdownModal } from "@/components/PointsBreakdownModal";
 import { usePlayersStore } from "@/lib/players/store";
-import { CAPTAIN_MULTIPLIER, isFrontRow, pointsBreakdown, pointsFromRow, statCountsFromRow } from "@/lib/scoring";
+import { CAPTAIN_MULTIPLIER, isFrontRow, pointsBreakdown, pointsFromRow, statCountsFromRow, roundPoints } from "@/lib/scoring";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 // =========================
 // Jersey assets (Matchup page uses ANGLED if available)
@@ -1402,7 +1402,7 @@ const rightEffC = rightRes ? rightRes.captain_used_id : rightC;
 
 function totalForSlots(lineup: Lineup | null, effCaptain: string | null, slots: SlotId[]) {
   if (!lineup) return 0;
-  return slots.reduce((sum, sid) => sum + pointsWithCaptain(lineup[sid], effCaptain), 0);
+  return roundPoints(slots.reduce((sum, sid) => sum + pointsWithCaptain(lineup[sid], effCaptain), 0));
 }
 
 const leftScore = totalForSlots(effectiveLeftLineup, leftEffC, STARTER_SLOTS);

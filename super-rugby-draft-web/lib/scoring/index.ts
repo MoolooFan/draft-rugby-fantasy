@@ -77,17 +77,26 @@ export const STATS: readonly StatDef[] = [
 ];
 
 export type ScoringRules = {
-  /** Points for playing 1–60 minutes. */
+  /** Points for getting on the field (appearance). */
   minutesUpTo60: number;
-  /** Points for playing 61+ minutes. */
+  /** Points instead, once a player reaches minutesFullAt minutes. */
   minutes61Plus: number;
-  /** Points per event. For metresGained it is points per full 10 metres. */
+  /** Minutes needed for minutes61Plus (Standard 61, Alternate 60). */
+  minutesFullAt: number;
+  /** Points per event. For metresGained it is points per full metresPer metres. */
   perEvent: Record<EventStatKey, number>;
+  /** Metres needed for each metresGained point (Standard 10, Alternate 5). */
+  metresPer: number;
+  /** Positions that get scrum points (Standard props and hookers, Alternate props only). */
+  scrumPositions: string[];
 };
 
 export const STANDARD_SCORING: ScoringRules = {
   minutesUpTo60: 1,
   minutes61Plus: 2,
+  minutesFullAt: 61,
+  metresPer: 10,
+  scrumPositions: ["PR", "HO"],
   perEvent: {
     tries: 15,
     tryAssists: 9,
@@ -118,6 +127,76 @@ export const STANDARD_SCORING: ScoringRules = {
   },
 };
 
+/**
+ * Ethan's alternate scoring (8 Nov 2026). These are only the starting values: the live values
+ * are in the database (scoring_systems) and Ethan edits them on the admin page.
+ */
+export const ALTERNATE_SCORING: ScoringRules = {
+  minutesUpTo60: 1, // appearance
+  minutes61Plus: 2, // appearance + 1 more at 60 minutes
+  minutesFullAt: 60,
+  metresPer: 5,
+  scrumPositions: ["PR"],
+  perEvent: {
+    tries: 7,
+    tryAssists: 4,
+    lineBreaks: 3.5,
+    lineBreakAssists: 2.5,
+    defendersBeaten: 1.2,
+    metresGained: 0.2, // per complete 5 m
+    offloads: 0.8,
+    tackles: 0.5,
+    tacklesMissed: -1,
+    turnoversForced: 3,
+    interceptions: 3,
+    fiftyTwentyTwos: 4,
+    penaltiesConceded: -2.5,
+    errors: -1,
+    lineoutsWon: 0.4,
+    lineoutSteals: 4,
+    lineoutErrors: -1.5,
+    scrumsWon: 2.5, // props only
+    conversions: 1.5,
+    conversionsMissed: -1,
+    penaltyGoals: 2,
+    penaltyGoalsMissed: -1,
+    dropGoals: 2,
+    dropGoalsMissed: -1,
+    yellowCards: -6,
+    redCards: -12,
+  },
+};
+
+/** Older saved rules may miss newer fields: fill them from Standard. */
+export function completeRules(r: Partial<ScoringRules> | null | undefined): ScoringRules {
+  const base = STANDARD_SCORING;
+  return {
+    minutesUpTo60: num(r?.minutesUpTo60 ?? base.minutesUpTo60),
+    minutes61Plus: num(r?.minutes61Plus ?? base.minutes61Plus),
+    minutesFullAt: num(r?.minutesFullAt ?? base.minutesFullAt) || base.minutesFullAt,
+    metresPer: num(r?.metresPer ?? base.metresPer) || base.metresPer,
+    scrumPositions: Array.isArray(r?.scrumPositions) ? r!.scrumPositions.map((p) => String(p).toUpperCase()) : base.scrumPositions,
+    perEvent: Object.fromEntries(
+      (Object.keys(base.perEvent) as EventStatKey[]).map((k) => [k, num(r?.perEvent?.[k] ?? base.perEvent[k])])
+    ) as Record<EventStatKey, number>,
+  };
+}
+
+// The scoring the pages use: the active league's (set when a league is loaded). The server
+// always passes a league's rules explicitly.
+let activeRules: ScoringRules = STANDARD_SCORING;
+export function setActiveScoringRules(rules: Partial<ScoringRules> | null | undefined) {
+  activeRules = rules ? completeRules(rules) : STANDARD_SCORING;
+}
+export function activeScoringRules(): ScoringRules {
+  return activeRules;
+}
+
+/** Points to one decimal place (Alternate scoring uses decimals). */
+export function roundPoints(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
 /** Captain scores double. Fixed for every league. */
 export const CAPTAIN_MULTIPLIER = 2;
 
@@ -125,8 +204,14 @@ export type StatCounts = Partial<Record<StatKey, number>>;
 
 type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null; thirdPosAbbrev?: string | null } | null | undefined;
 
-/** Only props (PR) and hookers (HO) get scrum points. */
-export function isFrontRow(player: PositionInfo): boolean {
+/** Does this player get scrum points under these rules (Standard: props and hookers; Alternate: props only)? */
+export function isFrontRow(player: PositionInfo, rules: ScoringRules = activeScoringRules()): boolean {
+  const all = [player?.posAbbrev, player?.secondaryPosAbbrev, player?.thirdPosAbbrev].map((v) => String(v ?? "").trim().toUpperCase());
+  return all.some((p) => rules.scrumPositions.includes(p));
+}
+
+/** Props or hookers (by position only, whatever the scoring). */
+export function isPropOrHooker(player: PositionInfo): boolean {
   // any of the player's positions (main, second or third)
   const all = [player?.posAbbrev, player?.secondaryPosAbbrev, player?.thirdPosAbbrev].map((v) => String(v ?? "").trim().toUpperCase());
   return all.includes("PR") || all.includes("HO");
@@ -159,8 +244,8 @@ export function statCountsFromRaw(stats: unknown): StatCounts {
   return out;
 }
 
-export function minutesPoints(minutes: number, rules: ScoringRules = STANDARD_SCORING): number {
-  if (minutes >= 61) return rules.minutes61Plus;
+export function minutesPoints(minutes: number, rules: ScoringRules = activeScoringRules()): number {
+  if (minutes >= rules.minutesFullAt) return rules.minutes61Plus;
   if (minutes > 0) return rules.minutesUpTo60;
   return 0;
 }
@@ -170,13 +255,13 @@ export function statPoints(
   key: StatKey,
   count: number,
   frontRow: boolean,
-  rules: ScoringRules = STANDARD_SCORING
+  rules: ScoringRules = activeScoringRules()
 ): number {
   if (!count) return 0;
   if (key === "minutesPlayed") return minutesPoints(count, rules);
   if (key === "scrumsWon" && !frontRow) return 0;
-  if (key === "metresGained") return Math.floor(count / 10) * rules.perEvent.metresGained;
-  return count * rules.perEvent[key];
+  if (key === "metresGained") return Math.round(Math.floor(count / rules.metresPer) * rules.perEvent.metresGained * 100) / 100;
+  return Math.round(count * rules.perEvent[key] * 100) / 100;
 }
 
 /** True when the player got on the field (0 minutes = didn't play, scores nothing, can be auto-subbed). */
@@ -188,24 +273,24 @@ export function playedInRound(counts: StatCounts): boolean {
 export function playerPoints(
   counts: StatCounts,
   frontRow: boolean,
-  rules: ScoringRules = STANDARD_SCORING
+  rules: ScoringRules = activeScoringRules()
 ): number {
   if (!playedInRound(counts)) return 0;
   let total = 0;
   for (const s of STATS) total += statPoints(s.key, num(counts[s.key]), frontRow, rules);
-  return total;
+  return roundPoints(total);
 }
 
 /** Shortcut for page-style stat rows. */
-export function pointsFromRow(row: unknown, player: PositionInfo, rules: ScoringRules = STANDARD_SCORING): number {
-  return playerPoints(statCountsFromRow(row), isFrontRow(player), rules);
+export function pointsFromRow(row: unknown, player: PositionInfo, rules: ScoringRules = activeScoringRules()): number {
+  return playerPoints(statCountsFromRow(row), isFrontRow(player, rules), rules);
 }
 
 /** Per-stat points, in STATS order (for points breakdown pop-ups). */
 export function pointsBreakdown(
   counts: StatCounts,
   frontRow: boolean,
-  rules: ScoringRules = STANDARD_SCORING
+  rules: ScoringRules = activeScoringRules()
 ): Array<{ stat: StatDef; count: number; points: number }> {
   return STATS.map((stat) => {
     const count = num(counts[stat.key]);

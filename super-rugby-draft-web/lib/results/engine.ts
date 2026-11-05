@@ -10,7 +10,8 @@
 // all run exactly the same code.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadSeasonPlayers } from "@/lib/players/db";
-import { statCountsFromRaw, isFrontRow, STATS, type StatCounts } from "@/lib/scoring";
+import { statCountsFromRaw, isFrontRow, roundPoints, STATS, type StatCounts } from "@/lib/scoring";
+import { getLeagueScoringRules } from "@/lib/scoring/leagueRules";
 import { scoreTeamWeek, type Lineup, type LineupPlayer } from "@/lib/scoring/week";
 import { reconcileLineup } from "@/lib/league/lineup";
 import { bonusPoints, buildLadder, type LadderMatchup } from "@/lib/league/ladder";
@@ -256,6 +257,7 @@ export async function finaliseWeek(
 
   const season = getSeason(league.season);
   await loadPlayers(db, league.season);
+  const rules = await getLeagueScoringRules(db, leagueId);
   const stats = await weekStats(db, season, week);
   const selections = await q<Array<{ team_id: string; lineup: Lineup; captain_id: string | null; vice_id: string | null }>>(
     db.from("team_selections").select("team_id, lineup, captain_id, vice_id").eq("league_id", leagueId).eq("week", week)
@@ -273,7 +275,8 @@ export async function finaliseWeek(
       captainId: s.captain_id,
       viceId: s.vice_id,
       statsFor: (id) => stats.get(normId(id)) ?? null,
-      frontRow: (id) => isFrontRow(playerInfo(id)),
+      frontRow: (id) => isFrontRow(playerInfo(id), rules),
+      rules,
     });
     return {
       league_id: leagueId, week, team_id: s.team_id,
@@ -320,7 +323,7 @@ export async function finaliseWeek(
   };
   const total = (teamId: string, weeks: number[]) => {
     const rs = allResults.filter((r) => r.team_id === teamId && weeks.includes(r.week));
-    return { score: rs.reduce((a, r) => a + r.score, 0), tries: rs.reduce((a, r) => a + r.tries, 0) };
+    return { score: roundPoints(rs.reduce((a, r) => a + Number(r.score), 0)), tries: rs.reduce((a, r) => a + r.tries, 0) };
   };
 
   for (const m of matchups) {

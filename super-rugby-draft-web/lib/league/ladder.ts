@@ -4,6 +4,7 @@
 // Order: ladder points, then points for, then points difference.
 // A bye: the team's score counts toward points for, but no win, loss or ladder points.
 import { BONUS_POINTS, LADDER_POINTS } from "@/lib/season";
+import { roundPoints } from "@/lib/scoring";
 
 export type LadderMatchup = {
   kind: string;
@@ -49,12 +50,12 @@ export function buildLadder(teamIds: string[], matchups: LadderMatchup[]): Ladde
     if (!home) continue;
     if (!m.away_team_id) {
       home.byes++;
-      home.pointsFor += m.home_score;
+      home.pointsFor += Number(m.home_score);
       continue;
     }
     const away = rows.get(m.away_team_id);
     if (!away || m.away_score == null) continue;
-    const hs = m.home_score, as = m.away_score;
+    const hs = Number(m.home_score), as = Number(m.away_score);
     home.played++; away.played++;
     home.pointsFor += hs; home.pointsAgainst += as;
     away.pointsFor += as; away.pointsAgainst += hs;
@@ -65,7 +66,11 @@ export function buildLadder(teamIds: string[], matchups: LadderMatchup[]): Ladde
     home.bonus += hb; away.bonus += ab;
     home.ladderPoints += hb; away.ladderPoints += ab;
   }
-  for (const r of rows.values()) r.pointsDiff = r.pointsFor - r.pointsAgainst;
+  for (const r of rows.values()) {
+    r.pointsFor = roundPoints(r.pointsFor);
+    r.pointsAgainst = roundPoints(r.pointsAgainst);
+    r.pointsDiff = roundPoints(r.pointsFor - r.pointsAgainst);
+  }
   return [...rows.values()].sort(
     (a, b) => b.ladderPoints - a.ladderPoints || b.pointsFor - a.pointsFor || b.pointsDiff - a.pointsDiff
   );

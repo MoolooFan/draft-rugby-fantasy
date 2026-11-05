@@ -24,6 +24,14 @@ export type League = {
 
     playoffFormat: PlayoffFormat;
 
+  // scoring (item 12): the system, and the point values this league actually uses
+  scoringSystem?: "standard" | "alternate" | "custom";
+  scoringRules?: Record<string, unknown>;
+  scoringCustom?: Record<string, unknown> | null;
+  scoringLocked?: boolean;
+  bonusPoints?: boolean;
+  season?: number;
+
   // season alignment
   realRegularSeasonRounds: number;
   startRound: number;

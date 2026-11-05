@@ -19,7 +19,7 @@ import { usePlayersStore } from "@/lib/players/store";
 import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib/league/week";
 import { getActiveUsername } from "@/lib/session";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
-import { CAPTAIN_MULTIPLIER, pointsFromRow } from "@/lib/scoring";
+import { CAPTAIN_MULTIPLIER, pointsFromRow, roundPoints } from "@/lib/scoring";
 
 type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null } | null;
 
@@ -1100,7 +1100,7 @@ function pointsWithCaptain(p: any | null, effCaptainId: string | null) {
 
 function totalForSlots(lineup: Lineup | null, effCaptain: string | null, slots: SlotId[]) {
   if (!lineup) return 0;
-  return slots.reduce((sum, sid) => sum + pointsWithCaptain(lineup[sid], effCaptain), 0);
+  return roundPoints(slots.reduce((sum, sid) => sum + pointsWithCaptain(lineup[sid], effCaptain), 0));
 }
 
 // Live values to replace the placeholders

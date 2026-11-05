@@ -8,7 +8,7 @@ import { useTransactionsStore } from "@/lib/transactions/store";
 import { useDraftStore } from "@/lib/draft/store";
 import { useLeagueStore } from "@/lib/league/store";
 import { usePlayersStore, usePlayers } from "@/lib/players/store";
-import { isFrontRow, pointsFromRow, statPoints, STATS, type StatKey } from "@/lib/scoring";
+import { isFrontRow, pointsFromRow, statPoints, STATS, type StatKey, roundPoints } from "@/lib/scoring";
 import { currentSeasonYear, roundLabel } from "@/lib/season";
 
 
@@ -1285,7 +1285,7 @@ function computeGames(rounds: { points: number; minutes?: number }[]) {
   return rounds?.length ?? 0;
 }
 function computeTotalPoints(rounds: { points: number }[]) {
-  return (rounds ?? []).reduce((sum, r) => sum + (Number(r?.points) || 0), 0);
+  return roundPoints((rounds ?? []).reduce((sum, r) => sum + (Number(r?.points) || 0), 0));
 }
 function computeAvgPoints(rounds: { points: number }[]) {
   const gp = rounds?.length ?? 0;

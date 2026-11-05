@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
 import { refreshDraftOrder } from "@/lib/draft/engine";
+import { rulesForLeagueRow } from "@/lib/scoring/leagueRules";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -132,6 +133,13 @@ if (computedOrder.length) {
     draftStatus: leagueRow.draft_status ?? "scheduled",
 
     playoffFormat: leagueRow.playoff_format ?? "final4",
+    // scoring: the system and the actual point values this league uses
+    scoringSystem: leagueRow.scoring_system ?? "standard",
+    scoringRules: await rulesForLeagueRow(supabaseAdmin, leagueRow),
+    scoringCustom: leagueRow.scoring_custom ?? null,
+    scoringLocked: !!leagueRow.scoring_rules_locked,
+    bonusPoints: leagueRow.bonus_points !== false,
+    season: leagueRow.season,
 
     realRegularSeasonRounds: leagueRow.real_regular_season_rounds ?? 16,
     startRound: leagueRow.start_round ?? 1,

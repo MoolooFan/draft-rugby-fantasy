@@ -7,7 +7,7 @@
 //   in bench order. Players can move to their other listed position so more bench players
 //   fit, but every starter who played stays in the XV.
 // - The captain scores x2. The vice-captain takes the x2 only if the captain didn't play.
-import { CAPTAIN_MULTIPLIER, STANDARD_SCORING, playerPoints, type ScoringRules, type StatCounts } from "@/lib/scoring";
+import { CAPTAIN_MULTIPLIER, STANDARD_SCORING, playerPoints, roundPoints, type ScoringRules, type StatCounts } from "@/lib/scoring";
 import { canPlayPosition } from "@/lib/players/positions";
 
 export type SlotId =
@@ -178,5 +178,5 @@ export function scoreTeamWeek(args: {
     score += p.id === cap ? pts * CAPTAIN_MULTIPLIER : pts;
     tries += counts ? Number(counts.tries ?? 0) : 0;
   }
-  return { finalLineup, captainUsedId: cap, playerPoints: playerPointsMap, score, tries };
+  return { finalLineup, captainUsedId: cap, playerPoints: playerPointsMap, score: roundPoints(score), tries };
 }

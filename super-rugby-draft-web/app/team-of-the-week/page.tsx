@@ -17,7 +17,7 @@ const fixturesData = fixturesByFantasyWeek();
 import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib/league/week";
 import { getActiveTimezone, getActiveUsername } from "@/lib/session";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
-import { pointsFromRow } from "@/lib/scoring";
+import { pointsFromRow, roundPoints } from "@/lib/scoring";
 import { playerPositions } from "@/lib/players/positions";
 
 // -----------------------
@@ -514,7 +514,7 @@ export default function TeamOfTheWeekPage() {
       if (!p?.id) continue;
       sum += weekPointsByPlayerId.get(p.id.toLowerCase()) ?? 0;
     }
-    return sum;
+    return roundPoints(sum);
   }, [lineup, weekPointsByPlayerId]);
 
   // -------- Ownership map (server rosters) --------

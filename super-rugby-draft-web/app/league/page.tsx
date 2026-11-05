@@ -7,7 +7,7 @@ import type { League, PlayoffFormat } from "@/lib/league/types";
 import { buildLeagueSchedule } from "@/lib/league/schedule";
 import { AppMenu } from "@/components/AppMenu";
 import { usePlayersStore } from "@/lib/players/store";
-import { CAPTAIN_MULTIPLIER, pointsFromRow } from "@/lib/scoring";
+import { CAPTAIN_MULTIPLIER, pointsFromRow, roundPoints } from "@/lib/scoring";
 import { fantasyWeekToRealRound } from "@/lib/league/week";
 import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/season";
 
@@ -1105,7 +1105,7 @@ function teamWeekScore(leagueId: string | null, teamId: string | null, weekNo: n
     const base = pointsFor(p);
     sum += (p.id === effC ? base * CAP_MULT : base);
   }
-  return sum;
+  return roundPoints(sum);
 }
 
 

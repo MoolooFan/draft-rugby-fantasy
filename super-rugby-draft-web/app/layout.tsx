@@ -3,6 +3,7 @@ import "./globals.css";
 import SessionProvider from "@/components/SessionProvider";
 import { getServerProfile } from "@/lib/serverSession";
 import { currentSeasonYear } from "@/lib/season";
+import ScoringRulesSync from "@/components/ScoringRulesSync";
 
 /**
  * Viewport configuration
@@ -60,7 +61,9 @@ export default async function RootLayout({
           background: "#0f172a",
         }}
       >
-        <SessionProvider profile={sessionProfile}>{children}</SessionProvider>
+        <SessionProvider profile={sessionProfile}>
+          <ScoringRulesSync>{children}</ScoringRulesSync>
+        </SessionProvider>
 
         {/* Portal target for modals / menus if needed later */}
         <div id="overlay-root" />

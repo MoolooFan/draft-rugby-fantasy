@@ -22,7 +22,7 @@ import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/seas
 
 // This season's fixtures, numbered by fantasy week (see lib/season).
 const fixturesData = fixturesByFantasyWeek();
-import { isFrontRow, playedInRound, playerPoints, statCountsFromRow } from "@/lib/scoring";
+import { isFrontRow, playedInRound, playerPoints, statCountsFromRow, roundPoints } from "@/lib/scoring";
 import { canPlayPosition } from "@/lib/players/positions";
 
 // -----------------------
@@ -2201,7 +2201,7 @@ function getTotalPoints(p: Player): number | null {
     any = true;
   }
 
-  return any ? total : null;
+  return any ? roundPoints(total) : null;
 }
 
 function getMatchesPlayed(p: Player): number | null {

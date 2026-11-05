@@ -14,6 +14,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadSeasonPlayers, type SitePlayer } from "@/lib/players/db";
 import { buildScheduleForLeague } from "@/lib/results/engine";
 import { ROSTER_SIZE, rosterFits, roundForPick, secondsForTeam, shuffled, teamForPick } from "@/lib/draft/rules";
+import { lockLeagueScoring } from "@/lib/scoring/leagueRules";
 
 type Db = SupabaseClient;
 
@@ -223,6 +224,7 @@ export async function advanceDraft(db: Db, leagueId: string, nowMs: number): Pro
       }).eq("league_id", leagueId)
     );
     await q(db.from("leagues").update({ draft_status: "live", settings_locked_at: new Date(nowMs).toISOString() }).eq("id", leagueId));
+    await lockLeagueScoring(db, leagueId); // later edits to Standard/Alternate won't change this season
     ctx = await loadContext(db, leagueId);
   }
 
