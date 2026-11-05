@@ -372,11 +372,11 @@ export async function prepareUpcoming(db: Db, leagueId: string) {
 export type TickReport = { leagues: number; locked: string[]; finalised: string[]; errors: string[] };
 
 /** Locks and finalises whatever is due for every league in a season. Stats syncing is done by the caller. */
-export async function runResultsTick(db: Db, seasonYear: number, nowMs: number, opts: { beforeFinalise?: () => Promise<void> } = {}): Promise<TickReport> {
+export async function runResultsTick(db: Db, seasonYear: number, nowMs: number, opts: { beforeFinalise?: (realRounds: number[]) => Promise<void> } = {}): Promise<TickReport> {
   const season = getSeason(seasonYear);
   const report: TickReport = { leagues: 0, locked: [], finalised: [], errors: [] };
   const leagues = await q<LeagueRow[]>(db.from("leagues").select("*").eq("season", seasonYear).not("schedule_built_at", "is", null));
-  let synced = false;
+  const syncedWeeks = new Set<number>();
   for (const league of leagues) {
     report.leagues++;
     const plan = league.schedule_plan;
@@ -395,7 +395,8 @@ export async function runResultsTick(db: Db, seasonYear: number, nowMs: number, 
         }
         const finaliseAt = weekFinaliseAtMs(season, w);
         if (finaliseAt != null && nowMs >= finaliseAt && !finalised.has(w)) {
-          if (!synced && opts.beforeFinalise) { await opts.beforeFinalise(); synced = true; }
+          // pull the week's final stats once (shared by every league finalising this week)
+          if (opts.beforeFinalise && !syncedWeeks.has(w)) { await opts.beforeFinalise(realRoundsForWeek(season, w)); syncedWeeks.add(w); }
           await finaliseWeek(db, league.id, w, nowMs);
           finalised.add(w);
           report.finalised.push(`${league.id} week ${w}`);

@@ -1,13 +1,14 @@
 // app/api/cron/tick/route.ts
 // Called every 5 minutes by Supabase's scheduler (pg_cron), with the CRON_SECRET password.
-// - While a game is on (kickoff to 13.5h after): pulls fresh player stats.
+// - While a game is on (kickoff to 3h after): pulls fresh player stats every call (5 min).
+// - After a game until its stats are final (13.5h after kickoff): pulls them once an hour.
 // - Locks lineups at each deadline and finalises each round when it's due (lib/results/engine).
 // Outside game weekends it does almost nothing, so it's cheap to call often.
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { syncExternalStats } from "@/lib/players/syncStats";
 import { runResultsTick } from "@/lib/results/engine";
-import { currentSeasonYear, getSeason, realRoundsInPlay } from "@/lib/season";
+import { currentSeasonYear, getSeason, liveRealRounds, realRoundsAwaitingFinalStats } from "@/lib/season";
 
 export const maxDuration = 60; // seconds (Vercel)
 
@@ -27,14 +28,15 @@ async function tick() {
     synced = { rounds, rows: r.insertedOrUpdated, failed: r.failedPlayers };
   };
 
-  const inPlay = realRoundsInPlay(season, now);
-  if (inPlay.length) await sync(inPlay);
+  // Live games every call; finished games only on the first call of each hour.
+  const firstCallOfHour = new Date(now).getUTCMinutes() < 5;
+  const rounds = new Set(liveRealRounds(season, now));
+  if (firstCallOfHour) for (const r of realRoundsAwaitingFinalStats(season, now)) rounds.add(r);
+  if (rounds.size) await sync([...rounds]);
 
-  // Before finalising, make sure the latest stats are in (if they weren't just pulled).
+  // Before finalising a week, pull its final stats (all of its real rounds).
   const results = await runResultsTick(supabaseAdmin, seasonYear, now, {
-    beforeFinalise: async () => {
-      if (!synced) await sync(season.fixtures.filter((f) => new Date(f.kickoffAt).getTime() <= now).map((f) => Number(f.week)).filter((r, i, a) => a.indexOf(r) === i).slice(-2));
-    },
+    beforeFinalise: (realRounds) => sync(realRounds),
   });
 
   return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, ...results };

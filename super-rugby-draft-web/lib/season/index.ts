@@ -147,14 +147,26 @@ export function currentSeasonYear(): number {
   return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 2027;
 }
 
-/** Real rounds with a game between its kickoff and 13.5h after it (the rounds worth syncing now). */
-export function realRoundsInPlay(s: SeasonConfig, nowMs: number): number[] {
+/** A game counts as live from kickoff until this long after (2h game + 1h for extra time/delays). */
+export const GAME_LIVE_MS = 3 * HOUR;
+
+function roundsWithGameBetween(s: SeasonConfig, nowMs: number, fromMs: number, toMs: number): number[] {
   const rounds = new Set<number>();
   for (const f of s.fixtures) {
     const k = kickoffMs(f);
-    if (k > 0 && nowMs >= k && nowMs <= k + FINALISE_AFTER_LAST_KICKOFF_MS) rounds.add(Number(f.week));
+    if (k > 0 && nowMs >= k + fromMs && nowMs <= k + toMs) rounds.add(Number(f.week));
   }
   return [...rounds];
+}
+
+/** Real rounds with a game on right now (stats synced every few minutes). */
+export function liveRealRounds(s: SeasonConfig, nowMs: number): number[] {
+  return roundsWithGameBetween(s, nowMs, 0, GAME_LIVE_MS);
+}
+
+/** Real rounds with a finished game whose stats may still be corrected (synced hourly). */
+export function realRoundsAwaitingFinalStats(s: SeasonConfig, nowMs: number): number[] {
+  return roundsWithGameBetween(s, nowMs, GAME_LIVE_MS, FINALISE_AFTER_LAST_KICKOFF_MS);
 }
 
 /** True while any game is between its kickoff and 13.5h after it (the only time stats need syncing). */
