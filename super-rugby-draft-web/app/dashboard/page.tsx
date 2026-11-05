@@ -2157,8 +2157,14 @@ function JerseyTile({
 
             <div style={{ display: "grid" }}>
               {bestAvailablePlayers.map((p, idx) => (
-                <button
+                <div
                   key={p.id}
+                  role="button"
+                  tabIndex={0}
+                  // (a clickable block, not a <button>: it holds the star and add buttons)
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.currentTarget as HTMLDivElement).click();
+                  }}
 onClick={() => {
   const ownerTeamId = ownerTeamIdByPlayerId.get(normaliseId(p.id)) ?? null;
 
@@ -2255,7 +2261,7 @@ onClick={() => {
   </button>
 </div>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
 

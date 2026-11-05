@@ -2,79 +2,18 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
-import { fixturesByFantasyWeek } from "@/lib/season";
-
-// This season's fixtures, numbered by fantasy week (see lib/season).
-const fixturesData = fixturesByFantasyWeek();
-
-type AnyFixture = {
-  id: string;
-  week: number;
-  kickoffAt: string | number;
-  kickoffMs?: number;
-};
-
-function toMs(x: any): number {
-  const n = typeof x === "number" ? x : new Date(x).getTime();
-  return Number.isFinite(n) ? n : 0;
-}
-
-function getWeekFirstKickoffMs(fixtures: AnyFixture[], week: number) {
-  const wk = fixtures.filter((f) => f.week === week);
-  if (!wk.length) return 0;
-  return Math.min(...wk.map((f) => f.kickoffMs ?? toMs(f.kickoffAt)));
-}
+import { isPastWeekDeadline, cancelExpiredPendingTrades } from "@/lib/trades/deadlines";
 
 // Team selection deadline = 1 hour before first kickoff
-function getWeekDeadlineMs(fixtures: AnyFixture[], week: number) {
-  const firstKickoff = getWeekFirstKickoffMs(fixtures, week);
-  return firstKickoff ? firstKickoff - 1 * 60 * 60 * 1000 : 0;
-}
-
-function getWeeksSorted(fixtures: AnyFixture[]) {
-  return Array.from(new Set(fixtures.map((f) => f.week))).sort((a, b) => a - b);
-}
 
 /**
  * Cancels any pending trade_offers for weeks where deadline has passed.
  * This is "lazy cleanup": it runs whenever someone proposes a trade.
  */
-async function cancelExpiredPendingTrades(leagueId: string, nowMs: number) {
-  const fixtures: AnyFixture[] = (fixturesData as AnyFixture[]).map((f) => ({
-    ...f,
-    kickoffMs: toMs((f as any).kickoffAt),
-  }));
-
-  const weeks = getWeeksSorted(fixtures);
-
-  const expiredWeeks = weeks.filter((w) => {
-    const dl = getWeekDeadlineMs(fixtures, w);
-    return dl > 0 && nowMs >= dl;
-  });
-
-  if (!expiredWeeks.length) return;
-
-  const { error } = await supabaseAdmin
-    .from("trade_offers")
-    .update({ status: "cancelled" })
-    .eq("league_id", leagueId)
-    .eq("status", "pending")
-    .in("week", expiredWeeks);
-
-  if (error) throw error;
-}
 
 /**
  * Returns true if the week’s selection deadline is already passed.
  */
-function isPastWeekDeadline(week: number, nowMs: number) {
-  const fixtures: AnyFixture[] = (fixturesData as AnyFixture[]).map((f) => ({
-    ...f,
-    kickoffMs: toMs((f as any).kickoffAt),
-  }));
-  const dl = getWeekDeadlineMs(fixtures, week);
-  return dl > 0 && nowMs >= dl;
-}
 
 const uniq = (arr: any[]) =>
   Array.from(new Set(arr.map((x) => String(x).trim()).filter(Boolean)));

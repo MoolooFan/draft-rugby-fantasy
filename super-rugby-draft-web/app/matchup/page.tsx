@@ -1771,7 +1771,8 @@ return (
 
   <div style={{ textAlign: "center" }}>
     <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.7 }}>vs</div>
-    {scoresLocked || displayLocked ? (
+    {/* shown once the page has loaded in the browser (the server has no league data yet) */}
+    {mounted && (scoresLocked || displayLocked) ? (
       <div style={{ marginTop: 2, fontSize: 9, fontWeight: 900, letterSpacing: 0.6, opacity: 0.6 }}>
         {scoresLocked ? "FINAL" : "LIVE"}
       </div>

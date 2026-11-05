@@ -981,32 +981,7 @@ useEffect(() => {
   })();
 }, [activeLeague?.id, hasExpiredDropLocks, nowMs]);
 
-  // Auto-decline pending trades at the live week selection deadline (one-time write)
-useEffect(() => {
-  if (!ENABLE_TRADES) return;
-  if (typeof window === "undefined") return;
-  if (!activeLeague?.id) return;
-  if (!liveWeekDeadlineMs) return;
-  if (nowMs < liveWeekDeadlineMs) return;
-
-  const key = `tx_autodecline_${activeLeague.id}_wk${liveWeek}`;
-  if (window.localStorage.getItem(key)) return;
-
-  (async () => {
-    await fetch(`/api/trades/decline-expired`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        leagueId: activeLeague.id,
-        deadlineMs: liveWeekDeadlineMs,
-        reason: "Auto-declined at team selection deadline",
-      }),
-    });
-
-    await refreshTransactionsForLeague(activeLeague.id);
-    window.localStorage.setItem(key, "1");
-  })();
-}, [ENABLE_TRADES, activeLeague?.id, liveWeekDeadlineMs, nowMs, liveWeek]);
+  // (Expired trade offers are cancelled by the server whenever trades are loaded.)
 
 // Auto-process waivers globally (idempotent via DB guard)
 useEffect(() => {

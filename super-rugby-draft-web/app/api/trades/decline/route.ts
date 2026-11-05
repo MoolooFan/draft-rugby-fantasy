@@ -1,45 +1,11 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
-import { fixturesByFantasyWeek } from "@/lib/season";
-
-// This season's fixtures, numbered by fantasy week (see lib/season).
-const fixturesData = fixturesByFantasyWeek();
+import { isPastWeekDeadline } from "@/lib/trades/deadlines";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
-type AnyFixture = {
-  id: string;
-  week: number;
-  kickoffAt: string | number;
-  kickoffMs?: number;
-};
-
-function toMs(x: any): number {
-  const n = typeof x === "number" ? x : new Date(x).getTime();
-  return Number.isFinite(n) ? n : 0;
-}
-
-function getWeekFirstKickoffMs(fixtures: AnyFixture[], week: number) {
-  const wk = fixtures.filter((f) => f.week === week);
-  if (!wk.length) return 0;
-  return Math.min(...wk.map((f) => f.kickoffMs ?? toMs(f.kickoffAt)));
-}
-
 // Team selection deadline = 1 hour before first kickoff
-function getWeekDeadlineMs(fixtures: AnyFixture[], week: number) {
-  const first = getWeekFirstKickoffMs(fixtures, week);
-  return first ? first - 1 * 60 * 60 * 1000 : 0;
-}
-
-function isPastWeekDeadline(week: number, nowMs: number) {
-  const fixtures: AnyFixture[] = (fixturesData as AnyFixture[]).map((f) => ({
-    ...f,
-    kickoffMs: toMs((f as any).kickoffAt),
-  }));
-  const dl = getWeekDeadlineMs(fixtures, week);
-  return dl > 0 && nowMs >= dl;
-}
 
 export async function POST(req: Request) {
   const usernameRaw = await getServerUsername();
