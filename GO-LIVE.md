@@ -31,7 +31,7 @@ Everyone makes a new account on the new site. The 2026 honours list (champion, r
 1. Go to **supabase.com/dashboard** and click **New project**.
 2. **Name:** e.g. `Draft Rugby Fantasy 2027`.
 3. **Database password:** click **Generate a password**, then copy it and save it somewhere safe, like a password manager. You need it in step 3.
-4. **Region:** **Sydney (ap-southeast-2)**, which is closest to the players.
+4. **Region:** **Asia-Pacific (Sydney)** (`ap-southeast-2`), which is closest to the players. Double-check this: the region can't be changed after the project is made, and a faraway database slows down every click.
 5. Click **Create new project** and wait a couple of minutes while it sets up.
 6. Look at the address bar. It shows `supabase.com/dashboard/project/`**`abcdefghijklmnop`**. That last part is the **project ref**. Copy it; you need it later.
 
@@ -80,9 +80,9 @@ npx supabase projects list
 The new project should have a **●** next to it in the `LINKED` column. If the old one does, stop and run the `link` command again.
 
 ```
-npx supabase db push
+npx supabase db push --remote
 ```
-It lists 11 changes and asks `Do you want to push these migrations?` Type `Y` and press Enter. It ends with `Finished supabase db push.`
+(Without `--remote`, the Supabase tool updates the test database on this PC instead.) It lists 11 changes and asks `Do you want to push these migrations?` Type `Y` and press Enter. It ends with `Finished supabase db push.`
 
 ## 4. Login settings (Supabase dashboard, new project)
 
@@ -137,6 +137,8 @@ It should say `No 2026 league in this database: imported the honours only (8 row
    - `SUPABASE_SERVICE_ROLE_KEY` → the secret key
 3. **Add New:** `CRON_SECRET` → the cron password (the same one you put in step 5).
 4. Delete `SESSION_SECRET` and `FIXTURES_SHEET_CSV_URL` if they're there, plus any old Google Sheets ones. Click each one's **⋯ → Delete**.
+
+5. **Put Vercel's servers in Sydney too** (next to the database): **Settings → Functions** (on some screens **Settings → General**) → **Function Region** → choose **Sydney, Australia (syd1)** → **Save**.
 
 The old site keeps working while you do this: Vercel only uses new settings when the next version goes live (step 8). The site now tells Vercel to use Node 22 on its own, so there's nothing to change for that.
 
