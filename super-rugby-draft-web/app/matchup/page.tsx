@@ -22,45 +22,9 @@ import { PointsBreakdownModal } from "@/components/PointsBreakdownModal";
 import { usePlayersStore } from "@/lib/players/store";
 import { CAPTAIN_MULTIPLIER, isFrontRow, pointsBreakdown, pointsFromRow, statCountsFromRow, roundPoints } from "@/lib/scoring";
 import { useRequireSession } from "@/lib/session/useRequireSession";
-// =========================
-// Jersey assets (Matchup page uses ANGLED if available)
-// Files live in: /public/images/jerseys
-// =========================
-const JERSEYS: Record<
-  string,
-  { angle?: string; front?: string; single?: string }
-> = {
-  BLU: { angle: "/images/jerseys/BLUJerseyAngle.webp", front: "/images/jerseys/BLUJerseyFront.webp" },
-  BRU: { single: "/images/jerseys/BRUJersey.webp" },
-  CHI: { angle: "/images/jerseys/CHIJerseyAngle.webp", front: "/images/jerseys/CHIJerseyFront.webp" },
-  CRU: { angle: "/images/jerseys/CRUJerseyAngle.webp", front: "/images/jerseys/CRUJerseyFront.webp" },
-  DRU: { single: "/images/jerseys/DRUJersey.webp" },
-  FOR: { single: "/images/jerseys/FORJersey.webp" },
-  HIG: { angle: "/images/jerseys/HIGJerseyAngle.webp", front: "/images/jerseys/HIGJerseyFront.webp" },
-  HUR: { angle: "/images/jerseys/HURJerseyAngle.webp", front: "/images/jerseys/HURJerseyFront.webp" },
-  MOP: { angle: "/images/jerseys/MOPJerseyAngle.webp", front: "/images/jerseys/MOPJerseyFront.webp" },
-  RED: { single: "/images/jerseys/REDJersey.webp" },
-    MOA: { angle: "/images/jerseys/MOPJerseyAngle.webp", front: "/images/jerseys/MOPJerseyFront.webp" },
-  WAR: { single: "/images/jerseys/WARJersey.webp" },
-};
+import { toMs, pickValue } from "@/lib/league/weekHelpers";
+import { JERSEYS } from "@/lib/teams/images";
 
-const JERSEY_PLACEHOLDER: string | null = null;
-function pickValue(row: any, candidates: string[]) {
-  if (!row || typeof row !== "object") return null;
-
-  const norm = (s: string) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
-  const keyMap = new Map<string, string>();
-  for (const k of Object.keys(row)) keyMap.set(norm(k), k);
-
-  for (const c of candidates) {
-    const k = keyMap.get(norm(c));
-    if (k != null) {
-      const v = (row as any)[k];
-      if (v !== undefined && v !== null && v !== "") return v;
-    }
-  }
-  return null;
-}
 
 function normaliseId(x: any) {
   return String(x ?? "")
@@ -227,11 +191,6 @@ type AnyFixture = Fixture & {
   homeScore?: number | null;
   awayScore?: number | null;
 };
-
-function toMs(x: any): number {
-  const n = typeof x === "number" ? x : new Date(x).getTime();
-  return Number.isFinite(n) ? n : 0;
-}
 
 function isFixtureComplete(f: AnyFixture) {
   const s = (f.status ?? "").toLowerCase();
@@ -584,7 +543,7 @@ const getLivePlayerById = useDraftStore((s) => (s as any).getLivePlayerById ?? n
   const nameByTeamId = (id: string | null) => {
     if (!id) return "BYE";
     return draftTeams.find((t) => t.id === id)?.name
-      ?? activeLeague?.teams.find((t) => t.id === id)?.name
+      ?? activeLeague?.teams?.find((t) => t.id === id)?.name
       ?? "TBC";
   };
 

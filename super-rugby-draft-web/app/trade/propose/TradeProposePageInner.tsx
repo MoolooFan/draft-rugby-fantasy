@@ -20,6 +20,8 @@ import { usePlayersStore } from "@/lib/players/store";
 import { canPlayPosition } from "@/lib/players/positions";
 import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { playerRoundRows } from "@/lib/players/roundIndex";
+import { toMs, getWeekDeadlineMs, getWeeksSorted } from "@/lib/league/weekHelpers";
+import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
 
 // -----------------------
 // Types
@@ -62,21 +64,6 @@ type AnyFixture = {
 type Step = "REQUESTING" | "OFFERING" | "REVIEW";
 type InfoMode = "DRAFT_RANK" | "AVG_PPG" | "TOTAL_PTS" | "FORM";
 
-const JERSEYS: Record<string, { angle?: string; front?: string; single?: string }> = {
-  BLU: { angle: "/images/jerseys/BLUJerseyAngle.webp", front: "/images/jerseys/BLUJerseyFront.webp" },
-  BRU: { single: "/images/jerseys/BRUJersey.webp" },
-  CHI: { angle: "/images/jerseys/CHIJerseyAngle.webp", front: "/images/jerseys/CHIJerseyFront.webp" },
-  CRU: { angle: "/images/jerseys/CRUJerseyAngle.webp", front: "/images/jerseys/CRUJerseyFront.webp" },
-  DRU: { single: "/images/jerseys/DRUJersey.webp" },
-  FOR: { single: "/images/jerseys/FORJersey.webp" },
-  HIG: { angle: "/images/jerseys/HIGJerseyAngle.webp", front: "/images/jerseys/HIGJerseyFront.webp" },
-  HUR: { angle: "/images/jerseys/HURJerseyAngle.webp", front: "/images/jerseys/HURJerseyFront.webp" },
-  MOA: { angle: "/images/jerseys/MOPJerseyAngle.webp", front: "/images/jerseys/MOPJerseyFront.webp" },
-  RED: { single: "/images/jerseys/REDJersey.webp" },
-  WAR: { single: "/images/jerseys/WARJersey.webp" },
-};
-const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.webp";
-
 function jerseySrcForTeamCode(teamCode: string | null | undefined, prefer: "angle" | "front" = "angle") {
   const code = normalizeTeamCode(teamCode);
   const j = JERSEYS[code];
@@ -98,29 +85,6 @@ function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }
 
 function normUser(x: any) {
   return String(x ?? "").trim().toLowerCase();
-}
-
-// -----------------------
-// Fixtures helpers (same logic you use elsewhere)
-// -----------------------
-function toMs(x: any): number {
-  const n = typeof x === "number" ? x : new Date(x).getTime();
-  return Number.isFinite(n) ? n : 0;
-}
-function getWeekFirstKickoffMs(fixtures: AnyFixture[], week: number) {
-  const wk = fixtures.filter((f) => f.week === week);
-  if (!wk.length) return 0;
-  return Math.min(...wk.map((f) => f.kickoffMs ?? toMs(f.kickoffAt)));
-}
-function getSelectionDeadlineMs(firstKickoffMs: number) {
-  return firstKickoffMs - 1 * 60 * 60 * 1000;
-}
-function getWeekDeadlineMs(fixtures: AnyFixture[], week: number) {
-  const first = getWeekFirstKickoffMs(fixtures, week);
-  return first ? getSelectionDeadlineMs(first) : 0;
-}
-function getWeeksSorted(fixtures: AnyFixture[]) {
-  return Array.from(new Set(fixtures.map((f) => f.week))).sort((a, b) => a - b);
 }
 
 // -----------------------

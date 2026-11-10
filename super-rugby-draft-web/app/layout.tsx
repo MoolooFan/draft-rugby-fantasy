@@ -4,6 +4,7 @@ import SessionProvider from "@/components/SessionProvider";
 import { getServerProfile } from "@/lib/serverSession";
 import { currentSeasonYear } from "@/lib/season";
 import ScoringRulesSync from "@/components/ScoringRulesSync";
+import LeagueSync from "@/components/LeagueSync";
 
 /**
  * Viewport configuration
@@ -62,6 +63,7 @@ export default async function RootLayout({
         }}
       >
         <SessionProvider profile={sessionProfile}>
+          <LeagueSync username={sessionProfile?.username ?? null} />
           <ScoringRulesSync>{children}</ScoringRulesSync>
         </SessionProvider>
 

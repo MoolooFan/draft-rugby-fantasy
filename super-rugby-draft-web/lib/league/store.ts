@@ -370,3 +370,49 @@ await syncMyTeamToSupabase(league);
     }
   )
 );
+
+// -------------------------------------------------------------------------------------------
+// The signed-in player's leagues, and which one is active (the one they had, if they're still
+// in it, otherwise their first). Used by every page (components/LeagueSync) and the dashboard,
+// so a page opened directly (bookmark, new browser, another person on this phone) shows the
+// right league. Calls made at the same time share one request.
+let leaguesLoading: Promise<boolean> | null = null;
+
+export function loadMyLeagues(): Promise<boolean> {
+  if (leaguesLoading) return leaguesLoading;
+  leaguesLoading = (async () => {
+    try {
+      const res = await fetch("/api/leagues/list", { cache: "no-store" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        console.log("Failed to load leagues:", json?.error ?? res.statusText);
+        return false;
+      }
+      const listed = (json.leagues ?? []) as League[];
+      // which league is active: the one they had, if they're still in it, otherwise their first
+      const current = useLeagueStore.getState().activeLeagueId;
+      const activeLeagueId = current && listed.some((l) => l.id === current) ? current : listed[0]?.id ?? null;
+      // the list has no team details: get the active league in full before showing anything
+      let full: League | null = null;
+      if (activeLeagueId) {
+        const r = await fetch(`/api/leagues/get?leagueId=${encodeURIComponent(activeLeagueId)}`, { cache: "no-store" });
+        const j = await r.json().catch(() => null);
+        if (r.ok && j?.ok && j.league) full = j.league as League;
+      }
+      useLeagueStore.setState((s) => {
+        const leagues = listed.map((l) => {
+          if (full && l.id === full.id) return full;
+          const prev = s.leagues.find((x) => x.id === l.id);
+          return prev ? { ...prev, ...l, teams: (l as any).teams ?? prev.teams } : l; // keep details we already had
+        });
+        return { ...s, leagues, activeLeagueId };
+      });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setTimeout(() => { leaguesLoading = null; }, 2000);
+    }
+  })();
+  return leaguesLoading;
+}

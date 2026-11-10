@@ -6,8 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { PlayerCardModal, type PlayerStatus } from "@/components/PlayerCardModal";
 import { AppMenu } from "@/components/AppMenu";
-import { useLeagueStore } from "@/lib/league/store";
-import type { League } from "@/lib/league/types";
+import { loadMyLeagues, useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
 
 import { currentSeasonYear, fixturesByFantasyWeek, getSeason, roundLabel, totalFantasyWeeks } from "@/lib/season";
@@ -22,6 +21,8 @@ import { getActiveUsername } from "@/lib/session";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { CAPTAIN_MULTIPLIER, pointsFromRow, roundPoints } from "@/lib/scoring";
 import { useStableComponent } from "@/lib/hooks/useStableComponent";
+import { toMs, getWeekFirstKickoffMs, getSelectionDeadlineMs, getWeeksSorted, type SheetFixtureRow, isSheetLabelRow, isSheetPlayableRow, currentWeekFromSheet, latestCompletedWeekFromSheet } from "@/lib/league/weekHelpers";
+import { STARTER_SLOTS } from "@/lib/scoring/week";
 
 type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null } | null;
 
@@ -88,25 +89,6 @@ function singularPosLabel(pos: string) {
   return map[p] ?? p;
 }
 
-function toMs(x: any): number {
-  const n = typeof x === "number" ? x : new Date(x).getTime();
-  return Number.isFinite(n) ? n : 0;
-}
-
-function getSelectionDeadlineMs(firstKickoffMs: number) {
-  return firstKickoffMs - 1 * 60 * 60 * 1000; // 1 hour before first kickoff
-}
-
-function getWeekFirstKickoffMs(fixtures: AnyFixture[], week: number) {
-  const wk = fixtures.filter((f) => f.week === week);
-  if (!wk.length) return 0;
-  return Math.min(...wk.map((f) => f.kickoffMs ?? toMs(f.kickoffAt)));
-}
-
-function getWeeksSorted(fixtures: AnyFixture[]) {
-  return Array.from(new Set(fixtures.map((f) => f.week))).sort((a, b) => a - b);
-}
-
 function getLiveWeekFromNow(fixtures: AnyFixture[], nowMs: number) {
   if (!fixtures.length) return 1;
 
@@ -130,62 +112,6 @@ function formatDeadline(dtMs: number, timeZone?: string) {
     minute: "2-digit",
     timeZone,
   });
-}
-
-type SheetFixtureRow = {
-  season: number;
-  weekFantasy: number;
-  weekReal: number | null;
-  label: string | null;
-  kind: string | null;
-  homeTeamId: string | null;
-  awayTeamId: string | null;
-  status: string; // upcoming | complete
-  homeScore: number | null;
-  awayScore: number | null;
-};
-
-function isSheetLabelRow(r: SheetFixtureRow) {
-  return !!r.label || String(r.kind ?? "").toLowerCase() === "label";
-}
-function isSheetPlayableRow(r: SheetFixtureRow) {
-  return !isSheetLabelRow(r);
-}
-function isFantasyWeekCompleteFromSheet(rows: SheetFixtureRow[], weekNo: number) {
-  const wk = rows.filter((r) => Number(r.weekFantasy) === weekNo && isSheetPlayableRow(r));
-  if (!wk.length) return false;
-  return wk.every((r) => String(r.status ?? "").toLowerCase() === "complete");
-}
-function latestCompletedWeekFromSheet(rows: SheetFixtureRow[]) {
-  const weeks = Array.from(
-    new Set(
-      rows
-        .filter(isSheetPlayableRow)
-        .map((r) => Number(r.weekFantasy))
-        .filter((w) => Number.isFinite(w) && w > 0)
-    )
-  ).sort((a, b) => a - b);
-
-  let latest = 0;
-  for (const w of weeks) {
-    if (isFantasyWeekCompleteFromSheet(rows, w)) latest = w;
-  }
-  return latest;
-}
-function currentWeekFromSheet(rows: SheetFixtureRow[]) {
-  const weeks = Array.from(
-    new Set(
-      rows
-        .filter(isSheetPlayableRow)
-        .map((r) => Number(r.weekFantasy))
-        .filter((w) => Number.isFinite(w) && w > 0)
-    )
-  ).sort((a, b) => a - b);
-
-  for (const w of weeks) {
-    if (!isFantasyWeekCompleteFromSheet(rows, w)) return w;
-  }
-  return latestCompletedWeekFromSheet(rows) || 1;
 }
 
 function isSheetRegularRow(r: SheetFixtureRow) {
@@ -241,15 +167,6 @@ type SlotId =
   | "bench1" | "bench2" | "bench3" | "bench4" | "bench5";
 
 type Lineup = Record<SlotId, any | null>;
-
-const STARTER_SLOTS: SlotId[] = [
-  "prop1","hooker1","prop2",
-  "lock1","lock2",
-  "looseforward1","looseforward2","looseforward3",
-  "halfback1","flyhalf1",
-  "centre1","centre2",
-  "outsideback1","outsideback2","outsideback3",
-];
 
 const CAP_MULT = CAPTAIN_MULTIPLIER;
 
@@ -363,29 +280,9 @@ useEffect(() => {
         return;
       }
 
-      // 2) load leagues for this user from server
-      const res = await fetch("/api/leagues/list", { cache: "no-store" });
-      const json = await res.json().catch(() => null);
-
-      if (cancelled) return;
-
-      if (!res.ok || !json?.ok) {
-        // If list fails, just leave store empty (dashboard will show No League Joined)
-        console.log("Failed to load leagues:", json?.error ?? res.statusText);
-        return;
-      }
-
-      const leagues = (json.leagues ?? []) as League[];
-
-      // 3) write into zustand store directly
-      useLeagueStore.setState((s) => {
-        const activeLeagueId =
-          s.activeLeagueId && leagues.some((l) => l.id === s.activeLeagueId)
-            ? s.activeLeagueId
-            : leagues[0]?.id ?? null;
-
-        return { ...s, leagues, activeLeagueId };
-      });
+      // 2) this player's leagues and the active one (shared with every page: LeagueSync)
+      // (if it fails the store stays as it was; the dashboard shows No League Joined)
+      await loadMyLeagues();
     } catch (e) {
       if (!cancelled) router.replace("/");
     }

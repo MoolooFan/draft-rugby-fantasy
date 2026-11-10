@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppMenu } from "@/components/AppMenu";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 
-import { TEAM_OPTIONS, POSITION_OPTIONS } from "@/lib/constants";
+import { TEAM_OPTIONS } from "@/lib/constants";
 import { getActiveUsername, getActiveTimezone } from "@/lib/session";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 
@@ -26,6 +26,9 @@ import { isFrontRow, playedInRound, playerPoints, statCountsFromRow, roundPoints
 import { canPlayPosition } from "@/lib/players/positions";
 import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { playerRoundRows } from "@/lib/players/roundIndex";
+import { toMs, getWeekDeadlineMs, getWeeksSorted, type SheetFixtureRow, currentWeekFromSheet } from "@/lib/league/weekHelpers";
+import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
+import { Filters } from "./Filters";
 
 // -----------------------
 // Types (match your player shape)
@@ -50,52 +53,6 @@ type Player = {
   stats?: any;
 };
 
-type SheetFixtureRow = {
-  season: number;
-  weekFantasy: number;
-  weekReal: number | null;
-  label: string | null;
-  kind: string | null;
-  homeTeamId: string | null;
-  awayTeamId: string | null;
-  status: string; // upcoming | complete
-  homeScore: number | null;
-  awayScore: number | null;
-};
-
-function isSheetLabelRow(r: SheetFixtureRow) {
-  return !!r.label || String(r.kind ?? "").toLowerCase() === "label";
-}
-
-function isSheetPlayableRow(r: SheetFixtureRow) {
-  return !isSheetLabelRow(r);
-}
-
-function isFantasyWeekCompleteFromSheet(rows: SheetFixtureRow[], weekNo: number) {
-  const wk = rows.filter(
-    (r) => Number(r.weekFantasy) === weekNo && isSheetPlayableRow(r)
-  );
-  if (!wk.length) return false;
-  return wk.every((r) => String(r.status ?? "").toLowerCase() === "complete");
-}
-
-function currentWeekFromSheet(rows: SheetFixtureRow[]) {
-  const weeks = Array.from(
-    new Set(
-      rows
-        .filter(isSheetPlayableRow)
-        .map((r) => Number(r.weekFantasy))
-        .filter((w) => Number.isFinite(w) && w > 0)
-    )
-  ).sort((a, b) => a - b);
-
-  for (const w of weeks) {
-    if (!isFantasyWeekCompleteFromSheet(rows, w)) return w;
-  }
-
-  return weeks[weeks.length - 1] ?? 1;
-}
-
 type AnyFixture = {
   id: string;
   week: number;
@@ -108,29 +65,9 @@ type AnyFixture = {
 
 type TabKey = "Player Pool" | "Watchlist" | "Pending Claims" | "Transactions";
 
-// =========================
-// Jersey assets (match Draft Room: prefer ANGLED if available)
-// Files live in: /public/images/jerseys
-// =========================
-const JERSEYS: Record<string, { angle?: string; front?: string; single?: string }> = {
-  BLU: { angle: "/images/jerseys/BLUJerseyAngle.webp", front: "/images/jerseys/BLUJerseyFront.webp" },
-  BRU: { single: "/images/jerseys/BRUJersey.webp" },
-  CHI: { angle: "/images/jerseys/CHIJerseyAngle.webp", front: "/images/jerseys/CHIJerseyFront.webp" },
-  CRU: { angle: "/images/jerseys/CRUJerseyAngle.webp", front: "/images/jerseys/CRUJerseyFront.webp" },
-  DRU: { single: "/images/jerseys/DRUJersey.webp" },
-  FOR: { single: "/images/jerseys/FORJersey.webp" },
-  HIG: { angle: "/images/jerseys/HIGJerseyAngle.webp", front: "/images/jerseys/HIGJerseyFront.webp" },
-  HUR: { angle: "/images/jerseys/HURJerseyAngle.webp", front: "/images/jerseys/HURJerseyFront.webp" },
-  MOA: { angle: "/images/jerseys/MOPJerseyAngle.webp", front: "/images/jerseys/MOPJerseyFront.webp" },
-  RED: { single: "/images/jerseys/REDJersey.webp" },
-  WAR: { single: "/images/jerseys/WARJersey.webp" },
-};
-
 const EMPTY_ARR: any[] = [];
 const EMPTY_OBJ: any = {};
 const NOOP = () => {};
-
-const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.webp";
 
 function jerseySrcForTeamCode(teamCode: string | null | undefined, prefer: "angle" | "front" = "angle") {
   const code = normalizeTeamCode(teamCode);
@@ -165,33 +102,6 @@ function toNum(v: any): number {
     return Number.isFinite(n) ? n : 0;
   }
   return 0;
-}
-
-// -----------------------
-// Date helpers (same pattern as fixtures/team-selection pages)
-// -----------------------
-function toMs(x: any): number {
-  const n = typeof x === "number" ? x : new Date(x).getTime();
-  return Number.isFinite(n) ? n : 0;
-}
-
-function getSelectionDeadlineMs(firstKickoffMs: number) {
-  return firstKickoffMs - 1 * 60 * 60 * 1000; // 1h before first kickoff
-}
-
-function getWeekFirstKickoffMs(fixtures: AnyFixture[], week: number) {
-  const wk = fixtures.filter((f) => f.week === week);
-  if (!wk.length) return 0;
-  return Math.min(...wk.map((f) => f.kickoffMs ?? toMs(f.kickoffAt)));
-}
-
-function getWeekDeadlineMs(fixtures: AnyFixture[], week: number) {
-  const first = getWeekFirstKickoffMs(fixtures, week);
-  return first ? getSelectionDeadlineMs(first) : 0;
-}
-
-function getWeeksSorted(fixtures: AnyFixture[]) {
-  return Array.from(new Set(fixtures.map((f) => f.week))).sort((a, b) => a - b);
 }
 
 function formatDeadline(dtMs: number, timeZone?: string) {
@@ -236,280 +146,6 @@ function getInitials(name: string | null | undefined) {
 function normUser(x: any) {
   return String(x ?? "").trim().toLowerCase();
 }
-
-type FiltersProps = {
-  search: string;
-  setSearch: (v: string) => void;
-
-  teamFilter: string;
-  setTeamFilter: (v: string) => void;
-
-  posFilter: string;
-  setPosFilter: (v: string) => void;
-
-  ownerFilterValue: string;
-  setOwnerFilterValue: (v: string) => void;
-
-  ownerFilterOptions: Array<{ label: string; value: string }>;
-
-  infoMode: string;
-  setInfoMode: (v: string) => void;
-};
-
-const Filters = React.memo(function Filters({
-  search,
-  setSearch,
-  teamFilter,
-  setTeamFilter,
-  posFilter,
-  setPosFilter,
-  ownerFilterValue,
-  setOwnerFilterValue,
-  ownerFilterOptions,
-  infoMode,
-  setInfoMode,
-}: FiltersProps) {
-  const stopCapture = (e: any) => {
-    e.stopPropagation?.();
-  };
-
-  const inputWrap: React.CSSProperties = {
-    background: "rgba(255,255,255,0.92)",
-    borderRadius: 10,
-    padding: "8px 10px",
-    boxShadow: "0 10px 20px rgba(0,0,0,0.12)",
-  };
-
-  return (
-    <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-      <div style={inputWrap}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 26px", alignItems: "center", gap: 8 }}>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              // ✅ keep keyboard open while typing; only close on Enter
-              if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
-            }}
-            placeholder="Search players"
-            inputMode="search"
-            enterKeyHint="search"
-            style={{
-              border: "none",
-              outline: "none",
-              background: "transparent",
-              fontSize: 13,
-              fontWeight: 700,
-              color: "#0f172a",
-            }}
-          />
-          <div style={{ textAlign: "right", fontSize: 16, opacity: 0.65 }}>🔍</div>
-        </div>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <div style={{ ...inputWrap, position: "relative" }} onPointerDownCapture={stopCapture} onClickCapture={stopCapture}>
-          <select
-            value={teamFilter}
-            onChange={(e) => setTeamFilter(e.target.value)}
-            onPointerDownCapture={stopCapture}
-            onClickCapture={stopCapture}
-            style={{
-              width: "100%",
-              height: 34,
-              border: "none",
-              outline: "none",
-              background: "transparent",
-              fontSize: 13,
-              fontWeight: 700,
-              color: teamFilter ? "#0f172a" : "rgba(15,23,42,0.55)",
-              WebkitAppearance: "none",
-              appearance: "none",
-              paddingRight: 30,
-            }}
-          >
-            <option value="">All Teams</option>
-            {TEAM_OPTIONS.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-
-          <span
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              right: 10,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: "rgba(15,23,42,0.45)",
-              fontSize: 16,
-              pointerEvents: "none",
-            }}
-          >
-            ▾
-          </span>
-        </div>
-
-        <div style={{ ...inputWrap, position: "relative" }} onPointerDownCapture={stopCapture} onClickCapture={stopCapture}>
-          <select
-            value={posFilter}
-            onChange={(e) => setPosFilter(e.target.value)}
-            onPointerDownCapture={stopCapture}
-            onClickCapture={stopCapture}
-            style={{
-              width: "100%",
-              height: 34,
-              border: "none",
-              outline: "none",
-              background: "transparent",
-              fontSize: 13,
-              fontWeight: 700,
-              color: posFilter ? "#0f172a" : "rgba(15,23,42,0.55)",
-              WebkitAppearance: "none",
-              appearance: "none",
-              paddingRight: 30,
-            }}
-          >
-            <option value="">All Positions</option>
-            {POSITION_OPTIONS.filter((p) => String(p.value).toUpperCase() !== "WC").map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-
-          <span
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              right: 10,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: "rgba(15,23,42,0.45)",
-              fontSize: 16,
-              pointerEvents: "none",
-            }}
-          >
-            ▾
-          </span>
-        </div>
-      </div>
-
-      {/* Owner + Info mode side-by-side */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <div style={{ ...inputWrap, position: "relative" }} onPointerDownCapture={stopCapture} onClickCapture={stopCapture}>
-          <select
-            value={ownerFilterValue}
-            onChange={(e) => setOwnerFilterValue(e.target.value)}
-            style={{
-              width: "100%",
-              height: 34,
-              border: "none",
-              outline: "none",
-              background: "transparent",
-              fontSize: 13,
-              fontWeight: 700,
-              color: ownerFilterValue === "available" ? "rgba(15,23,42,0.55)" : "#0f172a",
-              WebkitAppearance: "none",
-              appearance: "none",
-              paddingRight: 30,
-            }}
-          >
-            {ownerFilterOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-
-          <span
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              right: 10,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: "rgba(15,23,42,0.45)",
-              fontSize: 16,
-              pointerEvents: "none",
-            }}
-          >
-            ▾
-          </span>
-        </div>
-
-        <div style={{ ...inputWrap, position: "relative" }} onPointerDownCapture={stopCapture} onClickCapture={stopCapture}>
-          <select
-            value={infoMode}
-            onChange={(e) => setInfoMode(e.target.value)}
-            onPointerDownCapture={stopCapture}
-            onClickCapture={stopCapture}
-            style={{
-              width: "100%",
-              height: 34,
-              border: "none",
-              outline: "none",
-              background: "transparent",
-              fontSize: 13,
-              fontWeight: 700,
-              color: "#0f172a",
-              WebkitAppearance: "none",
-              appearance: "none",
-              paddingRight: 30,
-            }}
-          >
-            <option value="DRAFT_RANK">Draft Rank</option>
-            <option value="MATCH_AVG">Match Average</option>
-            <option value="TOTAL_PTS">Total Points</option>
-            <option value="FORM_3">Form</option>
-            <option value="LAST_SCORE">Last Fixture</option>
-            <option value="GAMES_PLAYED">Games Played</option>
-            <option value="TRIES">Tries Scored</option>
-            <option value="TRY_ASSISTS">Try Assists</option>
-            <option value="LINEBREAKS">Line Breaks</option>
-            <option value="LINEBREAK_ASSISTS">Line Break Assists</option>
-            <option value="DEFENDERS_BEATEN">Defenders Beaten</option>
-            <option value="METRES_GAINED">Metres Gained</option>
-            <option value="OFFLOADS">Offloads</option>
-            <option value="TACKLES">Tackles</option>
-            <option value="MISSED_TACKLES">Missed Tackles</option>
-            <option value="TURNOVERS_FORCED">Turnovers Forced</option>
-            <option value="INTERCEPTIONS">Interceptions</option>
-            <option value="KICKS_50_22">50:22 Kicks</option>
-            <option value="PENALTIES_CONCEDED">Penalties Conceded</option>
-            <option value="ERRORS">Errors</option>
-            <option value="LINEOUTS_WON">Lineouts Won</option>
-            <option value="LINEOUT_STEALS">Lineout Steals</option>
-            <option value="LINEOUT_ERRORS">Lineout Errors</option>
-            <option value="SCRUMS_WON">Scrums Won</option>
-            <option value="CONVERSIONS">Conversions</option>
-            <option value="PENALTY_GOALS">Penalty Goals</option>
-            <option value="DROP_GOALS">Drop Goals</option>
-            <option value="YELLOW_CARDS">Yellow Cards</option>
-            <option value="RED_CARDS">Red Cards</option>
-          </select>
-
-          <span
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              right: 10,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: "rgba(15,23,42,0.45)",
-              fontSize: 16,
-              pointerEvents: "none",
-            }}
-          >
-            ▾
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-});
 
 function extractRosterIdsClient(data: any): string[] {
   // Accept a bunch of possible shapes:
@@ -1771,8 +1407,6 @@ async function submitProposedTransaction() {
   }
 }
 
-  
-
     function DropSelectModal__render() {
     if (!dropModalOpen || !proposedAddPlayer) return null;
 
@@ -3004,7 +2638,6 @@ const [overId, setOverId] = useState<string | null>(null);
     if (!activeLeague?.id || !yourDraftTeamId) {
       return <div style={{ ...listBox, padding: 12, fontSize: 12, fontWeight: 900, opacity: 0.8 }}>No league/team selected.</div>;
     }
-    
 
   // --- Reorder support (priority) ---
   const persistPriorities = (orderedClaimIds: string[]) => {
@@ -3235,7 +2868,6 @@ const dropP = allPlayers.find((x) => x.id === c.dropPlayerId) ?? null;
             })
           )}
         </div>
-
         
       </>
     );
@@ -3803,7 +3435,6 @@ const StatusPill = useStableComponent(StatusPill__render);
         {/* League Trades since last team selection deadline */}
         <div style={{ ...listBox, marginTop: 10 }}>
           <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 900 }}>League Trades</div>
-          
 
           {leagueTradesSinceDeadline.length === 0 ? (
             <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 800, opacity: 0.7 }}>None yet.</div>
@@ -3863,7 +3494,6 @@ const StatusPill = useStableComponent(StatusPill__render);
         {/* Free Agent Transfers from latest free agency period */}
         <div style={{ ...listBox, marginTop: 10 }}>
           <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 900 }}>Free Agent Transfers</div>
-          
 
           {freeAgentFeed.length === 0 ? (
             <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 800, opacity: 0.7 }}>None.</div>

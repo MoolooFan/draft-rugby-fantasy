@@ -1,28 +1,9 @@
 "use client";
 
 import React from "react";
+import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
 
 type Row = { label: string; left?: string; right?: string };
-
-const JERSEYS: Record<string, { front?: string; angle?: string; single?: string }> = {
-  BLU: { angle: "/images/jerseys/BLUJerseyAngle.webp", front: "/images/jerseys/BLUJerseyFront.webp" },
-  BRU: { single: "/images/jerseys/BRUJersey.webp" },
-  CHI: { angle: "/images/jerseys/CHIJerseyAngle.webp", front: "/images/jerseys/CHIJerseyFront.webp" },
-  CRU: { angle: "/images/jerseys/CRUJerseyAngle.webp", front: "/images/jerseys/CRUJerseyFront.webp" },
-  DRU: { single: "/images/jerseys/DRUJersey.webp" },
-  FOR: { single: "/images/jerseys/FORJersey.webp" },
-  HIG: { angle: "/images/jerseys/HIGJerseyAngle.webp", front: "/images/jerseys/HIGJerseyFront.webp" },
-  HUR: { angle: "/images/jerseys/HURJerseyAngle.webp", front: "/images/jerseys/HURJerseyFront.webp" },
-  MOA: { angle: "/images/jerseys/MOPJerseyAngle.webp", front: "/images/jerseys/MOPJerseyFront.webp" },
-
-  // backwards compatibility
-  MOP: { angle: "/images/jerseys/MOPJerseyAngle.webp", front: "/images/jerseys/MOPJerseyFront.webp" },
-
-  RED: { single: "/images/jerseys/REDJersey.webp" },
-  WAR: { single: "/images/jerseys/WARJersey.webp" },
-};
-
-const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.webp";
 
 function normalizeTeamCode(raw: string | null | undefined): string | null {
   const s = (raw ?? "").trim();
@@ -82,7 +63,6 @@ export function PointsBreakdownModal(props: {
 const resolvedPlayerImageSrc = playerId
   ? `/api/players/image-file?playerId=${encodeURIComponent(playerId)}`
   : resolvedJerseySrc;
-
 
   const filteredRows = (rows ?? []).filter((r) => {
     const v = (r.right ?? "").toString().trim();

@@ -10,6 +10,7 @@ import { AppMenu } from "@/components/AppMenu";
 import { useLeagueStore } from "@/lib/league/store";
 import { roundLabel } from "@/lib/season";
 import { useStableComponent } from "@/lib/hooks/useStableComponent";
+import { TEAM_LOGOS, TEAM_LOGO_PLACEHOLDER } from "@/lib/teams/images";
 
 type TabKey = "Fixtures" | "Results" | "FDR";
 
@@ -238,25 +239,6 @@ function normalizeFixture(raw: any): AnyFixture {
     awayTeam: String(awayRaw ?? raw.awayTeam ?? ""),
   };
 }
-
-// -----------------------
-// Team logos (public/images/logos)
-// -----------------------
-const TEAM_LOGOS: Record<string, string> = {
-  BLU: "/images/logos/BLU.webp",
-  BRU: "/images/logos/BRU.webp",
-  CHI: "/images/logos/CHI.webp",
-  CRU: "/images/logos/CRU.webp",
-  DRU: "/images/logos/DRU.webp",
-  FOR: "/images/logos/FOR.webp",
-  HIG: "/images/logos/HIG.webp",
-  HUR: "/images/logos/HUR.webp",
-  MOA: "/images/logos/MOA.webp", // or point this to MOP.png if that's your filename
-  RED: "/images/logos/RED.webp",
-  WAR: "/images/logos/WAR.webp",
-};
-
-const TEAM_LOGO_PLACEHOLDER = "/images/logo-placeholder.webp";
 
 function teamLogoSrc(teamCodeOrName: string | null | undefined) {
   const raw = (teamCodeOrName ?? "").trim();

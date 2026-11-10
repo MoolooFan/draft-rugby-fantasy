@@ -19,6 +19,8 @@ import { getActiveTimezone, getActiveUsername } from "@/lib/session";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { pointsFromRow, roundPoints } from "@/lib/scoring";
 import { playerPositions } from "@/lib/players/positions";
+import { toMs, type SheetFixtureRow, isSheetPlayableRow, currentWeekFromSheet } from "@/lib/league/weekHelpers";
+import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
 
 // -----------------------
 // Types / helpers
@@ -28,67 +30,6 @@ type AnyFixture = {
   kickoffAt: string | number;
   kickoffMs?: number;
 };
-
-type SheetFixtureRow = {
-  season: number;
-  weekFantasy: number;
-  weekReal: number | null;
-  label: string | null;
-  kind: string | null;
-  homeTeamId: string | null;
-  awayTeamId: string | null;
-  status: string; // upcoming | complete
-  homeScore: number | null;
-  awayScore: number | null;
-};
-
-function isSheetLabelRow(r: SheetFixtureRow) {
-  return !!r.label || String(r.kind ?? "").toLowerCase() === "label";
-}
-function isSheetPlayableRow(r: SheetFixtureRow) {
-  return !isSheetLabelRow(r);
-}
-function isFantasyWeekCompleteFromSheet(rows: SheetFixtureRow[], weekNo: number) {
-  const wk = rows.filter((r) => Number(r.weekFantasy) === weekNo && isSheetPlayableRow(r));
-  if (!wk.length) return false;
-  return wk.every((r) => String(r.status ?? "").toLowerCase() === "complete");
-}
-function latestCompletedWeekFromSheet(rows: SheetFixtureRow[]) {
-  const weeks = Array.from(
-    new Set(
-      rows
-        .filter(isSheetPlayableRow)
-        .map((r) => Number(r.weekFantasy))
-        .filter((w) => Number.isFinite(w) && w > 0)
-    )
-  ).sort((a, b) => a - b);
-
-  let latest = 0;
-  for (const w of weeks) {
-    if (isFantasyWeekCompleteFromSheet(rows, w)) latest = w;
-  }
-  return latest;
-}
-function currentWeekFromSheet(rows: SheetFixtureRow[]) {
-  const weeks = Array.from(
-    new Set(
-      rows
-        .filter(isSheetPlayableRow)
-        .map((r) => Number(r.weekFantasy))
-        .filter((w) => Number.isFinite(w) && w > 0)
-    )
-  ).sort((a, b) => a - b);
-
-  for (const w of weeks) {
-    if (!isFantasyWeekCompleteFromSheet(rows, w)) return w;
-  }
-  return latestCompletedWeekFromSheet(rows) || 1;
-}
-
-function toMs(x: any): number {
-  const n = typeof x === "number" ? x : new Date(x).getTime();
-  return Number.isFinite(n) ? n : 0;
-}
 
 // -----------------------
 // Slot model = Team Selection starters (no bench)
@@ -203,26 +144,6 @@ function canPlayerFitSlot(player: Player, slot: SlotDef) {
   return false;
 }
 
-// -----------------------
-// Jerseys (Team Selection preference: FRONT > ANGLE > SINGLE)
-// -----------------------
-const JERSEYS: Record<string, { front?: string; angle?: string; single?: string }> = {
-  BLU: { front: "/images/jerseys/BLUJerseyFront.webp", angle: "/images/jerseys/BLUJerseyAngle.webp" },
-  BRU: { single: "/images/jerseys/BRUJersey.webp" },
-  CHI: { front: "/images/jerseys/CHIJerseyFront.webp", angle: "/images/jerseys/CHIJerseyAngle.webp" },
-  CRU: { front: "/images/jerseys/CRUJerseyFront.webp", angle: "/images/jerseys/CRUJerseyAngle.webp" },
-  DRU: { single: "/images/jerseys/DRUJersey.webp" },
-  FOR: { single: "/images/jerseys/FORJersey.webp" },
-  HIG: { front: "/images/jerseys/HIGJerseyFront.webp", angle: "/images/jerseys/HIGJerseyAngle.webp" },
-  HUR: { front: "/images/jerseys/HURJerseyFront.webp", angle: "/images/jerseys/HURJerseyAngle.webp" },
-  MOA: { front: "/images/jerseys/MOPJerseyFront.webp", angle: "/images/jerseys/MOPJerseyAngle.webp" },
-  MOP: { front: "/images/jerseys/MOPJerseyFront.webp", angle: "/images/jerseys/MOPJerseyAngle.webp" },
-  RED: { single: "/images/jerseys/REDJersey.webp" },
-  WAR: { single: "/images/jerseys/WARJersey.webp" },
-};
-
-const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.webp";
-
 function jerseySrcForTeam(teamCodeOrName: string) {
   const code = normalizeTeamCode(teamCodeOrName);
   const j = JERSEYS[code];
@@ -240,7 +161,6 @@ function rowRound(row: any) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-
 
 function calcFantasyPoints(row: any, player?: Player | null): number {
   return pointsFromRow(row, player ?? null);

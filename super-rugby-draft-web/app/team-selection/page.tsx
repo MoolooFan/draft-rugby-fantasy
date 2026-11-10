@@ -18,9 +18,11 @@ import { useRequireSession } from "@/lib/session/useRequireSession";
 import { getActiveUsername, getActiveTimezone } from "@/lib/session";
 import { usePlayersStore } from "@/lib/players/store";
 import { usePlayerPool } from "@/lib/players/pool";
-import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib/league/week";
+import { fantasyWeekToRealRound } from "@/lib/league/week";
 import { pointsFromRow } from "@/lib/scoring";
 import { playerPositions } from "@/lib/players/positions";
+import { toMs, getWeekDeadlineMs, type SheetFixtureRow, currentWeekFromSheet, pickValue } from "@/lib/league/weekHelpers";
+import { JERSEYS } from "@/lib/teams/images";
 
 type ViewMode = "Fixture" | "Latest Score" | "PPG" | "Form";
 
@@ -89,31 +91,6 @@ type SlotDef = {
   starter: boolean; // starters shown on field
 };
 
-// --- Jerseys (Team Selection uses FRONT if available, else fallback) ---
-const JERSEYS: Record<
-  string,
-  { front?: string; angle?: string; single?: string }
-> = {
-  BLU: { front: "/images/jerseys/BLUJerseyFront.webp", angle: "/images/jerseys/BLUJerseyAngle.webp" },
-  BRU: { single: "/images/jerseys/BRUJersey.webp" },
-
-  CHI: { front: "/images/jerseys/CHIJerseyFront.webp", angle: "/images/jerseys/CHIJerseyAngle.webp" },
-  CRU: { front: "/images/jerseys/CRUJerseyFront.webp", angle: "/images/jerseys/CRUJerseyAngle.webp" },
-
-  DRU: { single: "/images/jerseys/DRUJersey.webp" },
-  FOR: { single: "/images/jerseys/FORJersey.webp" },
-
-  HIG: { front: "/images/jerseys/HIGJerseyFront.webp", angle: "/images/jerseys/HIGJerseyAngle.webp" },
-  HUR: { front: "/images/jerseys/HURJerseyFront.webp", angle: "/images/jerseys/HURJerseyAngle.webp" },
- // ✅ add this (Moana)
-  MOA: { front: "/images/jerseys/MOPJerseyFront.webp", angle: "/images/jerseys/MOPJerseyAngle.webp" },
-
-  MOP: { front: "/images/jerseys/MOPJerseyFront.webp", angle: "/images/jerseys/MOPJerseyAngle.webp" },
-
-  RED: { single: "/images/jerseys/REDJersey.webp" },
-  WAR: { single: "/images/jerseys/WARJersey.webp" },
-};
-
 function normalizeTeamCode(teamCodeOrName: string) {
   const raw = (teamCodeOrName ?? "").trim();
   if (!raw) return "TBD";
@@ -175,31 +152,10 @@ const SLOT_DEFS: SlotDef[] = [
 const STARTER_IDS: SlotId[] = SLOT_DEFS.filter((s) => s.starter).map((s) => s.id);
 const BENCH_IDS: SlotId[] = SLOT_DEFS.filter((s) => !s.starter).map((s) => s.id);
 
-function toMs(x: any): number {
-  const n = typeof x === "number" ? x : new Date(x).getTime();
-  return Number.isFinite(n) ? n : 0;
-}
-
 function isFixtureComplete(f: AnyFixture) {
   if ((f.status ?? "").toLowerCase() === "complete") return true;
   if (f.homeScore != null && f.awayScore != null) return true;
   return false;
-}
-
-// function getSelectionDeadlineMs(firstKickoffMs: number) {
-  // 2 hours before
-//  return firstKickoffMs - 1 * 60 * 60 * 1000;
-// }
-
-function getWeekFirstKickoffMs(fixtures: AnyFixture[], week: number) {
-  const wk = fixtures.filter((f) => f.week === week);
-  if (!wk.length) return 0;
-  return Math.min(...wk.map((f: any) => f.kickoffMs ?? toMs(f.kickoffAt)));
-}
-
-function getWeekDeadlineMs(fixtures: AnyFixture[], realWeek: number) {
-  const first = getWeekFirstKickoffMs(fixtures, realWeek);
-  return first ? selectionDeadlineFromFirstKickoff(first) : 0;
 }
 
 function formatDeadline(dtMs: number, timeZone?: string) {
@@ -317,24 +273,6 @@ function abbrevTeam(name: string) {
   // 3-letter-ish
   return s.slice(0, 3).toUpperCase();
 }
-function pickValue(row: any, candidates: string[]) {
-  if (!row || typeof row !== "object") return null;
-
-  const norm = (s: string) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
-
-  // Build a lookup of normalizedKey -> actualKey
-  const keyMap = new Map<string, string>();
-  for (const k of Object.keys(row)) keyMap.set(norm(k), k);
-
-  for (const c of candidates) {
-    const k = keyMap.get(norm(c));
-    if (k != null) {
-      const v = (row as any)[k];
-      if (v !== undefined && v !== null && v !== "") return v;
-    }
-  }
-  return null;
-}
 
 function normaliseId(x: any) {
   return String(x ?? "")
@@ -344,52 +282,6 @@ function normaliseId(x: any) {
 
 function fixtureTeamCode(nameOrCode: string) {
   return normalizeTeamCode(nameOrCode ?? "");
-}
-
-type SheetFixtureRow = {
-  season: number;
-  weekFantasy: number;
-  weekReal: number | null;
-  label: string | null;
-  kind: string | null;
-  homeTeamId: string | null;
-  awayTeamId: string | null;
-  status: string; // upcoming | complete
-  homeScore: number | null;
-  awayScore: number | null;
-};
-
-function isSheetLabelRow(r: SheetFixtureRow) {
-  return !!r.label || String(r.kind ?? "").toLowerCase() === "label";
-}
-
-function isSheetPlayableRow(r: SheetFixtureRow) {
-  return !isSheetLabelRow(r);
-}
-
-function isFantasyWeekCompleteFromSheet(rows: SheetFixtureRow[], weekNo: number) {
-  const wk = rows.filter(
-    (r) => Number(r.weekFantasy) === weekNo && isSheetPlayableRow(r)
-  );
-  if (!wk.length) return false;
-  return wk.every((r) => String(r.status ?? "").toLowerCase() === "complete");
-}
-
-function currentWeekFromSheet(rows: SheetFixtureRow[]) {
-  const weeks = Array.from(
-    new Set(
-      rows
-        .filter(isSheetPlayableRow)
-        .map((r) => Number(r.weekFantasy))
-        .filter((w) => Number.isFinite(w) && w > 0)
-    )
-  ).sort((a, b) => a - b);
-
-  for (const w of weeks) {
-    if (!isFantasyWeekCompleteFromSheet(rows, w)) return w;
-  }
-
-  return weeks[weeks.length - 1] ?? 1;
 }
 
 export default function TeamSelectionPage() {
