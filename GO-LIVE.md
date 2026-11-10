@@ -1,5 +1,53 @@
 # Going live with the 2027 site
 
+## Where we're up to (10 Nov 2026)
+
+**Setup is done. Launch is on hold** until Ethan's changes and additions are finished and checked on the test site.
+
+| Done | What |
+|---|---|
+| ✅ | Node.js 22 on Ethan's PC |
+| ✅ | New Supabase project **Draft Rugby Fantasy 2027** (ref `dbmzgofmjbeeskhwohuv`, **Sydney**): tables, security rules, scheduler job built |
+| ✅ | Players (2027 pool = 2026 list for now), player photos (450 links), honours list imported |
+| ✅ | Logins: Confirm email off; Site URL and Redirect URL `https://sr-draft-fantasy.vercel.app`; Gmail SMTP; password-reset email template |
+| ✅ | Scheduler passwords (Vault `site_url`, `cron_secret`); job `results-tick` every 5 minutes |
+| ✅ | Vercel: new keys + `CRON_SECRET` (all environments), old `SESSION_SECRET` and `FIXTURES_SHEET_CSV_URL` deleted, function region **Sydney (syd1)**, address **sr-draft-fantasy.vercel.app** (old `…-foa5` address redirects) |
+| ✅ | Ethan's account **Stoutman** made site admin (on the test site) |
+
+- **Test site:** https://draft-rugby-fantasy-foa5-git-rebuild-2027-mooloofans-projects.vercel.app (only Ethan can open it while signed in to Vercel; it shows the latest `rebuild-2027` code and uses the **new** database).
+- **The live site** (sr-draft-fantasy.vercel.app) still runs the old code on the old database until launch.
+- ⚠️ **Until launch, don't redeploy `main` in Vercel** (e.g. the "Redeploy" button). Vercel now has the new database's keys, and the old code wouldn't work with them.
+
+## Launch day (about 15 minutes)
+
+Do this a few weeks before the 2027 draft, so everyone has time to make accounts.
+
+1. **Supabase awake?** Open the new project in the Supabase dashboard. If it says **Paused**, click **Restore** and wait for it to finish (free projects pause after about a week without use; nothing is lost).
+2. **Final check on the test site:** sign in, open the dashboard, Admin page and player cards.
+3. **Clear test data:** ask Claude to remove any test leagues or test accounts from the new database (keep Stoutman).
+4. **Official 2027 player list:** if it's out, ask Claude to import it, then set the draft ranks on the Admin page (photos: Ethan supplies the links).
+5. **Merge on GitHub (this is the actual launch):**
+   1. Go to **github.com/MoolooFan/draft-rugby-fantasy**, then **Pull requests → New pull request**.
+   2. Set **base: `main`** and **compare: `rebuild-2027`**. Click **Create pull request**, then **Create pull request** again.
+   3. Click **Merge pull request**, then **Confirm merge**.
+   4. In Vercel, open **Deployments** and wait for the top one (branch `main`) to say **Ready**, about 2 minutes.
+6. **Check the live site** at https://sr-draft-fantasy.vercel.app:
+   - Sign in as Stoutman. The Admin page should be there.
+   - **Forgot password:** use it on your own email. The email should arrive from the league Gmail, and its link should let you set a new password.
+   - After 10 minutes, ask Claude to check the scheduler is reaching the site (or in Supabase **SQL Editor** run `select status_code, created from net._http_response order by created desc limit 5;`, which should show `200`s).
+7. **Tell the group:** new site, same address, everyone **creates a new account** (old usernames don't carry over). Then create the 2027 league and send them the join code.
+
+**If something goes badly wrong:** Vercel → **Deployments** → find the previous **Production** deployment (older date) → **⋯ → Instant Rollback**. That puts the old site back as it was, on the old database. (Note: if you ever roll back, change nothing in Vercel's environment variables. The old deployment keeps the settings it was built with.)
+
+**After launch (no rush):**
+- In Vercel, check the leftover project **draft-rugby-fantasy** (without "foa5"). If no-one uses its address, delete it: **Settings → General → Delete Project**. It fails to build on every push.
+- On GitHub, the old stats robot's secrets can go: repo **Settings → Secrets and variables → Actions**, then delete them.
+- Delete the old Supabase project (**Draft Rugby Fantasy**, Mumbai) once you're sure you don't need it. The 2026 data is also saved in `backups/`.
+
+---
+
+# The original setup guide (steps already done, kept for reference)
+
 This guide moves the site over to a **new, empty Supabase project** and puts the rebuilt code live.
 Everyone makes a new account on the new site. The 2026 honours list (champion, runner-up and so on) comes across.
 
