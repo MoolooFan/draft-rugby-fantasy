@@ -41,21 +41,3 @@ export function getActiveUsername(): string | null {
 export function getActiveTimezone(): string | undefined {
   return current?.timezone || undefined;
 }
-
-export function clearUser() {
-  current = null;
-}
-
-export function getUserInitialsFromProfile(profile: UserProfile | null): string {
-  if (!profile) return "U";
-
-  const fn = (profile.firstName ?? "").trim();
-  const ln = (profile.lastName ?? "").trim();
-
-  if (fn || ln) {
-    return `${fn[0] ?? ""}${ln[0] ?? ""}`.toUpperCase();
-  }
-
-  const u = (profile.username ?? "").trim();
-  return (u.slice(0, 2) || "U").toUpperCase();
-}

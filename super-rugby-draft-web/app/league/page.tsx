@@ -16,6 +16,7 @@ import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/seas
 // This season's fixtures, numbered by fantasy week (see lib/season).
 const fixturesData = fixturesByFantasyWeek();
 import type { Fixture } from "@/lib/fixtures/types";
+import { useStableComponent } from "@/lib/hooks/useStableComponent";
 
 type LeagueStoreActions = ReturnType<typeof useLeagueStore.getState>;
 
@@ -614,7 +615,6 @@ const pointsByRealRound = useMemo(() => {
 const activeLeagueId = useLeagueStore((s: any) => s.activeLeagueId ?? null);
 
 const refreshLeague = useLeagueStore((s) => s.refreshLeague);
-const startLeagueRealtime = useLeagueStore((s) => s.startLeagueRealtime);
 
 useEffect(() => {
   if (!mounted) return;
@@ -633,14 +633,6 @@ useEffect(() => {
   };
 }, [mounted, leagueHydrated, activeLeagueId, refreshLeague]);
 
-useEffect(() => {
-  if (!mounted) return;
-  if (!leagueHydrated) return;
-  if (!activeLeagueId) return;
-
-  const stop = startLeagueRealtime(activeLeagueId);
-  return () => stop();
-}, [mounted, leagueHydrated, activeLeagueId, startLeagueRealtime]);
 
 const league = useMemo(() => {
   return leagues.find((l) => l.id === activeLeagueId) ?? null;
@@ -1093,7 +1085,7 @@ const finalsPlaceholderRowStyle: React.CSSProperties = {
     color: "#0f172a",
   };
 
-  function Hamburger() {
+  function Hamburger__render() {
     return (
       <button
         onClick={() => setMenuOpen(true)}
@@ -1114,8 +1106,9 @@ const finalsPlaceholderRowStyle: React.CSSProperties = {
       </button>
     );
   }
+const Hamburger = useStableComponent(Hamburger__render);
 
-  function Header() {
+  function Header__render() {
     return (
       <div style={{ ...card35, padding: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1126,8 +1119,9 @@ const finalsPlaceholderRowStyle: React.CSSProperties = {
       </div>
     );
   }
+const Header = useStableComponent(Header__render);
 
-  function Tabs() {
+  function Tabs__render() {
     const tabs: LeagueTab[] = ["Standings", "Fixtures", "Results"];
     return (
       <div style={tabBarStyle}>
@@ -1141,8 +1135,9 @@ const finalsPlaceholderRowStyle: React.CSSProperties = {
       </div>
     );
   }
+const Tabs = useStableComponent(Tabs__render);
 
-  function MovementCircle({ movement }: { movement: "same" | "up" | "down" }) {
+  function MovementCircle__render({ movement }: { movement: "same" | "up" | "down" }) {
   const isUp = movement === "up";
   const isDown = movement === "down";
   const isSame = movement === "same";
@@ -1176,8 +1171,9 @@ const finalsPlaceholderRowStyle: React.CSSProperties = {
     </span>
   );
 }
+const MovementCircle = useStableComponent(MovementCircle__render);
 
-  function StandingsTab() {
+  function StandingsTab__render() {
     // horizontally scrollable table
     return (
       <>
@@ -1270,8 +1266,9 @@ const finalsPlaceholderRowStyle: React.CSSProperties = {
       </>
     );
   }
+const StandingsTab = useStableComponent(StandingsTab__render);
 
-  function FixturesTab() {
+  function FixturesTab__render() {
     const future = fixtures.filter((w) => !isFantasyWeekComplete(w.weekNo));
     return (
       <div style={listBox}>
@@ -1417,8 +1414,9 @@ if (isBye) {
       </div>
     );
   }
+const FixturesTab = useStableComponent(FixturesTab__render);
 
-  function ResultsTab() {
+  function ResultsTab__render() {
     const past = fixtures
   .filter((w) => isFantasyWeekComplete(w.weekNo))
   .slice()
@@ -1617,8 +1615,9 @@ if (isLabelRow) {
       </div>
     );
   }
+const ResultsTab = useStableComponent(ResultsTab__render);
 
-function JoinLeagueModal() {
+function JoinLeagueModal__render() {
   const [code, setCode] = useState("");
   const [teamName, setTeamName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -1695,8 +1694,9 @@ function JoinLeagueModal() {
     </ModalOverlay>
   );
 }
+const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
 
-  function CreateLeagueModal() {
+  function CreateLeagueModal__render() {
   const [name, setName] = useState("");
   const [teamName, setTeamName] = useState("");
 
@@ -1834,6 +1834,7 @@ function JoinLeagueModal() {
     </ModalOverlay>
   );
 }
+const CreateLeagueModal = useStableComponent(CreateLeagueModal__render);
 
   function pillButton(bg: string): React.CSSProperties {
     return {

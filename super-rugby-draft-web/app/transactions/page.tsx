@@ -24,6 +24,8 @@ import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/seas
 const fixturesData = fixturesByFantasyWeek();
 import { isFrontRow, playedInRound, playerPoints, statCountsFromRow, roundPoints } from "@/lib/scoring";
 import { canPlayPosition } from "@/lib/players/positions";
+import { useStableComponent } from "@/lib/hooks/useStableComponent";
+import { playerRoundRows } from "@/lib/players/roundIndex";
 
 // -----------------------
 // Types (match your player shape)
@@ -111,24 +113,24 @@ type TabKey = "Player Pool" | "Watchlist" | "Pending Claims" | "Transactions";
 // Files live in: /public/images/jerseys
 // =========================
 const JERSEYS: Record<string, { angle?: string; front?: string; single?: string }> = {
-  BLU: { angle: "/images/jerseys/BLUJerseyAngle.png", front: "/images/jerseys/BLUJerseyFront.png" },
-  BRU: { single: "/images/jerseys/BRUJersey.png" },
-  CHI: { angle: "/images/jerseys/CHIJerseyAngle.png", front: "/images/jerseys/CHIJerseyFront.png" },
-  CRU: { angle: "/images/jerseys/CRUJerseyAngle.png", front: "/images/jerseys/CRUJerseyFront.png" },
-  DRU: { single: "/images/jerseys/DRUJersey.png" },
-  FOR: { single: "/images/jerseys/FORJersey.png" },
-  HIG: { angle: "/images/jerseys/HIGJerseyAngle.png", front: "/images/jerseys/HIGJerseyFront.png" },
-  HUR: { angle: "/images/jerseys/HURJerseyAngle.png", front: "/images/jerseys/HURJerseyFront.png" },
-  MOA: { angle: "/images/jerseys/MOPJerseyAngle.png", front: "/images/jerseys/MOPJerseyFront.png" },
-  RED: { single: "/images/jerseys/REDJersey.png" },
-  WAR: { single: "/images/jerseys/WARJersey.png" },
+  BLU: { angle: "/images/jerseys/BLUJerseyAngle.webp", front: "/images/jerseys/BLUJerseyFront.webp" },
+  BRU: { single: "/images/jerseys/BRUJersey.webp" },
+  CHI: { angle: "/images/jerseys/CHIJerseyAngle.webp", front: "/images/jerseys/CHIJerseyFront.webp" },
+  CRU: { angle: "/images/jerseys/CRUJerseyAngle.webp", front: "/images/jerseys/CRUJerseyFront.webp" },
+  DRU: { single: "/images/jerseys/DRUJersey.webp" },
+  FOR: { single: "/images/jerseys/FORJersey.webp" },
+  HIG: { angle: "/images/jerseys/HIGJerseyAngle.webp", front: "/images/jerseys/HIGJerseyFront.webp" },
+  HUR: { angle: "/images/jerseys/HURJerseyAngle.webp", front: "/images/jerseys/HURJerseyFront.webp" },
+  MOA: { angle: "/images/jerseys/MOPJerseyAngle.webp", front: "/images/jerseys/MOPJerseyFront.webp" },
+  RED: { single: "/images/jerseys/REDJersey.webp" },
+  WAR: { single: "/images/jerseys/WARJersey.webp" },
 };
 
 const EMPTY_ARR: any[] = [];
 const EMPTY_OBJ: any = {};
 const NOOP = () => {};
 
-const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.png";
+const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.webp";
 
 function jerseySrcForTeamCode(teamCode: string | null | undefined, prefer: "angle" | "front" = "angle") {
   const code = normalizeTeamCode(teamCode);
@@ -1127,7 +1129,7 @@ apiAcceptTrade(confirmTrade.id);
 closeConfirm();
 }
 
-function ConfirmAcceptTradeModal() {
+function ConfirmAcceptTradeModal__render() {
   if (!confirmOpen || !confirmTrade) return null;
 
   // helpers already exist in file: shortName(), jersey, etc.
@@ -1248,6 +1250,7 @@ function ConfirmAcceptTradeModal() {
     </div>
   );
 }
+const ConfirmAcceptTradeModal = useStableComponent(ConfirmAcceptTradeModal__render);
 
   // Prevent double-tap duplicate submissions (per-player short cooldown)
   const [addCooldownByPlayerId, setAddCooldownByPlayerId] = useState<Record<string, number>>({});
@@ -1770,7 +1773,7 @@ async function submitProposedTransaction() {
 
   
 
-    function DropSelectModal() {
+    function DropSelectModal__render() {
     if (!dropModalOpen || !proposedAddPlayer) return null;
 
     const confirmBg = proposeMode === "WAIVER" ? "#FACC15" : "#22C55E";
@@ -2014,6 +2017,7 @@ async function submitProposedTransaction() {
       </div>
     );
   }
+const DropSelectModal = useStableComponent(DropSelectModal__render);
 
 function normaliseId(x: any) {
   return String(x ?? "")
@@ -2037,31 +2041,7 @@ function getRoundPointsFromRow(row: any, p: Player): number | null {
 // Find rows belonging to this player.
 // We check a wider set of possible ID column names.
 function getPlayerRounds(playerId: string) {
-  const want = normaliseId(playerId);
-
-  const idKeys = [
-    "playerId",
-    "player_id",
-    "playerID",
-    "id",
-    "player", // sometimes sheets use this for ID
-  ];
-
-  return (roundRows ?? []).filter((r: any) => {
-    if (!r) return false;
-
-    // try likely keys
-    for (const k of idKeys) {
-      if (r[k] != null && normaliseId(r[k]) === want) return true;
-    }
-
-    // fallback: any key that “looks like” a player id field
-    const ks = Object.keys(r);
-    const maybe = ks.find((kk) => String(kk).toLowerCase().includes("player") && String(kk).toLowerCase().includes("id"));
-    if (maybe && r[maybe] != null && normaliseId(r[maybe]) === want) return true;
-
-    return false;
-  });
+  return playerRoundRows(roundRows, playerId); // grouped by player once (lib/players/roundIndex)
 }
 
 function getTotalPoints(p: Player): number | null {
@@ -2564,6 +2544,7 @@ const pendingOffersCount = useMemo(() => {
   const filteredPlayers = useMemo(() => {
     const q = search.trim().toLowerCase();
 
+    // work out each player's sort value once, then sort (it used to be worked out on every comparison)
     return baseOwnerList
       .filter((p) => (q ? `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) : true))
       .filter((p) => (teamFilter ? p.teamCode === teamFilter : true))
@@ -2571,20 +2552,15 @@ const pendingOffersCount = useMemo(() => {
         if (!posFilter) return true;
         return canPlayPosition(p, posFilter);
       })
+      .map((p) => ({ p, v: metricSortValue(p as any, infoMode) }))
       .sort((a, b) => {
-  const av = metricSortValue(a as any, infoMode);
-  const bv = metricSortValue(b as any, infoMode);
-
-  // Draft rank: lowest first (1 at top)
-  if (infoMode === "DRAFT_RANK") {
-    return (av ?? 9999) - (bv ?? 9999);
-  }
-
-  // Everything else: highest first
-  return (bv ?? -Infinity) - (av ?? -Infinity);
-});
-
-  }, [baseOwnerList, search, teamFilter, posFilter, infoMode]);
+        // Draft rank: lowest first (1 at top)
+        if (infoMode === "DRAFT_RANK") return (a.v ?? 9999) - (b.v ?? 9999);
+        // Everything else: highest first
+        return (b.v ?? -Infinity) - (a.v ?? -Infinity);
+      })
+      .map((x) => x.p);
+  }, [baseOwnerList, search, teamFilter, posFilter, infoMode, roundRows]);
 
   const ownerFilterOptions = useMemo(() => {
     const opts: Array<{ label: string; value: string }> = [];
@@ -2660,7 +2636,7 @@ return list
     color: "#0f172a",
   };
 
-  function Hamburger() {
+  function Hamburger__render() {
     return (
       <button
         onClick={() => setMenuOpen(true)}
@@ -2681,8 +2657,9 @@ return list
       </button>
     );
   }
+const Hamburger = useStableComponent(Hamburger__render);
 
-  function Tabs() {
+  function Tabs__render() {
   const tabs: TabKey[] = ["Player Pool", "Watchlist", "Pending Claims", "Transactions"];
 
   const badgeStyle: React.CSSProperties = {
@@ -2733,8 +2710,9 @@ return list
     </div>
   );
 }
+const Tabs = useStableComponent(Tabs__render);
 
-  function DeadlineBanner() {
+  function DeadlineBanner__render() {
     return (
       <div
         style={{
@@ -2774,8 +2752,9 @@ return list
       </div>
     );
   }
+const DeadlineBanner = useStableComponent(DeadlineBanner__render);
 
-  function StarButton({ active, onClick }: { active: boolean; onClick: () => void }) {
+  function StarButton__render({ active, onClick }: { active: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -2818,8 +2797,9 @@ return list
     </button>
   );
 }
+const StarButton = useStableComponent(StarButton__render);
 
-function TxActionButton({
+function TxActionButton__render({
   enabled,
   onClick,
   label,
@@ -2868,6 +2848,7 @@ function TxActionButton({
     </button>
   );
 }
+const TxActionButton = useStableComponent(TxActionButton__render);
 
 function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
   const url =
@@ -2894,7 +2875,7 @@ function hydratePlayer(p: Player): Player & { status?: any; weeklyStatus?: any }
   };
 }
 
-function PlayerRow({ p }: { p: Player }) {
+function PlayerRow__render({ p }: { p: Player }) {
   // Ownership
   const ownerTeamId = ownerByPlayerId.get(p.id) ?? null;
   const isOwned = !!ownerTeamId;
@@ -3008,6 +2989,7 @@ if (isOwned && !isOwnedByYou) {
     </div>
   );
 }
+const PlayerRow = useStableComponent(PlayerRow__render);
 function shortName(p: { firstName?: string; lastName?: string } | null | undefined) {
   const first = (p?.firstName ?? "").trim();
   const last = (p?.lastName ?? "").trim();
@@ -3015,7 +2997,7 @@ function shortName(p: { firstName?: string; lastName?: string } | null | undefin
   return last ? `${initial}. ${last}` : `${initial}.`;
 }
 
-  function WaiverClaimsTab() {
+  function WaiverClaimsTab__render() {
     const [draggingId, setDraggingId] = useState<string | null>(null);
 const [overId, setOverId] = useState<string | null>(null);
 
@@ -3258,8 +3240,9 @@ const dropP = allPlayers.find((x) => x.id === c.dropPlayerId) ?? null;
       </>
     );
   }
+const WaiverClaimsTab = useStableComponent(WaiverClaimsTab__render);
 
-  function TransactionsTab() {
+  function TransactionsTab__render() {
     const leagueId = activeLeague?.id ?? "";
     const yourId = yourDraftTeamId;
 
@@ -3298,7 +3281,7 @@ const userInitials = (teamId: string) => {
 // Confirm modal (Trades)
 // --------------------
 
-function LeagueTradeRow({ t }: { t: any }) {
+function LeagueTradeRow__render({ t }: { t: any }) {
   const from = teamName(t.fromTeamId);
   const to = teamName(t.toTeamId);
 
@@ -3386,6 +3369,7 @@ function LeagueTradeRow({ t }: { t: any }) {
     </div>
   );
 }
+const LeagueTradeRow = useStableComponent(LeagueTradeRow__render);
 
     // Last “team selection deadline” that has PASSED (used for league trades cutoff)
     const lastSelectionDeadlineMs = useMemo(() => {
@@ -3588,7 +3572,7 @@ const waiverClaimsFeed = useMemo(() => {
       whiteSpace: "nowrap",
     };
 
-    function TradeSummary({ t, mode }: { t: any; mode: "RECEIVED" | "PROPOSED" | "LEAGUE" }) {
+    function TradeSummary__render({ t, mode }: { t: any; mode: "RECEIVED" | "PROPOSED" | "LEAGUE" }) {
   const from = teamName(t.fromTeamId);
   const to = teamName(t.toTeamId);
 
@@ -3632,8 +3616,9 @@ const waiverClaimsFeed = useMemo(() => {
     </div>
   );
 }
+const TradeSummary = useStableComponent(TradeSummary__render);
 
-    function InitialBadge({ text }: { text: string }) {
+    function InitialBadge__render({ text }: { text: string }) {
       return (
         <div
           style={{
@@ -3652,8 +3637,9 @@ const waiverClaimsFeed = useMemo(() => {
         </div>
       );
     }
+const InitialBadge = useStableComponent(InitialBadge__render);
 
-        function StatusPill({ status }: { status: string }) {
+        function StatusPill__render({ status }: { status: string }) {
       const s = String(status ?? "").toUpperCase();
 
       const isProcessed = s === "PROCESSED" || s === "SUCCESS" || s === "APPROVED";
@@ -3700,6 +3686,7 @@ const waiverClaimsFeed = useMemo(() => {
         </div>
       );
     }
+const StatusPill = useStableComponent(StatusPill__render);
 
     // ---------- Render ----------
     // (This check sits after all the hooks above: returning before them could crash the page.)
@@ -3920,6 +3907,7 @@ const waiverClaimsFeed = useMemo(() => {
       </>
     );
   }
+const TransactionsTab = useStableComponent(TransactionsTab__render);
 
   // Player modal actions: keep blank placeholder buttons at bottom (for now)
   // Player modal actions

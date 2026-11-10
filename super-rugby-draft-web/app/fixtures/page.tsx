@@ -9,6 +9,7 @@ import type { Fixture } from "@/lib/fixtures/types";
 import { AppMenu } from "@/components/AppMenu";
 import { useLeagueStore } from "@/lib/league/store";
 import { roundLabel } from "@/lib/season";
+import { useStableComponent } from "@/lib/hooks/useStableComponent";
 
 type TabKey = "Fixtures" | "Results" | "FDR";
 
@@ -243,19 +244,19 @@ function normalizeFixture(raw: any): AnyFixture {
 // -----------------------
 const TEAM_LOGOS: Record<string, string> = {
   BLU: "/images/logos/BLU.webp",
-  BRU: "/images/logos/BRU.png",
-  CHI: "/images/logos/CHI.png",
-  CRU: "/images/logos/CRU.png",
-  DRU: "/images/logos/DRU.png",
-  FOR: "/images/logos/FOR.png",
-  HIG: "/images/logos/HIG.png",
-  HUR: "/images/logos/HUR.png",
-  MOA: "/images/logos/MOA.png", // or point this to MOP.png if that's your filename
-  RED: "/images/logos/RED.png",
-  WAR: "/images/logos/WAR.png",
+  BRU: "/images/logos/BRU.webp",
+  CHI: "/images/logos/CHI.webp",
+  CRU: "/images/logos/CRU.webp",
+  DRU: "/images/logos/DRU.webp",
+  FOR: "/images/logos/FOR.webp",
+  HIG: "/images/logos/HIG.webp",
+  HUR: "/images/logos/HUR.webp",
+  MOA: "/images/logos/MOA.webp", // or point this to MOP.png if that's your filename
+  RED: "/images/logos/RED.webp",
+  WAR: "/images/logos/WAR.webp",
 };
 
-const TEAM_LOGO_PLACEHOLDER = "/images/logo-placeholder.png";
+const TEAM_LOGO_PLACEHOLDER = "/images/logo-placeholder.webp";
 
 function teamLogoSrc(teamCodeOrName: string | null | undefined) {
   const raw = (teamCodeOrName ?? "").trim();
@@ -416,7 +417,7 @@ if (!Number.isFinite(w) || w <= 0) continue;
     color: "#0f172a",
   };
 
-  function Hamburger() {
+  function Hamburger__render() {
     return (
       <button
         onClick={() => setMenuOpen(true)}
@@ -437,8 +438,9 @@ if (!Number.isFinite(w) || w <= 0) continue;
       </button>
     );
   }
+const Hamburger = useStableComponent(Hamburger__render);
 
-  function TeamBadge({ code, size = 28 }: { code: string; size?: number }) {
+  function TeamBadge__render({ code, size = 28 }: { code: string; size?: number }) {
   return (
     <img
       src={teamLogoSrc(code)}
@@ -454,8 +456,9 @@ if (!Number.isFinite(w) || w <= 0) continue;
     />
   );
 }
+const TeamBadge = useStableComponent(TeamBadge__render);
 
-  function Tabs() {
+  function Tabs__render() {
     const tabs: TabKey[] = ["Fixtures", "Results", "FDR"];
     return (
       <div style={tabBarStyle}>
@@ -469,8 +472,9 @@ if (!Number.isFinite(w) || w <= 0) continue;
       </div>
     );
   }
+const Tabs = useStableComponent(Tabs__render);
 
-  function WeekLabel({ week }: { week: number }) {
+  function WeekLabel__render({ week }: { week: number }) {
     return (
       <div
         style={{
@@ -487,8 +491,9 @@ if (!Number.isFinite(w) || w <= 0) continue;
       </div>
     );
   }
+const WeekLabel = useStableComponent(WeekLabel__render);
 
-  function FixtureRow({ f, mode }: { f: AnyFixture; mode: "fixtures" | "results" }) {
+  function FixtureRow__render({ f, mode }: { f: AnyFixture; mode: "fixtures" | "results" }) {
     const home = f.homeTeamCode ?? f.homeTeam ?? "HOME";
     const away = f.awayTeamCode ?? f.awayTeam ?? "AWAY";
 
@@ -544,8 +549,9 @@ const sub = mode === "fixtures" ? (kickoffMs ? formatKickoffCompact(kickoffMs, u
       </div>
     );
   }
+const FixtureRow = useStableComponent(FixtureRow__render);
 
-  function WeekList({ which }: { which: "upcoming" | "completed" }) {
+  function WeekList__render({ which }: { which: "upcoming" | "completed" }) {
     const weeks = which === "upcoming" ? upcomingWeeks : completedWeeks;
 
     if (!weeks.length) {
@@ -574,8 +580,9 @@ const sub = mode === "fixtures" ? (kickoffMs ? formatKickoffCompact(kickoffMs, u
       </div>
     );
   }
+const WeekList = useStableComponent(WeekList__render);
 
-  function FdrTable() {
+  function FdrTable__render() {
     // Show only upcoming weeks (columns)
     const weeks = upcomingWeeks;
 
@@ -703,6 +710,7 @@ const sub = mode === "fixtures" ? (kickoffMs ? formatKickoffCompact(kickoffMs, u
       </div>
     );
   }
+const FdrTable = useStableComponent(FdrTable__render);
 
   return (
     <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>

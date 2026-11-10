@@ -18,6 +18,8 @@ import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 import { usePlayersStore } from "@/lib/players/store";
 import { canPlayPosition } from "@/lib/players/positions";
+import { useStableComponent } from "@/lib/hooks/useStableComponent";
+import { playerRoundRows } from "@/lib/players/roundIndex";
 
 // -----------------------
 // Types
@@ -61,19 +63,19 @@ type Step = "REQUESTING" | "OFFERING" | "REVIEW";
 type InfoMode = "DRAFT_RANK" | "AVG_PPG" | "TOTAL_PTS" | "FORM";
 
 const JERSEYS: Record<string, { angle?: string; front?: string; single?: string }> = {
-  BLU: { angle: "/images/jerseys/BLUJerseyAngle.png", front: "/images/jerseys/BLUJerseyFront.png" },
-  BRU: { single: "/images/jerseys/BRUJersey.png" },
-  CHI: { angle: "/images/jerseys/CHIJerseyAngle.png", front: "/images/jerseys/CHIJerseyFront.png" },
-  CRU: { angle: "/images/jerseys/CRUJerseyAngle.png", front: "/images/jerseys/CRUJerseyFront.png" },
-  DRU: { single: "/images/jerseys/DRUJersey.png" },
-  FOR: { single: "/images/jerseys/FORJersey.png" },
-  HIG: { angle: "/images/jerseys/HIGJerseyAngle.png", front: "/images/jerseys/HIGJerseyFront.png" },
-  HUR: { angle: "/images/jerseys/HURJerseyAngle.png", front: "/images/jerseys/HURJerseyFront.png" },
-  MOA: { angle: "/images/jerseys/MOPJerseyAngle.png", front: "/images/jerseys/MOPJerseyFront.png" },
-  RED: { single: "/images/jerseys/REDJersey.png" },
-  WAR: { single: "/images/jerseys/WARJersey.png" },
+  BLU: { angle: "/images/jerseys/BLUJerseyAngle.webp", front: "/images/jerseys/BLUJerseyFront.webp" },
+  BRU: { single: "/images/jerseys/BRUJersey.webp" },
+  CHI: { angle: "/images/jerseys/CHIJerseyAngle.webp", front: "/images/jerseys/CHIJerseyFront.webp" },
+  CRU: { angle: "/images/jerseys/CRUJerseyAngle.webp", front: "/images/jerseys/CRUJerseyFront.webp" },
+  DRU: { single: "/images/jerseys/DRUJersey.webp" },
+  FOR: { single: "/images/jerseys/FORJersey.webp" },
+  HIG: { angle: "/images/jerseys/HIGJerseyAngle.webp", front: "/images/jerseys/HIGJerseyFront.webp" },
+  HUR: { angle: "/images/jerseys/HURJerseyAngle.webp", front: "/images/jerseys/HURJerseyFront.webp" },
+  MOA: { angle: "/images/jerseys/MOPJerseyAngle.webp", front: "/images/jerseys/MOPJerseyFront.webp" },
+  RED: { single: "/images/jerseys/REDJersey.webp" },
+  WAR: { single: "/images/jerseys/WARJersey.webp" },
 };
-const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.png";
+const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.webp";
 
 function jerseySrcForTeamCode(teamCode: string | null | undefined, prefer: "angle" | "front" = "angle") {
   const code = normalizeTeamCode(teamCode);
@@ -282,36 +284,7 @@ function getRoundPointsFromRow(row: any, p: Player): number | null {
 }
 
 function getPlayerRounds(playerId: string, roundRows: any[]) {
-  const want = normaliseId(playerId);
-
-  const idKeys = [
-    "playerId",
-    "player_id",
-    "playerID",
-    "internalPlayerId",
-    "internal_player_id",
-    "InternalPlayerId",
-    "id",
-    "player",
-  ];
-
-  return (roundRows ?? []).filter((r: any) => {
-    if (!r) return false;
-
-    for (const k of idKeys) {
-      if (r[k] != null && normaliseId(r[k]) === want) return true;
-    }
-
-    const ks = Object.keys(r);
-    const maybe = ks.find(
-      (kk) =>
-        String(kk).toLowerCase().includes("player") &&
-        String(kk).toLowerCase().includes("id")
-    );
-    if (maybe && r[maybe] != null && normaliseId(r[maybe]) === want) return true;
-
-    return false;
-  });
+  return playerRoundRows(roundRows, playerId); // grouped by player once (lib/players/roundIndex)
 }
 
 function getTotalPointsFromRounds(p: Player, roundRows: any[]): number | null {
@@ -926,7 +899,7 @@ const offPlayers = offeringIds
     boxShadow: "0 10px 20px rgba(0,0,0,0.12)",
   };
 
-  function StepButtons() {
+  function StepButtons__render() {
   // REQUESTING: Next (right aligned)
   if (step === "REQUESTING") {
     const canNext = requestingIds.length > 0;
@@ -1018,8 +991,9 @@ if (step === "REVIEW") {
   return null;
 
 }
+const StepButtons = useStableComponent(StepButtons__render);
 
-  function TopBar() {
+  function TopBar__render() {
     return (
       <div style={{ ...card35, padding: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
         <div style={{ display: "flex", alignItems: "center" }}>
@@ -1155,8 +1129,9 @@ if (step === "REVIEW") {
       </div>
     );
   }
+const TopBar = useStableComponent(TopBar__render);
 
-  function SectionHeader({ title, color }: { title: string; color: string }) {
+  function SectionHeader__render({ title, color }: { title: string; color: string }) {
     return (
       <div
         style={{
@@ -1172,8 +1147,9 @@ if (step === "REVIEW") {
       </div>
     );
   }
+const SectionHeader = useStableComponent(SectionHeader__render);
 
-function PlayerRow({
+function PlayerRow__render({
   p,
   selected,
   onToggle,
@@ -1253,8 +1229,9 @@ function PlayerRow({
     </div>
   );
 }
+const PlayerRow = useStableComponent(PlayerRow__render);
 
-function GroupedList({
+function GroupedList__render({
   title,
   titleColor,
   players,
@@ -1309,9 +1286,10 @@ function GroupedList({
       </div>
     );
   }
+const GroupedList = useStableComponent(GroupedList__render);
 
   // Footer buttons for each step
-function Footer() {
+function Footer__render() {
   // Only show footer buttons on REVIEW
   if (step !== "REVIEW") return null;
 
@@ -1352,6 +1330,7 @@ function Footer() {
     </div>
   );
 }
+const Footer = useStableComponent(Footer__render);
 
   // Render the correct list
   const requestingCount = requestingIds.length;

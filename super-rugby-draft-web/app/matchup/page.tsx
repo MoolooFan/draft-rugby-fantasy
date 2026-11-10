@@ -30,18 +30,18 @@ const JERSEYS: Record<
   string,
   { angle?: string; front?: string; single?: string }
 > = {
-  BLU: { angle: "/images/jerseys/BLUJerseyAngle.png", front: "/images/jerseys/BLUJerseyFront.png" },
-  BRU: { single: "/images/jerseys/BRUJersey.png" },
-  CHI: { angle: "/images/jerseys/CHIJerseyAngle.png", front: "/images/jerseys/CHIJerseyFront.png" },
-  CRU: { angle: "/images/jerseys/CRUJerseyAngle.png", front: "/images/jerseys/CRUJerseyFront.png" },
-  DRU: { single: "/images/jerseys/DRUJersey.png" },
-  FOR: { single: "/images/jerseys/FORJersey.png" },
-  HIG: { angle: "/images/jerseys/HIGJerseyAngle.png", front: "/images/jerseys/HIGJerseyFront.png" },
-  HUR: { angle: "/images/jerseys/HURJerseyAngle.png", front: "/images/jerseys/HURJerseyFront.png" },
-  MOP: { angle: "/images/jerseys/MOPJerseyAngle.png", front: "/images/jerseys/MOPJerseyFront.png" },
-  RED: { single: "/images/jerseys/REDJersey.png" },
-    MOA: { angle: "/images/jerseys/MOPJerseyAngle.png", front: "/images/jerseys/MOPJerseyFront.png" },
-  WAR: { single: "/images/jerseys/WARJersey.png" },
+  BLU: { angle: "/images/jerseys/BLUJerseyAngle.webp", front: "/images/jerseys/BLUJerseyFront.webp" },
+  BRU: { single: "/images/jerseys/BRUJersey.webp" },
+  CHI: { angle: "/images/jerseys/CHIJerseyAngle.webp", front: "/images/jerseys/CHIJerseyFront.webp" },
+  CRU: { angle: "/images/jerseys/CRUJerseyAngle.webp", front: "/images/jerseys/CRUJerseyFront.webp" },
+  DRU: { single: "/images/jerseys/DRUJersey.webp" },
+  FOR: { single: "/images/jerseys/FORJersey.webp" },
+  HIG: { angle: "/images/jerseys/HIGJerseyAngle.webp", front: "/images/jerseys/HIGJerseyFront.webp" },
+  HUR: { angle: "/images/jerseys/HURJerseyAngle.webp", front: "/images/jerseys/HURJerseyFront.webp" },
+  MOP: { angle: "/images/jerseys/MOPJerseyAngle.webp", front: "/images/jerseys/MOPJerseyFront.webp" },
+  RED: { single: "/images/jerseys/REDJersey.webp" },
+    MOA: { angle: "/images/jerseys/MOPJerseyAngle.webp", front: "/images/jerseys/MOPJerseyFront.webp" },
+  WAR: { single: "/images/jerseys/WARJersey.webp" },
 };
 
 const JERSEY_PLACEHOLDER: string | null = null;

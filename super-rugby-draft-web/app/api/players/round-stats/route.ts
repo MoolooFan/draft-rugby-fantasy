@@ -32,7 +32,7 @@ function mapRawJsonToLegacyRow(row: any) {
     // useful extras
     points: toNum(raw.points ?? row.points),
     avg: toNum(raw.avg),
-    raw_json: raw,
+    // (the raw playfantasyrugby JSON isn't sent: nothing in the browser uses it, and it doubled the size)
   };
 }
 

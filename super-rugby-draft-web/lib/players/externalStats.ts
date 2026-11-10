@@ -66,11 +66,3 @@ export async function fetchExternalPlayerStatsByExternalId(
 
   return rows.map(normaliseRoundRow).filter(Boolean) as ExternalWeekStat[];
 }
-
-export async function fetchExternalPlayerStatsByInternalId(
-  internalId: string
-): Promise<ExternalWeekStat[]> {
-  const externalId = getExternalPlayerId(internalId);
-  if (externalId == null) return [];
-  return fetchExternalPlayerStatsByExternalId(externalId);
-}

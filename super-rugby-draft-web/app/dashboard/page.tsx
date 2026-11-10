@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { leagueRefreshMs, usePoll } from "@/lib/hooks/usePoll";
 import { useRouter } from "next/navigation";
 
 import { PlayerCardModal, type PlayerStatus } from "@/components/PlayerCardModal";
@@ -20,6 +21,7 @@ import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib
 import { getActiveUsername } from "@/lib/session";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { CAPTAIN_MULTIPLIER, pointsFromRow, roundPoints } from "@/lib/scoring";
+import { useStableComponent } from "@/lib/hooks/useStableComponent";
 
 type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null } | null;
 
@@ -397,32 +399,19 @@ useEffect(() => {
   const leagues = useLeagueStore((s) => s.leagues);
 const activeLeagueId = useLeagueStore((s) => s.activeLeagueId);
 
-useEffect(() => {
-  if (!activeLeagueId) return;
-
-  let cancelled = false;
-
-  const tick = async () => {
-    if (cancelled) return;
-
-    // 1) keep activeLeague fresh (teams, weeks, etc)
-    refreshLeague(activeLeagueId);
-
-    // 2) keep draft store fresh (teams, picks, etc)
-    await refreshFromServer(activeLeagueId);
-
-    // 3) rosters for lineup/score calcs
-    hydrateRostersFromDb(activeLeagueId);
-  };
-
-  tick();
-  const t = window.setInterval(tick, 1000);
-
-  return () => {
-    cancelled = true;
-    window.clearInterval(t);
-  };
-}, [activeLeagueId, refreshLeague, refreshFromServer, hydrateRostersFromDb]);
+// Keep the league, draft and rosters fresh: every few seconds around the draft, once a
+// minute otherwise, and not at all while the tab is hidden (lib/hooks/usePoll).
+usePoll(
+  activeLeagueId
+    ? async () => {
+        refreshLeague(activeLeagueId);
+        await refreshFromServer(activeLeagueId);
+        hydrateRostersFromDb(activeLeagueId);
+      }
+    : null,
+  () => leagueRefreshMs(useLeagueStore.getState().leagues.find((l) => l.id === activeLeagueId)),
+  activeLeagueId,
+);
 
 const setActiveLeague = useLeagueStore((s) => s.setActiveLeague);
 const maybeAutoStartDraft = useLeagueStore((s) => s.maybeAutoStartDraft);
@@ -627,8 +616,9 @@ useEffect(() => {
     }
   })();
 
-  // refresh occasionally so the badge updates
+  // refresh occasionally so the badge updates (not while the tab is hidden)
   const t = window.setInterval(() => {
+    if (document.hidden) return;
     fetch(
       `/api/trades/pending-count?leagueId=${encodeURIComponent(activeLeagueId)}&teamId=${encodeURIComponent(
         String(yourLeagueTeamId)
@@ -640,7 +630,7 @@ useEffect(() => {
         if (j?.ok) setPendingTradeCount(Number(j.count ?? 0) || 0);
       })
       .catch(() => {});
-  }, 10_000);
+  }, 30_000);
 
   return () => {
     cancelled = true;
@@ -1067,10 +1057,10 @@ const oppRecordLive = `(${rightRecordObj.w}-${rightRecordObj.l}-${rightRecordObj
   // run immediately (covers "already past" cases)
   maybeAutoStartDraft(activeLeagueId);
 
-  // keep checking while on dashboard
+  // keep checking while on dashboard (only changes anything at the draft time)
   const t = setInterval(() => {
     maybeAutoStartDraft(activeLeagueId);
-  }, 1000);
+  }, 5000);
 
   return () => clearInterval(t);
 }, [activeLeagueId, maybeAutoStartDraft]);
@@ -1588,7 +1578,7 @@ async function handleLogout() {
   // Full page load so the whole app forgets the signed-in player.
   window.location.assign("/");
 }
-  function MovementCircle({ movement }: { movement: Movement }) {
+  function MovementCircle__render({ movement }: { movement: Movement }) {
   const isUp = movement === "up";
   const isDown = movement === "down";
   const isSame = movement === "same";
@@ -1623,22 +1613,23 @@ async function handleLogout() {
     </span>
   );
 }
+const MovementCircle = useStableComponent(MovementCircle__render);
 
 const JERSEYS: Record<string, { angle?: string; front?: string; single?: string }> = {
-  BLU: { angle: "/images/jerseys/BLUJerseyAngle.png", front: "/images/jerseys/BLUJerseyFront.png" },
-  BRU: { single: "/images/jerseys/BRUJersey.png" },
-  CHI: { angle: "/images/jerseys/CHIJerseyAngle.png", front: "/images/jerseys/CHIJerseyFront.png" },
-  CRU: { angle: "/images/jerseys/CRUJerseyAngle.png", front: "/images/jerseys/CRUJerseyFront.png" },
-  DRU: { single: "/images/jerseys/DRUJersey.png" },
-  FOR: { single: "/images/jerseys/FORJersey.png" },
-  HIG: { angle: "/images/jerseys/HIGJerseyAngle.png", front: "/images/jerseys/HIGJerseyFront.png" },
-  HUR: { angle: "/images/jerseys/HURJerseyAngle.png", front: "/images/jerseys/HURJerseyFront.png" },
-  MOA: { angle: "/images/jerseys/MOPJerseyAngle.png", front: "/images/jerseys/MOPJerseyFront.png" },
-  RED: { single: "/images/jerseys/REDJersey.png" },
-  WAR: { single: "/images/jerseys/WARJersey.png" },
+  BLU: { angle: "/images/jerseys/BLUJerseyAngle.webp", front: "/images/jerseys/BLUJerseyFront.webp" },
+  BRU: { single: "/images/jerseys/BRUJersey.webp" },
+  CHI: { angle: "/images/jerseys/CHIJerseyAngle.webp", front: "/images/jerseys/CHIJerseyFront.webp" },
+  CRU: { angle: "/images/jerseys/CRUJerseyAngle.webp", front: "/images/jerseys/CRUJerseyFront.webp" },
+  DRU: { single: "/images/jerseys/DRUJersey.webp" },
+  FOR: { single: "/images/jerseys/FORJersey.webp" },
+  HIG: { angle: "/images/jerseys/HIGJerseyAngle.webp", front: "/images/jerseys/HIGJerseyFront.webp" },
+  HUR: { angle: "/images/jerseys/HURJerseyAngle.webp", front: "/images/jerseys/HURJerseyFront.webp" },
+  MOA: { angle: "/images/jerseys/MOPJerseyAngle.webp", front: "/images/jerseys/MOPJerseyFront.webp" },
+  RED: { single: "/images/jerseys/REDJersey.webp" },
+  WAR: { single: "/images/jerseys/WARJersey.webp" },
 };
 
-const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.png";
+const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.webp";
 
 function jerseySrcForTeamCode(teamCode: string | null | undefined, prefer: "angle" | "front" = "angle") {
   const code = normalizeTeamCode(teamCode);
@@ -1669,7 +1660,7 @@ function fullTeamNameFromCode(teamCode: string | null | undefined) {
   return MAP[code] ?? (teamCode ? String(teamCode) : "TBC");
 }
 
-function JerseyTile({
+function JerseyTile__render({
   size = 36,
   teamCode,
 }: {
@@ -1698,11 +1689,12 @@ function JerseyTile({
     />
   );
 }
+const JerseyTile = useStableComponent(JerseyTile__render);
 
   // -----------------------
   // Layout blocks
   // -----------------------
-  function Header() {
+  function Header__render() {
     return (
       <>
 
@@ -1784,8 +1776,9 @@ function JerseyTile({
       </>
     );
   }
+const Header = useStableComponent(Header__render);
 
-  function NoLeague() {
+  function NoLeague__render() {
     return (
       <div style={{ marginTop: 14 }}>
         <div style={cardStyle}>
@@ -1805,8 +1798,9 @@ function JerseyTile({
       </div>
     );
   }
+const NoLeague = useStableComponent(NoLeague__render);
 
-  function PostDraft() {
+  function PostDraft__render() {
     return (
       <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
         {/* League / matchup card */}
@@ -2151,8 +2145,9 @@ onClick={() => {
       </div>
     );
   }
+const PostDraft = useStableComponent(PostDraft__render);
 
-  function ScoreBlock({
+  function ScoreBlock__render({
     score,
     team,
     record,
@@ -2171,8 +2166,9 @@ onClick={() => {
       </div>
     );
   }
+const ScoreBlock = useStableComponent(ScoreBlock__render);
 
-  function StandingsCard() {
+  function StandingsCard__render() {
     return (
       <div style={cardStyle}>
         <div style={{ fontWeight: 900, fontSize: 12, marginBottom: 8 }}>{leagueName}</div>
@@ -2241,6 +2237,7 @@ onClick={() => {
       </div>
     );
   }
+const StandingsCard = useStableComponent(StandingsCard__render);
 
   // -----------------------
   // Render

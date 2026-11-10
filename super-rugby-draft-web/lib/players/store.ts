@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { currentSeasonYear } from "@/lib/season";
+import { cachedJson } from "@/lib/cachedJson";
 
 export type PlayerFromSheet = {
   id: string;
@@ -56,13 +57,10 @@ export const usePlayersStore = create<PlayersState>((set, get) => ({
     try {
       set({ loading: true, error: null });
 
-      const [playersRes, statsRes] = await Promise.all([
-  fetch(`/api/players/list?season=${currentSeasonYear()}`, { cache: "no-store" }),
-  fetch(`/api/players/round-stats?season=${currentSeasonYear()}`, { cache: "no-store" }),
-]);
-
-      const playersJson = await playersRes.json();
-      const statsJson = await statsRes.json();
+      const [playersJson, statsJson] = await Promise.all([
+        cachedJson<any>(`/api/players/list?season=${currentSeasonYear()}`),
+        cachedJson<any>(`/api/players/round-stats?season=${currentSeasonYear()}`),
+      ]);
 
       const players = Array.isArray(playersJson?.players)
         ? playersJson.players

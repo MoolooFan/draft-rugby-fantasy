@@ -241,6 +241,9 @@ function normId(x: any) {
   return String(x ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+/** Last draft answer per league (refreshFromServer skips repeats). */
+const lastDraftSig = new Map<string, string>();
+
 export const useDraftStore = create<DraftState>()(
   persist(
     (set, get) => ({
@@ -257,6 +260,12 @@ export const useDraftStore = create<DraftState>()(
     const offset = Number(json.serverNow) - Date.now();
     const deadline = st?.pick_deadline_at ? new Date(st.pick_deadline_at).getTime() - offset : null;
 
+    // Same answer as last time (and the same players loaded): nothing to redraw.
+    const { serverNow: _serverNow, ...same } = json;
+    const sig = JSON.stringify(same) + "|" + Object.keys(get().playersById ?? {}).length;
+    if (lastDraftSig.get(leagueId) === sig && get().draftLeagueId === leagueId) return;
+    lastDraftSig.set(leagueId, sig);
+
     set((prev) => {
       // teams in draft order
       const byId = new Map(prev.teams.map((t) => [t.id, t]));
@@ -272,10 +281,14 @@ export const useDraftStore = create<DraftState>()(
         if (n >= 1 && n <= total) picks[n - 1] = player;
         byTeam.set(String(r.team_id), [...(byTeam.get(String(r.team_id)) ?? []), player]);
       }
-      const rosters: Record<string, TeamRosterState> = {};
-      for (const t of teams) {
-        const players = byTeam.get(t.id) ?? [];
-        rosters[t.id] = rebalanceRoster(players, getSlotCaps(), getWcCap()) ?? { slots: {}, wildcards: players };
+      // After the draft, the saved rosters (with trades, waivers...) are the real ones: keep them.
+      const keepSaved = st?.phase === "complete" && !!prev.hydratedLeagueIds?.[leagueId];
+      const rosters: Record<string, TeamRosterState> = keepSaved ? prev.rosters : {};
+      if (!keepSaved) {
+        for (const t of teams) {
+          const players = byTeam.get(t.id) ?? [];
+          rosters[t.id] = rebalanceRoster(players, getSlotCaps(), getWcCap()) ?? { slots: {}, wildcards: players };
+        }
       }
 
       const last = rows[rows.length - 1];
@@ -320,12 +333,8 @@ setHasHydrated: (v) => set({ hasHydrated: v }),
       phase: "preDraft",
       draftPicks: [],
       playersById: {},
-      // Default teams (will be overwritten once you sync from league)
-      teams: [
-        { id: "t-1", name: "Stouty’s Studs", initials: "ES" },
-        { id: "t-2", name: "Hughie’s Hornets", initials: "HH" },
-        { id: "t-3", name: "Diddy Dunkers", initials: "DD" },
-      ],
+      // filled in from the league (no made-up teams showing while it loads)
+      teams: [],
       isDraftOrderSet: true,
 
       roundsPerTeam: 20,

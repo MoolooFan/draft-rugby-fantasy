@@ -7,6 +7,7 @@ import { PointsBreakdownModal } from "@/components/PointsBreakdownModal";
 import { usePlayersStore, usePlayers } from "@/lib/players/store";
 import { isFrontRow, pointsFromRow, statPoints, STATS, type StatKey, roundPoints } from "@/lib/scoring";
 import { currentSeasonYear, roundLabel } from "@/lib/season";
+import { cachedJson } from "@/lib/cachedJson";
 
 export type PlayerStatus = "starting" | "benched" | "out" | null;
 
@@ -199,19 +200,19 @@ const BREAKDOWN_ORDER: string[] = [
 
 const TEAM_LOGOS: Record<string, string> = {
   BLU: "/images/logos/BLU.webp",
-  BRU: "/images/logos/BRU.png",
-  CHI: "/images/logos/CHI.png",
-  CRU: "/images/logos/CRU.png",
-  DRU: "/images/logos/DRU.png",
-  FOR: "/images/logos/FOR.png",
-  HIG: "/images/logos/HIG.png",
-  HUR: "/images/logos/HUR.png",
-  MOA: "/images/logos/MOA.png",
-  RED: "/images/logos/RED.png",
-  WAR: "/images/logos/WAR.png",
+  BRU: "/images/logos/BRU.webp",
+  CHI: "/images/logos/CHI.webp",
+  CRU: "/images/logos/CRU.webp",
+  DRU: "/images/logos/DRU.webp",
+  FOR: "/images/logos/FOR.webp",
+  HIG: "/images/logos/HIG.webp",
+  HUR: "/images/logos/HUR.webp",
+  MOA: "/images/logos/MOA.webp",
+  RED: "/images/logos/RED.webp",
+  WAR: "/images/logos/WAR.webp",
 };
 
-const TEAM_LOGO_PLACEHOLDER = "/images/logo-placeholder.png";
+const TEAM_LOGO_PLACEHOLDER = "/images/logo-placeholder.webp";
 
 function teamLogoSrc(codeOrName: string | null | undefined) {
   const code =
@@ -251,24 +252,24 @@ MOP: { primary: "#0cacba", secondary: "#f5821f" },
 // Files live in: /public/images/jerseys
 // =========================
 const JERSEYS: Record<string, { angle?: string; front?: string; single?: string }> = {
-  BLU: { angle: "/images/jerseys/BLUJerseyAngle.png", front: "/images/jerseys/BLUJerseyFront.png" },
-  BRU: { single: "/images/jerseys/BRUJersey.png" },
-  CHI: { angle: "/images/jerseys/CHIJerseyAngle.png", front: "/images/jerseys/CHIJerseyFront.png" },
-  CRU: { angle: "/images/jerseys/CRUJerseyAngle.png", front: "/images/jerseys/CRUJerseyFront.png" },
-  DRU: { single: "/images/jerseys/DRUJersey.png" },
-  FOR: { single: "/images/jerseys/FORJersey.png" },
-  HIG: { angle: "/images/jerseys/HIGJerseyAngle.png", front: "/images/jerseys/HIGJerseyFront.png" },
-  HUR: { angle: "/images/jerseys/HURJerseyAngle.png", front: "/images/jerseys/HURJerseyFront.png" },
-  MOA: { angle: "/images/jerseys/MOPJerseyAngle.png", front: "/images/jerseys/MOPJerseyFront.png" },
+  BLU: { angle: "/images/jerseys/BLUJerseyAngle.webp", front: "/images/jerseys/BLUJerseyFront.webp" },
+  BRU: { single: "/images/jerseys/BRUJersey.webp" },
+  CHI: { angle: "/images/jerseys/CHIJerseyAngle.webp", front: "/images/jerseys/CHIJerseyFront.webp" },
+  CRU: { angle: "/images/jerseys/CRUJerseyAngle.webp", front: "/images/jerseys/CRUJerseyFront.webp" },
+  DRU: { single: "/images/jerseys/DRUJersey.webp" },
+  FOR: { single: "/images/jerseys/FORJersey.webp" },
+  HIG: { angle: "/images/jerseys/HIGJerseyAngle.webp", front: "/images/jerseys/HIGJerseyFront.webp" },
+  HUR: { angle: "/images/jerseys/HURJerseyAngle.webp", front: "/images/jerseys/HURJerseyFront.webp" },
+  MOA: { angle: "/images/jerseys/MOPJerseyAngle.webp", front: "/images/jerseys/MOPJerseyFront.webp" },
 
 // backwards compatibility (old code)
-MOP: { angle: "/images/jerseys/MOPJerseyAngle.png", front: "/images/jerseys/MOPJerseyFront.png" },
+MOP: { angle: "/images/jerseys/MOPJerseyAngle.webp", front: "/images/jerseys/MOPJerseyFront.webp" },
 
-  RED: { single: "/images/jerseys/REDJersey.png" },
-  WAR: { single: "/images/jerseys/WARJersey.png" },
+  RED: { single: "/images/jerseys/REDJersey.webp" },
+  WAR: { single: "/images/jerseys/WARJersey.webp" },
 };
 
-const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.png";
+const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.webp";
 
 function normalizeTeamCodeLocal(raw: string | null | undefined): string | null {
 
@@ -644,16 +645,11 @@ useEffect(() => {
       setLoading(true);
       setError(null);
 
-      const [roundRes, fixRes] = await Promise.all([
-  fetch(`/api/players/round-stats?season=${currentSeasonYear()}`),
-  fetch(`/api/fixtures/season`),
-]);
-
-      if (!roundRes.ok) throw new Error("Failed to load player stats");
-      if (!fixRes.ok) throw new Error("Failed to load fixtures");
-
-const roundJson = await roundRes.json();
-const fixJson = await fixRes.json();
+      // shared with the rest of the site (lib/cachedJson): opening a card doesn't re-download them
+      const [roundJson, fixJson] = await Promise.all([
+        cachedJson<any>(`/api/players/round-stats?season=${currentSeasonYear()}`),
+        cachedJson<any>(`/api/fixtures/season?season=${currentSeasonYear()}`),
+      ]);
 
 // /api/players/round-stats -> { ok: true, rows: [...] }
 const roundRows: Record<string, any>[] = Array.isArray(roundJson?.rows) ? roundJson.rows : [];

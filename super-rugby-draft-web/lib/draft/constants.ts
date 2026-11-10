@@ -1,7 +1,5 @@
 // lib/draft/constants.ts
 
-// You already have TEAM_OPTIONS / POSITION_OPTIONS in lib/constants
-export { TEAM_OPTIONS, POSITION_OPTIONS } from "../constants";
 
 // Roster template
 export const rosterSlots = [

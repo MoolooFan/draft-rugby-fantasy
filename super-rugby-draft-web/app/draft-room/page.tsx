@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { leagueRefreshMs, usePoll } from "@/lib/hooks/usePoll";
 import { useRouter } from "next/navigation";
 import { getActiveUser } from "@/lib/session";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
@@ -19,6 +20,7 @@ import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { usePlayersStore } from "@/lib/players/store";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { canPlayPosition } from "@/lib/players/positions";
+import { useStableComponent } from "@/lib/hooks/useStableComponent";
 
 type DraftTab = "Player Pool" | "Watchlist" | "Teams" | "Draft Results";
 type DraftPhase = "preDraft" | "liveDraft";
@@ -76,17 +78,14 @@ const completeDraft = useLeagueStore((s) => s.completeDraft);
 const phase: DraftPhase =
   activeLeague?.draftStatus === "live" ? "liveDraft" : "preDraft";
 
-const now = useNowTick(250);
 const refreshLeague = useLeagueStore((s) => s.refreshLeague);
 
-useEffect(() => {
-  if (!activeLeagueId) return;
-
-  refreshLeague(activeLeagueId);
-  const t = window.setInterval(() => refreshLeague(activeLeagueId), 1000);
-
-  return () => window.clearInterval(t);
-}, [activeLeagueId, refreshLeague]);
+// League details: every few seconds around the draft (to see it go live), rarely otherwise.
+usePoll(
+  activeLeagueId ? () => refreshLeague(activeLeagueId) : null,
+  () => leagueRefreshMs(useLeagueStore.getState().leagues.find((l) => l.id === activeLeagueId)),
+  activeLeagueId,
+);
 
   const [activeTab, setActiveTab] = useState<DraftTab>("Player Pool");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -103,25 +102,15 @@ const hydrateRostersFromDb = useDraftStore((s) => s.hydrateRostersFromDb);
     if (!livePlayersLoaded) refreshLivePlayers();
   }, [livePlayersLoaded, refreshLivePlayers]);
 
-useEffect(() => {
-  const lid = activeLeagueId;
-  if (!lid) return;
-
-  let cancelled = false;
-
-  const tick = async (leagueId: string) => {
-    if (cancelled) return;
-    await refreshFromServer(leagueId);
-  };
-
-  tick(lid);
-  const t = window.setInterval(() => tick(lid), 1000);
-
-  return () => {
-    cancelled = true;
-    window.clearInterval(t);
-  };
-}, [activeLeagueId, refreshFromServer]);
+// Picks and the clock: every second while the draft is on, otherwise like the league details.
+usePoll(
+  activeLeagueId ? () => refreshFromServer(activeLeagueId) : null,
+  () => {
+    const l = useLeagueStore.getState().leagues.find((x) => x.id === activeLeagueId);
+    return l?.draftStatus === "live" ? 1000 : leagueRefreshMs(l);
+  },
+  activeLeagueId,
+);
 
 useEffect(() => {
   const lid = activeLeagueId;
@@ -134,20 +123,20 @@ useEffect(() => {
   // Files live in: /public/images/jerseys
   // =========================
   const JERSEYS: Record<string, { angle?: string; front?: string; single?: string }> = {
-    BLU: { angle: "/images/jerseys/BLUJerseyAngle.png", front: "/images/jerseys/BLUJerseyFront.png" },
-    BRU: { single: "/images/jerseys/BRUJersey.png" },
-    CHI: { angle: "/images/jerseys/CHIJerseyAngle.png", front: "/images/jerseys/CHIJerseyFront.png" },
-    CRU: { angle: "/images/jerseys/CRUJerseyAngle.png", front: "/images/jerseys/CRUJerseyFront.png" },
-    DRU: { single: "/images/jerseys/DRUJersey.png" },
-    FOR: { single: "/images/jerseys/FORJersey.png" },
-    HIG: { angle: "/images/jerseys/HIGJerseyAngle.png", front: "/images/jerseys/HIGJerseyFront.png" },
-    HUR: { angle: "/images/jerseys/HURJerseyAngle.png", front: "/images/jerseys/HURJerseyFront.png" },
-    MOA: { angle: "/images/jerseys/MOPJerseyAngle.png", front: "/images/jerseys/MOPJerseyFront.png" },
-    RED: { single: "/images/jerseys/REDJersey.png" },
-    WAR: { single: "/images/jerseys/WARJersey.png" },
+    BLU: { angle: "/images/jerseys/BLUJerseyAngle.webp", front: "/images/jerseys/BLUJerseyFront.webp" },
+    BRU: { single: "/images/jerseys/BRUJersey.webp" },
+    CHI: { angle: "/images/jerseys/CHIJerseyAngle.webp", front: "/images/jerseys/CHIJerseyFront.webp" },
+    CRU: { angle: "/images/jerseys/CRUJerseyAngle.webp", front: "/images/jerseys/CRUJerseyFront.webp" },
+    DRU: { single: "/images/jerseys/DRUJersey.webp" },
+    FOR: { single: "/images/jerseys/FORJersey.webp" },
+    HIG: { angle: "/images/jerseys/HIGJerseyAngle.webp", front: "/images/jerseys/HIGJerseyFront.webp" },
+    HUR: { angle: "/images/jerseys/HURJerseyAngle.webp", front: "/images/jerseys/HURJerseyFront.webp" },
+    MOA: { angle: "/images/jerseys/MOPJerseyAngle.webp", front: "/images/jerseys/MOPJerseyFront.webp" },
+    RED: { single: "/images/jerseys/REDJersey.webp" },
+    WAR: { single: "/images/jerseys/WARJersey.webp" },
   };
 
-  const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.png";
+  const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.webp";
 
   function jerseySrcForTeamCode(
     teamCode: string | null | undefined,
@@ -463,7 +452,7 @@ const firstPickTeamName = useMemo(() => {
     color: "#0f172a",
   };
 
-  function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }) {
+  function JerseyTile__render({ teamCode, size = 34 }: { teamCode: string; size?: number }) {
     return (
       <img
         src={jerseySrcForTeamCode(teamCode, "angle")}
@@ -479,8 +468,9 @@ const firstPickTeamName = useMemo(() => {
       />
     );
   }
+const JerseyTile = useStableComponent(JerseyTile__render);
 
-  function DraftButton({
+  function DraftButton__render({
     enabled,
     onClick,
     label = "Draft",
@@ -510,8 +500,9 @@ const firstPickTeamName = useMemo(() => {
       </button>
     );
   }
+const DraftButton = useStableComponent(DraftButton__render);
 
-  function StarButton({ active, onClick }: { active: boolean; onClick: () => void }) {
+  function StarButton__render({ active, onClick }: { active: boolean; onClick: () => void }) {
     return (
       <button
         onClick={onClick}
@@ -534,8 +525,9 @@ const firstPickTeamName = useMemo(() => {
       </button>
     );
   }
+const StarButton = useStableComponent(StarButton__render);
 
-  function Hamburger() {
+  function Hamburger__render() {
     return (
       <button
         onClick={() => setMenuOpen(true)}
@@ -556,8 +548,9 @@ const firstPickTeamName = useMemo(() => {
       </button>
     );
   }
+const Hamburger = useStableComponent(Hamburger__render);
 
-  function TimeBlock({ value, label }: { value: string; label: string }) {
+  function TimeBlock__render({ value, label }: { value: string; label: string }) {
     return (
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: 28, fontWeight: 900, lineHeight: "30px" }}>{value}</div>
@@ -565,8 +558,10 @@ const firstPickTeamName = useMemo(() => {
       </div>
     );
   }
+const TimeBlock = useStableComponent(TimeBlock__render);
 
-  function PreDraftHeader() {
+  function PreDraftHeader__render() {
+  const now = useNowTick(250);
   
 const deadline = preDraftDeadlineMs; // number | null
 const preDraftSeconds =
@@ -610,8 +605,10 @@ const isTbd = !deadline;
       </div>
     );
   }
+const PreDraftHeader = useStableComponent(PreDraftHeader__render);
 
-  function LiveHeader() {
+  function LiveHeader__render() {
+  const now = useNowTick(250);
   
     const deadline = serverDeadlineMs ?? 0;
 
@@ -672,8 +669,9 @@ const isTbd = !deadline;
       </div>
     );
   }
+const LiveHeader = useStableComponent(LiveHeader__render);
 
-  function Tabs() {
+  function Tabs__render() {
     const tabs: DraftTab[] = ["Player Pool", "Watchlist", "Teams", "Draft Results"];
     return (
       <div style={tabBarStyle}>
@@ -687,8 +685,9 @@ const isTbd = !deadline;
       </div>
     );
   }
+const Tabs = useStableComponent(Tabs__render);
 
-  function Filters() {
+  function Filters__render() {
     const stopCapture = (e: any) => {
       e.stopPropagation?.();
     };
@@ -806,8 +805,9 @@ const isTbd = !deadline;
       </div>
     );
   }
+const Filters = useStableComponent(Filters__render);
 
-  function PlayerRow({ p, draftEnabled, reorder }: { p: Player; draftEnabled: boolean; reorder?: { index: number; count: number } }) {
+  function PlayerRow__render({ p, draftEnabled, reorder }: { p: Player; draftEnabled: boolean; reorder?: { index: number; count: number } }) {
     const isStar = !!watchlist[p.id];
     const arrow: React.CSSProperties = { border: "none", background: "transparent", fontSize: 12, fontWeight: 900, padding: "0 2px", cursor: "pointer", lineHeight: "12px" };
 
@@ -856,8 +856,9 @@ const isTbd = !deadline;
       </div>
     );
   }
+const PlayerRow = useStableComponent(PlayerRow__render);
 
-  function PlayerPoolTab() {
+  function PlayerPoolTab__render() {
     const draftEnabledFor = (p: Player) =>
       phase === "liveDraft" && isYouOnClock && canTeamDraftPlayer(yourTeamId, p) && !draftComplete;
 
@@ -883,8 +884,9 @@ const isTbd = !deadline;
       </>
     );
   }
+const PlayerPoolTab = useStableComponent(PlayerPoolTab__render);
 
-  function WatchlistTab() {
+  function WatchlistTab__render() {
     const draftEnabledFor = (p: Player) =>
       phase === "liveDraft" && isYouOnClock && canTeamDraftPlayer(yourTeamId, p) && !draftComplete;
 
@@ -912,6 +914,7 @@ const isTbd = !deadline;
       </>
     );
   }
+const WatchlistTab = useStableComponent(WatchlistTab__render);
 
   // ✅ IMPORTANT: this MUST be inside DraftRoomPage (it’s a hook)
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
@@ -923,7 +926,7 @@ useEffect(() => {
   }
 }, [teams, selectedTeamId]);
 
-  function TeamsTab() {
+  function TeamsTab__render() {
     const roster = rosters[selectedTeamId] ?? null;
 
     if (!roster) {
@@ -1044,8 +1047,9 @@ const entry = resolvePlayer(rawEntry);
       </>
     );
   }
+const TeamsTab = useStableComponent(TeamsTab__render);
 
-  function DraftResultsTab() {
+  function DraftResultsTab__render() {
     return (
       <div
         ref={draftResultsScrollRef}
@@ -1149,8 +1153,9 @@ const entry = resolvePlayer(rawEntry);
       </div>
     );
   }
+const DraftResultsTab = useStableComponent(DraftResultsTab__render);
 
-  function DraftConfirmModal({ player }: { player: Player }) {
+  function DraftConfirmModal__render({ player }: { player: Player }) {
     return (
       <ModalOverlay onClose={() => setModal(null)}>
         <div
@@ -1236,8 +1241,9 @@ confirmDraft(player, leagueId, (lid) => completeDraft?.(lid));
       </ModalOverlay>
     );
   }
+const DraftConfirmModal = useStableComponent(DraftConfirmModal__render);
 
-  function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  function ModalOverlay__render({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
     return (
       <div style={{ position: "fixed", inset: 0, zIndex: 10000 }}>
         <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)" }} onClick={onClose} />
@@ -1247,6 +1253,7 @@ confirmDraft(player, leagueId, (lid) => completeDraft?.(lid));
       </div>
     );
   }
+const ModalOverlay = useStableComponent(ModalOverlay__render);
 
   if (!ready) {
   return (

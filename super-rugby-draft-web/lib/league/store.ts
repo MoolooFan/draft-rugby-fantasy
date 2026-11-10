@@ -3,7 +3,6 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { League, LeagueTeam, PlayoffFormat } from "./types";
 import { getActiveUserProfile } from "@/lib/session";
-import { supabase } from "@/lib/supabase/client";
 function normalizeUserId(u: string) {
   return u.trim().toLowerCase();
 }
@@ -18,7 +17,6 @@ type LeagueState = {
   activeLeagueId: string | null;
   maybeAutoStartDraft: (leagueId: string) => void;
 refreshLeague: (leagueId: string) => Promise<void>;
-startLeagueRealtime: (leagueId: string) => () => void;
   // helpers
   activeLeague: () => League | null;
   isActiveLeagueCreator: () => boolean;
@@ -112,34 +110,14 @@ refreshLeague: async (leagueId) => {
 
     const league: League = json.league;
 
+    // Nothing changed: leave the store alone so the pages don't redraw.
+    const current = get().leagues.find((l) => l.id === league.id);
+    if (current && JSON.stringify(current) === JSON.stringify(league)) return;
+
     set((s) => ({
       leagues: [league, ...s.leagues.filter((l) => l.id !== league.id)],
     }));
   } catch {}
-},
-startLeagueRealtime: (leagueId: string) => {
-  // Subscribe to changes on the teams table for this league
-  const channel = supabase
-    .channel(`teams:${leagueId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "teams",
-        filter: `league_id=eq.${leagueId}`,
-      },
-      async () => {
-        // When ANY team changes, refresh the league object from your API
-        await get().refreshLeague(leagueId);
-      }
-    )
-    .subscribe();
-
-  // Return cleanup function so pages can unsubscribe on unmount
-  return () => {
-    supabase.removeChannel(channel);
-  };
 },
       activeLeague: () => {
         const s = get();
@@ -156,6 +134,8 @@ startLeagueRealtime: (leagueId: string) => {
       setActiveLeague: (leagueId) => set({ activeLeagueId: leagueId }),
 
       maybeAutoStartDraft: (leagueId) => {
+        const due = get().leagues.some((l) => l.id === leagueId && l.draftStatus === "scheduled" && !!l.draftAt && Date.now() >= l.draftAt);
+        if (!due) return; // nothing to change (most of the time)
         set((s) => ({
           leagues: s.leagues.map((l) => {
             if (l.id !== leagueId) return l;

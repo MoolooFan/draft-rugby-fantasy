@@ -94,24 +94,24 @@ const JERSEYS: Record<
   string,
   { front?: string; angle?: string; single?: string }
 > = {
-  BLU: { front: "/images/jerseys/BLUJerseyFront.png", angle: "/images/jerseys/BLUJerseyAngle.png" },
-  BRU: { single: "/images/jerseys/BRUJersey.png" },
+  BLU: { front: "/images/jerseys/BLUJerseyFront.webp", angle: "/images/jerseys/BLUJerseyAngle.webp" },
+  BRU: { single: "/images/jerseys/BRUJersey.webp" },
 
-  CHI: { front: "/images/jerseys/CHIJerseyFront.png", angle: "/images/jerseys/CHIJerseyAngle.png" },
-  CRU: { front: "/images/jerseys/CRUJerseyFront.png", angle: "/images/jerseys/CRUJerseyAngle.png" },
+  CHI: { front: "/images/jerseys/CHIJerseyFront.webp", angle: "/images/jerseys/CHIJerseyAngle.webp" },
+  CRU: { front: "/images/jerseys/CRUJerseyFront.webp", angle: "/images/jerseys/CRUJerseyAngle.webp" },
 
-  DRU: { single: "/images/jerseys/DRUJersey.png" },
-  FOR: { single: "/images/jerseys/FORJersey.png" },
+  DRU: { single: "/images/jerseys/DRUJersey.webp" },
+  FOR: { single: "/images/jerseys/FORJersey.webp" },
 
-  HIG: { front: "/images/jerseys/HIGJerseyFront.png", angle: "/images/jerseys/HIGJerseyAngle.png" },
-  HUR: { front: "/images/jerseys/HURJerseyFront.png", angle: "/images/jerseys/HURJerseyAngle.png" },
+  HIG: { front: "/images/jerseys/HIGJerseyFront.webp", angle: "/images/jerseys/HIGJerseyAngle.webp" },
+  HUR: { front: "/images/jerseys/HURJerseyFront.webp", angle: "/images/jerseys/HURJerseyAngle.webp" },
  // ✅ add this (Moana)
-  MOA: { front: "/images/jerseys/MOPJerseyFront.png", angle: "/images/jerseys/MOPJerseyAngle.png" },
+  MOA: { front: "/images/jerseys/MOPJerseyFront.webp", angle: "/images/jerseys/MOPJerseyAngle.webp" },
 
-  MOP: { front: "/images/jerseys/MOPJerseyFront.png", angle: "/images/jerseys/MOPJerseyAngle.png" },
+  MOP: { front: "/images/jerseys/MOPJerseyFront.webp", angle: "/images/jerseys/MOPJerseyAngle.webp" },
 
-  RED: { single: "/images/jerseys/REDJersey.png" },
-  WAR: { single: "/images/jerseys/WARJersey.png" },
+  RED: { single: "/images/jerseys/REDJersey.webp" },
+  WAR: { single: "/images/jerseys/WARJersey.webp" },
 };
 
 function normalizeTeamCode(teamCodeOrName: string) {
@@ -140,7 +140,7 @@ function jerseySrcForTeam(teamCodeOrName: string) {
     j?.front ??
     j?.angle ??
     j?.single ??
-    "/images/jersey-placeholder.png"
+    "/images/jersey-placeholder.webp"
   );
 }
 
@@ -1556,9 +1556,9 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
           position: "relative",
           height: 520,
           background:
-            // Use your field PNG later (drop it into /public/images/field.png)
+            // Use your field PNG later (drop it into /public/images/field.webp)
             `linear-gradient(to bottom, rgba(5,150,105,0.92), rgba(16,185,129,0.92))`,
-          backgroundImage: `url("/images/field.png")`,
+          backgroundImage: `url("/images/field.webp")`,
           backgroundSize: "cover",
           backgroundPosition: "center",
           

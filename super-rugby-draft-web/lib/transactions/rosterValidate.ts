@@ -42,39 +42,6 @@ const REQUIRED: Record<string, number> = {
 export const SQUAD_SIZE = 20;
 
 /**
- * NOTE:
- * This is a conservative *server* validator that ensures:
- * - roster size == 20
- * - required minimums are met
- *
- * If your app allows secondary positions and “auto slotting”, this still works
- * as long as players.json exposes a single primary position for each player.
- * (If you store secondary positions, we can upgrade this to satisfy via either.)
- */
-export function validateRosterPlayerIds(nextPlayerIds: string[]) {
-  const ids = nextPlayerIds.map(String).filter(Boolean);
-
-  if (ids.length !== SQUAD_SIZE) {
-    return { ok: false as const, error: `Roster must be exactly ${SQUAD_SIZE} players.` };
-  }
-
-  const counts: Record<string, number> = {};
-  for (const id of ids) {
-    const pos = getPos(id);
-    if (!pos) continue;
-    counts[pos] = (counts[pos] ?? 0) + 1;
-  }
-
-  for (const [pos, min] of Object.entries(REQUIRED)) {
-    if ((counts[pos] ?? 0) < min) {
-      return { ok: false as const, error: `Roster must have at least ${min} ${pos}.` };
-    }
-  }
-
-  return { ok: true as const };
-}
-
-/**
  * Applies add/drop to a flat playerIds roster and validates the result.
  * If your roster data is not flat, you already normalize to playerIds in routes.
  */

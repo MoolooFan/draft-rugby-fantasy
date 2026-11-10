@@ -26,12 +26,3 @@ export const POSITION_OPTIONS: { value: string; label: string }[] = [
   { value: "OB", label: "Outside Back" },
   { value: "WC", label: "Wildcard" },
 ];
-
-// Optional helper (nice to have)
-export function teamLabel(teamCode: string) {
-  return TEAM_OPTIONS.find((t) => t.value === teamCode)?.label ?? teamCode;
-}
-
-export function positionLabel(posAbbrev: string) {
-  return POSITION_OPTIONS.find((p) => p.value === posAbbrev)?.label ?? posAbbrev;
-}

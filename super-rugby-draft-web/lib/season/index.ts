@@ -248,11 +248,3 @@ export function recentlyFinishedFixtures(s: SeasonConfig, nowMs: number, withinM
     return kickoffMs(f) > 0 && nowMs >= end && nowMs - end <= withinMs;
   });
 }
-
-/** True while any game is between its kickoff and 13.5h after it (the only time stats need syncing). */
-export function isStatsSyncWindow(s: SeasonConfig, nowMs: number): boolean {
-  return s.fixtures.some((f) => {
-    const k = kickoffMs(f);
-    return k > 0 && nowMs >= k && nowMs <= k + FINALISE_AFTER_LAST_KICKOFF_MS;
-  });
-}

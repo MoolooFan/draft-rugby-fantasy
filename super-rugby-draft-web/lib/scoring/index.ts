@@ -210,13 +210,6 @@ export function isFrontRow(player: PositionInfo, rules: ScoringRules = activeSco
   return all.some((p) => rules.scrumPositions.includes(p));
 }
 
-/** Props or hookers (by position only, whatever the scoring). */
-export function isPropOrHooker(player: PositionInfo): boolean {
-  // any of the player's positions (main, second or third)
-  const all = [player?.posAbbrev, player?.secondaryPosAbbrev, player?.thirdPosAbbrev].map((v) => String(v ?? "").trim().toUpperCase());
-  return all.includes("PR") || all.includes("HO");
-}
-
 function num(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
