@@ -24,6 +24,7 @@ import { CAPTAIN_MULTIPLIER, isFrontRow, pointsBreakdown, pointsFromRow, statCou
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { toMs, pickValue } from "@/lib/league/weekHelpers";
 import { JERSEYS } from "@/lib/teams/images";
+import { formatStatCount } from "@/lib/scoring";
 
 
 function normaliseId(x: any) {
@@ -55,9 +56,10 @@ function calcFantasyPoints(
 }
 
 // Build breakdown rows for PointsBreakdownModal (matches Row: { label, right })
-function buildBreakdownRows(row: any, player: Player | null): Array<{ label: string; right?: string }> {
+function buildBreakdownRows(row: any, player: Player | null): Array<{ label: string; right?: string; count?: string }> {
   return pointsBreakdown(statCountsFromRow(row), isFrontRow(player)).map((b) => ({
     label: b.stat.header,
+    count: formatStatCount(b.stat.key, b.count),
     right: String(b.points),
   }));
 }
@@ -300,7 +302,7 @@ const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 const [selectedOwned, setSelectedOwned] = useState(false);
 const [selectedSide, setSelectedSide] = useState<"left" | "right">("left");
 const [selectedFixtureLabel, setSelectedFixtureLabel] = useState<string>("—");
-const [selectedRows, setSelectedRows] = useState<Array<{ label: string; right?: string }>>([]);
+const [selectedRows, setSelectedRows] = useState<Array<{ label: string; right?: string; count?: string }>>([]);
 
   const leagues = useLeagueStore((s) => s.leagues);
   const activeLeague = useLeagueStore((s) => s.activeLeague());

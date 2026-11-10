@@ -6,11 +6,13 @@ import { PointsBreakdownModal } from "@/components/PointsBreakdownModal";
 
 import { usePlayersStore, usePlayers } from "@/lib/players/store";
 import { isFrontRow, pointsFromRow, statPoints, STATS, type StatKey, roundPoints } from "@/lib/scoring";
-import { currentSeasonYear, roundLabel } from "@/lib/season";
+import { currentSeasonYear, statsSeasonYear, roundLabel } from "@/lib/season";
 import { cachedJson } from "@/lib/cachedJson";
 import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
 import { FixtureRow, normalizeTeamCodeLocal, TabCard } from "./playerCard/helpers";
 import { ResultsTab, StatsTab, FixturesTab } from "./playerCard/tabs";
+import { positionsLabel } from "@/lib/players/positions";
+import { formatStatCount } from "@/lib/scoring";
 
 export type PlayerStatus = "starting" | "benched" | "out" | null;
 
@@ -435,6 +437,12 @@ const [fixtures, setFixtures] = useState<FixtureRow[]>([]);
 const [allRoundRows, setAllRoundRows] = useState<Record<string, any>[]>([]);
 const [seasonWeeks, setSeasonWeeks] = useState<number[]>([]);
 const [lastCompletedWeek, setLastCompletedWeek] = useState<number>(0);
+// Results/Stats use the stats season (last season's until this season's first kickoff); the
+// Fixtures tab always shows this season's draw.
+const [statSeason, setStatSeason] = useState<number>(() => statsSeasonYear());
+const [upcomingFixtures, setUpcomingFixtures] = useState<FixtureRow[]>([]);
+const [upcomingWeeks, setUpcomingWeeks] = useState<number[]>([]);
+const [upcomingLastCompleted, setUpcomingLastCompleted] = useState<number>(0);
 
 // for the Results score breakdown popup
 const [openBreakdown, setOpenBreakdown] = useState(false);
@@ -517,9 +525,12 @@ useEffect(() => {
       setError(null);
 
       // shared with the rest of the site (lib/cachedJson): opening a card doesn't re-download them
-      const [roundJson, fixJson] = await Promise.all([
-        cachedJson<any>(`/api/players/round-stats?season=${currentSeasonYear()}`),
-        cachedJson<any>(`/api/fixtures/season?season=${currentSeasonYear()}`),
+      const statsYear = statsSeasonYear();
+      const thisYear = currentSeasonYear();
+      const [roundJson, fixJson, upcomingJson] = await Promise.all([
+        cachedJson<any>(`/api/players/round-stats?season=${statsYear}`),
+        cachedJson<any>(`/api/fixtures/season?season=${statsYear}`),
+        statsYear === thisYear ? Promise.resolve(null) : cachedJson<any>(`/api/fixtures/season?season=${thisYear}`),
       ]);
 
 // /api/players/round-stats -> { ok: true, rows: [...] }
@@ -548,12 +559,21 @@ const weeks = Array.from(
 const parsedRounds = buildRoundsFromSheetRows(roundRows, p);
 const parsedFix = buildFixturesForTeam(allFixtures, p.teamCode);
 
+// this season's draw for the Fixtures tab (the same as above once the season has started)
+const upcomingAll: any[] = upcomingJson ? (Array.isArray(upcomingJson?.fixtures) ? upcomingJson.fixtures : []) : allFixtures;
+const upcomingDone = upcomingAll.filter((f) => isFixtureCompleteAny(f)).map((f) => Number(f.week) || 0).filter((w) => w > 0);
+const upcomingWeekList = Array.from(new Set(upcomingAll.map((f) => Number(f.week) || 0).filter((w) => w > 0))).sort((a, b) => b - a);
+
 if (!cancelled) {
   setRounds(parsedRounds);
   setFixtures(parsedFix);
   setAllRoundRows(roundRows);
   setSeasonWeeks(weeks);
   setLastCompletedWeek(lastW); // ✅ add this
+  setStatSeason(statsYear);
+  setUpcomingFixtures(upcomingJson ? buildFixturesForTeam(upcomingAll, p.teamCode) : parsedFix);
+  setUpcomingWeeks(upcomingJson ? upcomingWeekList : weeks);
+  setUpcomingLastCompleted(upcomingJson ? (upcomingDone.length ? Math.max(...upcomingDone) : 0) : lastW);
 }
 
     } catch (e: any) {
@@ -620,9 +640,8 @@ const teamTheme = TEAM_THEME[p.teamCode] ?? {
     borderWidth: TEAM_CHIP_BORDER_WIDTH,
   };
 
-  const positionLabel =
-  (p.posName?.trim() ? p.posName.trim() : p.posAbbrev) +
-  (p.secondaryPosName?.trim() ? ` / ${p.secondaryPosName.trim()}` : "");
+  // e.g. "CE/OB/FH" (the full player record has all three positions)
+  const positionLabel = positionsLabel(sheetP ?? p);
 
 const TEAM_NAME_BY_CODE: Record<string, string> = {
   BLU: "Blues",
@@ -827,6 +846,11 @@ const teamLabelFull =
   label="Position Rk"
   value={rk ? String(rk.rank) : "-"}
 />
+      {statSeason !== currentSeasonYear() ? (
+        <div style={{ gridColumn: "1 / -1", textAlign: "center", fontSize: 11, fontWeight: 800, opacity: 0.92, color: "white" }}>
+          {statSeason} season stats until the {currentSeasonYear()} season starts
+        </div>
+      ) : null}
 
     </div>
   );
@@ -925,10 +949,10 @@ const teamLabelFull =
 
 ) : tab === "Fixtures" ? (
   <FixturesTab
-  fixtures={fixtures}
+  fixtures={upcomingFixtures}
   teamCode={p.teamCode}
-  seasonWeeks={seasonWeeks}
-  lastCompletedWeek={lastCompletedWeek} // ✅ add
+  seasonWeeks={upcomingWeeks}
+  lastCompletedWeek={upcomingLastCompleted}
 />
 
 ) : null
@@ -1001,12 +1025,14 @@ const teamLabelFull =
     return {
       key,
       pts,
+      count,
       label: BREAKDOWN_LABELS[key] ?? key,
     };
   })
   .filter((x) => x.pts !== 0)
   .map((x) => ({
     label: x.label,
+    count: formatStatCount(x.key, x.count),
     right: String(x.pts),
   }));
 
@@ -1019,7 +1045,7 @@ const teamLabelFull =
   playerName={`${p.firstName} ${p.lastName}`}
   teamCode={p.teamCode}
 
-  weekLabel={selectedRound ? roundLabel(selectedRound.week) : ""}
+  weekLabel={selectedRound ? roundLabel(selectedRound.week, statSeason) : ""}
   fixtureLabel={
     selectedRound
       ? (() => {
@@ -1035,7 +1061,7 @@ const teamLabelFull =
 
 rows={
   selectedRound
-    ? BREAKDOWN_ORDER.reduce<{ label: string; right: string }[]>((acc, key) => {
+    ? BREAKDOWN_ORDER.reduce<{ label: string; right: string; count?: string }[]>((acc, key) => {
         const count = Number((selectedRound.breakdown as any)?.[key]) || 0;
         if (!count) return acc;
 
@@ -1044,6 +1070,7 @@ rows={
 
         acc.push({
           label: BREAKDOWN_LABELS[key] ?? key,
+          count: formatStatCount(key, count),
           right: String(pts),
         });
 

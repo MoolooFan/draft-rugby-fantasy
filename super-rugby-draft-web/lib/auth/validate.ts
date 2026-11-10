@@ -3,13 +3,17 @@
 
 export const MIN_PASSWORD_LENGTH = 8;
 
-export const TIMEZONE_VALUES = [
-  "Australia/Perth",
-  "Australia/Sydney",
-  "Australia/Brisbane",
-  "Australia/Melbourne",
-  "New Zealand/Auckland",
-] as const;
+/** The timezone a phone/computer reports, if it's a real one (sign-up records it; times show in the device's own zone). */
+export function cleanTimezone(input: unknown): string | null {
+  const tz = String(input ?? "").trim();
+  if (!tz || tz.length > 64) return null;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: tz });
+    return tz;
+  } catch {
+    return null;
+  }
+}
 
 type Result<T> = { ok: true; value: T } | { ok: false; message: string };
 

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { currentSeasonYear } from "@/lib/season";
+import { getActiveTimezone } from "@/lib/session";
 import {
   MIN_PASSWORD_LENGTH,
   validateEmail,
@@ -10,14 +11,6 @@ import {
   validateUsername,
 } from "@/lib/auth/validate";
 
-const TIMEZONES = [
-  { value: "", label: "Timezone" },
-  { value: "Australia/Perth", label: "Australia — Perth" },
-  { value: "Australia/Sydney", label: "Australia — Sydney" },
-  { value: "Australia/Brisbane", label: "Australia — Brisbane" },
-  { value: "Australia/Melbourne", label: "Australia — Melbourne" },
-  { value: "New Zealand/Auckland", label: "New Zealand — Auckland" },
-];
 
 type Mode = "signin" | "create" | "forgot";
 
@@ -68,7 +61,6 @@ useEffect(() => {
   const [username, setUsername] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [timezone, setTimezone] = useState("");
 
   // Animation control
   const [isMounted, setIsMounted] = useState(true);
@@ -100,11 +92,6 @@ useEffect(() => {
     }
   }, []);
 
-  // Default timezone when entering create mode
-  useEffect(() => {
-    if (mode === "create" && !timezone) setTimezone("Australia/Perth");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
 
   const primaryButtonLabel = useMemo(() => {
     if (isLoading) return "Loading…";
@@ -165,15 +152,13 @@ useEffect(() => {
     const p = validateNewPassword(password);
     if (!p.ok) return stop(p.message);
 
-    if (!timezone) return stop("Please select a timezone.");
-
     const r = await postJson("/api/auth/signup", {
       username: u.value.clean,
       email: e.value,
       password,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      timezone,
+      timezone: getActiveTimezone() ?? "", // recorded only; times always show in the device's zone
       rememberMe,
     });
     if (!r.ok) return stop(r.data?.error ?? "Failed to create account.");
@@ -365,19 +350,6 @@ useEffect(() => {
                     className={INPUT_CLASS}
                     onChange={(ev) => setLastName(ev.target.value)}
                   />
-
-                  <select
-                    disabled={isLoading}
-                    value={timezone}
-                    onChange={(ev) => setTimezone(ev.target.value)}
-                    className={INPUT_CLASS}
-                  >
-                    {TIMEZONES.map((tz) => (
-                      <option key={tz.value} value={tz.value}>
-                        {tz.label}
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 {messages}

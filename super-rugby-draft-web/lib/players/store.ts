@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { currentSeasonYear } from "@/lib/season";
+import { currentSeasonYear, statsSeasonYear } from "@/lib/season";
 import { cachedJson } from "@/lib/cachedJson";
 
 export type PlayerFromSheet = {
@@ -27,7 +27,11 @@ export type PlayerFromSheet = {
 
 type PlayersState = {
   players: PlayerFromSheet[];
-  roundRows: Record<string, any>[]; // raw rows from player-round-stats sheet
+  roundRows: Record<string, any>[]; // this season's stat rows (matchups, lineups, live scores)
+  /** Stat rows people browse on player cards and in player pools: last season's until this
+   *  season's first kickoff (lib/season statsSeasonYear), then the same as roundRows. */
+  statRows: Record<string, any>[];
+  statSeason: number;
 
   loading: boolean;
   error: string | null;
@@ -46,6 +50,8 @@ function normaliseId(x: any) {
 export const usePlayersStore = create<PlayersState>((set, get) => ({
   players: [],
   roundRows: [],
+  statRows: [],
+  statSeason: statsSeasonYear(),
 
   loading: false,
   error: null,
@@ -57,9 +63,11 @@ export const usePlayersStore = create<PlayersState>((set, get) => ({
     try {
       set({ loading: true, error: null });
 
-      const [playersJson, statsJson] = await Promise.all([
+      const statSeason = statsSeasonYear();
+      const [playersJson, statsJson, browseJson] = await Promise.all([
         cachedJson<any>(`/api/players/list?season=${currentSeasonYear()}`),
         cachedJson<any>(`/api/players/round-stats?season=${currentSeasonYear()}`),
+        statSeason === currentSeasonYear() ? Promise.resolve(null) : cachedJson<any>(`/api/players/round-stats?season=${statSeason}`),
       ]);
 
       const players = Array.isArray(playersJson?.players)
@@ -70,9 +78,13 @@ export const usePlayersStore = create<PlayersState>((set, get) => ({
         ? statsJson.rows
         : [];
 
+      const statRows = browseJson ? (Array.isArray(browseJson?.rows) ? browseJson.rows : []) : roundRows;
+
       set({
         players,
         roundRows,
+        statRows,
+        statSeason,
         loading: false,
         loaded: true,
         error: null,

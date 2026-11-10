@@ -10,7 +10,7 @@ import { TEAM_OPTIONS, POSITION_OPTIONS } from "@/lib/constants";
 import { useDraftStore } from "@/lib/draft/store";
 
 import { usePlayerPool } from "@/lib/players/pool";
-import { rosterSlots, derivePosName } from "@/lib/draft/constants";
+import { rosterSlots } from "@/lib/draft/constants";
 
 import { AppMenu } from "@/components/AppMenu";
 import { useLeagueStore } from "@/lib/league/store";
@@ -21,6 +21,7 @@ import { usePlayersStore } from "@/lib/players/store";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { canPlayPosition } from "@/lib/players/positions";
 import { useStableComponent } from "@/lib/hooks/useStableComponent";
+import { positionsLabel } from "@/lib/players/positions";
 
 type DraftTab = "Player Pool" | "Watchlist" | "Teams" | "Draft Results";
 type DraftPhase = "preDraft" | "liveDraft";
@@ -840,9 +841,7 @@ const Filters = useStableComponent(Filters__render);
               <div style={{ fontSize: 10, opacity: 0.7 }}>
                 {TEAM_OPTIONS.find((t) => t.value === p.teamCode)?.label ?? p.teamCode}
                 {" — "}
-                {p.posName}
-                {p.secondaryPosName ? ` / ${p.secondaryPosName}` : ""}
-                {(p as { thirdPosName?: string }).thirdPosName ? ` / ${(p as { thirdPosName?: string }).thirdPosName}` : ""}
+                {positionsLabel(p)}
               </div>
             </div>
           </div>
@@ -1007,8 +1006,7 @@ const entry = resolvePlayer(rawEntry);
                           <div style={{ fontSize: 10, opacity: 0.7 }}>
                             {TEAM_OPTIONS.find((t) => t.value === entry.teamCode)?.label ?? entry.teamCode}
                             {" — "}
-                            {derivePosName(entry.posAbbrev)}
-                            {entry.secondaryPosAbbrev ? ` / ${derivePosName(entry.secondaryPosAbbrev)}` : ""}{(entry as { thirdPosAbbrev?: string }).thirdPosAbbrev ? ` / ${derivePosName(String((entry as { thirdPosAbbrev?: string }).thirdPosAbbrev))}` : ""}
+                            {positionsLabel(entry)}
                           </div>
                         </div>
                       </div>
@@ -1112,8 +1110,7 @@ const TeamsTab = useStableComponent(TeamsTab__render);
                             {player.firstName[0]}. {player.lastName}
                           </div>
                           <div style={{ fontSize: 10, opacity: 0.7 }}>
-                            {teamLabel} {" — "} {derivePosName(player.posAbbrev)}
-                            {player.secondaryPosAbbrev ? ` / ${derivePosName(player.secondaryPosAbbrev)}` : ""}{(player as { thirdPosAbbrev?: string }).thirdPosAbbrev ? ` / ${derivePosName(String((player as { thirdPosAbbrev?: string }).thirdPosAbbrev))}` : ""}
+                            {teamLabel} {" — "} {positionsLabel(player)}
                           </div>
                         </div>
                       </div>
@@ -1190,7 +1187,7 @@ const DraftResultsTab = useStableComponent(DraftResultsTab__render);
                   {player.firstName[0]}. {player.lastName}
                 </div>
                 <div style={{ fontSize: 11, opacity: 0.7 }}>
-                  {player.teamCode} — {player.posName}
+                  {player.teamCode} — {positionsLabel(player)}
                 </div>
               </div>
             </div>

@@ -29,6 +29,7 @@ import { playerRoundRows } from "@/lib/players/roundIndex";
 import { toMs, getWeekDeadlineMs, getWeeksSorted, type SheetFixtureRow, currentWeekFromSheet } from "@/lib/league/weekHelpers";
 import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
 import { Filters } from "./Filters";
+import { positionsLabel } from "@/lib/players/positions";
 
 // -----------------------
 // Types (match your player shape)
@@ -340,7 +341,8 @@ const freeAgentTransfers = useTransactionsStore(
 // -----------------------
 const livePlayersLoaded = usePlayersStore((s) => s.loaded);
 const refreshLivePlayers = usePlayersStore((s) => s.refresh);
-const roundRows = usePlayersStore((s) => s.roundRows);
+// season stats people browse (last season's until this season's first kickoff: lib/season statsSeasonYear)
+const roundRows = usePlayersStore((s) => s.statRows);
 const getLivePlayerById = usePlayersStore((s) => s.getById); // keep for modal status only
 
 useEffect(() => {
@@ -1501,8 +1503,7 @@ async function submitProposedTransaction() {
         </div>
 
         <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.9 }}>
-          {fullTeamName(proposedAddPlayer.teamCode)} — {proposedAddPlayer.posName}
-{proposedAddPlayer.secondaryPosName ? ` / ${proposedAddPlayer.secondaryPosName}` : ""}
+          {fullTeamName(proposedAddPlayer.teamCode)} — {positionsLabel(proposedAddPlayer)}
 
         </div>
       </div>
@@ -1566,8 +1567,7 @@ async function submitProposedTransaction() {
                         {p.firstName?.[0]}. {p.lastName}
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.7 }}>
-                        {fullTeamName(p.teamCode)} — {p.posName}
-{p.secondaryPosName ? ` / ${p.secondaryPosName}` : ""}
+                        {fullTeamName(p.teamCode)} — {positionsLabel(p)}
 
                       </div>
                     </div>
@@ -2447,6 +2447,7 @@ function TxActionButton__render({
   fg?: string;
 }) {
   const isPlus = label === "+";
+  const isTrade = label === "↔";
 
   return (
     <button
@@ -2465,9 +2466,9 @@ function TxActionButton__render({
         color: fg,
         fontWeight: 900,
         // ✅ Bigger +, smaller initials
-        fontSize: isPlus || label === "↔" ? 20 : 11,
-        lineHeight: label === "↔" ? 0.25 : 1,
-        letterSpacing: isPlus || label === "↔" ? 0 : 0.3,
+        fontSize: isPlus ? 20 : 11,
+        lineHeight: 1,
+        letterSpacing: isPlus ? 0 : 0.3,
 
         cursor: enabled ? "pointer" : "not-allowed",
         opacity: enabled ? 1 : 0.85,
@@ -2475,10 +2476,18 @@ function TxActionButton__render({
         placeItems: "center",
         userSelect: "none",
       }}
-      aria-label={isPlus ? "Add / Claim" : `Owned by ${label}`}
-      title={isPlus ? "Add / Claim" : label}
+      aria-label={isPlus ? "Add / Claim" : isTrade ? "Propose a trade" : `Owned by ${label}`}
+      title={isPlus ? "Add / Claim" : isTrade ? "Propose a trade" : label}
     >
-      {label}
+      {isTrade ? (
+        // two arrows swapping places (trade)
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2.5 5.5h10.5M10.5 3l2.5 2.5-2.5 2.5" />
+          <path d="M13.5 10.5H3M5.5 8L3 10.5 5.5 13" />
+        </svg>
+      ) : (
+        label
+      )}
     </button>
   );
 }
@@ -2578,8 +2587,7 @@ if (isOwned && !isOwnedByYou) {
               {teamLabel(p.teamCode)}
 
               {" — "}
-              {p.posName}
-              {p.secondaryPosName ? ` / ${p.secondaryPosName}` : ""}
+              {positionsLabel(p)}
             </div>
           </div>
         </div>

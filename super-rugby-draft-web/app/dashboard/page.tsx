@@ -23,6 +23,7 @@ import { CAPTAIN_MULTIPLIER, pointsFromRow, roundPoints } from "@/lib/scoring";
 import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { toMs, getWeekFirstKickoffMs, getSelectionDeadlineMs, getWeeksSorted, type SheetFixtureRow, isSheetLabelRow, isSheetPlayableRow, currentWeekFromSheet, latestCompletedWeekFromSheet } from "@/lib/league/weekHelpers";
 import { STARTER_SLOTS } from "@/lib/scoring/week";
+import { positionsLabel } from "@/lib/players/positions";
 
 type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null } | null;
 
@@ -53,6 +54,7 @@ type Player = {
   teamCode: string; // e.g. CHI
   posAbbrev: string; // e.g. FH
   posName: string; // e.g. Flyhalf
+  positions?: string; // e.g. "CE/OB/FH"
   form: number;
   points?: number;
 };
@@ -367,6 +369,8 @@ useEffect(() => {
 const livePlayersLoaded = usePlayersStore((s) => s.loaded);
 const refreshLivePlayers = usePlayersStore((s) => s.refresh);
 const roundRows = usePlayersStore((s) => s.roundRows);
+// form for the top available players uses the browsing stats (last season's until the first kickoff)
+const statRows = usePlayersStore((s) => s.statRows);
 const allPlayers = usePlayersStore((s: any) => s.players ?? s.allPlayers ?? EMPTY_ARR);
 
 // --- Watchlist (Supabase via /api/watchlist; same as Transactions) ---
@@ -1309,7 +1313,7 @@ const pos2 =
 
 const posName = pos2 ? `${posNamePrimary} / ${pos2}` : posNamePrimary;
 
-      const form = getLatest3FormFromRoundRows(id, roundRows, p);
+      const form = getLatest3FormFromRoundRows(id, statRows, p);
 
       return {
         id,
@@ -1318,6 +1322,7 @@ const posName = pos2 ? `${posNamePrimary} / ${pos2}` : posNamePrimary;
         teamCode,
         posAbbrev,
         posName,
+        positions: positionsLabel(p),
         form: Number.isFinite(form) ? form : 0,
       } as Player;
     })
@@ -1335,7 +1340,7 @@ const posName = pos2 ? `${posNamePrimary} / ${pos2}` : posNamePrimary;
   });
 
   return available.slice(0, 10);
-}, [allPlayers, rosteredIds, roundRows]);
+}, [allPlayers, rosteredIds, statRows]);
 
   const playersOfWeek: Player[] = useMemo(() => {
   if (!displayWeek) return [];
@@ -1374,6 +1379,7 @@ const posName = pos2 ? `${posNamePrimary} / ${pos2}` : posNamePrimary;
         teamCode,
         posAbbrev,
         posName,
+        positions: meta ? positionsLabel(meta) : posAbbrev,
         form: 0,
         points: maxPts,
       } as Player;
@@ -1858,7 +1864,7 @@ const NoLeague = useStableComponent(NoLeague__render);
                 {p.firstName} {p.lastName}
               </div>
               <div style={{ fontSize: 11, opacity: 0.7 }}>
-                {fullTeamNameFromCode(p.teamCode)} — {singularPosLabel(p.posName)}
+                {fullTeamNameFromCode(p.teamCode)} — {p.positions ?? singularPosLabel(p.posName)}
               </div>
             </div>
           </div>
@@ -1953,7 +1959,7 @@ onClick={() => {
                           {p.firstName[0]}. {p.lastName}
                         </div>
                         <div style={{ fontSize: 10, opacity: 0.7 }}>
-  {fullTeamNameFromCode(p.teamCode)} — {singularPosLabel(p.posName)}
+  {fullTeamNameFromCode(p.teamCode)} — {p.positions ?? singularPosLabel(p.posName)}
 </div>
                       </div>
                     </div>

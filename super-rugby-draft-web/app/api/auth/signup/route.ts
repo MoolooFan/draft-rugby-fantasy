@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAuthClient } from "@/lib/supabase/authServer";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import {
-  TIMEZONE_VALUES,
+  cleanTimezone,
   validateEmail,
   validateNewPassword,
   validateUsername,
@@ -26,8 +26,8 @@ export async function POST(req: Request) {
   const password = validateNewPassword(body?.password);
   if (!password.ok) return fail(password.message);
 
-  const timezone = String(body?.timezone ?? "");
-  if (!(TIMEZONE_VALUES as readonly string[]).includes(timezone)) return fail("Please select a timezone.");
+  // just for the record: every page shows times in the device's own timezone
+  const timezone = cleanTimezone(body?.timezone) ?? "Pacific/Auckland";
 
   const firstName = String(body?.firstName ?? "").trim().slice(0, 40);
   const lastName = String(body?.lastName ?? "").trim().slice(0, 40);

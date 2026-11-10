@@ -22,6 +22,7 @@ import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { playerRoundRows } from "@/lib/players/roundIndex";
 import { toMs, getWeekDeadlineMs, getWeeksSorted } from "@/lib/league/weekHelpers";
 import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
+import { positionsLabel } from "@/lib/players/positions";
 
 // -----------------------
 // Types
@@ -480,7 +481,8 @@ const yourLeagueTeamId = useMemo(() => {
 
 const livePlayersLoaded = usePlayersStore((s) => s.loaded);
 const refreshLivePlayers = usePlayersStore((s) => s.refresh);
-const roundRows = usePlayersStore((s) => s.roundRows);
+// season stats people browse (last season's until this season's first kickoff: lib/season statsSeasonYear)
+const roundRows = usePlayersStore((s) => s.statRows);
 const getLivePlayerById = usePlayersStore((s) => s.getById);
 
 useEffect(() => {
@@ -1158,8 +1160,7 @@ function PlayerRow__render({
               textOverflow: "ellipsis",
             }}
           >
-            {fullTeamName(p.teamCode)} — {p.posName}
-            {p.secondaryPosName ? ` / ${p.secondaryPosName}` : ""}
+            {fullTeamName(p.teamCode)} — {positionsLabel(p)}
           </div>
         </div>
       </div>

@@ -1,21 +1,23 @@
 // app/api/fixtures/season/route.ts
-// The current season's Super Rugby fixtures for the pages (replaces the Google Sheet).
+// A season's Super Rugby fixtures for the pages (replaces the Google Sheet): the current season,
+// or ?season=2026 for an earlier one (player cards show last season's results before kickoff).
 // `week` is the FANTASY week (2027: rounds 10 and 11 are both week 10), `realRound` the Super
 // Rugby round, `weekLabel` the name to show ("Round 10/11").
 // fdrHome / fdrAway = how hard the game is for the home / away team (1 easy ... 5 hard), from
 // the difficulty ratings in the database (Ethan edits them on the admin page).
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { currentSeasonYear, fixturesByFantasyWeek, kickoffMs, roundLabel } from "@/lib/season";
+import { SEASONS, currentSeasonYear, fixturesByFantasyWeek, kickoffMs, roundLabel } from "@/lib/season";
 
 export const dynamic = "force-dynamic";
 
 type Rating = { team: string; home_rating: number; away_rating: number };
 const clamp = (n: number) => Math.min(5, Math.max(1, Math.round(n))) as 1 | 2 | 3 | 4 | 5;
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const season = currentSeasonYear();
+    const asked = Number(new URL(req.url).searchParams.get("season"));
+    const season = SEASONS[asked] ? asked : currentSeasonYear();
     const { data, error } = await supabaseAdmin.from("team_difficulty").select("team, home_rating, away_rating").eq("season", season);
     if (error) throw error;
     const rating = new Map((data as Rating[]).map((r) => [r.team, r]));

@@ -3,7 +3,7 @@
 import React from "react";
 import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
 
-type Row = { label: string; left?: string; right?: string };
+type Row = { label: string; left?: string; right?: string; count?: string };
 
 function normalizeTeamCode(raw: string | null | undefined): string | null {
   const s = (raw ?? "").trim();
@@ -221,23 +221,45 @@ const resolvedPlayerImageSrc = playerId
   }}
 >
   {filteredRows.length ? (
-    filteredRows.map((r, idx) => (
+    <>
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 64px 52px",
+        gap: 12,
+        padding: "6px 14px 4px",
+        fontSize: 10,
+        fontWeight: 900,
+        letterSpacing: "0.04em",
+        textTransform: "uppercase",
+        color: "#0f172a",
+        opacity: 0.55,
+      }}
+    >
+      <div>Stat</div>
+      <div style={{ textAlign: "right" }}>No.</div>
+      <div style={{ textAlign: "right" }}>Pts</div>
+    </div>
+    {filteredRows.map((r, idx) => (
       <div
         key={idx}
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr auto",
+          gridTemplateColumns: "1fr 64px 52px",
           gap: 12,
           padding: "9px 14px",
-          borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)",
+          borderTop: "1px solid rgba(0,0,0,0.08)",
           fontSize: 12,
           color: "#0f172a",
+          fontVariantNumeric: "tabular-nums",
         }}
       >
         <div style={{ opacity: 0.75, fontWeight: 900 }}>{r.label}</div>
-        <div style={{ fontWeight: 950 }}>{r.right ?? "—"}</div>
+        <div style={{ opacity: 0.75, fontWeight: 800, textAlign: "right" }}>{r.count ?? ""}</div>
+        <div style={{ fontWeight: 950, textAlign: "right" }}>{r.right ?? "—"}</div>
       </div>
-    ))
+    ))}
+    </>
   ) : (
     <div style={{ padding: "12px 14px", fontSize: 12, opacity: 0.75, fontWeight: 900 }}>
       No scoring stats.

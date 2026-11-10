@@ -38,6 +38,12 @@ export function getActiveUsername(): string | null {
   return current?.username ?? null;
 }
 
+/** Times show in the device's own timezone (phone/computer settings), so nobody has to choose one. */
 export function getActiveTimezone(): string | undefined {
-  return current?.timezone || undefined;
+  if (typeof window === "undefined") return undefined;
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
 }

@@ -290,3 +290,12 @@ export function pointsBreakdown(
     return { stat, count, points: statPoints(stat.key, count, frontRow, rules) };
   });
 }
+
+/** How many of a stat, for points breakdowns: "85 m" for metres, "80 min" for minutes, else the number. */
+export function formatStatCount(key: string, count: number): string {
+  const n = Number(count) || 0;
+  const v = Number.isInteger(n) ? String(n) : n.toFixed(1);
+  if (key === "metresGained") return `${v} m`;
+  if (key === "minutesPlayed") return `${v} min`;
+  return v;
+}

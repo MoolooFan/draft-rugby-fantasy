@@ -18,3 +18,8 @@ export function playerPositions(p: HasPositions | Record<string, unknown>): stri
 export function canPlayPosition(p: HasPositions | Record<string, unknown>, pos: string): boolean {
   return playerPositions(p).includes(String(pos).trim().toUpperCase());
 }
+
+/** Short label for lists and cards, e.g. "CE/OB/FH" (up to three positions fit this way). */
+export function positionsLabel(p: HasPositions | Record<string, unknown>): string {
+  return playerPositions(p).join("/") || "—";
+}

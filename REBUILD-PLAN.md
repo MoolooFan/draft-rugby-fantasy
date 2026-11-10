@@ -64,13 +64,13 @@ Agreed answers are recorded here so nothing is lost between sessions. Status: �
 **Phase 1: quick fixes**
 | # | Change | Status | Agreed details |
 |---|---|---|---|
-| A1 | Fit the screen when added to the iPhone home screen | ⬜ | Everyone is on iPhone; only the home-screen app is wrong. Keep the full-screen look, but nothing under the clock/battery or the bottom swipe bar; page background fills those areas (no black strip). |
-| A2 | Automatic timezone | ⬜ | Remove the timezone/region choice; all times show in the phone's own timezone. |
-| A3 | Position abbreviations | ⬜ | PR, HO, LK, LF, HB, FH, CE, OB joined with "/" (e.g. CE/OB/FH) in most places, since three positions won't fit written out. |
+| A1 | Fit the screen when added to the iPhone home screen | 🔶 | Everyone is on iPhone; only the home-screen app is wrong. Keep the full-screen look, but nothing under the clock/battery or the bottom swipe bar; page background fills those areas (no black strip). Built 10 Nov: page background and top spacing fixed site-wide (incl. the menu); checked in an iPhone simulation. **Ethan to check on his phone from the home screen.** |
+| A2 | Automatic timezone | ✅ | Remove the timezone/region choice; all times show in the phone's own timezone. Done 10 Nov (sign-up no longer asks; also fixed: the old NZ option wasn't a valid timezone). |
+| A3 | Position abbreviations | ✅ | PR, HO, LK, LF, HB, FH, CE, OB joined with "/" (e.g. CE/OB/FH) in most places, since three positions won't fit written out. Done 10 Nov (player pools, player card, draft room, trade pages, dashboard). |
 | A4 | New status symbols + show them in the player pools | ⬜ | Green / yellow / red, inspired by FPL and the official Super Rugby fantasy. Statuses: Starting, Bench, Injured, Suspended (red badge with an "S"; Ethan enters suspensions by hand, they're rare), Out; nothing when available. Ethan picks from example designs. |
-| A5 | Points breakdown shows how many of each stat | ⬜ | Rows: stat, count, points (e.g. Tries 2 14.0). |
-| A6 | Better trade button symbol | ⬜ | Replace the double-arrow symbol. |
-| A7 | 2026 stats until the 2027 season starts | ⬜ | Player cards and player pools show 2026 stats until the first 2027 kickoff (copy 2026 stats into the new database). |
+| A5 | Points breakdown shows how many of each stat | ✅ | Rows: stat, count, points (e.g. Tries 2 14.0). Done 10 Nov (e.g. Metres 39 m · 3; Minutes 80 min · 2). |
+| A6 | Better trade button symbol | ✅ | Replace the double-arrow symbol. Done 10 Nov (drawn two-arrow swap icon). |
+| A7 | 2026 stats until the 2027 season starts | ✅ | Player cards and player pools show 2026 stats until the first 2027 kickoff (copy 2026 stats into the new database). Done 10 Nov: 2026 stats copied to the new database; player cards (with a "2026 season stats" note; the Fixtures tab shows the 2027 draw), transactions and trade pools, and the dashboard's form use 2026 until the first 2027 kickoff. Matchups and lineups always use the current season. |
 
 **Phase 2: rules and reliability**
 | # | Change | Status | Agreed details |

@@ -151,6 +151,25 @@ export function currentSeasonYear(): number {
 }
 
 /** What users see a week called in the current season, e.g. "Round 10/11". */
+/** First kickoff of a season (ms), or null if it has no fixtures. */
+export function seasonFirstKickoffMs(seasonYear: number): number | null {
+  if (!SEASONS[seasonYear]) return null;
+  const times = getSeason(seasonYear).fixtures.map(kickoffMs).filter((t) => t > 0);
+  return times.length ? Math.min(...times) : null;
+}
+
+/**
+ * Which season's stats people browse (player cards, player pools): last season's until the
+ * current season's first kickoff, then the current season's. Matchups and lineups always use
+ * the current season.
+ */
+export function statsSeasonYear(nowMs: number = Date.now()): number {
+  const current = currentSeasonYear();
+  const first = seasonFirstKickoffMs(current);
+  if (first != null && nowMs < first && SEASONS[current - 1]) return current - 1;
+  return current;
+}
+
 export function roundLabel(fantasyWeek: number, seasonYear: number = currentSeasonYear()): string {
   return weekLabel(getSeason(seasonYear), fantasyWeek);
 }

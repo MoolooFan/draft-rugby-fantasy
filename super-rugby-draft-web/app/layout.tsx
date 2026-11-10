@@ -58,8 +58,11 @@ export default async function RootLayout({
         style={{
           margin: 0,
           padding: 0,
+          // keep everything below the iPhone clock/battery when opened from the home screen
+          // (0 in a normal browser tab); the background comes from <html> (app/globals.css)
+          paddingTop: "env(safe-area-inset-top, 0px)",
           minHeight: "100svh",
-          background: "#0f172a",
+          background: "transparent",
         }}
       >
         <SessionProvider profile={sessionProfile}>
