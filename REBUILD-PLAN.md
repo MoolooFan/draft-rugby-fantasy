@@ -57,6 +57,48 @@ Status key: ⬜ not started · 🔶 in progress · ✅ done
 - **Scoring options:** Standard / Alternate / Custom. Custom can change every stat's points and the minutes points, but not the x2 captain.
 - **History:** 2026: Ethan champion, Sam runner-up, Logan and Will semi-finalists (weeks 15 and 16 were the playoffs). 2025 (Sam, Ethan, Josh, Jake): Sam champion, Ethan runner-up, Jake last. Stored by person and linked to the new accounts once people sign up.
 
+## 2027 changes and additions (Ethan's list, 10 Nov 2026)
+
+Agreed answers are recorded here so nothing is lost between sessions. Status: ⬜ to do, 🔶 in progress, ✅ done (tested on the test site).
+
+**Phase 1: quick fixes**
+| # | Change | Status | Agreed details |
+|---|---|---|---|
+| A1 | Fit the screen when added to the iPhone home screen | ⬜ | Everyone is on iPhone; only the home-screen app is wrong. Keep the full-screen look, but nothing under the clock/battery or the bottom swipe bar; page background fills those areas (no black strip). |
+| A2 | Automatic timezone | ⬜ | Remove the timezone/region choice; all times show in the phone's own timezone. |
+| A3 | Position abbreviations | ⬜ | PR, HO, LK, LF, HB, FH, CE, OB joined with "/" (e.g. CE/OB/FH) in most places, since three positions won't fit written out. |
+| A4 | New status symbols + show them in the player pools | ⬜ | Green / yellow / red, inspired by FPL and the official Super Rugby fantasy. Statuses: Starting, Bench, Injured, Suspended (red badge with an "S"; Ethan enters suspensions by hand, they're rare), Out; nothing when available. Ethan picks from example designs. |
+| A5 | Points breakdown shows how many of each stat | ⬜ | Rows: stat, count, points (e.g. Tries 2 14.0). |
+| A6 | Better trade button symbol | ⬜ | Replace the double-arrow symbol. |
+| A7 | 2026 stats until the 2027 season starts | ⬜ | Player cards and player pools show 2026 stats until the first 2027 kickoff (copy 2026 stats into the new database). |
+
+**Phase 2: rules and reliability**
+| # | Change | Status | Agreed details |
+|---|---|---|---|
+| B1 | Lineups fix themselves after transactions | ⬜ | New player takes the vacated spot if they fit; else the highest bench player who fits moves up and the new player goes to the bench; else fewest moves. A transaction that would leave an empty spot doesn't go through. IR players never move automatically. Locked weeks don't change. Applies to free agency, waivers and trades. |
+| B2 | Captain and vice always set | ⬜ | Start of season: 1st and 2nd draft picks. Carry over week to week. If the captain leaves the team (dropped / traded / IR) or ends up on the bench: vice becomes captain, and the new vice is the highest draft pick among the starters. Same for the vice. Neither can be on the bench. |
+| B3 | Injury reserve (IR) | ⬜ | One IR spot per team. Teams still draft 20. An IR player doesn't count towards the 20 or position limits, can't be in a lineup, and doesn't score. Eligible: any injury status or "Out"; not Suspended / Starting / Bench / not named. Players can't be added straight into IR. Can be moved to IR any time (a locked week's lineup doesn't change). If the IR player becomes healthy: no adds, claims or trades (proposing or accepting) until they're activated; lineups and declining trades still allowed. Activating: drop a player in the same move, or swap in another injured player. IR players can't be traded. IR moves aren't listed in the Transactions tab. |
+| B4 | Add players straight from the dashboard | ⬜ | The + on top available players works on the dashboard: free agency asks who to drop (if full) and confirms; waivers place a claim with a drop. No page change. |
+| B5 | Usernames / team names | ✅ | Decided: usernames stay fixed; team names stay on the Team Details page (already works). |
+
+**Phase 3: bigger screens**
+| # | Change | Status | Agreed details |
+|---|---|---|---|
+| C1 | Per game / total / per 80 toggle | ⬜ | Affects points and every stat. Everywhere people look at a player's season stats (player card, player pools incl. draft room, trade screens). Default: per game. Per 80 shows "–" until the player has 20+ minutes in the season. The dashboard's top players keep showing form only. |
+| C2 | Filters pop-up | ⬜ | One Filters button opening a pop-up: Players (Available / All / a team), Team, Position, Status, Sort by, Clear. Several options per filter allowed (e.g. 3 teams). Same pop-up in the draft room. Status options: All / Available to play / Starting / Bench / Injured / Suspended. |
+| C3 | Player card: Transactions tab | ⬜ | Newest first, this league only: drafted (round and pick), added (free agent, with who was dropped), claimed on waivers, traded (from to). No IR moves. |
+| C4 | Player card: AI coach tab | ⬜ | Placeholder tab for now; the coach itself is designed later with Ethan (season outlook, after-game and team-sheet notes, like ESPN player news). |
+| C5 | Trade review pop-up | ⬜ | Received offers show "Review" (not accept/decline). Pop-up: players you get and give, one stat at a time (changeable) + the per game / per 80 / total toggle; Accept and Decline inside. |
+
+**Phase 4: big features**
+| # | Change | Status | Agreed details |
+|---|---|---|---|
+| D1 | Push notifications | ⬜ | iPhone home-screen app (iOS 16.4+), with a "turn on notifications" button and instructions. Types: trade offer for you; your trade accepted or declined; any trade accepted in your league; lineup deadline reminder 2 hours before; waivers processed (only if you had claims in that run); draft starting soon. Each person can switch types on/off. |
+| D2 | Live match scores | ⬜ | Wherever real match scores are shown, they update live during games (from the official site, like the player stats). |
+| D3 | AI assistant coach | ⬜ | Later: Ethan will break down what it should use and we'll design it together. |
+
+Everything new matches the current look (a site-wide formatting refresh comes later).
+
 ## Done so far
 
 - ✅ Checked GitHub connection and that no keys are committed (4 Nov 2026)
