@@ -30,6 +30,7 @@ import { toMs, getWeekDeadlineMs, getWeeksSorted, type SheetFixtureRow, currentW
 import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
 import { Filters } from "./Filters";
 import { positionsLabel } from "@/lib/players/positions";
+import { StatusTag } from "@/components/StatusTag";
 
 // -----------------------
 // Types (match your player shape)
@@ -2579,8 +2580,11 @@ if (isOwned && !isOwnedByYou) {
           <JerseyTile teamCode={p.teamCode} size={32} />
 
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {p.firstName?.[0]}. {p.lastName}
+            <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {p.firstName?.[0]}. {p.lastName}
+              </div>
+              <StatusTag player={p} />
             </div>
 
             <div style={{ fontSize: 10, opacity: 0.7 }}>

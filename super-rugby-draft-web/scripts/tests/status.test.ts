@@ -2,6 +2,7 @@
 // Uses small made-up articles in the same layout as the official ones.
 import { injuryStatus, parseInjuryList, parseTeamLists, splitInjury } from "../../lib/status/articles";
 import { matchName, type MatchPlayer } from "../../lib/status/match";
+import { statusKind, currentStatusText } from "../../lib/status/kind";
 
 let failures = 0;
 const check = (name: string, ok: boolean, extra = "") => {
@@ -41,7 +42,10 @@ for (const [inner, want] of [
   ["foot - integrating back into team units this week", "Foot - Returning"], ["shoulder/medium term", "Shoulder - Medium term"],
   ["head injury/return to play protocols", "Concussion - TBC"], ["hamstring tightness", "Hamstring - TBC"],
 ] as const) check(`"${inner}" -> "${want}"`, std(inner) === want, std(inner));
-check("no reason given = Out", injuryStatus(inj[0].players[2]) === "Out");
+check("no reason given = Injury - TBC", injuryStatus(inj[0].players[2]) === "Injury - TBC");
+check('"(out)" = Injury - TBC', std("out") === "Injury - TBC", std("out"));
+check('"(personal)" = Personal reasons - TBC', std("personal") === "Personal reasons - TBC", std("personal"));
+check('"(suspended/2 weeks)" = Suspended - 2 weeks', std("suspended/2 weeks") === "Suspended - 2 weeks", std("suspended/2 weeks"));
 
 const players: MatchPlayer[] = [
   { id: "E.Faifa", firstName: "Eli", lastName: "Fai'fa", teamCode: "BRU" },
@@ -60,6 +64,18 @@ check("short first name matches (Thomas/Tom)", id(m("Thomas Smith", "CHI")) === 
 check("same surname in another team isn't confused", id(m("Tim Smith", "CHI")) !== "T.Smith2");
 check("player named for another team is flagged", id(m("Max Moved", "BLU")) === "flag:M.Moved");
 check("unknown player is flagged without a suggestion", id(m("Nobody Atall", "BLU")) === "flag:-");
+
+// which badge a status gets
+for (const [text, want] of [
+  ["Starting", "starting"], ["starting", "starting"], ["Benched", "bench"], ["", null], ["-", null],
+  ["Knee - TBC", "injured"], ["Injury - TBC", "injured"], ["Concussion - 1-2 weeks", "injured"],
+  ["Suspended - 2 weeks", "suspended"], ["Out", "out"], ["Out - Personal reasons", "out"],
+  ["Personal reasons - TBC", "out"], ["Paternity leave - TBC", "out"], ["Rested - TBC", "out"],
+  ["Compassionate leave - TBC", "out"], ["International duty - TBC", "out"],
+] as const) check(`badge for "${text}" is ${want}`, statusKind(text) === want, String(statusKind(text)));
+check("this week's status beats the card status", currentStatusText({ status: "Knee - TBC", weeklyStatus: { W3: "Starting" } }, 3) === "Starting");
+check("card status used when not named this week", currentStatusText({ status: "Knee - TBC", weeklyStatus: { W2: "Starting" } }, 3) === "Knee - TBC");
+check("no status = available", currentStatusText({ status: null, weeklyStatus: {} }, 3) === null);
 
 console.log(failures ? `\n${failures} FAILED` : "\nALL CHECKS PASSED");
 process.exit(failures ? 1 : 0);

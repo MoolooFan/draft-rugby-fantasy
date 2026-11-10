@@ -9,6 +9,8 @@ import { useLeagueStore } from "@/lib/league/store";
 import { currentSeasonYear, getSeason, SEASONS, totalFantasyWeeks, weekLabel } from "@/lib/season";
 import { ScoringEditor } from "@/components/ScoringEditor";
 import type { ScoringRules } from "@/lib/scoring";
+import { StatusTag } from "@/components/StatusTag";
+import { STATUS_PRESETS } from "@/lib/status/kind";
 
 // ---------------------------------------------------------------------------
 // Styles (same look as the other pages)
@@ -196,7 +198,10 @@ function PlayerForm({
           </select>
         </div>
         <div><div style={labelStyle}>playfantasyrugby id</div><input style={inputStyle} inputMode="numeric" value={f.externalId} onChange={set("externalId")} /></div>
-        <div><div style={labelStyle}>Current status (player card)</div><input style={inputStyle} placeholder="e.g. Knee - TBC" value={f.status} onChange={set("status")} /></div>
+        <div>
+          <div style={labelStyle}>Current status (player card) <StatusTag text={f.status} /></div>
+          <input style={inputStyle} list="status-presets" placeholder="e.g. Knee - TBC" value={f.status} onChange={set("status")} />
+        </div>
       </div>
       <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
         <input type="checkbox" checked={f.active} onChange={set("active")} /> In this season&apos;s player pool
@@ -207,11 +212,16 @@ function PlayerForm({
         <button style={{ ...primaryButton, background: "rgba(15,23,42,0.35)" }} onClick={onCancel}>Close</button>
       </div>
 
+      <datalist id="status-presets">
+        {STATUS_PRESETS.map((x) => <option key={x} value={x} />)}
+      </datalist>
+
       {player ? (
         <div style={{ borderTop: "1px solid rgba(0,0,0,0.1)", paddingTop: 8, display: "grid", gap: 6 }}>
           <div style={{ fontWeight: 900, fontSize: 13 }}>Status for a round</div>
           <div style={{ fontSize: 11, opacity: 0.7, fontWeight: 700 }}>
-            e.g. Starting, Benched, Out, Knee - TBC. Leave empty for not named.
+            e.g. Starting, Benched, Knee - 2 weeks, Suspended - 1 week, Out - Personal reasons. Leave empty for not named.
+            Injuries get INJ, &quot;Suspended…&quot; gets SUS, &quot;Out…&quot; (personal reasons, paternity leave, rested…) gets OUT.
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 8 }}>
             <select aria-label="Round" style={inputStyle} value={week} onChange={(e) => setWeek(Number(e.target.value))}>
@@ -219,8 +229,9 @@ function PlayerForm({
                 <option key={w} value={w}>{weekLabel(getSeason(season), w)}</option>
               ))}
             </select>
-            <input aria-label="Round status" style={inputStyle} value={weekStatus} onChange={(e) => setWeekStatus(e.target.value)} />
+            <input aria-label="Round status" style={inputStyle} list="status-presets" value={weekStatus} onChange={(e) => setWeekStatus(e.target.value)} />
           </div>
+          {weekStatus.trim() ? <div style={{ fontSize: 11, fontWeight: 800 }}>Shows as <StatusTag text={weekStatus} /></div> : null}
           <button style={primaryButton} disabled={busy} onClick={saveWeekStatus}>Save round status</button>
         </div>
       ) : null}

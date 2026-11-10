@@ -83,7 +83,7 @@ export function AppMenu({
           width: "78%",
           maxWidth: 320,
           padding: 16,
-          paddingTop: `calc(16px + env(safe-area-inset-top, 0px))`,
+          paddingTop: `calc(16px + max(0px, calc(env(safe-area-inset-top, 0px) - 10px)))`,
           paddingBottom: `calc(16px + env(safe-area-inset-bottom, 0px))`,
           background:
             "linear-gradient(to bottom, rgb(15, 23, 42), rgb(13, 148, 136), rgb(16, 185, 129))",

@@ -1465,22 +1465,6 @@ const iconGlyphStyle: React.CSSProperties = {
   display: "block",
 };
 
-async function handleLogout() {
-  try {
-    await fetch("/api/session/logout", { method: "POST" });
-  } catch {
-    // ignore
-  }
-
-  // Optional: clear local UI caches so you see a “clean” state after logout
-  try {
-    localStorage.removeItem("sr-user-profile-v1"); // if you use this key in lib/session
-    localStorage.removeItem("sr-leagues-v3");      // your league zustand persist key
-  } catch {}
-
-  // Full page load so the whole app forgets the signed-in player.
-  window.location.assign("/");
-}
   function MovementCircle__render({ movement }: { movement: Movement }) {
   const isUp = movement === "up";
   const isDown = movement === "down";
@@ -1622,23 +1606,6 @@ const JerseyTile = useStableComponent(JerseyTile__render);
   </button>
 
   <div style={{ flex: 1 }} />
-
-  <button
-    onClick={handleLogout}
-    style={{
-      height: 30,
-      padding: "0 14px",
-      borderRadius: 999,
-      border: "1px solid rgba(255,255,255,0.75)",
-      background: "rgba(0,0,0,0.18)",
-      color: "white",
-      fontSize: 11,
-      fontWeight: 900,
-      cursor: "pointer",
-    }}
-  >
-    Logout
-  </button>
 </div>
 
         {/* Deadline banner */}

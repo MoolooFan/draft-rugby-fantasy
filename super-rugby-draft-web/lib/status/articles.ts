@@ -85,6 +85,9 @@ const INJURY_WORDS: Array<[RegExp, string]> = [
   [/^(rest|rested|all rested|resting policy|rest policy)$/i, "Rested"],
   [/^(paternity leave|birth of (first |second |third )?child)$/i, "Paternity leave"],
   [/^compassionate( grounds| leave)?$/i, "Compassionate leave"],
+  [/^(personal|personal reasons?|personal matter|family reasons?)$/i, "Personal reasons"],
+  [/^(international duty|national duty|national team|test duty)$/i, "International duty"],
+  [/^(suspended|suspension|banned|judicial)$/i, "Suspended"],
   [/^nkle$/i, "Ankle"],
   [/^food$/i, "Foot"],
   [/^cork(ed)?( thigh)?$/i, "Corked thigh"],
@@ -161,10 +164,15 @@ export function parseInjuryList(html: string): InjuryList[] {
   return out;
 }
 
-/** The status shown for an injury, always "Injury - Timeframe" (e.g. "Knee - Season", "Knee - TBC"), or "Out" if no reason is given. */
+/**
+ * The status shown for an injury list entry, always "Reason - Timeframe" (e.g. "Knee - Season",
+ * "Knee - TBC", "Personal reasons - TBC"). Teams sometimes list players with no reason, or just
+ * "out" (the Reds did this in 2026) - these are nearly always injuries, so they become
+ * "Injury - TBC" (Ethan can change one to e.g. "Out - Personal reasons" on the admin page).
+ */
 export function injuryStatus(e: InjuryEntry): string {
-  if (!e.injury) return "Out";
-  return `${e.injury} - ${e.timeframe ?? "TBC"}`;
+  const reason = !e.injury || /^(out|unavailable|not available|tbc|tba)$/i.test(e.injury) ? "Injury" : e.injury;
+  return `${reason} - ${e.timeframe ?? "TBC"}`;
 }
 
 const ROUND_WORDS = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen"];

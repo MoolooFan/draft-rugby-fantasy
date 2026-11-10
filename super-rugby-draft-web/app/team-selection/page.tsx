@@ -23,6 +23,7 @@ import { pointsFromRow } from "@/lib/scoring";
 import { playerPositions } from "@/lib/players/positions";
 import { toMs, getWeekDeadlineMs, type SheetFixtureRow, currentWeekFromSheet, pickValue } from "@/lib/league/weekHelpers";
 import { JERSEYS } from "@/lib/teams/images";
+import { StatusTag } from "@/components/StatusTag";
 
 type ViewMode = "Fixture" | "Latest Score" | "PPG" | "Form";
 
@@ -1293,27 +1294,8 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
         {!isCaptain && isVice ? CaptainBadge({ kind: "V" }) : null}
       </div>
 
-      <div
-        style={{
-          position: "absolute",
-          top: -6,
-          right: -2,
-          zIndex: 3,
-          fontSize: 12,
-          opacity: p ? 0.95 : 0,
-          lineHeight: "16px",
-        }}
-        aria-hidden="true"
-      >
-        {p ? (() => {
-  const live = getLivePlayerById(p.id);
-  const s = String(live?.status ?? "").toLowerCase();
-  if (s === "starting") return "👍";
-  if (s === "benched") return "⚠️";
-  if (s) return "⛔";
-  return "";
-})() : ""}
-
+      <div style={{ position: "absolute", top: -6, right: -2, zIndex: 3, lineHeight: "12px" }}>
+        {p ? <StatusTag player={getLivePlayerById(p.id)} style={{ fontSize: 8, padding: "1px 3px", boxShadow: "0 1px 2px rgba(0,0,0,0.35)" }} /> : null}
       </div>
 
       {/* Main content */}

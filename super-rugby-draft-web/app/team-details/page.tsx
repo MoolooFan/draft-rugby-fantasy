@@ -209,7 +209,7 @@ export default function TeamDetailsPage() {
           paddingBottom: "calc(18px + env(safe-area-inset-bottom))",
         }}
       >
-        {/* Top row: menu + logout */}
+        {/* Top row: menu */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
   <button
     onClick={() => setMenuOpen(true)}

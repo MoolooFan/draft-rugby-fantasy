@@ -60,7 +60,8 @@ export default async function RootLayout({
           padding: 0,
           // keep everything below the iPhone clock/battery when opened from the home screen
           // (0 in a normal browser tab); the background comes from <html> (app/globals.css)
-          paddingTop: "env(safe-area-inset-top, 0px)",
+          // a little less than the full clock area (pages have their own top padding too)
+          paddingTop: "max(0px, calc(env(safe-area-inset-top, 0px) - 10px))",
           minHeight: "100svh",
           background: "transparent",
         }}

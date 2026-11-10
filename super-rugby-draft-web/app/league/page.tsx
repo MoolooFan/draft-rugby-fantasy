@@ -1467,6 +1467,9 @@ if (!league) {
       <GradientBg />
 
       <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px" }}>
+        <div style={{ marginBottom: 10 }}>
+          <Hamburger />
+        </div>
         <div style={{ borderRadius: 18, background: "rgba(255,255,255,0.35)", padding: 14 }}>
           <div style={{ fontWeight: 900, fontSize: 16 }}>No active league</div>
           <div style={{ marginTop: 6, opacity: 0.9, fontSize: 12, fontWeight: 700 }}>

@@ -48,7 +48,7 @@ export type SitePlayer = {
   active: boolean;
   /** current status for the player card, e.g. 'Knee - TBC' */
   status: string | null;
-  /** status by fantasy week: { W1: 'starting', W2: 'benched', W3: 'knee - tbc' } (no entry = not named) */
+  /** status by fantasy week, as written: { W1: "Starting", W2: "Benched", W3: "Knee - TBC" } (no entry = not named) */
   weeklyStatus: Record<string, string>;
   stats: typeof ZERO_STATS;
 };
@@ -99,7 +99,7 @@ export async function loadSeasonPlayers(db: SupabaseClient, season: number, opts
   const weekly = new Map<string, Record<string, string>>();
   for (const s of statuses) {
     const m = weekly.get(s.player_id) ?? {};
-    m[`W${s.week}`] = s.status.trim().toLowerCase();
+    m[`W${s.week}`] = s.status.trim();
     weekly.set(s.player_id, m);
   }
   return rows.map((p) => toSitePlayer(p, weekly.get(p.id)));

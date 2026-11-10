@@ -22,6 +22,7 @@ import { useRequireSession } from "@/lib/session/useRequireSession";
 import { canPlayPosition } from "@/lib/players/positions";
 import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { positionsLabel } from "@/lib/players/positions";
+import { StatusTag } from "@/components/StatusTag";
 
 type DraftTab = "Player Pool" | "Watchlist" | "Teams" | "Draft Results";
 type DraftPhase = "preDraft" | "liveDraft";
@@ -836,7 +837,7 @@ const Filters = useStableComponent(Filters__render);
 
             <div>
               <div style={{ fontWeight: 700, fontSize: 12 }}>
-                {p.firstName[0]}. {p.lastName}
+                {p.firstName[0]}. {p.lastName} <StatusTag player={p} />
               </div>
               <div style={{ fontSize: 10, opacity: 0.7 }}>
                 {TEAM_OPTIONS.find((t) => t.value === p.teamCode)?.label ?? p.teamCode}

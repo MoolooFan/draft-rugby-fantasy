@@ -23,6 +23,7 @@ import { playerRoundRows } from "@/lib/players/roundIndex";
 import { toMs, getWeekDeadlineMs, getWeeksSorted } from "@/lib/league/weekHelpers";
 import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
 import { positionsLabel } from "@/lib/players/positions";
+import { StatusTag } from "@/components/StatusTag";
 
 // -----------------------
 // Types
@@ -1147,8 +1148,11 @@ function PlayerRow__render({
       <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
         <JerseyTile teamCode={p.teamCode} size={26} />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {shortName(p)}
+          <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {shortName(p)}
+            </div>
+            <StatusTag player={p} />
           </div>
           <div
             style={{

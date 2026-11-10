@@ -13,6 +13,8 @@ import { FixtureRow, normalizeTeamCodeLocal, TabCard } from "./playerCard/helper
 import { ResultsTab, StatsTab, FixturesTab } from "./playerCard/tabs";
 import { positionsLabel } from "@/lib/players/positions";
 import { formatStatCount } from "@/lib/scoring";
+import { currentStatusText, statusKind, STATUS_TAG } from "@/lib/status/kind";
+import { StatusTag } from "@/components/StatusTag";
 
 export type PlayerStatus = "starting" | "benched" | "out" | null;
 
@@ -466,25 +468,13 @@ const sheetP = usePlayersStore((s) => s.getById(p.id));
 const statusFromSheet = sheetP?.status ?? null;
 const weeklyFromSheet = sheetP?.weeklyStatus ?? null;
 
-// ✅ Use sheet status automatically if not explicitly passed
-const effectiveStatus: PlayerStatus = useMemo(() => {
-  // if caller explicitly forces status, respect it
-  if (status === "starting" || status === "benched" || status === "out") return status;
-
-  // otherwise ONLY use sheet status
-  const raw = String(statusFromSheet ?? "");
-
-  const s = raw.trim().toLowerCase();
-
-  // treat empty / "-" as no status
-  if (!s || s === "-") return null;
-
-  if (s === "starting") return "starting";
-  if (s === "benched") return "benched";
-
-  // anything else counts as out
-  return "out";
-}, [status, statusFromSheet]);
+// This week's status (team list / injury list), else the card status. A caller can force
+// starting / benched.
+const statusText = useMemo<string | null>(() => {
+  if (status === "starting" || status === "benched") return status;
+  return currentStatusText({ status: statusFromSheet, weeklyStatus: weeklyFromSheet ?? p.weeklyStatus });
+}, [status, statusFromSheet, weeklyFromSheet, p.weeklyStatus]);
+const statusK = statusKind(statusText);
 
 const computed = useMemo(() => {
   const ws = weeklyFromSheet ?? p.weeklyStatus ?? {};
@@ -589,32 +579,20 @@ if (!cancelled) {
   };
 }, [open, p.id, p.teamCode]);
 
-// ✅ If player is OUT, show the actual sheet reason (e.g. "Hamstring", "Suspended", etc)
-const outReason = useMemo(() => {
-  const raw = String(statusFromSheet ?? "").trim();
-  if (!raw) return "";
-
-  const low = raw.toLowerCase();
-  if (low === "starting" || low === "benched" || low === "out") return "";
-
-  return raw;
-}, [statusFromSheet]);
-
-// Status strip (optional)
-const statusStyle =
-  effectiveStatus === "starting"
-    ? { bg: "#bbf7d0", text: "#111827", icon: "👍", label: "Starting" }
-    : effectiveStatus === "benched"
-    ? { bg: "#FFE65B", text: "#111827", icon: "⚠️", label: "Benched" }
-    : effectiveStatus === "out"
-    ? {
-        bg: "#C0020D",
-        text: "#ffffff",
-        icon: "⛔",
-        // ✅ if we have a reason from the sheet, show that instead of just "Out"
-        label: outReason || "Out",
-      }
-    : null;
+// Status strip: the tag, then the details (e.g. "Knee - 2 weeks", "Out - Personal reasons").
+const statusStyle = !statusK
+  ? null
+  : statusK === "starting"
+  ? { bg: "#bbf7d0", text: "#111827", chipBg: STATUS_TAG.starting.bg, chipFg: STATUS_TAG.starting.fg, label: "Starting" }
+  : statusK === "bench"
+  ? { bg: "#FFE65B", text: "#111827", chipBg: "#3b2f00", chipFg: "#FFE65B", label: "On the bench" }
+  : {
+      bg: "#C0020D",
+      text: "#ffffff",
+      chipBg: "#ffffff",
+      chipFg: "#C0020D",
+      label: /^(out|suspended|injured)$/i.test(String(statusText).trim()) ? STATUS_TAG[statusK].name : String(statusText).trim(),
+    };
 
   const posTheme = POSITION_THEME[p.posAbbrev] ?? {
   primary: "rgba(0,0,0,0.25)",
@@ -710,7 +688,7 @@ const teamLabelFull =
       gap: 8,
     }}
   >
-    <span style={{ fontSize: 14, lineHeight: "14px" }}>{statusStyle.icon}</span>
+    <StatusTag kind={statusK} style={{ fontSize: 10, background: statusStyle.chipBg, color: statusStyle.chipFg }} />
     <span>{statusStyle.label}</span>
   </div>
 )}
