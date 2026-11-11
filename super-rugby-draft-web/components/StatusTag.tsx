@@ -1,5 +1,5 @@
 // components/StatusTag.tsx
-// The small coloured status tag (XV / BENCH / INJ / SUS / OUT) shown next to a player's name.
+// The small coloured status tag (XV / SUB / INJ / SUS / OUT) shown next to a player's name.
 // Nothing is shown when the player has no status (available). Details (e.g. "Knee - 2 weeks")
 // are on the player card.
 import type { CSSProperties } from "react";

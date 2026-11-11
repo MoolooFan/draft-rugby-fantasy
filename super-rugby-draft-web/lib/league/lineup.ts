@@ -19,6 +19,7 @@ import { canPlayPosition } from "@/lib/players/positions";
 export const ALL_SLOTS: SlotId[] = [...STARTER_SLOTS, ...BENCH_SLOTS];
 
 const INF = 1e12;
+const EMPTY = 1e9; // a starting spot left empty (only when no player can fill it, e.g. the only hooker is in IR)
 const MOVE = 1e6; // one player moved
 // tie-breaks between arrangements with the same number of moves:
 const BENCH_UP = 10; // x bench number: bench1 moves up before bench2
@@ -89,7 +90,7 @@ export function updateLineup(prev: Lineup | null, roster: LineupPlayer[]): Lineu
     const row: number[] = [];
     for (const slot of ALL_SLOTS) {
       const starter = !slot.startsWith("bench");
-      if (!p) { row.push(starter ? INF : 0); continue; } // an empty roster place: bench only
+      if (!p) { row.push(starter ? EMPTY : 0); continue; } // an empty roster place: bench, or a starting spot nobody can fill
       if (starter && !canPlayPosition(p, SLOT_POSITION[slot])) { row.push(INF); continue; }
       const was = slotOf.get(p.id);
       if (!was) {
@@ -114,7 +115,7 @@ export function updateLineup(prev: Lineup | null, roster: LineupPlayer[]): Lineu
   for (let r = 0; r < n; r++) {
     const p = players[r];
     const slot = ALL_SLOTS[assign[r]];
-    if (cost[r][assign[r]] >= INF) full = false;
+    if (cost[r][assign[r]] >= EMPTY) full = false;
     if (!p) continue;
     const before = prev && slotOf.has(p.id) ? prev[slotOf.get(p.id)!] : null;
     lineup[slot] = { ...(before ?? {}), ...p };

@@ -1,7 +1,7 @@
 // lib/status/kind.ts
 // One place that decides what a player's status text means, so every page shows the same badge.
 //   Starting  → green  XV
-//   Benched   → yellow BENCH
+//   Benched   → yellow SUB
 //   Injured   → red    INJ   (any injury, e.g. "Knee - TBC", "Injury - TBC")
 //   Suspended → red    SUS   (e.g. "Suspended - 2 weeks")
 //   Out       → red    OUT   (not injured: personal reasons, paternity leave, rested, ...)
@@ -18,7 +18,7 @@ export function statusKind(raw: string | null | undefined): StatusKind | null {
   const s = String(raw ?? "").trim().toLowerCase();
   if (!s || s === "-") return null;
   if (s === "starting") return "starting";
-  if (s === "benched" || s === "bench") return "bench";
+  if (s === "benched" || s === "bench" || s === "sub" || s === "substitute" || s === "replacement") return "bench";
   if (s.startsWith("susp")) return "suspended";
   if (OUT_REASONS.test(s)) return "out";
   return "injured";
@@ -26,7 +26,7 @@ export function statusKind(raw: string | null | undefined): StatusKind | null {
 
 export const STATUS_TAG: Record<StatusKind, { tag: string; name: string; bg: string; fg: string }> = {
   starting: { tag: "XV", name: "Starting", bg: "#16a34a", fg: "#ffffff" },
-  bench: { tag: "BENCH", name: "Bench", bg: "#facc15", fg: "#3b2f00" },
+  bench: { tag: "SUB", name: "Sub", bg: "#facc15", fg: "#3b2f00" },
   injured: { tag: "INJ", name: "Injured", bg: "#dc2626", fg: "#ffffff" },
   suspended: { tag: "SUS", name: "Suspended", bg: "#dc2626", fg: "#ffffff" },
   out: { tag: "OUT", name: "Out", bg: "#dc2626", fg: "#ffffff" },

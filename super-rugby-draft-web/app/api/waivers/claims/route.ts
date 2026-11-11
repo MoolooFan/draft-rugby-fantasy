@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { buildAndValidateNextIds } from "@/lib/transactions/rosterValidate";
+import { healthyIrBlock, irIdsOf } from "@/lib/league/ir";
 
 function extractIds(data: any): string[] {
   if (Array.isArray(data?.playerIds)) return data.playerIds.map(String);
@@ -125,6 +126,7 @@ if (rErr) throw rErr;
 const owned = new Set<string>();
 for (const row of rosterRows ?? []) {
   for (const pid of extractIds((row as any).data ?? {})) owned.add(pid);
+  for (const pid of irIdsOf((row as any).data)) owned.add(pid); // IR players are still owned
 }
 if (owned.has(addPlayerId)) {
   return NextResponse.json({ ok: false, error: "Player already owned." }, { status: 400 });
@@ -133,7 +135,16 @@ if (owned.has(addPlayerId)) {
 // 3) load my roster and validate add/drop would be legal
 const myRow = (rosterRows ?? []).find((r: any) => String(r.team_id) === teamId);
 const roster = structuredClone((myRow as any)?.data ?? { playerIds: [] });
-const currentIds = extractIds(roster);
+const myIr = irIdsOf(roster);
+const currentIds = extractIds(roster).filter((id) => !myIr.includes(id));
+
+// An IR player who is fit again has to be activated before any claims.
+const { data: lg, error: lgErr } = await supabaseAdmin.from("leagues").select("season").eq("id", leagueId).maybeSingle();
+if (lgErr) throw lgErr;
+const irBlock = await healthyIrBlock(supabaseAdmin, Number(lg?.season), roster, { nowMs: now });
+if (irBlock) {
+  return NextResponse.json({ ok: false, error: irBlock }, { status: 400 });
+}
 
 const built = buildAndValidateNextIds({
   currentIds,

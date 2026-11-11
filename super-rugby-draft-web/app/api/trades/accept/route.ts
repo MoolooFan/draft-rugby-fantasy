@@ -4,6 +4,7 @@ import { getServerUsername } from "@/lib/serverSession";
 import { cancelPendingTradesTouchingPlayers, cancelInvalidPendingTradesForTeams } from "@/lib/trades/cancelPendingTrades";
 import { isPastWeekDeadline } from "@/lib/trades/deadlines";
 import { loadRosterPlayers, rosterProblem, updateLineupsAfterRosterChange } from "@/lib/league/rosterChange";
+import { healthyIrBlock, irIdsOf } from "@/lib/league/ir";
 
 type TradeOfferRow = {
   id: string;
@@ -198,24 +199,35 @@ const requested = uniq((offer.request_player_ids ?? []) as any);
     const fromSet = new Set(fromExtract.ids);
     const toSet = new Set(toExtract.ids);
 
+    const fromIr = irIdsOf(fromRoster.data);
+    const toIr = irIdsOf(toRoster.data);
     for (const pid of offered) {
+      if (fromIr.includes(pid)) throw new Error(`${pid} is in IR and can't be traded`);
       if (!fromSet.has(pid)) throw new Error(`from_team does not own offered player: ${pid}`);
     }
     for (const pid of requested) {
+      if (toIr.includes(pid)) throw new Error(`${pid} is in IR and can't be traded`);
       if (!toSet.has(pid)) throw new Error(`to_team does not own requested player: ${pid}`);
     }
+
+    // 8b) A team whose IR player is fit again can't trade until he's activated.
+    const { data: lg, error: lgErr } = await supabaseAdmin.from("leagues").select("season").eq("id", offer.league_id).maybeSingle();
+    if (lgErr) throw new Error("League not found");
+    const season = Number(lg?.season);
+    const myIrBlock = await healthyIrBlock(supabaseAdmin, season, toRoster.data, { nowMs: now });
+    if (myIrBlock) throw new Error(myIrBlock);
+    const theirIrBlock = await healthyIrBlock(supabaseAdmin, season, fromRoster.data, { mine: false, nowMs: now });
+    if (theirIrBlock) throw new Error(theirIrBlock);
 
     // 9) Swap
     const nextFrom = fromExtract.ids.filter((id) => !offered.includes(id)).concat(requested);
     const nextTo = toExtract.ids.filter((id) => !requested.includes(id)).concat(offered);
 
     // 9b) Both teams must keep the position rules (so each can always field a full XV)
-    const { data: lg, error: lgErr } = await supabaseAdmin.from("leagues").select("season").eq("id", offer.league_id).maybeSingle();
-    if (lgErr) throw new Error("League not found");
-    const rosterPlayers = await loadRosterPlayers(supabaseAdmin, Number(lg?.season), [...nextFrom, ...nextTo]);
-    const toProblem = rosterProblem(uniq(nextTo), rosterPlayers);
+    const rosterPlayers = await loadRosterPlayers(supabaseAdmin, season, [...nextFrom, ...nextTo]);
+    const toProblem = rosterProblem(uniq(nextTo), rosterPlayers, toExtract.ids);
     if (toProblem) throw new Error(`Your team: ${toProblem}`);
-    const fromProblem = rosterProblem(uniq(nextFrom), rosterPlayers);
+    const fromProblem = rosterProblem(uniq(nextFrom), rosterPlayers, fromExtract.ids);
     if (fromProblem) throw new Error(`The other team: ${fromProblem}`);
 
     const nextFromData = writePlayerIds(fromRoster.data, fromExtract.key, uniq(nextFrom));

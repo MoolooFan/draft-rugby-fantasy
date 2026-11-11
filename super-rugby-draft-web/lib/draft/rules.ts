@@ -61,6 +61,34 @@ export function rosterFits(players: HasPositions[]): boolean {
   return players.every((_, p) => tryPlace(p, new Array(spots.length).fill(false)));
 }
 
+/**
+ * How many of the 15 starting spots (2 PR, 1 HO, 2 LK, 3 LF, 1 HB, 1 FH, 2 CE, 3 OB) these
+ * players can't fill between them. 0 = a full XV is possible.
+ */
+export function startingGaps(players: HasPositions[]): number {
+  const spots: string[] = [];
+  for (const [pos, n] of Object.entries(ROSTER_SPOTS)) for (let i = 0; i < n; i++) spots.push(pos);
+  const fits = players.map((p) => {
+    const pos = playerPositions(p);
+    return spots.map((s, i) => (pos.includes(s) ? i : -1)).filter((i) => i >= 0);
+  });
+  const spotOwner = new Array(spots.length).fill(-1);
+  const tryPlace = (p: number, seen: boolean[]): boolean => {
+    for (const s of fits[p]) {
+      if (seen[s]) continue;
+      seen[s] = true;
+      if (spotOwner[s] < 0 || tryPlace(spotOwner[s], seen)) {
+        spotOwner[s] = p;
+        return true;
+      }
+    }
+    return false;
+  };
+  let filled = 0;
+  for (let p = 0; p < players.length; p++) if (tryPlace(p, new Array(spots.length).fill(false))) filled++;
+  return spots.length - filled;
+}
+
 /** Shuffle (for the random draft order). */
 export function shuffled<T>(items: T[]): T[] {
   const a = [...items];

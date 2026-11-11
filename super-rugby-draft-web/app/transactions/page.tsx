@@ -195,6 +195,9 @@ function extractRosterIdsClient(data: any): string[] {
   return ids;
 }
 
+/** Drop-list choice meaning "don't drop anyone" (the team has a free place). */
+const NO_DROP = "__no_drop__";
+
 function TransactionsPageInner() {
   const router = useRouter();
   const pathname = usePathname();
@@ -601,6 +604,9 @@ const ownerByPlayerId = useMemo(() => {
   for (const [teamId, roster] of Object.entries(source ?? {})) {
     const ids = extractRosterIdsClient(roster);
     for (const pid of ids) map.set(pid, teamId);
+    // players in a team's IR spot are still owned by it
+    const ir = (roster as any)?.irIds;
+    if (Array.isArray(ir)) for (const pid of ir) map.set(String(pid), teamId);
   }
   return map;
 }, [rostersForOwnership]);
@@ -1075,6 +1081,9 @@ const yourRosterPlayers: Player[] = useMemo(() => {
   return list;
 }, [rostersForOwnership, yourDraftTeamId, allPlayers]);
 
+  // Fewer than 20 (not counting IR): the team can add without dropping anyone.
+  const hasFreePlace = yourRosterPlayers.length > 0 && yourRosterPlayers.length < 20;
+
   // Given an addPlayer, compute droppable players that keep roster valid after swap
   const droppableCandidates: Player[] = useMemo(() => {
     if (!proposedAddPlayer) return [];
@@ -1334,6 +1343,7 @@ async function submitProposedTransaction() {
   if (submittingProposedTransaction) return;
   if (!activeLeague?.id || !yourDraftTeamId || !proposedAddPlayer) return;
   if (!selectedDropPlayerId) return;
+  const dropId = selectedDropPlayerId === NO_DROP ? null : selectedDropPlayerId;
 
   const leagueId = activeLeague.id;
   setSubmittingProposedTransaction(true);
@@ -1348,14 +1358,20 @@ async function submitProposedTransaction() {
         week: claimsWeek,
         teamId: yourDraftTeamId,
         addPlayerId: proposedAddPlayer.id,
-        dropPlayerId: selectedDropPlayerId,
+        dropPlayerId: dropId,
       };
 
-      await fetch(`/api/waivers/claims`, {
+      const claimRes = await fetch(`/api/waivers/claims`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       });
+      const claimJson = await claimRes.json().catch(() => null);
+      if (!claimJson?.ok) {
+        window.alert(claimJson?.error ?? "That claim couldn't be made");
+        setSubmittingProposedTransaction(false);
+        return;
+      }
 
       await refreshTransactionsForLeague(leagueId);
       setTab("Pending Claims");
@@ -1371,16 +1387,23 @@ async function submitProposedTransaction() {
       week: selectionWeek,
       teamId: yourDraftTeamId,
       addPlayerId: proposedAddPlayer.id,
-      dropPlayerId: selectedDropPlayerId,
+      dropPlayerId: dropId,
       createdAtMs: Date.now(),
       lockedUntilMs: selectionDeadlineMs,
     };
 
-    await fetch(`/api/free-agency/transfer`, {
+    const faRes = await fetch(`/api/free-agency/transfer`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
     });
+    const faJson = await faRes.json().catch(() => null);
+    if (faJson?.failReason === "IR_PLAYER_FIT" || faJson?.failReason === "ROSTER_VALIDATION_FAILED") {
+      window.alert(faJson?.extra?.validationError ?? "That signing couldn't be made");
+      await refreshTransactionsForLeague(leagueId);
+      setSubmittingProposedTransaction(false);
+      return;
+    }
 
     // Refresh transactions
     await refreshTransactionsForLeague(leagueId);
@@ -1540,6 +1563,39 @@ async function submitProposedTransaction() {
   }}
 >
 
+            {hasFreePlace ? (
+              <div
+                style={{
+                  padding: "10px 12px",
+                  display: "grid",
+                  gridTemplateColumns: "1fr auto",
+                  gap: 10,
+                  alignItems: "center",
+                  background: selectedDropPlayerId === NO_DROP ? "rgba(34,197,94,0.14)" : "transparent",
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 900 }}>
+                  No one - use your free place
+                  <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.7 }}>You have {yourRosterPlayers.length} players (a player is in IR)</div>
+                </div>
+                <button
+                  onClick={() => setSelectedDropPlayerId(NO_DROP)}
+                  style={{
+                    height: 32,
+                    padding: "0 10px",
+                    borderRadius: 10,
+                    border: "none",
+                    background: "rgba(34,197,94,0.9)",
+                    color: "white",
+                    fontWeight: 900,
+                    fontSize: 11,
+                    cursor: "pointer",
+                  }}
+                >
+                  {selectedDropPlayerId === NO_DROP ? "Selected" : "Select"}
+                </button>
+              </div>
+            ) : null}
             {droppableCandidates.length === 0 ? (
               <div style={{ padding: 12, fontSize: 12, fontWeight: 800, opacity: 0.75 }}>
                 No valid drop options found (position restrictions).

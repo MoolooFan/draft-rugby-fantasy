@@ -4,6 +4,7 @@ import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { selectionDeadlineMs } from "@/lib/league/deadlines";
 import { loadPickRank, loadRosterPlayers } from "@/lib/league/rosterChange";
 import { fixCaptains, updateLineup } from "@/lib/league/lineup";
+import { activeIdsOf } from "@/lib/league/ir";
 import type { Lineup } from "@/lib/scoring/week";
 
 export async function POST(req: Request) {
@@ -80,17 +81,16 @@ export async function POST(req: Request) {
       .eq("team_id", teamId)
       .maybeSingle();
     if (rErr) throw rErr;
-    const rosterIds: string[] = (rosterRow?.data?.playerIds ?? []).map(String);
+    const rosterIds: string[] = activeIdsOf(rosterRow?.data); // not IR
     const players = await loadRosterPlayers(supabaseAdmin, Number(league?.season), rosterIds);
     const pickRank = await loadPickRank(supabaseAdmin, leagueId, players);
     const roster = rosterIds
       .map((id) => players.get(id))
       .filter((p): p is NonNullable<typeof p> => !!p)
       .sort((a, b) => pickRank(a.id) - pickRank(b.id));
+    // If the team can't fill every starting spot (only possible while a player is in IR and the
+    // team is short of his position) the lineup is still saved, with that spot empty.
     const fixed = updateLineup(lineup as Lineup, roster);
-    if (!fixed.ok) {
-      return NextResponse.json({ ok: false, error: fixed.error }, { status: 400 });
-    }
     const caps = fixCaptains(fixed.lineup, captainId, viceId, pickRank);
 
     const { error } = await supabaseAdmin
@@ -110,7 +110,14 @@ export async function POST(req: Request) {
 
     if (error) throw error;
 
-    return NextResponse.json({ ok: true, lineup: fixed.lineup, captainId: caps.captainId, viceId: caps.viceId, moved: fixed.moved });
+    return NextResponse.json({
+      ok: true,
+      lineup: fixed.lineup,
+      captainId: caps.captainId,
+      viceId: caps.viceId,
+      moved: fixed.ok ? fixed.moved : [],
+      warning: fixed.ok ? null : "Your team can't fill every starting spot - add a player for the empty spot",
+    });
   } catch (e: any) {
     const { msg, status } = toHttpError(e);
     return NextResponse.json({ ok: false, error: msg }, { status });

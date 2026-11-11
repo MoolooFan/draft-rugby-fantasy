@@ -26,6 +26,9 @@ import { JERSEYS } from "@/lib/teams/images";
 import { StatusTag } from "@/components/StatusTag";
 import { fixCaptains } from "@/lib/league/lineup";
 import type { Lineup as ServerLineup } from "@/lib/scoring/week";
+import { irEligible, IR_SPOTS } from "@/lib/league/ir";
+import { currentStatusText } from "@/lib/status/kind";
+import { ROSTER_SIZE } from "@/lib/draft/rules";
 
 type ViewMode = "Fixture" | "Latest Score" | "PPG" | "Form";
 
@@ -368,7 +371,7 @@ useEffect(() => {
     .catch((e) => console.error(e));
 }, [activeLeague?.id]);
 
-const [serverRosters, setServerRosters] = useState<Map<string, { playerIds: string[] }>>(new Map());
+const [serverRosters, setServerRosters] = useState<Map<string, { playerIds: string[]; irIds: string[] }>>(new Map());
 
 const playerPool = usePlayerPool();
 const playersById = useMemo(() => {
@@ -428,13 +431,15 @@ useEffect(() => {
       if (!j?.ok) return;
       const rows = Array.isArray(j.data) ? j.data : [];
 
-      const m = new Map<string, { playerIds: string[] }>();
+      const m = new Map<string, { playerIds: string[]; irIds: string[] }>();
       for (const row of rows) {
         const teamId = String(row.team_id ?? "");
         if (!teamId) continue;
 
-        const ids = rosterRowToPlayerIds(row?.data);
-        m.set(teamId, { playerIds: ids });
+        // players in the IR spot aren't part of the lineup
+        const irIds: string[] = Array.isArray(row?.data?.irIds) ? row.data.irIds.map(String).filter(Boolean) : [];
+        const ids = rosterRowToPlayerIds(row?.data).filter((id) => !irIds.includes(id));
+        m.set(teamId, { playerIds: ids, irIds });
       }
 
       setServerRosters(m);
@@ -716,6 +721,13 @@ const deadlineText = useMemo(() => {
   });
 }, [yourDraftTeamId, serverRosters, playersById]);
 
+  // The player in the IR spot (not in the lineup, doesn't score). Rules in lib/league/ir.ts.
+  const irPlayer: Player | null = useMemo(() => {
+    if (!yourDraftTeamId) return null;
+    const id = serverRosters.get(yourDraftTeamId)?.irIds?.[0];
+    return id ? playersById.get(id) ?? null : null;
+  }, [yourDraftTeamId, serverRosters, playersById]);
+
   // Initial lineup:
   // - If no roster: all empty tiles
   // - Else: fill starters/bench by matching pos group; leftovers into wildcards
@@ -963,6 +975,85 @@ function hydratePlayer(p: Player): Player & { status?: any; weeklyStatus?: any }
 
   const openPlayer = (p: Player) => setModalPlayer(hydratePlayer(p) as any);
 
+  // ---- IR spot ----
+  // Move an injured player (or one out for e.g. personal reasons) to IR, swap him with the IR
+  // player, or activate the IR player (dropping someone if the team is full). The server checks
+  // the rules and fixes the lineups for the weeks that aren't locked yet.
+  const [irBusy, setIrBusy] = useState(false);
+  const [irNotice, setIrNotice] = useState<{ kind: "error" | "info"; text: string } | null>(null);
+  const [irDropMode, setIrDropMode] = useState(false); // choosing a player to drop to activate the IR player
+
+  const nameOf = (p: { firstName?: string; lastName?: string } | null | undefined) =>
+    p ? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() : "";
+  const canGoInIr = (id: string) => irEligible(currentStatusText(getLivePlayerById(id)));
+  const irPlayerFit = !!irPlayer && !canGoInIr(irPlayer.id);
+
+  async function irRequest(body: Record<string, unknown>, doneText: string) {
+    if (!activeLeague?.id || !yourDraftTeamId || irBusy) return;
+    setIrBusy(true);
+    setIrNotice(null);
+    try {
+      if (isDirty) await saveSelection(); // keep the changes made on this page first
+      const res = await fetch("/api/ir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ leagueId: activeLeague.id, ...body }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!json?.ok) {
+        setIrNotice({ kind: "error", text: json?.error ?? "That didn't work - please try again" });
+        return;
+      }
+      const teamId = yourDraftTeamId;
+      setServerRosters((prev) => {
+        const m = new Map(prev);
+        m.set(teamId, { playerIds: (json.playerIds ?? []).map(String), irIds: (json.irIds ?? []).map(String) });
+        return m;
+      });
+      setIrNotice({ kind: "info", text: doneText });
+      window.setTimeout(() => setIrNotice(null), 4000);
+    } catch (e) {
+      console.error("IR move failed:", e);
+      setIrNotice({ kind: "error", text: "That didn't work - please try again" });
+    } finally {
+      setIrBusy(false);
+    }
+  }
+
+  function moveToIr(p: Player) {
+    if (!window.confirm(`Move ${nameOf(p)} to IR?
+
+He won't be in your lineup or score while he's in IR.`)) return;
+    irRequest({ action: "move", playerId: p.id }, `${nameOf(p)} moved to IR`);
+  }
+
+  function swapWithIr(p: Player) {
+    if (!irPlayer) return;
+    if (!window.confirm(`Move ${nameOf(p)} to IR and bring ${nameOf(irPlayer)} back into your team?`)) return;
+    irRequest({ action: "swap", playerId: irPlayer.id, swapPlayerId: p.id }, `${nameOf(irPlayer)} is back; ${nameOf(p)} moved to IR`);
+  }
+
+  function startActivate() {
+    if (!irPlayer) return;
+    if (rosterPool.length < ROSTER_SIZE) {
+      if (!window.confirm(`Bring ${nameOf(irPlayer)} back from IR into your team?`)) return;
+      irRequest({ action: "activate", playerId: irPlayer.id }, `${nameOf(irPlayer)} is back in your team`);
+      return;
+    }
+    setSwapFromSlot(null);
+    setIrDropMode(true);
+    setIrNotice({ kind: "info", text: `Your team is full - tap the player to drop to make room for ${nameOf(irPlayer)}` });
+  }
+
+  function chooseDrop(p: Player) {
+    if (!irPlayer) return;
+    setIrDropMode(false);
+    setIrNotice(null);
+    if (!window.confirm(`Drop ${nameOf(p)} and bring ${nameOf(irPlayer)} back from IR?`)) return;
+    irRequest({ action: "activate", playerId: irPlayer.id, dropPlayerId: p.id }, `${nameOf(irPlayer)} is back; ${nameOf(p)} dropped`);
+  }
+
   const slotOfPlayer = useMemo(() => {
     const map = new Map<string, SlotId>();
     for (const s of SLOT_DEFS) {
@@ -1031,6 +1122,12 @@ function isStarterSlotId(id: SlotId) {
 
   function onTilePress(slotId: SlotId) {
     const p = lineup[slotId];
+
+    // choosing who to drop to activate the IR player
+    if (irDropMode) {
+      if (p) chooseDrop(p);
+      return;
+    }
 
     // If we are in "swap select target" mode:
 if (swapFromSlot) {
@@ -1212,7 +1309,9 @@ const isVice = !!p?.id && viceId === p.id && slot.starter;
   !!getSwapPlan(swapFromSlot, slotId);
 
  const border =
-  isSwapSource
+  irDropMode && p
+    ? "2px solid rgba(248,113,113,0.95)"
+    : isSwapSource
     ? "2px solid rgba(250,204,21,0.95)"
     : isSwapTarget
     ? "2px solid rgba(250,204,21,0.85)"
@@ -1390,6 +1489,66 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
   );
 }
 
+  // The IR spot: looks like a player tile, with a red "IR" corner badge.
+  function IrTile() {
+    const p = irPlayer;
+    const swapping = !!swapFromSlot;
+    return (
+      <button
+        onClick={() => {
+          if (swapping) { setSwapFromSlot(null); return; } // IR isn't part of lineup swaps
+          if (irDropMode) { setIrDropMode(false); setIrNotice(null); return; }
+          if (p) openPlayer(p);
+          else setIrNotice({ kind: "info", text: "To use your IR spot, tap an injured player (or one who is out) and choose Move to IR" });
+        }}
+        style={{
+          width: 70,
+          height: 70,
+          borderRadius: 14,
+          border: irPlayerFit ? "2px solid rgba(250,204,21,0.95)" : "1px dashed rgba(248,113,113,0.85)",
+          background: p ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.10)",
+          backdropFilter: "blur(8px)",
+          boxShadow: "0 10px 22px rgba(0,0,0,0.16)",
+          opacity: swapping ? 0.45 : 1,
+          padding: 0,
+          cursor: "pointer",
+          position: "relative",
+          overflow: "visible",
+          color: "white",
+        }}
+      >
+        {p ? (
+          <>
+            <div style={{ position: "absolute", top: -6, left: -2, zIndex: 3 }}>
+              <span style={{ display: "inline-block", fontSize: 8, fontWeight: 900, padding: "1px 3px", borderRadius: 4, background: "#dc2626", color: "#ffffff", boxShadow: "0 1px 2px rgba(0,0,0,0.35)", lineHeight: "10px" }}>
+                IR
+              </span>
+            </div>
+            <div style={{ position: "absolute", top: -6, right: -2, zIndex: 3, lineHeight: "12px" }}>
+              <StatusTag player={getLivePlayerById(p.id)} style={{ fontSize: 8, padding: "1px 3px", boxShadow: "0 1px 2px rgba(0,0,0,0.35)" }} />
+            </div>
+            <div style={{ position: "absolute", top: 3, left: "50%", transform: "translateX(-50%)", width: 65, height: 44, overflow: "hidden", zIndex: 1, display: "grid", placeItems: "center" }}>
+              <img src={jerseySrcForTeam(p.teamCode)} alt="" style={{ width: "100%", height: 65, objectFit: "contain", filter: "drop-shadow(0 8px 14px rgba(0,0,0,0.25)) grayscale(0.6)" }} />
+            </div>
+            <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, borderRadius: 999, overflow: "hidden", zIndex: 2, boxShadow: "0 10px 18px rgba(0,0,0,0.18)" }}>
+              <div style={{ background: "rgba(255,255,255,0.95)", color: "#0f2a4a", textAlign: "center", padding: "3px 6px", fontSize: 10, fontWeight: 500, lineHeight: "8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {p.lastName}
+              </div>
+              <div style={{ background: "#7f1d1d", color: "white", textAlign: "center", fontSize: 10, fontWeight: 700, lineHeight: "12px", borderTop: "1px solid rgba(15,23,42,0.10)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {irPlayerFit ? "Fit - activate" : "IR"}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 900, opacity: 0.75, lineHeight: "12px", textAlign: "center" }}>
+            <span>IR</span>
+            <span style={{ fontWeight: 600, fontSize: 9 }}>Injury reserve</span>
+          </div>
+        )}
+      </button>
+    );
+  }
+
   function FieldStarters() {
     return (
       <div
@@ -1443,7 +1602,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     return (
       <div style={{ marginTop: 10, ...card35, padding: 12, borderRadius: 18 }}>
         <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.95, marginBottom: 8 }}>
-          Substitutes
+          Substitutes &amp; IR
         </div>
 
         {/* Bench layout: match field spacing (OB row + Centre row) */}
@@ -1454,13 +1613,11 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
   }}
 >
   {BENCH_IDS.map((id, idx) => {
-    // Top row: 3 tiles at 24/50/76 (like outside backs)
-    const topRowLefts = ["24%", "50%", "76%"];
-    // Bottom row: 2 tiles at 38/62 (like centres)
-    const bottomRowLefts = ["37%", "63%"];
+    // Two rows of three at 24/50/76 (like outside backs): subs 1-3, then subs 4-5 and the IR spot
+    const lefts = ["24%", "50%", "76%"];
 
     const isTopRow = idx < 3;
-    const left = isTopRow ? topRowLefts[idx] : bottomRowLefts[idx - 3];
+    const left = lefts[idx % 3];
     const top = isTopRow ? "20%" : "75%";
 
     return (
@@ -1477,7 +1634,43 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
       </div>
     );
   })}
+  {IR_SPOTS > 0 ? (
+    <div style={{ position: "absolute", top: "75%", left: "76%", transform: "translate(-50%, -50%)" }}>
+      {IrTile()}
+    </div>
+  ) : null}
 </div>
+
+        {irPlayerFit && !irNotice ? (
+          <div style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: "#FACC15", textAlign: "center" }}>
+            {nameOf(irPlayer)} is fit again - activate him before making adds, claims or trades
+          </div>
+        ) : null}
+        {irNotice ? (
+          <div
+            style={{
+              marginTop: 8,
+              padding: "6px 10px",
+              borderRadius: 10,
+              fontSize: 11,
+              fontWeight: 700,
+              textAlign: "center",
+              background: irNotice.kind === "error" ? "rgba(220,38,38,0.9)" : "rgba(15,23,42,0.55)",
+              color: "white",
+            }}
+          >
+            {irNotice.text}
+            {irDropMode ? (
+              <button
+                onClick={() => { setIrDropMode(false); setIrNotice(null); }}
+                style={{ marginLeft: 8, border: "1px solid rgba(255,255,255,0.8)", background: "transparent", color: "white", borderRadius: 8, fontSize: 11, fontWeight: 800, padding: "1px 8px", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {irBusy ? <div style={{ marginTop: 6, fontSize: 11, opacity: 0.8, textAlign: "center" }}>Updating…</div> : null}
 
       </div>
     );
@@ -1492,6 +1685,19 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     const isStarter = !!slot?.starter;
 
     const actions: Array<{ label: string; onClick: () => void; variant: "primary" | "secondary" }> = [];
+
+    // The IR player: only activating (he isn't in the lineup)
+    if (irPlayer && modalPlayer.id === irPlayer.id) {
+      actions.push({
+        label: "Activate",
+        onClick: () => {
+          setModalPlayer(null);
+          startActivate();
+        },
+        variant: "primary",
+      });
+      return actions;
+    }
 
     // Swap always available if player exists in lineup
     actions.push({
@@ -1533,9 +1739,26 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
       variant: "primary",
     });
 
+    // Injured (or out) players can go in IR, or swap with the IR player
+    if (slotId && canGoInIr(modalPlayer.id)) {
+      const p = lineup[slotId];
+      if (p) {
+        actions.push({
+          label: irPlayer ? "Swap with IR" : "Move to IR",
+          onClick: () => {
+            setModalPlayer(null);
+            if (irPlayer) swapWithIr(p);
+            else moveToIr(p);
+          },
+          variant: "secondary",
+        });
+      }
+    }
+
     // If not starter, disable intent by no-op; you can later add UI disable inside PlayerCardModal if desired.
     return actions;
-  }, [modalPlayer, slotOfPlayer, swapFromSlot, captainId, viceId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalPlayer, slotOfPlayer, swapFromSlot, captainId, viceId, irPlayer, lineup, rosterPool.length, isDirty, irBusy]);
 
   return (
     <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>

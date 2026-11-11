@@ -4,6 +4,7 @@ import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { buildAndValidateNextIds } from "@/lib/transactions/rosterValidate";
 import { cancelPendingTradesTouchingPlayers, cancelInvalidPendingTradesForTeams } from "@/lib/trades/cancelPendingTrades";
 import { loadRosterPlayers, rosterProblem, updateLineupsAfterRosterChange } from "@/lib/league/rosterChange";
+import { healthyIrBlock, irIdsOf } from "@/lib/league/ir";
 
 function extractIds(data: any): string[] {
   const ids: string[] = [];
@@ -151,6 +152,7 @@ export async function POST(req: Request) {
     const owned = new Set<string>();
     for (const row of rosterRows ?? []) {
       for (const pid of extractIds((row as any).data ?? {})) owned.add(pid);
+      for (const pid of irIdsOf((row as any).data)) owned.add(pid); // IR players are still owned
     }
 
     if (owned.has(addPlayerId)) {
@@ -168,7 +170,17 @@ export async function POST(req: Request) {
     if (myErr) throw myErr;
 
     const roster = structuredClone((myRow as any)?.data ?? { playerIds: [] });
-    const currentIds = extractIds(roster);
+    const myIr = irIdsOf(roster);
+    const currentIds = extractIds(roster).filter((id) => !myIr.includes(id));
+
+    const { data: lg, error: lgErr } = await supabaseAdmin.from("leagues").select("season").eq("id", leagueId).maybeSingle();
+    if (lgErr) throw lgErr;
+
+    // An IR player who is fit again has to be activated before any adds.
+    const irBlock = await healthyIrBlock(supabaseAdmin, Number(lg?.season), roster, { nowMs: now });
+    if (irBlock) {
+      return recordFailed("IR_PLAYER_FIT", { validationError: irBlock });
+    }
 
     // Server-authoritative roster validation + building
     const built = buildAndValidateNextIds({
@@ -182,17 +194,15 @@ export async function POST(req: Request) {
     }
 
     // Position rules (so the team can always field a full XV), checked with the players table.
-    const { data: lg, error: lgErr } = await supabaseAdmin.from("leagues").select("season").eq("id", leagueId).maybeSingle();
-    if (lgErr) throw lgErr;
-    const rosterPlayers = await loadRosterPlayers(supabaseAdmin, Number(lg?.season), built.nextIds);
-    const problem = rosterProblem(built.nextIds, rosterPlayers);
+    const rosterPlayers = await loadRosterPlayers(supabaseAdmin, Number(lg?.season), [...built.nextIds, ...currentIds]);
+    const problem = rosterProblem(built.nextIds, rosterPlayers, currentIds);
     if (problem) {
       return recordFailed("ROSTER_VALIDATION_FAILED", { validationError: problem });
     }
 
     // IMPORTANT: rosters DB should be authoritative by playerIds only.
 // Do NOT persist slots/wildcards here (they go stale and never remove players).
-const nextRoster = { playerIds: built.nextIds };
+const nextRoster = { playerIds: built.nextIds, irIds: myIr };
 
     
 

@@ -5,7 +5,7 @@
 //    (lib/league/lineup.ts), with the captain / vice-captain rules applied.
 // Locked weeks are never changed.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { rosterFits, ROSTER_SIZE } from "@/lib/draft/rules";
+import { rosterFits, ROSTER_SIZE, startingGaps } from "@/lib/draft/rules";
 import { fixCaptains, updateLineup } from "@/lib/league/lineup";
 import { selectionDeadlineMs } from "@/lib/league/deadlines";
 import { getSeason, SEASONS, totalFantasyWeeks } from "@/lib/season";
@@ -42,13 +42,25 @@ export async function loadRosterPlayers(db: Db, season: number, ids: string[]): 
   return out;
 }
 
-/** Why this roster breaks the rules, or null if it's fine. */
-export function rosterProblem(ids: string[], players: Map<string, RosterPlayer>): string | null {
-  if (ids.length > ROSTER_SIZE) return `A team can have at most ${ROSTER_SIZE} players`;
+export const POSITION_RULES_ERROR =
+  "This would break the position rules (your team needs 2 PR, 1 HO, 2 LK, 3 LF, 1 HB, 1 FH, 2 CE and 3 OB)";
+
+/**
+ * Why this roster (not counting IR) breaks the rules, or null if it's fine.
+ * prevIds: the roster before the change. A team below 20 (a player in IR) may already be short
+ * of a position; a change is fine as long as it doesn't leave more starting spots unfillable
+ * than before. A full team of 20 must always be able to field a full XV.
+ */
+export function rosterProblem(ids: string[], players: Map<string, RosterPlayer>, prevIds?: string[]): string | null {
+  if (ids.length > ROSTER_SIZE) return `A team can have at most ${ROSTER_SIZE} players (not counting IR)`;
   const missing = ids.filter((id) => !players.has(id));
   if (missing.length) return `Unknown player: ${missing[0]}`;
-  if (!rosterFits(ids.map((id) => players.get(id)!))) {
-    return "This would break the position rules (your team needs 2 PR, 1 HO, 2 LK, 3 LF, 1 HB, 1 FH, 2 CE and 3 OB)";
+  const next = ids.map((id) => players.get(id)!);
+  if (!rosterFits(next)) return POSITION_RULES_ERROR;
+  const gaps = startingGaps(next);
+  if (gaps > 0) {
+    const before = prevIds ? startingGaps(prevIds.map((id) => players.get(id)).filter((p): p is RosterPlayer => !!p)) : 0;
+    if (gaps > before) return POSITION_RULES_ERROR;
   }
   return null;
 }

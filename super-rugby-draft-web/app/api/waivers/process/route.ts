@@ -6,6 +6,7 @@ import { currentSeasonYear } from "@/lib/season";
 
 import { cancelPendingTradesTouchingPlayers, cancelInvalidPendingTradesForTeams } from "@/lib/trades/cancelPendingTrades";
 import { loadRosterPlayers, rosterProblem, updateLineupsAfterRosterChange } from "@/lib/league/rosterChange";
+import { healthyIrBlock, irIdsOf } from "@/lib/league/ir";
 
 function extractIds(data: any): string[] {
   if (Array.isArray(data?.playerIds)) return data.playerIds.map(String);
@@ -141,6 +142,7 @@ if (String(runRow.status).toUpperCase() === "RUNNING" && runRow.started_at_ms !=
       const data = (row as any).data ?? {};
       rosterByTeam.set(teamId, data);
       for (const pid of extractIds(data)) owned.add(pid);
+      for (const pid of irIdsOf(data)) owned.add(pid); // IR players are still owned
     }
 
     // current locks
@@ -160,6 +162,15 @@ if (String(runRow.status).toUpperCase() === "RUNNING" && runRow.started_at_ms !=
       ...owned,
       ...(claims ?? []).map((c: any) => String(c.add_player_id)),
     ]);
+
+    // Teams whose IR player is fit again can't claim until he's activated.
+    const irBlockByTeam = new Map<string, string | null>();
+    for (const teamId of new Set((claims ?? []).map((c: any) => String(c.team_id)))) {
+      irBlockByTeam.set(
+        teamId,
+        await healthyIrBlock(supabaseAdmin, Number(lgRow?.season), rosterByTeam.get(teamId) ?? {}, { nowMs: processedAtMs })
+      );
+    }
 
     // group pending claims per team by (priority asc, created asc)
 const pendingByTeam = new Map<string, any[]>();
@@ -238,6 +249,22 @@ while (madeProgress) {
         continue;
       }
 
+      const irBlock = irBlockByTeam.get(teamId);
+      if (irBlock) {
+        const { error: claimFailErr } = await supabaseAdmin
+          .from("waiver_claims")
+          .update({
+            status: "FAILED",
+            decided_reason: irBlock.slice(0, 200),
+            decided_at_ms: processedAtMs,
+            processed_at_ms: processedAtMs,
+            updated_at_ms: processedAtMs,
+          })
+          .eq("id", id);
+        if (claimFailErr) throw claimFailErr;
+        continue;
+      }
+
       // IMPORTANT: validate against the team's CURRENT live roster state
       const currentRoster = rosterByTeam.get(teamId) ?? { playerIds: [] };
       const currentIds = new Set(
@@ -268,19 +295,22 @@ const roster = structuredClone(rosterByTeam.get(teamId) ?? { playerIds: [] });
 
 // Only use playerIds array as the source of truth here.
 // If old data might not have playerIds, fall back to extractIds.
-const baseIds = Array.isArray((roster as any)?.playerIds)
+const teamIr = irIdsOf(roster);
+const baseIds: string[] = (Array.isArray((roster as any)?.playerIds)
   ? (roster as any).playerIds.map((x: any) => String(x)).filter(Boolean)
-  : extractIds(roster);
+  : extractIds(roster)
+).filter((x: string) => !teamIr.includes(x));
 
 const ids = new Set(baseIds);
 
 if (dropId) ids.delete(dropId);
 ids.add(addId);
 
-const nextRoster = { playerIds: Array.from(ids) as string[] };
+const nextRoster = { playerIds: Array.from(ids) as string[], irIds: teamIr };
 
-      // Position rules (so the team can always field a full XV)
-      const problem = rosterProblem(nextRoster.playerIds, rosterPlayers);
+      // Size and position rules (so the team can always field a full XV; no drop needed if
+      // the team has a free place because a player is in IR)
+      const problem = rosterProblem(nextRoster.playerIds, rosterPlayers, baseIds);
       if (problem) {
         const { error: claimFailErr } = await supabaseAdmin
           .from("waiver_claims")

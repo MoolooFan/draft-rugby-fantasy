@@ -53,30 +53,30 @@ export function buildAndValidateNextIds(input: {
   const addId = String(input.addPlayerId);
   const dropId = input.dropPlayerId ? String(input.dropPlayerId) : null;
 
-  if (!addId) return { ok: false as const, error: "Missing addPlayerId" };
-  if (!dropId) return { ok: false as const, error: "Drop player required." };
-  if (dropId === addId) return { ok: false as const, error: "Cannot drop the same player you are adding." };
-
-  // normalize
+  // normalize (currentIds = the team without its IR player)
   const cur = input.currentIds.map(String).filter(Boolean);
   const curSet = new Set(cur);
+
+  if (!addId) return { ok: false as const, error: "Missing addPlayerId" };
+  // A drop is needed unless the team has a free place (e.g. a player is in IR).
+  if (!dropId && curSet.size >= SQUAD_SIZE) return { ok: false as const, error: "Drop player required." };
+  if (dropId === addId) return { ok: false as const, error: "Cannot drop the same player you are adding." };
 
   if (curSet.has(addId)) {
     return { ok: false as const, error: "Add player is already on your roster." };
   }
 
-  // drop must exist in roster (this is the only guard we keep)
-  if (!curSet.has(dropId)) {
+  if (dropId && !curSet.has(dropId)) {
     return { ok: false as const, error: "Drop player is not on your roster." };
   }
 
   // Apply drop + add
   const nextSet = new Set(cur);
-  nextSet.delete(dropId);
+  if (dropId) nextSet.delete(dropId);
   nextSet.add(addId);
 
   const nextIds = Array.from(nextSet);
 
-  // NO roster-size or position validation for now
+  // Size and position rules are checked by the routes (lib/league/rosterChange.ts rosterProblem).
   return { ok: true as const, nextIds };
 }

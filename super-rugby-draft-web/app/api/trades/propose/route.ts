@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { isPastWeekDeadline, cancelExpiredPendingTrades } from "@/lib/trades/deadlines";
+import { healthyIrBlock, irIdsOf } from "@/lib/league/ir";
 
 // Team selection deadline = 1 hour before first kickoff
 
@@ -100,6 +101,26 @@ export async function POST(req: Request) {
       if (lockedSet.has(pid)) {
         return NextResponse.json({ ok: false, error: "Player is locked" }, { status: 400 });
       }
+    }
+
+    // IR players can't be traded, and a team whose IR player is fit again can't propose trades
+    // until he's activated.
+    const { data: rosterRows, error: rosterErr } = await supabaseAdmin
+      .from("rosters")
+      .select("team_id, data")
+      .eq("league_id", leagueId)
+      .in("team_id", [fromTeamId, toTeamId]);
+    if (rosterErr) throw rosterErr;
+    const irIds = new Set((rosterRows ?? []).flatMap((r: any) => irIdsOf(r.data)));
+    if ([...offerIds, ...requestIds].some((pid) => irIds.has(pid))) {
+      return NextResponse.json({ ok: false, error: "Players in IR can't be traded" }, { status: 400 });
+    }
+    const { data: lg, error: lgErr } = await supabaseAdmin.from("leagues").select("season").eq("id", leagueId).maybeSingle();
+    if (lgErr) throw lgErr;
+    const myRoster = (rosterRows ?? []).find((r: any) => String(r.team_id) === fromTeamId);
+    const irBlock = await healthyIrBlock(supabaseAdmin, Number(lg?.season), myRoster?.data ?? {}, { nowMs: now });
+    if (irBlock) {
+      return NextResponse.json({ ok: false, error: irBlock }, { status: 400 });
     }
 
     const { data, error } = await supabaseAdmin

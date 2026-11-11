@@ -14,6 +14,7 @@ import { statCountsFromRaw, isFrontRow, roundPoints, STATS, type StatCounts } fr
 import { getLeagueScoringRules } from "@/lib/scoring/leagueRules";
 import { scoreTeamWeek, type Lineup, type LineupPlayer } from "@/lib/scoring/week";
 import { fixCaptains, reconcileLineup } from "@/lib/league/lineup";
+import { activeIdsOf } from "@/lib/league/ir";
 import { bonusPoints, buildLadder, type LadderMatchup } from "@/lib/league/ladder";
 import {
   buildLeagueSchedule,
@@ -169,7 +170,7 @@ export async function lockWeek(db: Db, leagueId: string, week: number, nowMs: nu
   const { data: lg } = await db.from("leagues").select("season").eq("id", leagueId).single();
   await loadPlayers(db, Number(lg?.season));
   const teams = await q<Array<{ id: string }>>(db.from("teams").select("id").eq("league_id", leagueId));
-  const rosters = await q<Array<{ team_id: string; data: { playerIds?: string[] } }>>(
+  const rosters = await q<Array<{ team_id: string; data: { playerIds?: string[]; irIds?: string[] } }>>(
     db.from("rosters").select("team_id, data").eq("league_id", leagueId)
   );
   const selections = await q<Array<{ team_id: string; week: number; lineup: Lineup; captain_id: string | null; vice_id: string | null; locked_at: string | null }>>(
@@ -184,7 +185,7 @@ export async function lockWeek(db: Db, leagueId: string, week: number, nowMs: nu
     const existing = selections.find((s) => s.team_id === t.id && s.week === week);
     if (existing?.locked_at) continue;
     const latest = existing ?? selections.filter((s) => s.team_id === t.id).sort((a, b) => b.week - a.week)[0] ?? null;
-    const rosterIds = rosters.find((r) => r.team_id === t.id)?.data?.playerIds ?? [];
+    const rosterIds = activeIdsOf(rosters.find((r) => r.team_id === t.id)?.data); // IR players never play
     const roster = rosterIds.map(playerInfo).sort((a, b) => pickRank(a.id) - pickRank(b.id));
     const lineup = reconcileLineup(latest?.lineup ?? null, roster);
     const caps = fixCaptains(lineup, latest?.captain_id, latest?.vice_id, pickRank);

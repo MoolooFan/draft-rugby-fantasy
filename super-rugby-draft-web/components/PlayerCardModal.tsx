@@ -585,7 +585,7 @@ const statusStyle = !statusK
   : statusK === "starting"
   ? { bg: "#bbf7d0", text: "#111827", chipBg: STATUS_TAG.starting.bg, chipFg: STATUS_TAG.starting.fg, label: "Starting" }
   : statusK === "bench"
-  ? { bg: "#FFE65B", text: "#111827", chipBg: "#3b2f00", chipFg: "#FFE65B", label: "On the bench" }
+  ? { bg: "#FFE65B", text: "#111827", chipBg: "#3b2f00", chipFg: "#FFE65B", label: "Sub" }
   : {
       bg: "#C0020D",
       text: "#ffffff",
@@ -950,7 +950,7 @@ const teamLabelFull =
     gap: 10,
   }}
 >
-    {(!hideActions ? actions : []).slice(0, 3).map((a) => (
+    {(!hideActions ? actions : []).map((a) => ( /* more than 3 wrap onto a second row */
 
     <button
       key={a.label}
