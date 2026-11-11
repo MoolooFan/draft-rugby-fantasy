@@ -59,7 +59,6 @@ export default function TeamDetailsPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [loggingOut, setLoggingOut] = useState(false);
 
   // route protection
   useEffect(() => {
@@ -103,18 +102,6 @@ export default function TeamDetailsPage() {
     fontWeight: 900,
     border: "2px solid rgba(255,255,255,0.85)",
     boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)",
-    cursor: "pointer",
-  };
-
-  const dangerButton: React.CSSProperties = {
-    height: 38,
-    width: "100%",
-    borderRadius: 999,
-    background: "#EF4444",
-    color: "white",
-    fontSize: 13,
-    fontWeight: 900,
-    border: "2px solid rgba(255,255,255,0.85)",
     cursor: "pointer",
   };
 
@@ -168,24 +155,6 @@ export default function TeamDetailsPage() {
     } finally {
       setSaving(false);
     }
-  }
-
-  async function handleLogout() {
-    setMsg(null);
-    setErr(null);
-    setLoggingOut(true);
-
-    try {
-      await fetch("/api/session/logout", { method: "POST" });
-    } catch {}
-
-    try {
-      localStorage.removeItem("sr-user-profile-v1");
-      localStorage.removeItem("sr-leagues-v3");
-    } catch {}
-
-    // Full page load so the whole app forgets the signed-in player.
-    window.location.assign("/");
   }
 
   return (
@@ -273,17 +242,6 @@ export default function TeamDetailsPage() {
               style={{ ...primaryButton, marginTop: 10, opacity: saving ? 0.7 : 1 }}
             >
               {saving ? "Saving…" : "Save Team Name"}
-            </button>
-          </div>
-
-          <div style={cardStyle}>
-            <div style={{ fontWeight: 900, fontSize: 12, marginBottom: 8 }}>Session</div>
-            <button
-              onClick={handleLogout}
-              disabled={loggingOut}
-              style={{ ...dangerButton, opacity: loggingOut ? 0.7 : 1 }}
-            >
-              {loggingOut ? "Logging out…" : "Log out"}
             </button>
           </div>
         </div>

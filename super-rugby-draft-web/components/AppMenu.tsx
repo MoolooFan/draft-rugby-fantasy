@@ -15,6 +15,8 @@ type ActiveMenu =
   | "Draft Room"
   | "Fixtures"
   | "Team Details"
+  | "Player Pool"
+  | "Account"
   | "Admin";
 
 export function AppMenu({
@@ -48,19 +50,18 @@ export function AppMenu({
     if (item === "Team Selection") router.push("/team-selection");
     if (item === "Fixtures") router.push("/fixtures");
     if (item === "Team Details") router.push("/team-details");
+    if (item === "Player Pool") router.push("/player-pool");
+    if (item === "Account") router.push("/account");
     if (item === "Admin") router.push("/admin");
 
   }
 
+  // No league joined yet: only the pages that work without one (plan item E2).
+  const hasLeague = (leagues ?? []).length > 0;
   const items: ActiveMenu[] = [
-    "Dashboard",
-    "Matchup",
-    "Team Selection",
-    "Transactions",
-    "League",
-    "Draft Room",
-    "Fixtures",
-    "Team Details",
+    ...((hasLeague
+      ? ["Dashboard", "Matchup", "Team Selection", "Transactions", "League", "Draft Room", "Fixtures", "Team Details", "Account"]
+      : ["Dashboard", "League", "Fixtures", "Player Pool", "Account"]) as ActiveMenu[]),
     // only for the site admin (the server checks again on the admin page)
     ...(getActiveUserProfile()?.isSiteAdmin ? (["Admin"] as ActiveMenu[]) : []),
   ];
@@ -143,7 +144,8 @@ export function AppMenu({
 
         <div style={{ flex: 1 }} />
 
-        {/* Swap League */}
+        {/* Swap League (also on the Account page) */}
+        {hasLeague ? (
         <div>
           <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 8, opacity: 0.95 }}>
             Swap League
@@ -173,6 +175,7 @@ export function AppMenu({
             </select>
           </div>
         </div>
+        ) : null}
       </aside>
     </div>
   );
