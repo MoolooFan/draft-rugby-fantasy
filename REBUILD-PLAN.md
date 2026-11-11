@@ -71,7 +71,7 @@ Agreed answers are recorded here so nothing is lost between sessions. Status: �
 | A5 | Points breakdown shows how many of each stat | ✅ | Rows: stat, count, points (e.g. Tries 2 14.0). Done 10 Nov (e.g. Metres 39 m · 3; Minutes 80 min · 2). |
 | A6 | Better trade button symbol | ✅ | Replace the double-arrow symbol. Done 10 Nov (drawn two-arrow swap icon). |
 | A7 | 2026 stats until the 2027 season starts | ✅ | Player cards and player pools show 2026 stats until the first 2027 kickoff (copy 2026 stats into the new database). Done 10 Nov: 2026 stats copied to the new database; player cards (with a "2026 season stats" note; the Fixtures tab shows the 2027 draw), transactions and trade pools, and the dashboard's form use 2026 until the first 2027 kickoff. Matchups and lineups always use the current season. |
-| A8 | Log out button moves to Team Details | 🔶 | Added 10 Nov. Removed from the dashboard (Team Details already had one, and the menu always shows Team Details, even with no league). Browser check pending. |
+| A8 | Log out button moves to Team Details | 🔶 | (Superseded by E1: Log out is now on the Account page.) Added 10 Nov. Removed from the dashboard (Team Details already had one, and the menu always shows Team Details, even with no league). Browser check pending. |
 | A9 | League page with no league: menu button missing | 🔶 | Added 10 Nov. ☰ added to the "No active league" screen; still to check every other page with no league. |
 
 **Phase 2: rules and reliability**
@@ -88,8 +88,8 @@ Agreed answers are recorded here so nothing is lost between sessions. Status: �
 |---|---|---|---|
 | C1 | Per game / total / per 80 toggle | ⬜ | Affects points and every stat. Everywhere people look at a player's season stats (player card, player pools incl. draft room, trade screens). Default: per game. Per 80 shows "–" until the player has 20+ minutes in the season. The dashboard's top players keep showing form only. |
 | C2 | Filters pop-up | ⬜ | One Filters button opening a pop-up: Players (Available / All / a team), Team, Position, Status, Sort by, Clear. Several options per filter allowed (e.g. 3 teams). Same pop-up in the draft room. Status options: All / Available to play / Starting / Bench / Injured / Suspended. |
-| C3 | Player card: Transactions tab | ⬜ | Newest first, this league only: drafted (round and pick), added (free agent, with who was dropped), dropped (e.g. to make room for an IR player), claimed on waivers, traded (from to). No IR moves. |
-| C4 | Player card: AI coach tab | ⬜ | Placeholder tab for now; the coach itself is designed later with Ethan (season outlook, after-game and team-sheet notes, like ESPN player news). |
+| C3 | Player card: Transactions tab | 🔶 | Newest first, this league only: drafted (round and pick), added (free agent, with who was dropped), dropped (e.g. to make room for an IR player), claimed on waivers, traded (from to). No IR moves. Built 11 Nov (shown when you're in a league; lib/league/playerHistory.ts, 7 checks). **Browser / database check pending.** |
+| C4 | Player card: AI coach tab | 🔶 | Placeholder tab for now; the coach itself is designed later with Ethan (season outlook, after-game and team-sheet notes, like ESPN player news). Placeholder "AI Coach" tab added 11 Nov. |
 | C5 | Trade review pop-up | ⬜ | Received offers show "Review" (not accept/decline). Pop-up: players you get and give, one stat at a time (changeable) + the per game / per 80 / total toggle; Accept and Decline inside. |
 
 **Phase 4: big features**

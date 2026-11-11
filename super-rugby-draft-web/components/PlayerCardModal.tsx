@@ -10,6 +10,8 @@ import { currentSeasonYear, statsSeasonYear, roundLabel } from "@/lib/season";
 import { cachedJson } from "@/lib/cachedJson";
 import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
 import { FixtureRow, normalizeTeamCodeLocal, TabCard } from "./playerCard/helpers";
+import { HistoryTab, CoachTab } from "./playerCard/HistoryTab";
+import { useLeagueStore } from "@/lib/league/store";
 import { ResultsTab, StatsTab, FixturesTab } from "./playerCard/tabs";
 import { positionsLabel } from "@/lib/players/positions";
 import { formatStatCount } from "@/lib/scoring";
@@ -18,7 +20,7 @@ import { StatusTag } from "@/components/StatusTag";
 
 export type PlayerStatus = "starting" | "benched" | "out" | null;
 
-export type PlayerCardTab = "Results" | "Stats" | "Fixtures";
+export type PlayerCardTab = "Results" | "Stats" | "Fixtures" | "Transactions" | "AI Coach";
 
 export type PlayerCardPlayer = {
   id: string;
@@ -450,9 +452,11 @@ const [upcomingLastCompleted, setUpcomingLastCompleted] = useState<number>(0);
 const [openBreakdown, setOpenBreakdown] = useState(false);
 const [selectedRound, setSelectedRound] = useState<PlayerRound | null>(null);
 
+  // Transactions (C3) are this league's, so only shown when you're in a league; AI Coach (C4) is a placeholder
+  const leagueId = useLeagueStore((s) => s.activeLeagueId);
   const tabs: PlayerCardTab[] = useMemo(
-  () => ["Results", "Stats", "Fixtures"],
-  []
+  () => (leagueId ? ["Results", "Stats", "Fixtures", "Transactions", "AI Coach"] : ["Results", "Stats", "Fixtures", "AI Coach"]),
+  [leagueId]
 );
 
   const [tab, setTab] = useState<PlayerCardTab>(initialTab);
@@ -853,10 +857,9 @@ const teamLabelFull =
             <div
               style={{
                 padding: 10,
-                display: "grid",
-                gridTemplateColumns: `repeat(${tabs.length}, 1fr)`,
-
-                gap: 8,
+                display: "flex",
+                gap: 6,
+                overflowX: "auto",
                 borderBottom: "1px solid rgba(0,0,0,0.10)",
               }}
             >
@@ -867,7 +870,8 @@ const teamLabelFull =
                     key={t}
                     onClick={() => setTab(t)}
                     style={{
-                      width: "100%",
+                      flex: "1 0 auto",
+                      padding: "0 8px",
                       height: 28,
                       borderRadius: 10,
                       background: active ? "rgba(15, 35, 83, 0.1)" : "rgba(0,0,0,0.05)",
@@ -876,7 +880,8 @@ const teamLabelFull =
                         : "1px solid rgba(0,0,0,0.12)",
                       color: "#0f172a",
                       fontWeight: 700,
-                      fontSize: 12,
+                      fontSize: tabs.length > 4 ? 11 : 12,
+                      whiteSpace: "nowrap",
                       cursor: "pointer",
                     }}
                   >
@@ -932,6 +937,12 @@ const teamLabelFull =
   seasonWeeks={upcomingWeeks}
   lastCompletedWeek={upcomingLastCompleted}
 />
+
+) : tab === "Transactions" && leagueId ? (
+  <HistoryTab leagueId={leagueId} playerId={p.id} />
+
+) : tab === "AI Coach" ? (
+  <CoachTab />
 
 ) : null
 
