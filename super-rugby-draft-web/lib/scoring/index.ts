@@ -291,11 +291,9 @@ export function pointsBreakdown(
   });
 }
 
-/** How many of a stat, for points breakdowns: "85 m" for metres, "80 min" for minutes, else the number. */
+/** How many of a stat, for points breakdowns: just the number (no "min" / "m" - Ethan, Nov 2026). */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function formatStatCount(key: string, count: number): string {
   const n = Number(count) || 0;
-  const v = Number.isInteger(n) ? String(n) : n.toFixed(1);
-  if (key === "metresGained") return `${v} m`;
-  if (key === "minutesPlayed") return `${v} min`;
-  return v;
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }

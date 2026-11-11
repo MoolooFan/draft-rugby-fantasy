@@ -99,6 +99,19 @@ Agreed answers are recorded here so nothing is lost between sessions. Status: �
 | D2 | Live match scores | ⬜ | Wherever real match scores are shown, they update live during games (from the official site, like the player stats). |
 | D3 | AI assistant coach | ⬜ | Later: Ethan will break down what it should use and we'll design it together. |
 
+### Phase 5 - Ethan's second list (11 Nov 2026)
+
+| # | Change | Status | Agreed details |
+|---|---|---|---|
+| E1 | Account page | ⬜ | Change password (type current + new; "forgot password" email still on the login page), notification settings (the D1 types, each on/off - saved now, used once D1 is built), log out, switch teams (pick which league/team you're looking at; the picker also stays in the menu). Log out moves here from Team Details. |
+| E2 | Fewer pages with no league | ⬜ | No league joined: menu shows only Dashboard, League, Fixtures, Player Pool, Account. Player Pool = browse and filter the players only (no add / claim); only shown to people with no league (in a league, Transactions has the pool). |
+| E3 | FDR key | ⬜ | Under the ratings on the Fixtures > FDR tab: one line of 1-5 in their colour boxes. |
+| E4 | Score breakdown numbers | ⬜ | No "min" / "m" after the numbers in the score breakdown pop-up. |
+| E5 | Team pictures | ⬜ | Upload your own photo (cropped to a circle), like ESPN. Shown in a circle wherever team badges appear. |
+| E6 | Weekly crown and spoon | ⬜ | Each finalised round, the league's highest team score gets a crown and the lowest a spoon ("weekly spoon" in text, so it isn't mixed up with the season wooden spoon). Shown as a tally on the League ladder and in the weekly recap. Ties: both teams get it. Designs to pick: https://claude.ai/artifact/MVP7qHQHK77B91HbwW8YeN |
+| E7 | Weekly recap | ⬜ | Pops up the first time you open the site after a round is finalised (once per league): your matchup result, best player, biggest dud (lowest-scoring starter; players who didn't play and were subbed are skipped), crown and spoon, ladder change, next opponent. |
+| E8 | Championship stars and restarting a league | ⬜ | A small star on the top edge of the (circular) team picture for every championship that person has won in that league. At a new season the commissioner can restart the league (same name and history, new season); everyone rejoins with the invite code, and someone who played before in that league (matched to their account - can skip a season) gets their old team name and picture back. Ethan links the 2025 / 2026 honours (stored by first name) to people's accounts on the admin page when they sign up, and links the first 2027 league to the existing league history ("Epstein Try League", 2025-26). |
+
 Everything new matches the current look (a site-wide formatting refresh comes later).
 
 ## Done so far

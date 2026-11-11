@@ -689,6 +689,29 @@ const WeekList = useStableComponent(WeekList__render);
             ))}
           </div>
         </div>
+
+        {/* Key: 1 (easiest) to 5 (hardest) in their colours */}
+        <div style={{ marginTop: 10, display: "flex", justifyContent: "center", gap: 6 }} aria-label="FDR key: 1 easiest to 5 hardest">
+          {[1, 2, 3, 4, 5].map((r) => (
+            <div
+              key={r}
+              style={{
+                width: 30,
+                height: 22,
+                borderRadius: 6,
+                display: "grid",
+                placeItems: "center",
+                fontSize: 11,
+                fontWeight: 800,
+                background: fdrBg(r),
+                color: fdrText(r),
+                boxShadow: "0 6px 12px rgba(0,0,0,0.10)",
+              }}
+            >
+              {r}
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
