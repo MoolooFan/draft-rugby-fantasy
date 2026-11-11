@@ -4,7 +4,7 @@ import { getServerUsername } from "@/lib/serverSession";
 import { refreshDraftOrder } from "@/lib/draft/engine";
 import { rulesForLeagueRow } from "@/lib/scoring/leagueRules";
 import { championshipStars } from "@/lib/league/honours";
-import { currentSeasonYear } from "@/lib/season";
+import { currentSeasonYear, restartWindow } from "@/lib/season";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -152,8 +152,9 @@ if (computedOrder.length) {
     scoringLocked: !!leagueRow.scoring_rules_locked,
     bonusPoints: leagueRow.bonus_points !== false,
     season: leagueRow.season,
-    // E8: a league from an earlier season can be restarted for this season by its commissioner
-    canRestart: Number(leagueRow.season) < currentSeasonYear() && !(await hasSuccessor(leagueRow)),
+    // E8: a league from an earlier season can be restarted for this season by its commissioner,
+    // in the month before the season starts (restartOpensAt: when that month begins)
+    ...(await restartInfo(leagueRow)),
 
     realRegularSeasonRounds: leagueRow.real_regular_season_rounds ?? 16,
     startRound: leagueRow.start_round ?? 1,
@@ -164,6 +165,16 @@ draftOrder: computedOrder,
   };
 
   return NextResponse.json({ ok: true, league });
+
+  async function restartInfo(row: { id: string; season: number; lineage_id?: string | null }) {
+    const season = currentSeasonYear();
+    const win = restartWindow(season);
+    const now = Date.now();
+    if (Number(row.season) >= season || !win || now >= win.closesMs || (await hasSuccessor(row))) {
+      return { canRestart: false, restartOpensAt: null };
+    }
+    return { canRestart: now >= win.opensMs, restartOpensAt: win.opensMs };
+  }
 
   async function hasSuccessor(row: { id: string; lineage_id?: string | null }) {
     const lineage = row.lineage_id ?? row.id;

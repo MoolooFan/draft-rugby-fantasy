@@ -21,6 +21,7 @@ import { toMs, pickValue } from "@/lib/league/weekHelpers";
 import { toDatetimeLocal, ModalOverlay, inputStyle, selectStyle, parseDatetimeLocal, saveButton } from "./ui";
 import { LeagueSettingsModal } from "./LeagueSettingsModal";
 import { TeamAvatar } from "@/components/TeamAvatar";
+import { PictureCropper } from "@/components/PictureCropper";
 import { CrownIcon, SpoonIcon } from "@/components/AwardIcons";
 
 type LeagueTab = "Standings" | "Fixtures" | "Results";
@@ -857,7 +858,13 @@ const MovementCircle = useStableComponent(MovementCircle__render);
           League Code: {leagueCode}
         </div>
 
-        {/* E8: the commissioner starts last season's league again for this season */}
+        {/* E8: the commissioner starts last season's league again for this season (in the month before it starts) */}
+        {isCreator && !league?.canRestart && league?.restartOpensAt ? (
+          <div style={{ marginTop: 12, textAlign: "center", fontSize: 12, fontWeight: 800, opacity: 0.85 }}>
+            You can start the {currentSeasonYear()} season for this league from{" "}
+            {new Date(league.restartOpensAt).toLocaleDateString(undefined, { day: "numeric", month: "long" })}.
+          </div>
+        ) : null}
         {isCreator && league?.canRestart ? (
           <div style={{ ...listBox, marginTop: 12, padding: 12, display: "grid", gap: 8 }}>
             <div style={{ fontSize: 13, fontWeight: 900 }}>New season</div>
@@ -1251,13 +1258,63 @@ if (isLabelRow) {
   }
 const ResultsTab = useStableComponent(ResultsTab__render);
 
+// Joining (E8): step 1 the league code; step 2 your team name and picture for that league
+// (pre-filled with your old ones if you've played in this league before - change them if you like).
 function JoinLeagueModal__render() {
+  const [step, setStep] = useState<"code" | "team">("code");
   const [code, setCode] = useState("");
   const [teamName, setTeamName] = useState("");
+  const [leagueTitle, setLeagueTitle] = useState("");
+  const [rejoining, setRejoining] = useState(false);
+  // the picture: the one from last time, a new one (chosen here), or none
+  const [pic, setPic] = useState<{ kind: "previous"; url: string } | { kind: "new"; blob: Blob; url: string } | { kind: "none" }>({ kind: "none" });
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  async function findLeague() {
+    setError(null);
+    const clean = code.trim().toUpperCase();
+    if (!clean) return setError("Enter a league code.");
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/leagues/preview?code=${encodeURIComponent(clean)}`, { cache: "no-store", credentials: "include" });
+      const j = await res.json().catch(() => null);
+      if (!j?.ok) return setError(j?.error ?? "Couldn't find that league.");
+      setLeagueTitle(j.league?.name ?? "League");
+      setRejoining(!!j.previous);
+      setTeamName(j.previous?.name ?? "");
+      setPic(j.previous?.pictureUrl ? { kind: "previous", url: j.previous.pictureUrl } : { kind: "none" });
+      setStep("team");
+    } catch {
+      setError("Couldn't find that league.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function join() {
+    setError(null);
+    if (teamName.trim().length < 2) return setError("Team name must be at least 2 characters.");
+    setBusy(true);
+    try {
+      const res = await joinLeagueByCode({ code, teamName: teamName.trim(), keepPreviousPicture: pic.kind === "previous" });
+      if (!res.ok) return setError(res.error);
+      if (pic.kind === "new") {
+        const form = new FormData();
+        form.append("leagueId", res.leagueId);
+        form.append("file", pic.blob, "team.jpg");
+        await fetch("/api/teams/picture", { method: "POST", body: form, credentials: "include" }).catch(() => null);
+      }
+      refreshLeague(res.leagueId);
+      setModal(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <ModalOverlay onClose={() => setModal(null)}>
+    <ModalOverlay onClose={() => !busy && setModal(null)}>
       <div
         style={{
           borderRadius: 14,
@@ -1286,45 +1343,95 @@ function JoinLeagueModal__render() {
           ×
         </button>
 
-        <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 12 }}>Join League</div>
-
-        <div style={{ display: "grid", gap: 10 }}>
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            style={inputStyle()}
-            placeholder="League Code"
-          />
-
-          <input
-            value={teamName}
-            onChange={(e) => setTeamName(e.target.value)}
-            style={inputStyle()}
-            placeholder="Team Name"
-          />
-
-          {error && (
-            <div style={{ marginTop: 4, color: "#FCA5A5", fontSize: 12, fontWeight: 800 }}>
-              {error}
+        {step === "code" ? (
+          <>
+            <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 12 }}>Join League</div>
+            <div style={{ display: "grid", gap: 10 }}>
+              <input
+                id="join-code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && findLeague()}
+                style={inputStyle()}
+                placeholder="League Code"
+                autoCapitalize="characters"
+              />
+              {error && <div style={{ marginTop: 4, color: "#FCA5A5", fontSize: 12, fontWeight: 800 }}>{error}</div>}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
+                <button disabled={busy} onClick={findLeague} style={{ ...saveButton(), height: 36, padding: "0 18px", opacity: busy ? 0.7 : 1 }}>
+                  {busy ? "Finding…" : "Next"}
+                </button>
+              </div>
             </div>
-          )}
-
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
-            <button
-              
-                onClick={async () => {
-  const res = await joinLeagueByCode({ code, teamName });
-  if (!res.ok) setError(res.error);
-  else setModal(null);
-
-              }}
-              style={{ ...saveButton(), height: 36, padding: "0 18px" }}
-            >
-              Join
-            </button>
-          </div>
-        </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 2, paddingRight: 24 }}>Join {leagueTitle}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, marginBottom: 12 }}>
+              {rejoining ? "Welcome back! Your team from last time is filled in - change anything you like." : "Choose your team name and picture."}
+            </div>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <TeamAvatar pictureUrl={pic.kind === "none" ? null : pic.url} initials={teamName.trim().slice(0, 2) || "?"} size={56} />
+                <div style={{ display: "grid", gap: 6, flex: 1, minWidth: 0 }}>
+                  <label style={{ ...saveButton(), display: "grid", placeItems: "center", background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.6)" }}>
+                    {pic.kind === "none" ? "Add picture" : "Change picture"}
+                    <input
+                      id="join-picture"
+                      type="file"
+                      accept="image/*"
+                      style={{ display: "none" }}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = "";
+                        if (f) setCropFile(f);
+                      }}
+                    />
+                  </label>
+                  {pic.kind !== "none" ? (
+                    <button
+                      onClick={() => setPic({ kind: "none" })}
+                      style={{ background: "transparent", border: "none", color: "white", fontSize: 11, fontWeight: 800, textDecoration: "underline", cursor: "pointer", justifySelf: "start", padding: 0 }}
+                    >
+                      Remove picture
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              <input
+                id="join-team-name"
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+                style={inputStyle()}
+                placeholder="Team Name"
+              />
+              {error && <div style={{ marginTop: 4, color: "#FCA5A5", fontSize: 12, fontWeight: 800 }}>{error}</div>}
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                <button
+                  disabled={busy}
+                  onClick={() => { setStep("code"); setError(null); }}
+                  style={{ background: "transparent", border: "none", color: "white", fontSize: 12, fontWeight: 800, cursor: "pointer" }}
+                >
+                  ‹ Back
+                </button>
+                <button disabled={busy} onClick={join} style={{ ...saveButton(), height: 36, padding: "0 18px", opacity: busy ? 0.7 : 1 }}>
+                  {busy ? "Joining…" : "Join"}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
+      {cropFile ? (
+        <PictureCropper
+          file={cropFile}
+          onCancel={() => setCropFile(null)}
+          onDone={(blob) => {
+            setPic({ kind: "new", blob, url: URL.createObjectURL(blob) });
+            setCropFile(null);
+          }}
+        />
+      ) : null}
     </ModalOverlay>
   );
 }

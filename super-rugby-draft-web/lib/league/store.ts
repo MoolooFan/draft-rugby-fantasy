@@ -40,7 +40,9 @@ createLeague: (params: {
 joinLeagueByCode: (params: {
   code: string;
   teamName: string;
-}) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** rejoining: keep the team picture from last time (E8) */
+  keepPreviousPicture?: boolean;
+}) => Promise<{ ok: true; leagueId: string } | { ok: false; error: string }>;
 
   setCurrentWeek: (leagueId: string, week: number) => void;
   advanceWeek: (leagueId: string) => void;
@@ -193,7 +195,7 @@ return { ok: true };
   }
 },
 
-      joinLeagueByCode: async ({ code, teamName }) => {
+      joinLeagueByCode: async ({ code, teamName, keepPreviousPicture }) => {
   const userId = getActiveUserId();
   if (!userId) return { ok: false, error: "Not signed in." };
 
@@ -204,7 +206,7 @@ return { ok: true };
     const res = await fetch("/api/leagues/join", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: cleanCode, teamName }),
+      body: JSON.stringify({ code: cleanCode, teamName, keepPreviousPicture: !!keepPreviousPicture }),
     });
 
     const json = await res.json().catch(() => null);
@@ -221,7 +223,7 @@ return { ok: true };
       activeLeagueId: league.id,
     }));
 await syncMyTeamToSupabase(league);
-    return { ok: true };
+    return { ok: true, leagueId: league.id };
   } catch (e) {
     return { ok: false, error: "Failed to join league." };
   }

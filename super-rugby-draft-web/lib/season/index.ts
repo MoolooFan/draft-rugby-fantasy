@@ -159,6 +159,16 @@ export function seasonFirstKickoffMs(seasonYear: number): number | null {
 }
 
 /**
+ * When a commissioner can restart last season's league for this season (E8, Ethan Nov 2026):
+ * from about a month before the season's first kickoff until it starts.
+ */
+export const RESTART_OPENS_BEFORE_SEASON_MS = 30 * 24 * HOUR;
+export function restartWindow(seasonYear: number): { opensMs: number; closesMs: number } | null {
+  const first = seasonFirstKickoffMs(seasonYear);
+  return first == null ? null : { opensMs: first - RESTART_OPENS_BEFORE_SEASON_MS, closesMs: first };
+}
+
+/**
  * Which season's stats people browse (player cards, player pools): last season's until the
  * current season's first kickoff, then the current season's. Matchups and lineups always use
  * the current season.

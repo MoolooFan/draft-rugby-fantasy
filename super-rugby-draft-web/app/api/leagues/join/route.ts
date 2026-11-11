@@ -15,6 +15,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const code = String(body?.code ?? "").trim().toUpperCase();
   const teamName = String(body?.teamName ?? "").trim();
+  const keepPreviousPicture = body?.keepPreviousPicture === true;
 
   if (!code || !teamName) {
     return NextResponse.json({ ok: false, error: "Missing code/teamName" }, { status: 400 });
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
   let team = existing;
 
   // 3) otherwise create team. Someone who played in this league before (any earlier season,
-  //    E8) gets their old team name and picture back.
+  //    E8) has their old name and picture pre-filled on the join pop-up; they can change them.
   if (!team) {
     const teamId = `team_${crypto.randomUUID()}`;
     let prev: { name: string; picture_url: string | null } | null = null;
@@ -61,10 +62,10 @@ export async function POST(req: Request) {
       .insert({
         id: teamId,
         league_id: league.id,
-        name: prev?.name ?? teamName,
+        name: teamName,
         owner_username: username,
         user_id: username,
-        picture_url: prev?.picture_url ?? null,
+        picture_url: keepPreviousPicture ? prev?.picture_url ?? null : null,
       })
       .select("*")
       .single();

@@ -35,6 +35,8 @@ export type League = {
   season?: number;
   /** E8: the commissioner can restart this (earlier-season) league for the current season */
   canRestart?: boolean;
+  /** E8: when restarting opens (a month before the season starts); null if it can't be restarted */
+  restartOpensAt?: number | null;
 
   // season alignment
   realRegularSeasonRounds: number;

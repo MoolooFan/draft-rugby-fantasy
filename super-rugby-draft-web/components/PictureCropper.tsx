@@ -66,7 +66,7 @@ export function PictureCropper({
   return (
     <div
       onClick={() => !busy && onCancel()}
-      style={{ position: "fixed", inset: 0, zIndex: 90, background: "rgba(0,0,0,0.72)", display: "grid", placeItems: "center", padding: 18 }}
+      style={{ position: "fixed", inset: 0, zIndex: 10050, background: "rgba(0,0,0,0.72)", display: "grid", placeItems: "center", padding: 18 }}
     >
       <div
         onClick={(e) => e.stopPropagation()}

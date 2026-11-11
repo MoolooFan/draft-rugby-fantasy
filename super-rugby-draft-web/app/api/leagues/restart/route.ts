@@ -1,4 +1,5 @@
 // POST /api/leagues/restart { leagueId }  (plan item E8)
+// Only in the month before the new season starts (restartWindow in lib/season).
 // The commissioner starts last season's league again for this season: a new league with the
 // same name, settings and history (lineage), a new join code and a new draft. Only the
 // commissioner joins automatically (with their old team name and picture); everyone else
@@ -7,7 +8,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
-import { currentSeasonYear, getSeason, totalFantasyWeeks } from "@/lib/season";
+import { currentSeasonYear, getSeason, restartWindow, totalFantasyWeeks } from "@/lib/season";
 import { getDraftState } from "@/lib/draft/engine";
 import { previousTeam } from "@/lib/league/honours";
 
@@ -39,6 +40,15 @@ export async function POST(req: Request) {
   const season = currentSeasonYear();
   if (Number(old.season) >= season) {
     return NextResponse.json({ ok: false, error: "This league is already this season's" }, { status: 400 });
+  }
+  const win = restartWindow(season);
+  const now = Date.now();
+  if (!win || now < win.opensMs) {
+    const opens = win ? new Date(win.opensMs).toLocaleDateString("en-NZ", { day: "numeric", month: "long" }) : "a month before the season";
+    return NextResponse.json({ ok: false, error: `The new season can be started from ${opens}` }, { status: 400 });
+  }
+  if (now >= win.closesMs) {
+    return NextResponse.json({ ok: false, error: `The ${season} season has already started, so this league can't be restarted for it` }, { status: 400 });
   }
   const lineage = old.lineage_id ?? old.id;
   const { data: already, error: aErr } = await supabaseAdmin
