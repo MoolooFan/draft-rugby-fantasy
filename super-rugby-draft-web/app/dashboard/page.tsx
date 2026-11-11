@@ -142,6 +142,8 @@ function buildRecordsUpToWeek(rows: SheetFixtureRow[], upToWeek: number) {
 
   const playable = rows
     .filter(isSheetPlayableRow)
+    // win / loss records are the regular season only: finals don't change them
+    .filter((r) => String(r.kind ?? "regular").toLowerCase() === "regular")
     .filter((r) => String(r.status ?? "").toLowerCase() === "complete")
     .filter((r) => Number(r.weekFantasy) <= upToWeek)
     .filter((r) => r.homeTeamId && r.awayTeamId && r.homeScore != null && r.awayScore != null);

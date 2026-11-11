@@ -409,6 +409,8 @@ const recordByTeamId = useMemo(() => {
   // Completed matches up to lastCompletedWeek
   const rows = sheetFixtures
     .filter(isCompletedPlayableRow)
+    // win / loss records and streaks are the regular season only: finals don't change them
+    .filter((r) => String(r.kind ?? "regular").toLowerCase() === "regular")
     .filter((r) => Number(r.weekFantasy) <= lastCompletedWeek);
 
   for (const m of rows) {
@@ -434,6 +436,8 @@ const streakByTeamId = useMemo(() => {
   // For streaks, we need each team’s results in chronological order
   const rows = sheetFixtures
     .filter(isCompletedPlayableRow)
+    // win / loss records and streaks are the regular season only: finals don't change them
+    .filter((r) => String(r.kind ?? "regular").toLowerCase() === "regular")
     .filter((r) => Number(r.weekFantasy) <= lastCompletedWeek)
     .slice()
     .sort((a, b) => {

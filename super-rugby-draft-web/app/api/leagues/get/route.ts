@@ -93,6 +93,20 @@ if (
   if (teamErr) {
     return NextResponse.json({ ok: false, error: teamErr.message }, { status: 500 });
   }
+// each owner's name as "Ethan S." (shown under the team name on the ladder)
+const ownerNames = new Map<string, string>();
+{
+  const owners = [...new Set((teamRows ?? []).map((t: any) => String(t.owner_username ?? "")).filter(Boolean))];
+  if (owners.length) {
+    const { data: users } = await supabaseAdmin.from("users").select("username, username_norm, first_name, last_name").in("username_norm", owners);
+    for (const u of users ?? []) {
+      const first = String(u.first_name ?? "").trim();
+      const last = String(u.last_name ?? "").trim();
+      ownerNames.set(u.username_norm, first ? `${first}${last ? ` ${last[0].toUpperCase()}.` : ""}` : u.username);
+    }
+  }
+}
+
 // championship stars (E8): titles each team's owner has won in this league's history
 let stars: Record<string, number> = {};
 try {
@@ -117,6 +131,7 @@ const teamsRaw = (teamRows ?? []).map((t: any) => {
     userInitials: computed,
     pictureUrl: t.picture_url ?? null,
     stars: stars[t.id] ?? 0,
+    ownerName: ownerNames.get(String(t.owner_username ?? "")) ?? null,
   };
 });
 

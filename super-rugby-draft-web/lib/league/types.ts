@@ -9,6 +9,7 @@ export type LeagueTeam = {
   userInitials?: string;  // ✅ owner initials (from first/last or username)
   pictureUrl?: string | null; // team picture (E5), shown in a circle; none = initials
   stars?: number; // championships the owner has won in this league's history (E8)
+  ownerName?: string | null; // the owner, e.g. "Ethan S." (under the team name on the ladder)
 };
 
 export type DraftStatus = "scheduled" | "live" | "complete";

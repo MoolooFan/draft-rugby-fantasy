@@ -832,7 +832,15 @@ const MovementCircle = useStableComponent(MovementCircle__render);
                       const t: any = (league?.teams ?? []).find((x: any) => x.id === r.teamId);
                       return <TeamAvatar pictureUrl={t?.pictureUrl} initials={t?.userInitials ?? t?.initials} size={24} stars={t?.stars} />;
                     })()}
-                    <span style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.teamName}</span>
+                    <span style={{ minWidth: 0, display: "grid" }}>
+                      <span style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.teamName}</span>
+                      {(() => {
+                        const owner = (league?.teams ?? []).find((x: any) => x.id === r.teamId)?.ownerName;
+                        return owner ? (
+                          <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{owner}</span>
+                        ) : null;
+                      })()}
+                    </span>
                     {latestAward?.crown.includes(r.teamId) ? (
                       <CrownIcon size={15} title={`Top score in round ${latestAward.week}`} />
                     ) : null}
