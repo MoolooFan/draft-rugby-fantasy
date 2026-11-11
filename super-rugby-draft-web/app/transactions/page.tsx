@@ -28,7 +28,7 @@ import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { playerRoundRows } from "@/lib/players/roundIndex";
 import { toMs, getWeekDeadlineMs, getWeeksSorted, type SheetFixtureRow, currentWeekFromSheet } from "@/lib/league/weekHelpers";
 import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
-import { Filters } from "./Filters";
+import { PoolFilterBar, matchesPoolFilters, EMPTY_FILTERS, type PoolFilters } from "@/components/PoolFilters";
 import { positionsLabel } from "@/lib/players/positions";
 import { StatusTag } from "@/components/StatusTag";
 import { TeamAvatar } from "@/components/TeamAvatar";
@@ -198,6 +198,39 @@ function extractRosterIdsClient(data: any): string[] {
 
   return ids;
 }
+
+/** Sort options for the player pool (the metric shown on each row). */
+const SORT_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "DRAFT_RANK", label: "Draft Rank" },
+  { value: "MATCH_AVG", label: "Match Average" },
+  { value: "TOTAL_PTS", label: "Points" },
+  { value: "FORM_3", label: "Form" },
+  { value: "LAST_SCORE", label: "Last Fixture" },
+  { value: "GAMES_PLAYED", label: "Games Played" },
+  { value: "TRIES", label: "Tries Scored" },
+  { value: "TRY_ASSISTS", label: "Try Assists" },
+  { value: "LINEBREAKS", label: "Line Breaks" },
+  { value: "LINEBREAK_ASSISTS", label: "Line Break Assists" },
+  { value: "DEFENDERS_BEATEN", label: "Defenders Beaten" },
+  { value: "METRES_GAINED", label: "Metres Gained" },
+  { value: "OFFLOADS", label: "Offloads" },
+  { value: "TACKLES", label: "Tackles" },
+  { value: "MISSED_TACKLES", label: "Missed Tackles" },
+  { value: "TURNOVERS_FORCED", label: "Turnovers Forced" },
+  { value: "INTERCEPTIONS", label: "Interceptions" },
+  { value: "KICKS_50_22", label: "50:22 Kicks" },
+  { value: "PENALTIES_CONCEDED", label: "Penalties Conceded" },
+  { value: "ERRORS", label: "Errors" },
+  { value: "LINEOUTS_WON", label: "Lineouts Won" },
+  { value: "LINEOUT_STEALS", label: "Lineout Steals" },
+  { value: "LINEOUT_ERRORS", label: "Lineout Errors" },
+  { value: "SCRUMS_WON", label: "Scrums Won" },
+  { value: "CONVERSIONS", label: "Conversions" },
+  { value: "PENALTY_GOALS", label: "Penalty Goals" },
+  { value: "DROP_GOALS", label: "Drop Goals" },
+  { value: "YELLOW_CARDS", label: "Yellow Cards" },
+  { value: "RED_CARDS", label: "Red Cards" }
+];
 
 /** Drop-list choice meaning "don't drop anyone" (the team has a free place). */
 const NO_DROP = "__no_drop__";
@@ -936,15 +969,15 @@ const ConfirmAcceptTradeModal = useStableComponent(ConfirmAcceptTradeModal__rend
   // Draft Room-style filters
   // -----------------------
   const [search, setSearch] = useState("");
-  const [teamFilter, setTeamFilter] = useState<string>("");
-  const [posFilter, setPosFilter] = useState<string>("");
-  const [ownerFilterValue, setOwnerFilterValue] = useState<string>("available");
+  // C2: Team / Position / Status (several of each allowed) and Players (Available, All or fantasy teams)
+  const [poolFilters, setPoolFilters] = useState<PoolFilters>(EMPTY_FILTERS);
+  const [ownerFilters, setOwnerFilters] = useState<string[]>(["available"]);
 useEffect(() => {
   // When entering Watchlist, default to All Players (only if still on the default "available")
-  if (tab === "Watchlist" && ownerFilterValue === "available") {
-    setOwnerFilterValue("all");
+  if (tab === "Watchlist" && ownerFilters.length === 1 && ownerFilters[0] === "available") {
+    setOwnerFilters(["all"]);
   }
-}, [tab, ownerFilterValue]);
+}, [tab, ownerFilters]);
 
   type InfoMode =
   | "DRAFT_RANK"
@@ -2238,24 +2271,14 @@ const pendingOffersCount = useMemo(() => {
 
   // Like Draft Room: show AVAILABLE (unowned) players, then apply filters.
   const baseOwnerList = useMemo(() => {
-    // available
-    if (ownerFilterValue === "available") {
-      return allPlayers.filter((p) => !isPlayerOwned(p.id));
-    }
-
-    // all
-    if (ownerFilterValue === "all") {
-      return allPlayers;
-    }
-
-    // team:<id>
-    if (ownerFilterValue.startsWith("team:")) {
-      const teamId = ownerFilterValue.slice("team:".length);
-      return allPlayers.filter((p) => ownerByPlayerId.get(p.id) === teamId);
-    }
-
-    return allPlayers.filter((p) => !isPlayerOwned(p.id));
-  }, [allPlayers, ownerFilterValue, ownerByPlayerId]);
+    if (ownerFilters.includes("all")) return allPlayers;
+    const teams = new Set(ownerFilters.filter((v) => v.startsWith("team:")).map((v) => v.slice("team:".length)));
+    const wantAvailable = ownerFilters.includes("available") || (!teams.size && !ownerFilters.length);
+    return allPlayers.filter((p) => {
+      const owner = ownerByPlayerId.get(p.id);
+      return owner ? teams.has(owner) : wantAvailable;
+    });
+  }, [allPlayers, ownerFilters, ownerByPlayerId]);
 
   const filteredPlayers = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -2263,11 +2286,7 @@ const pendingOffersCount = useMemo(() => {
     // work out each player's sort value once, then sort (it used to be worked out on every comparison)
     return baseOwnerList
       .filter((p) => (q ? `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) : true))
-      .filter((p) => (teamFilter ? p.teamCode === teamFilter : true))
-      .filter((p) => {
-        if (!posFilter) return true;
-        return canPlayPosition(p, posFilter);
-      })
+      .filter((p) => matchesPoolFilters(p as any, poolFilters, getLivePlayerById?.(p.id) as any))
       .map((p) => ({ p, v: metricSortValue(p as any, infoMode) }))
       .sort((a, b) => {
         // Draft rank: lowest first (1 at top)
@@ -2276,7 +2295,7 @@ const pendingOffersCount = useMemo(() => {
         return (b.v ?? -Infinity) - (a.v ?? -Infinity);
       })
       .map((x) => x.p);
-  }, [baseOwnerList, search, teamFilter, posFilter, infoMode, roundRows, statView]);
+  }, [baseOwnerList, search, poolFilters, infoMode, roundRows, statView, getLivePlayerById]);
 
   const ownerFilterOptions = useMemo(() => {
     const opts: Array<{ label: string; value: string }> = [];
@@ -3777,18 +3796,17 @@ const url =
 
         {tab === "Player Pool" && (
           <>
-            <Filters
+            <PoolFilterBar
   search={search}
   setSearch={setSearch}
-  teamFilter={teamFilter}
-  setTeamFilter={setTeamFilter}
-  posFilter={posFilter}
-  setPosFilter={setPosFilter}
-  ownerFilterValue={ownerFilterValue}
-  setOwnerFilterValue={setOwnerFilterValue}
-  ownerFilterOptions={ownerFilterOptions}
-  infoMode={infoMode}
-  setInfoMode={(v) => setInfoMode(v as any)}
+  filters={poolFilters}
+  setFilters={setPoolFilters}
+  owners={ownerFilters}
+  setOwners={setOwnerFilters}
+  ownerOptions={ownerFilterOptions}
+  sort={infoMode}
+  setSort={(v) => setInfoMode(v as any)}
+  sortOptions={SORT_OPTIONS}
 />
 
             <div style={listBox}>
@@ -3808,18 +3826,17 @@ const url =
 
         {tab === "Watchlist" && (
           <>
-            <Filters
+            <PoolFilterBar
   search={search}
   setSearch={setSearch}
-  teamFilter={teamFilter}
-  setTeamFilter={setTeamFilter}
-  posFilter={posFilter}
-  setPosFilter={setPosFilter}
-  ownerFilterValue={ownerFilterValue}
-  setOwnerFilterValue={setOwnerFilterValue}
-  ownerFilterOptions={ownerFilterOptions}
-  infoMode={infoMode}
-  setInfoMode={(v) => setInfoMode(v as any)}
+  filters={poolFilters}
+  setFilters={setPoolFilters}
+  owners={ownerFilters}
+  setOwners={setOwnerFilters}
+  ownerOptions={ownerFilterOptions}
+  sort={infoMode}
+  setSort={(v) => setInfoMode(v as any)}
+  sortOptions={SORT_OPTIONS}
 />
 
             <div style={listBox}>

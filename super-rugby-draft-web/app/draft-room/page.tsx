@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { getActiveUser } from "@/lib/session";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 
-import { TEAM_OPTIONS, POSITION_OPTIONS } from "@/lib/constants";
+import { TEAM_OPTIONS } from "@/lib/constants";
+import { PoolFilterBar, matchesPoolFilters, EMPTY_FILTERS, type PoolFilters } from "@/components/PoolFilters";
 import { useDraftStore } from "@/lib/draft/store";
 
 import { usePlayerPool } from "@/lib/players/pool";
@@ -19,7 +20,6 @@ import type { Player } from "@/lib/draft/types";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { usePlayersStore } from "@/lib/players/store";
 import { useRequireSession } from "@/lib/session/useRequireSession";
-import { canPlayPosition } from "@/lib/players/positions";
 import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { positionsLabel } from "@/lib/players/positions";
 import { StatusTag } from "@/components/StatusTag";
@@ -245,8 +245,8 @@ const preDraftDeadlineMs = useMemo(() => {
   // Filters
   // -----------------------
   const [search, setSearch] = useState("");
-  const [teamFilter, setTeamFilter] = useState<string>("");
-  const [posFilter, setPosFilter] = useState<string>("");
+  // C2: the same Filters pop-up as the Transactions page (Team / Position / Status, several of each)
+  const [poolFilters, setPoolFilters] = useState<PoolFilters>(EMPTY_FILTERS);
 
   // Watchlist
   const watchlist = useDraftStore((s) => s.watchlist);
@@ -352,13 +352,9 @@ function resolvePlayer(x: any): Player | null {
     return allPlayers
       .filter((p) => (draftedIds.has(p.id) ? false : true))
       .filter((p) => (q ? `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) : true))
-      .filter((p) => (teamFilter ? p.teamCode === teamFilter : true))
-      .filter((p) => {
-        if (!posFilter) return true;
-        return canPlayPosition(p, posFilter);
-      })
+      .filter((p) => matchesPoolFilters(p as any, poolFilters, getLivePlayerById?.(p.id) as any))
       .sort((a, b) => a.draftRank - b.draftRank);
-  }, [allPlayers, draftedIds, search, teamFilter, posFilter]);
+  }, [allPlayers, draftedIds, search, poolFilters, getLivePlayerById]);
 
   const playerPoolPlayers = useMemo(() => {
     return filteredPlayers.filter((p) => canTeamDraftPlayer(yourTeamId, p));
@@ -690,122 +686,7 @@ const LiveHeader = useStableComponent(LiveHeader__render);
 const Tabs = useStableComponent(Tabs__render);
 
   function Filters__render() {
-    const stopCapture = (e: any) => {
-      e.stopPropagation?.();
-    };
-
-    return (
-      <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-        <div style={inputWrap}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 26px", alignItems: "center", gap: 8 }}>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search players"
-              style={{
-                border: "none",
-                outline: "none",
-                background: "transparent",
-                fontSize: 13,
-                fontWeight: 700,
-                color: "#0f172a",
-              }}
-            />
-            <div style={{ textAlign: "right", fontSize: 16, opacity: 0.65 }}>🔍</div>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <div style={{ ...inputWrap, position: "relative" }} onPointerDownCapture={stopCapture} onClickCapture={stopCapture}>
-            <select
-              value={teamFilter}
-              onChange={(e) => setTeamFilter(e.target.value)}
-              onPointerDownCapture={stopCapture}
-              onClickCapture={stopCapture}
-              style={{
-                width: "100%",
-                height: 34,
-                border: "none",
-                outline: "none",
-                background: "transparent",
-                fontSize: 13,
-                fontWeight: 700,
-                color: teamFilter ? "#0f172a" : "rgba(15,23,42,0.55)",
-                WebkitAppearance: "none",
-                appearance: "none",
-                paddingRight: 30,
-              }}
-            >
-              <option value="">All Teams</option>
-              {TEAM_OPTIONS.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-
-            <span
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                right: 10,
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: "rgba(15,23,42,0.45)",
-                fontSize: 16,
-                pointerEvents: "none",
-              }}
-            >
-              ▾
-            </span>
-          </div>
-
-          <div style={{ ...inputWrap, position: "relative" }} onPointerDownCapture={stopCapture} onClickCapture={stopCapture}>
-            <select
-              value={posFilter}
-              onChange={(e) => setPosFilter(e.target.value)}
-              onPointerDownCapture={stopCapture}
-              onClickCapture={stopCapture}
-              style={{
-                width: "100%",
-                height: 34,
-                border: "none",
-                outline: "none",
-                background: "transparent",
-                fontSize: 13,
-                fontWeight: 700,
-                color: posFilter ? "#0f172a" : "rgba(15,23,42,0.55)",
-                WebkitAppearance: "none",
-                appearance: "none",
-                paddingRight: 30,
-              }}
-            >
-              <option value="">All Positions</option>
-              {POSITION_OPTIONS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-
-            <span
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                right: 10,
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: "rgba(15,23,42,0.45)",
-                fontSize: 16,
-                pointerEvents: "none",
-              }}
-            >
-              ▾
-            </span>
-          </div>
-        </div>
-      </div>
-    );
+    return <PoolFilterBar search={search} setSearch={setSearch} filters={poolFilters} setFilters={setPoolFilters} />;
   }
 const Filters = useStableComponent(Filters__render);
 
