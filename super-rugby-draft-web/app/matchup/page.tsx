@@ -25,6 +25,7 @@ import { useRequireSession } from "@/lib/session/useRequireSession";
 import { toMs, pickValue } from "@/lib/league/weekHelpers";
 import { JERSEYS } from "@/lib/teams/images";
 import { formatStatCount } from "@/lib/scoring";
+import { TeamAvatar } from "@/components/TeamAvatar";
 
 
 function normaliseId(x: any) {
@@ -541,6 +542,13 @@ const yourLeagueTeamId = useMemo(() => {
   // Draft teams for name lookup
   const draftTeams = useDraftStore((s) => s.teams);
 const getLivePlayerById = useDraftStore((s) => (s as any).getLivePlayerById ?? null);
+
+  // team picture (E5) and initials for the scoreboard
+  const teamPicture = (id: string | null) => (activeLeague?.teams?.find((t) => t.id === id) as any)?.pictureUrl ?? null;
+  const teamInitials = (id: string | null) => {
+    const t: any = activeLeague?.teams?.find((x) => x.id === id);
+    return t?.userInitials ?? t?.initials ?? null;
+  };
 
   const nameByTeamId = (id: string | null) => {
     if (!id) return "BYE";
@@ -1626,6 +1634,9 @@ return (
         <div style={{ marginTop: 10, ...listBox, padding: 10 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10 }}>
             <div style={{ textAlign: "left" }}>
+              {leftTeamId ? (
+                <TeamAvatar pictureUrl={teamPicture(leftTeamId)} initials={teamInitials(leftTeamId)} size={44} style={{ marginBottom: 6 }} />
+              ) : null}
               <div style={{ fontSize: 18, fontWeight: 950 }}>{leftName}</div>
 
 <div style={{ fontSize: 13, fontWeight: 900, opacity: 0.75 }}>
@@ -1640,6 +1651,9 @@ return (
             <div style={{ fontSize: 18, fontWeight: 900, opacity: 0.85 }}></div>
 
             <div style={{ textAlign: "right" }}>
+              {rightTeamId ? (
+                <TeamAvatar pictureUrl={teamPicture(rightTeamId)} initials={teamInitials(rightTeamId)} size={44} style={{ marginBottom: 6 }} />
+              ) : null}
               <div style={{ fontSize: 18, fontWeight: 950 }}>{rightName}</div>
 
 <div style={{ fontSize: 13, fontWeight: 900, opacity: 0.75 }}>

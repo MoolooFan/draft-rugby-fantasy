@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AppMenu } from "@/components/AppMenu";
+import { TeamAvatar } from "@/components/TeamAvatar";
+import { PictureCropper } from "@/components/PictureCropper";
 import { useLeagueStore } from "@/lib/league/store";
 import { getActiveUsername } from "@/lib/session";
 
@@ -75,6 +77,53 @@ export default function TeamDetailsPage() {
       cancelled = true;
     };
   }, [router]);
+
+  // ---- team picture (E5) ----
+  const myTeam: any = useMemo(() => {
+    const teams = Array.isArray(activeLeague?.teams) ? activeLeague.teams : [];
+    return yourTeamId ? teams.find((t: any) => String(t.id) === String(yourTeamId)) ?? null : null;
+  }, [activeLeague?.teams, yourTeamId]);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [picBusy, setPicBusy] = useState(false);
+  const [picMsg, setPicMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  async function uploadPicture(jpeg: Blob) {
+    if (!activeLeagueId) return;
+    setPicBusy(true);
+    setPicMsg(null);
+    try {
+      const form = new FormData();
+      form.append("leagueId", activeLeagueId);
+      form.append("file", jpeg, "team.jpg");
+      const res = await fetch("/api/teams/picture", { method: "POST", body: form, credentials: "include" });
+      const j = await res.json().catch(() => null);
+      if (!j?.ok) throw new Error(j?.error ?? "Couldn't save the picture");
+      setCropFile(null);
+      setPicMsg({ kind: "ok", text: "Team picture updated." });
+      refreshLeague(activeLeagueId);
+    } catch (e: any) {
+      setPicMsg({ kind: "err", text: e?.message ?? "Couldn't save the picture" });
+    } finally {
+      setPicBusy(false);
+    }
+  }
+
+  async function removePicture() {
+    if (!activeLeagueId) return;
+    setPicBusy(true);
+    setPicMsg(null);
+    try {
+      const res = await fetch(`/api/teams/picture?leagueId=${encodeURIComponent(activeLeagueId)}`, { method: "DELETE", credentials: "include" });
+      const j = await res.json().catch(() => null);
+      if (!j?.ok) throw new Error(j?.error ?? "Couldn't remove the picture");
+      setPicMsg({ kind: "ok", text: "Team picture removed." });
+      refreshLeague(activeLeagueId);
+    } catch (e: any) {
+      setPicMsg({ kind: "err", text: e?.message ?? "Couldn't remove the picture" });
+    } finally {
+      setPicBusy(false);
+    }
+  }
 
   // prefill team name from league store
   useEffect(() => {
@@ -205,7 +254,7 @@ export default function TeamDetailsPage() {
           <div style={cardStyle}>
             <div style={{ textAlign: "center", fontWeight: 900, fontSize: 22 }}>Team Details</div>
             <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 800, opacity: 0.9 }}>
-              Change your team name
+              Your team&apos;s picture and name
             </div>
 
             {(msg || err) ? (
@@ -223,6 +272,54 @@ export default function TeamDetailsPage() {
                 }}
               >
                 {err ? err : msg}
+              </div>
+            ) : null}
+          </div>
+
+          <div style={cardStyle}>
+            <div style={{ fontWeight: 900, fontSize: 12, marginBottom: 10 }}>Team Picture</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <TeamAvatar pictureUrl={myTeam?.pictureUrl} initials={myTeam?.userInitials ?? myTeam?.initials} size={72} />
+              <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 8 }}>
+                <label style={{ ...primaryButton, display: "grid", placeItems: "center", opacity: picBusy || !yourTeamId ? 0.7 : 1 }}>
+                  {myTeam?.pictureUrl ? "Change picture" : "Upload picture"}
+                  <input
+                    id="team-picture-file"
+                    type="file"
+                    accept="image/*"
+                    disabled={picBusy || !yourTeamId}
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = ""; // so choosing the same file again still works
+                      if (f) setCropFile(f);
+                    }}
+                  />
+                </label>
+                {myTeam?.pictureUrl ? (
+                  <button
+                    onClick={removePicture}
+                    disabled={picBusy}
+                    style={{ height: 30, borderRadius: 999, border: "2px solid rgba(255,255,255,0.85)", background: "transparent", color: "white", fontSize: 12, fontWeight: 900, cursor: "pointer" }}
+                  >
+                    Remove picture
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            {picMsg ? (
+              <div
+                style={{
+                  marginTop: 10,
+                  borderRadius: 12,
+                  padding: "8px 12px",
+                  background: picMsg.kind === "err" ? "rgba(239,68,68,0.22)" : "rgba(34,197,94,0.18)",
+                  border: picMsg.kind === "err" ? "1px solid rgba(239,68,68,0.45)" : "1px solid rgba(34,197,94,0.35)",
+                  fontSize: 12,
+                  fontWeight: 800,
+                }}
+              >
+                {picMsg.text}
               </div>
             ) : null}
           </div>
@@ -246,6 +343,8 @@ export default function TeamDetailsPage() {
           </div>
         </div>
       </div>
+
+      {cropFile ? <PictureCropper file={cropFile} busy={picBusy} onCancel={() => setCropFile(null)} onDone={uploadPicture} /> : null}
 
       <AppMenu
         open={menuOpen}

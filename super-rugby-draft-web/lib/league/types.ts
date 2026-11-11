@@ -7,6 +7,7 @@ export type LeagueTeam = {
   initials: string;      // team initials (branding)
   userId: string;        // owner username
   userInitials?: string;  // ✅ owner initials (from first/last or username)
+  pictureUrl?: string | null; // team picture (E5), shown in a circle; none = initials
 };
 
 export type DraftStatus = "scheduled" | "live" | "complete";

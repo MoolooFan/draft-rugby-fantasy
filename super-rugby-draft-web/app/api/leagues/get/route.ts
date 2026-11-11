@@ -84,7 +84,7 @@ if (
   // 3) fetch teams
   const { data: teamRows, error: teamErr } = await supabaseAdmin
     .from("teams")
-      .select("id, name, initials, user_id, owner_name, created_at")
+      .select("id, name, initials, user_id, owner_name, created_at, picture_url")
     .eq("league_id", leagueId)
     .order("created_at", { ascending: true });
 
@@ -105,6 +105,7 @@ const teamsRaw = (teamRows ?? []).map((t: any) => {
     initials: computed,
     userId: t.user_id,
     userInitials: computed,
+    pictureUrl: t.picture_url ?? null,
   };
 });
 

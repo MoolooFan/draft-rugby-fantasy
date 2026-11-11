@@ -94,7 +94,7 @@ export async function POST(req: Request) {
   // 6) load all teams for hydration
   const { data: teams, error: teamsErr } = await supabaseAdmin
     .from("teams")
-    .select("id, name, initials, owner_username")
+    .select("id, name, initials, owner_username, picture_url")
     .eq("league_id", league.id)
     .order("created_at", { ascending: true });
 
@@ -113,6 +113,7 @@ export async function POST(req: Request) {
       initials: t.initials ?? "",
       userId: norm(String(t.owner_username ?? "")),
       userInitials: t.initials ?? "",
+      pictureUrl: t.picture_url ?? null,
     })),
     draftDateTimeText: league.draft_date_time_text ?? "",
     draftAt: league.draft_at ?? null,

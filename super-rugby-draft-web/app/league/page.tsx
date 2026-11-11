@@ -20,6 +20,7 @@ import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { toMs, pickValue } from "@/lib/league/weekHelpers";
 import { toDatetimeLocal, ModalOverlay, inputStyle, selectStyle, parseDatetimeLocal, saveButton } from "./ui";
 import { LeagueSettingsModal } from "./LeagueSettingsModal";
+import { TeamAvatar } from "@/components/TeamAvatar";
 
 type LeagueTab = "Standings" | "Fixtures" | "Results";
 type Modal =
@@ -790,7 +791,13 @@ const MovementCircle = useStableComponent(MovementCircle__render);
                     <span style={{ width: 14, textAlign: "right", fontWeight: 900 }}>{r.rank}</span>
                     <MovementCircle movement={r.movement} />
                   </div>
-                  <div style={{ fontWeight: 500 }}>{r.teamName}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    {(() => {
+                      const t: any = (league?.teams ?? []).find((x: any) => x.id === r.teamId);
+                      return <TeamAvatar pictureUrl={t?.pictureUrl} initials={t?.userInitials ?? t?.initials} size={24} />;
+                    })()}
+                    <span style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.teamName}</span>
+                  </div>
                   <div>{r.played}</div>
                   <div>{r.wins}</div>
                   <div>{r.draws}</div>

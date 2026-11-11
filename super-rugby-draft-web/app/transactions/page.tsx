@@ -31,6 +31,7 @@ import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
 import { Filters } from "./Filters";
 import { positionsLabel } from "@/lib/players/positions";
 import { StatusTag } from "@/components/StatusTag";
+import { TeamAvatar } from "@/components/TeamAvatar";
 
 // -----------------------
 // Types (match your player shape)
@@ -3318,7 +3319,10 @@ const waiverClaimsFeed = useMemo(() => {
 }
 const TradeSummary = useStableComponent(TradeSummary__render);
 
-    function InitialBadge__render({ text }: { text: string }) {
+    function InitialBadge__render({ text, teamId }: { text: string; teamId?: string }) {
+      // the team's picture (E5) if it has one, otherwise its initials
+      const pic = teamId ? (teamById as any)?.[teamId]?.pictureUrl : null;
+      if (pic) return <TeamAvatar pictureUrl={pic} initials={text} size={34} />;
       return (
         <div
           style={{
@@ -3416,7 +3420,7 @@ const StatusPill = useStableComponent(StatusPill__render);
   ) : (
     offersReceived.map((t: any) => (
       <div key={t.id} style={rowWrap}>
-        <InitialBadge text={userInitials(t.fromTeamId)} />
+        <InitialBadge text={userInitials(t.fromTeamId)} teamId={t.fromTeamId} />
 
         <TradeSummary t={t} mode="RECEIVED" />
 
@@ -3470,7 +3474,7 @@ const StatusPill = useStableComponent(StatusPill__render);
   ) : (
     offersProposed.map((t: any) => (
       <div key={t.id} style={rowWrap}>
-        <InitialBadge text={userInitials(t.toTeamId)} />
+        <InitialBadge text={userInitials(t.toTeamId)} teamId={t.toTeamId} />
 
         <TradeSummary t={t} mode="PROPOSED" />
 
@@ -3541,7 +3545,7 @@ const StatusPill = useStableComponent(StatusPill__render);
                 >
                   <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, textAlign: "center" }}>{idx + 1}</div>
 
-                  <InitialBadge text={userInitials(c.teamId)} />
+                  <InitialBadge text={userInitials(c.teamId)} teamId={c.teamId} />
 
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -3584,7 +3588,7 @@ const StatusPill = useStableComponent(StatusPill__render);
                 >
                   <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, textAlign: "center" }}>{idx + 1}</div>
 
-                  <InitialBadge text={userInitials(x.teamId)} />
+                  <InitialBadge text={userInitials(x.teamId)} teamId={x.teamId} />
 
                   {x.addPlayerId ? (
                   <div style={{ minWidth: 0 }}>

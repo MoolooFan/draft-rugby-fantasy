@@ -24,6 +24,7 @@ import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { toMs, getWeekFirstKickoffMs, getSelectionDeadlineMs, getWeeksSorted, type SheetFixtureRow, isSheetLabelRow, isSheetPlayableRow, currentWeekFromSheet, latestCompletedWeekFromSheet } from "@/lib/league/weekHelpers";
 import { STARTER_SLOTS } from "@/lib/scoring/week";
 import { positionsLabel } from "@/lib/players/positions";
+import { TeamAvatar } from "@/components/TeamAvatar";
 
 type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null } | null;
 
@@ -1692,8 +1693,8 @@ const NoLeague = useStableComponent(NoLeague__render);
               gap: 10,
             }}
           >
-            <ScoreBlock score={userScore} team={leftName} record={userRecord} align="left" />
-<ScoreBlock score={oppScore} team={rightName} record={oppRecord} align="right" />
+            <ScoreBlock score={userScore} team={leftName} record={userRecord} align="left" teamId={leftTeamId} />
+<ScoreBlock score={oppScore} team={rightName} record={oppRecord} align="right" teamId={rightTeamId} />
           </div>
 
           <button style={{ ...primaryButton, marginTop: 12 }} onClick={() => router.push("/matchup")}>
@@ -2022,15 +2023,22 @@ const PostDraft = useStableComponent(PostDraft__render);
     team,
     record,
     align,
+    teamId,
   }: {
     score: number;
     team: string;
     record: string;
     align: "left" | "right";
+    teamId?: string | null;
   }) {
+    // the team's picture (E5) beside the score
+    const t: any = teamId ? (activeLeague?.teams ?? []).find((x: any) => x.id === teamId) : null;
     return (
       <div style={{ textAlign: align as any }}>
-        <div style={{ fontSize: 34, fontWeight: 900, lineHeight: "34px" }}>{score}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexDirection: align === "right" ? "row-reverse" : "row" }}>
+          {t ? <TeamAvatar pictureUrl={t.pictureUrl} initials={t.userInitials ?? t.initials} size={36} /> : null}
+          <div style={{ fontSize: 34, fontWeight: 900, lineHeight: "34px" }}>{score}</div>
+        </div>
         <div style={{ marginTop: 6, fontSize: 17, fontWeight: 900 }}>{team}</div>
         <div style={{ marginTop: 2, fontSize: 11, fontWeight: 800, opacity: 0.9 }}>{record}</div>
       </div>
