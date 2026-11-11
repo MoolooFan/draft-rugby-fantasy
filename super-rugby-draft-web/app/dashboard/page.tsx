@@ -25,6 +25,7 @@ import { toMs, getWeekFirstKickoffMs, getSelectionDeadlineMs, getWeeksSorted, ty
 import { STARTER_SLOTS } from "@/lib/scoring/week";
 import { positionsLabel } from "@/lib/players/positions";
 import { TeamAvatar } from "@/components/TeamAvatar";
+import { WeeklyRecapModal } from "@/components/WeeklyRecapModal";
 
 type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null } | null;
 
@@ -2147,6 +2148,9 @@ const StandingsCard = useStableComponent(StandingsCard__render);
 {effectiveDashState === "postDraft" && <PostDraft />}
 
       </div>
+
+      {/* weekly recap pop-up (E7): once per league per finalised round */}
+      <WeeklyRecapModal leagueId={activeLeague?.id} leagueName={activeLeague?.name} />
 
       <AppMenu
   open={menuOpen}
