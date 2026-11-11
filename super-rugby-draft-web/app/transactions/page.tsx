@@ -3586,6 +3586,7 @@ const StatusPill = useStableComponent(StatusPill__render);
 
                   <InitialBadge text={userInitials(x.teamId)} />
 
+                  {x.addPlayerId ? (
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       IN: {addP ? shortName(addP) : x.addPlayerId}
@@ -3594,6 +3595,17 @@ const StatusPill = useStableComponent(StatusPill__render);
                       OUT: {dropP ? shortName(dropP) : x.dropPlayerId ?? "—"}
                     </div>
                   </div>
+                  ) : (
+                  // a drop with no one added (to bring a player back from IR)
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      OUT: {dropP ? shortName(dropP) : x.dropPlayerId ?? "—"}
+                    </div>
+                    <div style={{ marginTop: 2, fontSize: 10, fontWeight: 800, opacity: 0.65, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      Dropped by {teamName(x.teamId)}
+                    </div>
+                  </div>
+                  )}
 
                   <StatusPill status={x.status ?? "Processed"} />
                 </div>

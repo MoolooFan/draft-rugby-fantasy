@@ -1,7 +1,8 @@
 // POST /api/ir  { leagueId, action: "move" | "activate" | "swap", playerId, dropPlayerId?, swapPlayerId? }
 // Moves a player into or out of the team's IR spot (rules in lib/league/ir.ts). Afterwards the
 // team's lineups for the weeks that aren't locked yet are fixed up; locked weeks don't change.
-// IR moves aren't recorded as transactions. A player dropped to activate someone is locked
+// Moving a player into or out of IR isn't listed in the Transactions tab, but a player dropped to
+// activate someone is ("dropped by <team>"), and is locked
 // until the next lineup deadline, the same as a free-agency drop.
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -102,6 +103,20 @@ export async function POST(req: Request) {
         reason: "IR_ACTIVATION_DROP",
       });
       if (insErr) throw insErr;
+
+      // The drop is listed in the Transactions tab ("<player> dropped by <team>"); the IR move isn't.
+      const { error: txErr } = await supabaseAdmin.from("free_agent_transfers").insert({
+        league_id: leagueId,
+        week: week ?? 0,
+        team_id: teamId,
+        add_player_id: null,
+        drop_player_id: res.dropped,
+        status: "PROCESSED",
+        reason: "IR_ACTIVATION_DROP",
+        created_at_ms: now,
+        updated_at_ms: now,
+      });
+      if (txErr) throw txErr;
     }
 
     return NextResponse.json({ ok: true, playerIds: res.active, irIds: res.ir, dropped: res.dropped });
