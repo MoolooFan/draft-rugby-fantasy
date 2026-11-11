@@ -33,6 +33,7 @@ import { positionsLabel } from "@/lib/players/positions";
 import { StatusTag } from "@/components/StatusTag";
 import { TeamAvatar } from "@/components/TeamAvatar";
 import { StatViewToggle } from "@/components/StatViewToggle";
+import { TradeReviewModal } from "@/components/TradeReviewModal";
 import { applyStatView, formatStatView, useStatView } from "@/lib/players/statView";
 
 // -----------------------
@@ -652,6 +653,8 @@ const ownerByPlayerId = useMemo(() => {
 // -----------------------
 const [confirmOpen, setConfirmOpen] = useState(false);
 const [confirmTrade, setConfirmTrade] = useState<any | null>(null);
+// C5: a received offer opens the review pop-up (players, one stat at a time, Accept / Decline)
+const [reviewTrade, setReviewTrade] = useState<any | null>(null);
 
 function openAcceptConfirm(trade: any) {
   // only allow confirming offers RECEIVED by you
@@ -1278,13 +1281,15 @@ async function refreshTransactionsForLeague(leagueId: string) {
 async function apiAcceptTrade(tradeId: string) {
   if (!activeLeague?.id) return;
 
-  await fetch(`/api/trades/accept`, {
+  const acceptRes = await fetch(`/api/trades/accept`, {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({
     tradeOfferId: tradeId,
   }),
 });
+  const acceptJson = await acceptRes.json().catch(() => null);
+  if (!acceptJson?.ok) window.alert(acceptJson?.error ?? "That trade couldn't be accepted");
 
   await refreshTransactionsForLeague(activeLeague.id);
 
@@ -3447,33 +3452,17 @@ const StatusPill = useStableComponent(StatusPill__render);
         <div style={{ display: "grid", gap: 8, justifyContent: "end" }}>
           <>
   {tradeWindowOpen ? (
-    <>
-      <button
-        style={{
-          ...pill,
-          background: "rgba(34,197,94,0.12)",
-          color: "rgba(34,197,94,0.95)",
-          border: "1px solid rgba(34,197,94,0.35)",
-        }}
-        onClick={() => openAcceptConfirm(t)}
-      >
-        Accept
-      </button>
-
-      <button
-        style={{
-          ...pill,
-          background: "rgba(239,68,68,0.10)",
-          color: "rgba(239,68,68,0.95)",
-          border: "1px solid rgba(239,68,68,0.30)",
-        }}
-        onClick={() => {
-  apiDeclineTrade(t.id);
-}}
-      >
-        Decline
-      </button>
-    </>
+    <button
+      style={{
+        ...pill,
+        background: "rgba(37,99,235,0.12)",
+        color: "rgba(37,99,235,0.95)",
+        border: "1px solid rgba(37,99,235,0.35)",
+      }}
+      onClick={() => setReviewTrade(t)}
+    >
+      Review
+    </button>
   ) : (
     <StatusPill status="Expired" />
   )}
@@ -3887,6 +3876,27 @@ const url =
 
             <DropSelectModal />
 <ConfirmAcceptTradeModal />
+{reviewTrade ? (
+  <TradeReviewModal
+    fromTeamName={(activeLeague?.teams ?? []).find((x: any) => x.id === reviewTrade.fromTeamId)?.name ?? "another team"}
+    getPlayers={((reviewTrade.offerPlayerIds ?? []) as string[]).map((id) => allPlayers.find((x) => x.id === id) ?? ({ id, lastName: id } as any))}
+    givePlayers={((reviewTrade.requestPlayerIds ?? []) as string[]).map((id) => allPlayers.find((x) => x.id === id) ?? ({ id, lastName: id } as any))}
+    statRows={roundRows ?? []}
+    canRespond={!!tradeWindowOpen}
+    livePlayer={(id) => getLivePlayerById?.(id)}
+    onClose={() => setReviewTrade(null)}
+    onAccept={() => {
+      const id = reviewTrade.id;
+      setReviewTrade(null);
+      if (tradeWindowOpen) apiAcceptTrade(id);
+    }}
+    onDecline={() => {
+      const id = reviewTrade.id;
+      setReviewTrade(null);
+      apiDeclineTrade(id);
+    }}
+  />
+) : null}
 
     </main>
   );
