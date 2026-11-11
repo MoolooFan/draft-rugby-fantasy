@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
 import { refreshDraftOrder } from "@/lib/draft/engine";
+import { previousTeam } from "@/lib/league/honours";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -44,18 +45,26 @@ export async function POST(req: Request) {
 
   let team = existing;
 
-  // 3) otherwise create team
+  // 3) otherwise create team. Someone who played in this league before (any earlier season,
+  //    E8) gets their old team name and picture back.
   if (!team) {
     const teamId = `team_${crypto.randomUUID()}`;
+    let prev: { name: string; picture_url: string | null } | null = null;
+    try {
+      prev = await previousTeam(supabaseAdmin, league.lineage_id ?? league.id, username, league.id);
+    } catch (e) {
+      console.error("[leagues/join] previous team:", e);
+    }
 
     const { data: created, error: teamErr } = await supabaseAdmin
       .from("teams")
       .insert({
         id: teamId,
         league_id: league.id,
-        name: teamName,
+        name: prev?.name ?? teamName,
         owner_username: username,
         user_id: username,
+        picture_url: prev?.picture_url ?? null,
       })
       .select("*")
       .single();
@@ -115,6 +124,7 @@ export async function POST(req: Request) {
       userInitials: t.initials ?? "",
       pictureUrl: t.picture_url ?? null,
     })),
+    season: league.season,
     draftDateTimeText: league.draft_date_time_text ?? "",
     draftAt: league.draft_at ?? null,
     draftStatus: league.draft_status ?? "scheduled",

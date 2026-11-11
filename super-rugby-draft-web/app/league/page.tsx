@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRequireSession } from "@/lib/session/useRequireSession";
-import { useLeagueStore } from "@/lib/league/store";
+import { useLeagueStore, loadMyLeagues } from "@/lib/league/store";
 import type { PlayoffFormat } from "@/lib/league/types";
 
 import { AppMenu } from "@/components/AppMenu";
@@ -365,6 +365,36 @@ useEffect(() => {
     setActiveLeague(leagues[0].id);
   }
 }, [mounted, leagueHydrated, activeLeagueId, leagues, setActiveLeague]);
+
+  // E8: restart the league for the new season
+  const [restarting, setRestarting] = useState(false);
+  const [restartMsg, setRestartMsg] = useState<string | null>(null);
+  async function restartLeague() {
+    if (!league?.id || restarting) return;
+    if (!window.confirm(`Start ${league.name} again for ${currentSeasonYear()}?`)) return;
+    setRestarting(true);
+    setRestartMsg(null);
+    try {
+      const res = await fetch("/api/leagues/restart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ leagueId: league.id }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!j?.ok) {
+        setRestartMsg(j?.error ?? "Couldn't start the new season");
+        return;
+      }
+      setActiveLeague(j.leagueId);
+      await loadMyLeagues();
+      setRestartMsg(`Done! Share the new join code: ${j.code}`);
+    } catch {
+      setRestartMsg("Couldn't start the new season");
+    } finally {
+      setRestarting(false);
+    }
+  }
 
   const updateLeagueSettings = useLeagueStore((s) => s.updateLeagueSettings);
   const setDraftOrder = useLeagueStore((s) => s.setDraftOrder);
@@ -799,7 +829,7 @@ const MovementCircle = useStableComponent(MovementCircle__render);
                   <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                     {(() => {
                       const t: any = (league?.teams ?? []).find((x: any) => x.id === r.teamId);
-                      return <TeamAvatar pictureUrl={t?.pictureUrl} initials={t?.userInitials ?? t?.initials} size={24} />;
+                      return <TeamAvatar pictureUrl={t?.pictureUrl} initials={t?.userInitials ?? t?.initials} size={24} stars={t?.stars} />;
                     })()}
                     <span style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.teamName}</span>
                     {latestAward?.crown.includes(r.teamId) ? (
@@ -826,6 +856,25 @@ const MovementCircle = useStableComponent(MovementCircle__render);
         <div style={{ marginTop: 18, textAlign: "center", fontSize: 12, fontWeight: 800, opacity: 0.9 }}>
           League Code: {leagueCode}
         </div>
+
+        {/* E8: the commissioner starts last season's league again for this season */}
+        {isCreator && league?.canRestart ? (
+          <div style={{ ...listBox, marginTop: 12, padding: 12, display: "grid", gap: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 900 }}>New season</div>
+            <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.8 }}>
+              Start {leagueName} again for {currentSeasonYear()}: same name, settings and history, with a new join code and draft.
+              Everyone rejoins with the new code and gets their team name and picture back.
+            </div>
+            <button
+              disabled={restarting}
+              onClick={restartLeague}
+              style={{ height: 38, borderRadius: 12, border: "none", background: "#22C55E", color: "white", fontWeight: 900, cursor: "pointer", opacity: restarting ? 0.7 : 1 }}
+            >
+              {restarting ? "Starting…" : `Start the ${currentSeasonYear()} season`}
+            </button>
+            {restartMsg ? <div style={{ fontSize: 12, fontWeight: 800 }}>{restartMsg}</div> : null}
+          </div>
+        ) : null}
 
         <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
           <button

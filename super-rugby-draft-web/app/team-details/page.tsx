@@ -279,7 +279,7 @@ export default function TeamDetailsPage() {
           <div style={cardStyle}>
             <div style={{ fontWeight: 900, fontSize: 12, marginBottom: 10 }}>Team Picture</div>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <TeamAvatar pictureUrl={myTeam?.pictureUrl} initials={myTeam?.userInitials ?? myTeam?.initials} size={72} />
+              <TeamAvatar pictureUrl={myTeam?.pictureUrl} initials={myTeam?.userInitials ?? myTeam?.initials} size={72} stars={myTeam?.stars} />
               <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 8 }}>
                 <label style={{ ...primaryButton, display: "grid", placeItems: "center", opacity: picBusy || !yourTeamId ? 0.7 : 1 }}>
                   {myTeam?.pictureUrl ? "Change picture" : "Upload picture"}

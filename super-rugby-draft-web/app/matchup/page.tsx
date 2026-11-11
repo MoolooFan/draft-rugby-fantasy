@@ -545,6 +545,7 @@ const getLivePlayerById = useDraftStore((s) => (s as any).getLivePlayerById ?? n
 
   // team picture (E5) and initials for the scoreboard
   const teamPicture = (id: string | null) => (activeLeague?.teams?.find((t) => t.id === id) as any)?.pictureUrl ?? null;
+  const teamStars = (id: string | null) => (activeLeague?.teams?.find((t) => t.id === id) as any)?.stars ?? 0;
   const teamInitials = (id: string | null) => {
     const t: any = activeLeague?.teams?.find((x) => x.id === id);
     return t?.userInitials ?? t?.initials ?? null;
@@ -1635,7 +1636,7 @@ return (
           <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10 }}>
             <div style={{ textAlign: "left" }}>
               {leftTeamId ? (
-                <TeamAvatar pictureUrl={teamPicture(leftTeamId)} initials={teamInitials(leftTeamId)} size={44} style={{ marginBottom: 6 }} />
+                <TeamAvatar pictureUrl={teamPicture(leftTeamId)} initials={teamInitials(leftTeamId)} size={44} stars={teamStars(leftTeamId)} style={{ marginBottom: 6, marginTop: 6 }} />
               ) : null}
               <div style={{ fontSize: 18, fontWeight: 950 }}>{leftName}</div>
 
@@ -1652,7 +1653,7 @@ return (
 
             <div style={{ textAlign: "right" }}>
               {rightTeamId ? (
-                <TeamAvatar pictureUrl={teamPicture(rightTeamId)} initials={teamInitials(rightTeamId)} size={44} style={{ marginBottom: 6 }} />
+                <TeamAvatar pictureUrl={teamPicture(rightTeamId)} initials={teamInitials(rightTeamId)} size={44} stars={teamStars(rightTeamId)} style={{ marginBottom: 6, marginTop: 6 }} />
               ) : null}
               <div style={{ fontSize: 18, fontWeight: 950 }}>{rightName}</div>
 

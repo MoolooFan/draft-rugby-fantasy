@@ -23,19 +23,18 @@ function ordinal(n: number) {
 }
 
 export function WeeklyRecapModal({ leagueId, leagueName }: { leagueId: string | null | undefined; leagueName?: string }) {
-  const [recap, setRecap] = useState<RecapResponse | null>(null);
+  // the recap and which league it's for (switching league never shows the other league's)
+  const [recap, setRecap] = useState<(RecapResponse & { forLeague: string }) | null>(null);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    setOpen(false);
-    setRecap(null);
     if (!leagueId) return;
     let cancelled = false;
     fetch(`/api/recap?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store", credentials: "include" })
       .then((r) => r.json())
       .then((j) => {
         if (cancelled || !j?.ok || !j.recap || j.seen) return;
-        setRecap(j.recap);
+        setRecap({ ...j.recap, forLeague: leagueId });
         setOpen(true);
       })
       .catch(() => {});
@@ -44,7 +43,7 @@ export function WeeklyRecapModal({ leagueId, leagueName }: { leagueId: string | 
     };
   }, [leagueId]);
 
-  if (!open || !recap || !leagueId) return null;
+  if (!open || !recap || !leagueId || recap.forLeague !== leagueId) return null;
 
   const team = (id: string | null | undefined): TeamInfo =>
     (id && recap.teams[id]) || { name: id ? "TBC" : "Bye", initials: null, pictureUrl: null };

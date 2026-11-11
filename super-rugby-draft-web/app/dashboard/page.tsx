@@ -2037,7 +2037,7 @@ const PostDraft = useStableComponent(PostDraft__render);
     return (
       <div style={{ textAlign: align as any }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexDirection: align === "right" ? "row-reverse" : "row" }}>
-          {t ? <TeamAvatar pictureUrl={t.pictureUrl} initials={t.userInitials ?? t.initials} size={36} /> : null}
+          {t ? <TeamAvatar pictureUrl={t.pictureUrl} initials={t.userInitials ?? t.initials} size={36} stars={t.stars} /> : null}
           <div style={{ fontSize: 34, fontWeight: 900, lineHeight: "34px" }}>{score}</div>
         </div>
         <div style={{ marginTop: 6, fontSize: 17, fontWeight: 900 }}>{team}</div>

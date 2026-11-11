@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
 import { refreshDraftOrder } from "@/lib/draft/engine";
 import { rulesForLeagueRow } from "@/lib/scoring/leagueRules";
+import { championshipStars } from "@/lib/league/honours";
+import { currentSeasonYear } from "@/lib/season";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -84,13 +86,21 @@ if (
   // 3) fetch teams
   const { data: teamRows, error: teamErr } = await supabaseAdmin
     .from("teams")
-      .select("id, name, initials, user_id, owner_name, created_at, picture_url")
+      .select("id, name, initials, user_id, owner_name, owner_username, created_at, picture_url")
     .eq("league_id", leagueId)
     .order("created_at", { ascending: true });
 
   if (teamErr) {
     return NextResponse.json({ ok: false, error: teamErr.message }, { status: 500 });
   }
+// championship stars (E8): titles each team's owner has won in this league's history
+let stars: Record<string, number> = {};
+try {
+  stars = await championshipStars(supabaseAdmin, leagueId, (teamRows ?? []) as any);
+} catch (e) {
+  console.error("[leagues/get] stars:", e);
+}
+
 const teamsRaw = (teamRows ?? []).map((t: any) => {
   const dbInitials =
     typeof t.initials === "string" && t.initials.trim()
@@ -106,6 +116,7 @@ const teamsRaw = (teamRows ?? []).map((t: any) => {
     userId: t.user_id,
     userInitials: computed,
     pictureUrl: t.picture_url ?? null,
+    stars: stars[t.id] ?? 0,
   };
 });
 
@@ -141,6 +152,8 @@ if (computedOrder.length) {
     scoringLocked: !!leagueRow.scoring_rules_locked,
     bonusPoints: leagueRow.bonus_points !== false,
     season: leagueRow.season,
+    // E8: a league from an earlier season can be restarted for this season by its commissioner
+    canRestart: Number(leagueRow.season) < currentSeasonYear() && !(await hasSuccessor(leagueRow)),
 
     realRegularSeasonRounds: leagueRow.real_regular_season_rounds ?? 16,
     startRound: leagueRow.start_round ?? 1,
@@ -151,6 +164,17 @@ draftOrder: computedOrder,
   };
 
   return NextResponse.json({ ok: true, league });
+
+  async function hasSuccessor(row: { id: string; lineage_id?: string | null }) {
+    const lineage = row.lineage_id ?? row.id;
+    const { data } = await supabaseAdmin
+      .from("leagues")
+      .select("id")
+      .or(`lineage_id.eq.${lineage},id.eq.${lineage}`)
+      .eq("season", currentSeasonYear())
+      .limit(1);
+    return !!data?.length;
+  }
 
   
 }

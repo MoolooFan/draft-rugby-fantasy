@@ -3322,7 +3322,8 @@ const TradeSummary = useStableComponent(TradeSummary__render);
     function InitialBadge__render({ text, teamId }: { text: string; teamId?: string }) {
       // the team's picture (E5) if it has one, otherwise its initials
       const pic = teamId ? (teamById as any)?.[teamId]?.pictureUrl : null;
-      if (pic) return <TeamAvatar pictureUrl={pic} initials={text} size={34} />;
+      const stars = teamId ? (teamById as any)?.[teamId]?.stars ?? 0 : 0;
+      if (pic || stars) return <TeamAvatar pictureUrl={pic} initials={text} size={34} stars={stars} />;
       return (
         <div
           style={{

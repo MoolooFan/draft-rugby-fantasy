@@ -15,6 +15,7 @@ import { getLeagueScoringRules } from "@/lib/scoring/leagueRules";
 import { scoreTeamWeek, type Lineup, type LineupPlayer } from "@/lib/scoring/week";
 import { fixCaptains, reconcileLineup } from "@/lib/league/lineup";
 import { activeIdsOf } from "@/lib/league/ir";
+import { recordSeasonHonours } from "@/lib/league/honours";
 import { bonusPoints, buildLadder, type LadderMatchup } from "@/lib/league/ladder";
 import {
   buildLeagueSchedule,
@@ -360,6 +361,12 @@ export async function finaliseWeek(
   }
   await q(db.from("league_week_finalisations").upsert({ league_id: leagueId, week, finalised_at: nowIso }, { onConflict: "league_id,week" }));
   await prepareUpcoming(db, leagueId);
+  // Season over? Record the honours (champion, runner-up, wooden spoon...) for the stars (E8).
+  try {
+    await recordSeasonHonours(db, leagueId);
+  } catch (e) {
+    console.error("[results] season honours not recorded:", e);
+  }
   return { finalised: true, teams: results.length };
 }
 

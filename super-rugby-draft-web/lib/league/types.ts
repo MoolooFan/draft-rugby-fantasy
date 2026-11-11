@@ -8,6 +8,7 @@ export type LeagueTeam = {
   userId: string;        // owner username
   userInitials?: string;  // ✅ owner initials (from first/last or username)
   pictureUrl?: string | null; // team picture (E5), shown in a circle; none = initials
+  stars?: number; // championships the owner has won in this league's history (E8)
 };
 
 export type DraftStatus = "scheduled" | "live" | "complete";
@@ -32,6 +33,8 @@ export type League = {
   scoringLocked?: boolean;
   bonusPoints?: boolean;
   season?: number;
+  /** E8: the commissioner can restart this (earlier-season) league for the current season */
+  canRestart?: boolean;
 
   // season alignment
   realRegularSeasonRounds: number;
