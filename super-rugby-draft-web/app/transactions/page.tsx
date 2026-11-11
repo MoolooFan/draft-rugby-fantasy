@@ -32,6 +32,8 @@ import { Filters } from "./Filters";
 import { positionsLabel } from "@/lib/players/positions";
 import { StatusTag } from "@/components/StatusTag";
 import { TeamAvatar } from "@/components/TeamAvatar";
+import { StatViewToggle } from "@/components/StatViewToggle";
+import { applyStatView, formatStatView, useStatView } from "@/lib/players/statView";
 
 // -----------------------
 // Types (match your player shape)
@@ -973,6 +975,7 @@ useEffect(() => {
   | "RED_CARDS";
 
 const [infoMode, setInfoMode] = useState<InfoMode>("TOTAL_PTS");
+const [statView] = useStatView(); // C1: per game (default) / total / per 80
 
     // =========================
   // Drop-select modal (Claim / Add)
@@ -1865,7 +1868,7 @@ function getStatTotalCount(p: Player, header: string): number | null {
   switch (mode) {
     case "DRAFT_RANK": return "Draft Rk";
     case "MATCH_AVG": return "Match Avg";
-    case "TOTAL_PTS": return "Total Pts";
+    case "TOTAL_PTS": return "Points";
     case "FORM_3": return "Form";
     case "LAST_SCORE": return "Last";
     case "GAMES_PLAYED": return "Games";
@@ -1898,6 +1901,7 @@ function getStatTotalCount(p: Player, header: string): number | null {
 }
 
   function metricValue(p: Player, mode: InfoMode): string {
+  if (VIEW_MODES.has(mode)) return formatStatView(metricSortValue(p, mode), statView);
   // Basic score-derived stats
   if (mode === "DRAFT_RANK") return typeof p.draftRank === "number" ? String(p.draftRank) : "-";
 
@@ -2047,7 +2051,22 @@ function ownerTeamLabelForPlayerId(playerId: string): string {
   return "Owned";
 }
 
+// C1: points and stat totals follow the Per game / Total / Per 80 switch (draft rank, match
+// average, form, last score and games don't)
+const VIEW_MODES = new Set<InfoMode>([
+  "TOTAL_PTS", "TRIES", "TRY_ASSISTS", "LINEBREAKS", "LINEBREAK_ASSISTS", "DEFENDERS_BEATEN", "METRES_GAINED",
+  "OFFLOADS", "TACKLES", "MISSED_TACKLES", "TURNOVERS_FORCED", "INTERCEPTIONS", "KICKS_50_22", "PENALTIES_CONCEDED",
+  "ERRORS", "LINEOUTS_WON", "LINEOUT_STEALS", "LINEOUT_ERRORS", "SCRUMS_WON", "CONVERSIONS", "PENALTY_GOALS",
+  "DROP_GOALS", "YELLOW_CARDS", "RED_CARDS",
+]);
+
 function metricSortValue(p: Player, mode: InfoMode): number | null {
+  const raw = metricRawValue(p, mode);
+  if (!VIEW_MODES.has(mode)) return raw;
+  return applyStatView(raw, getMatchesPlayed(p) ?? 0, getStatTotalCount(p, "Minutes played") ?? 0, statView);
+}
+
+function metricRawValue(p: Player, mode: InfoMode): number | null {
   if (mode === "DRAFT_RANK") return typeof p.draftRank === "number" ? p.draftRank : null;
 
   if (mode === "MATCH_AVG") return getAvgPPG(p);
@@ -2252,7 +2271,7 @@ const pendingOffersCount = useMemo(() => {
         return (b.v ?? -Infinity) - (a.v ?? -Infinity);
       })
       .map((x) => x.p);
-  }, [baseOwnerList, search, teamFilter, posFilter, infoMode, roundRows]);
+  }, [baseOwnerList, search, teamFilter, posFilter, infoMode, roundRows, statView]);
 
   const ownerFilterOptions = useMemo(() => {
     const opts: Array<{ label: string; value: string }> = [];
@@ -3784,11 +3803,9 @@ const url =
 />
 
             <div style={listBox}>
-              <div style={{ padding: "8px 121px", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 180px" }}>
-                  <div />
-                  <div style={{ textAlign: "right" }}>{metricLabel(infoMode)}</div>
-                </div>
+              <div style={{ padding: "8px 121px 8px 10px", display: "grid", gridTemplateColumns: "auto 1fr", alignItems: "center", gap: 8 }}>
+                <StatViewToggle dark />
+                <div style={{ textAlign: "right", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>{metricLabel(infoMode)}</div>
               </div>
 
               {playerPoolPlayers.length === 0 ? (
@@ -3817,11 +3834,9 @@ const url =
 />
 
             <div style={listBox}>
-              <div style={{ padding: "8px 121px", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 180px" }}>
-                  <div />
-                  <div style={{ textAlign: "right" }}>{metricLabel(infoMode)}</div>
-                </div>
+              <div style={{ padding: "8px 121px 8px 10px", display: "grid", gridTemplateColumns: "auto 1fr", alignItems: "center", gap: 8 }}>
+                <StatViewToggle dark />
+                <div style={{ textAlign: "right", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>{metricLabel(infoMode)}</div>
               </div>
 
               {watchlistPlayers.length === 0 ? (

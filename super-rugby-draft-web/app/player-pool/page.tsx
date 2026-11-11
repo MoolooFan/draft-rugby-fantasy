@@ -17,9 +17,11 @@ import { playerRoundRows } from "@/lib/players/roundIndex";
 import { canPlayPosition, positionsLabel } from "@/lib/players/positions";
 import { isFrontRow, playedInRound, playerPoints, roundPoints, statCountsFromRow } from "@/lib/scoring";
 import { TEAM_OPTIONS } from "@/lib/constants";
+import { StatViewToggle } from "@/components/StatViewToggle";
+import { applyStatView, formatStatView, STAT_VIEW_LABEL, useStatView } from "@/lib/players/statView";
 import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
 
-type SortKey = "total" | "avg" | "rank";
+type SortKey = "points" | "rank";
 const POSITIONS = ["PR", "HO", "LK", "LF", "HB", "FH", "CE", "OB"];
 const PAGE = 60;
 
@@ -43,23 +45,26 @@ export default function PlayerPoolPage() {
   const [search, setSearch] = useState("");
   const [team, setTeam] = useState("");
   const [pos, setPos] = useState("");
-  const [sort, setSort] = useState<SortKey>("total");
+  const [sort, setSort] = useState<SortKey>("points");
+  const [view] = useStatView(); // C1: per game / total / per 80
   const [shown, setShown] = useState(PAGE);
   const [card, setCard] = useState<PlayerFromSheet | null>(null);
 
   // season points and games for every player (stat rows are grouped by player once)
   const totals = useMemo(() => {
-    const m = new Map<string, { total: number | null; games: number }>();
+    const m = new Map<string, { total: number | null; games: number; minutes: number }>();
     for (const p of players) {
       let total = 0;
       let games = 0;
+      let minutes = 0;
       for (const r of playerRoundRows(statRows, p.id)) {
         const counts = statCountsFromRow(r);
         if (!playedInRound(counts)) continue;
         total += playerPoints(counts, isFrontRow(p));
+        minutes += Number(counts.minutesPlayed) || 0;
         games++;
       }
-      m.set(p.id, { total: games ? roundPoints(total) : null, games });
+      m.set(p.id, { total: games ? roundPoints(total) : null, games, minutes });
     }
     return m;
   }, [players, statRows]);
@@ -74,12 +79,11 @@ export default function PlayerPoolPage() {
     });
     const val = (p: PlayerFromSheet) => {
       const t = totals.get(p.id);
-      if (sort === "total") return t?.total ?? -1;
-      if (sort === "avg") return t && t.games ? (t.total ?? 0) / t.games : -1;
+      if (sort === "points") return t ? applyStatView(t.total, t.games, t.minutes, view) ?? -1 : -1;
       return -(p.draftRank ?? 9999);
     };
     return out.sort((a, b) => val(b) - val(a) || String(a.lastName).localeCompare(String(b.lastName)));
-  }, [players, search, team, pos, sort, totals]);
+  }, [players, search, team, pos, sort, totals, view]);
 
   const selectStyle: React.CSSProperties = {
     height: 34,
@@ -145,26 +149,28 @@ export default function PlayerPoolPage() {
               ))}
             </select>
             <select id="pool-sort" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} style={selectStyle} aria-label="Sort by">
-              <option value="total">Total pts</option>
-              <option value="avg">Avg pts</option>
+              <option value="points">Points</option>
               <option value="rank">Draft rank</option>
             </select>
           </div>
-          <div style={{ marginTop: 8, fontSize: 10, fontWeight: 800, opacity: 0.85 }}>
-            {list.length} players · points from {statSeason}
+          <div style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <StatViewToggle />
+            <span style={{ fontSize: 10, fontWeight: 800, opacity: 0.85 }}>
+              {list.length} players · {statSeason} season
+            </span>
           </div>
         </div>
 
         <div style={{ marginTop: 12, borderRadius: 18, overflow: "hidden", background: "rgba(255,255,255,0.92)", color: "#0f172a", boxShadow: "0 12px 30px rgba(0,0,0,0.18)" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "34px 1fr 44px 44px", gap: 8, padding: "8px 10px", fontSize: 10, fontWeight: 900, opacity: 0.6 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "34px 1fr 36px 52px", gap: 8, padding: "8px 10px", fontSize: 10, fontWeight: 900, opacity: 0.6 }}>
             <span />
             <span>Player</span>
-            <span style={{ textAlign: "right" }}>Total</span>
-            <span style={{ textAlign: "right" }}>Avg</span>
+            <span style={{ textAlign: "right" }}>Games</span>
+            <span style={{ textAlign: "right" }}>Pts {STAT_VIEW_LABEL[view].toLowerCase()}</span>
           </div>
           {list.slice(0, shown).map((p) => {
             const t = totals.get(p.id);
-            const avg = t && t.games ? (t.total ?? 0) / t.games : null;
+            const pts = t ? applyStatView(t.total, t.games, t.minutes, view) : null;
             return (
               <button
                 key={p.id}
@@ -172,7 +178,7 @@ export default function PlayerPoolPage() {
                 style={{
                   width: "100%",
                   display: "grid",
-                  gridTemplateColumns: "34px 1fr 44px 44px",
+                  gridTemplateColumns: "34px 1fr 36px 52px",
                   gap: 8,
                   alignItems: "center",
                   padding: "8px 10px",
@@ -196,8 +202,8 @@ export default function PlayerPoolPage() {
                     {String(p.teamCode).toUpperCase()} · {positionsLabel(p)}
                   </span>
                 </span>
-                <span style={{ textAlign: "right", fontSize: 12, fontWeight: 900, fontVariantNumeric: "tabular-nums" }}>{t?.total ?? "-"}</span>
-                <span style={{ textAlign: "right", fontSize: 12, fontWeight: 800, opacity: 0.75, fontVariantNumeric: "tabular-nums" }}>{avg != null ? avg.toFixed(1) : "-"}</span>
+                <span style={{ textAlign: "right", fontSize: 12, fontWeight: 800, opacity: 0.75, fontVariantNumeric: "tabular-nums" }}>{t?.games || "–"}</span>
+                <span style={{ textAlign: "right", fontSize: 12, fontWeight: 900, fontVariantNumeric: "tabular-nums" }}>{formatStatView(pts, view)}</span>
               </button>
             );
           })}

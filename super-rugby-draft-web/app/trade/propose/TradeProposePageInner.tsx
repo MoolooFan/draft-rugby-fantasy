@@ -24,6 +24,8 @@ import { toMs, getWeekDeadlineMs, getWeeksSorted } from "@/lib/league/weekHelper
 import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
 import { positionsLabel } from "@/lib/players/positions";
 import { StatusTag } from "@/components/StatusTag";
+import { StatViewToggle } from "@/components/StatViewToggle";
+import { applyStatView, formatStatView, useStatView, type StatView } from "@/lib/players/statView";
 
 // -----------------------
 // Types
@@ -306,14 +308,17 @@ function getFormLast3AvgFromRounds(p: Player, roundRows: any[]): number | null {
   return sum / last3.length;
 }
 
-function metricValue(p: Player, mode: InfoMode, roundRows: any[]): string {
+function metricValue(p: Player, mode: InfoMode, roundRows: any[], view: StatView = "game"): string {
   if (mode === "DRAFT_RANK") {
     return typeof p.draftRank === "number" ? String(p.draftRank) : "-";
   }
 
   if (mode === "TOTAL_PTS") {
+    // C1: points follow the Per game / Total / Per 80 switch
     const t = getTotalPointsFromRounds(p, roundRows);
-    return typeof t === "number" ? String(Math.round(t)) : "-";
+    const gp = getMatchesPlayedFromRounds(p, roundRows) ?? 0;
+    const mins = getPlayerRounds(p.id, roundRows).reduce((a: number, r: any) => a + (toNum(r?.["Minutes played"]) ?? 0), 0);
+    return formatStatView(applyStatView(t, gp, mins, view), view);
   }
 
   if (mode === "AVG_PPG") {
@@ -665,6 +670,7 @@ const [proposeError, setProposeError] = useState<string | null>(null);
 
   // Info mode
   const [infoMode, setInfoMode] = useState<InfoMode>("AVG_PPG");
+  const [statView] = useStatView(); // C1
 
   // When partner team changes: clear selections + go back to REQUESTING
   useEffect(() => {
@@ -1048,6 +1054,13 @@ const StepButtons = useStableComponent(StepButtons__render);
   </div>
 )}
 
+          {/* C1: Per game / Total / Per 80 (for Points) */}
+          {infoMode === "TOTAL_PTS" ? (
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <StatViewToggle />
+            </div>
+          ) : null}
+
           {/* View selector */}
           <div style={{ ...inputWrap, position: "relative" }}>
             <select
@@ -1069,7 +1082,7 @@ const StepButtons = useStableComponent(StepButtons__render);
             >
               <option value="DRAFT_RANK">Draft Rank</option>
 <option value="AVG_PPG">Match Average</option>
-<option value="TOTAL_PTS">Total Points</option>
+<option value="TOTAL_PTS">Points</option>
 <option value="FORM">Form</option>
 
             </select>
@@ -1171,7 +1184,7 @@ function PlayerRow__render({
 
       {/* Metric + live week points */}
       <div style={{ textAlign: "right", fontSize: 12, fontWeight: 900 }}>
-  {metricValue(p, infoMode, roundRows ?? [])}
+  {metricValue(p, infoMode, roundRows ?? [], statView)}
 
 </div>
 

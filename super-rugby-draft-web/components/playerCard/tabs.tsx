@@ -3,7 +3,9 @@
 // (moved out of PlayerCardModal.tsx unchanged)
 import { useMemo } from "react";
 
-import { FixtureRow, TabCard, computeGames, totalDerived, playerGetsScrumPointsForCard, StatRow, perGameDerived, teamLogoSrc, formatKickoffLocal, fdrTheme } from "./helpers";
+import { FixtureRow, TabCard, computeGames, totalDerived, playerGetsScrumPointsForCard, StatRow, teamLogoSrc, formatKickoffLocal, fdrTheme } from "./helpers";
+import { applyStatView, formatStatView, STAT_VIEW_LABEL, useStatView } from "@/lib/players/statView";
+import { StatViewToggle } from "@/components/StatViewToggle";
 
 export function StatsTab({
   player,
@@ -104,12 +106,11 @@ export function StatsTab({
     { label: "Red Cards", key: "redCards" },
   ];
 
-  // Formatting to match screenshot (mostly 1dp, but "-" when no games)
-  function fmtPerGame(val: number) {
-    if (!gp) return "-";
-    // If it’s basically an integer, show 0dp? Screenshot shows decimals often, so keep 1dp always.
-    return val.toFixed(1);
-  }
+  // Per game / Total / Per 80 (C1): every stat below follows the switch at the top
+  const [view] = useStatView();
+  const minutes = (rounds ?? []).reduce((a, r) => a + (Number(r?.minutes ?? r?.breakdown?.minutesPlayed) || 0), 0);
+  const shown = (total: number) => formatStatView(applyStatView(gp ? total : null, gp, minutes, view), view);
+  const pointsTotal = (rounds ?? []).reduce((a, r) => a + (Number(r?.points) || 0), 0);
 
   return (
     <TabCard>
@@ -127,11 +128,10 @@ export function StatsTab({
           right2={typeof st === "number" ? String(st) : "-"}
           right2Label="Starts"
         />
-        <StatRow label="Tries Scored" right={triesTotal ? String(triesTotal) : "-"} />
-        <StatRow label="Try Assists" right={tryAssistsTotal ? String(tryAssistsTotal) : "-"} />
 
-        {/* divider */}
-        <div style={{ height: 10 }} />
+        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 2px" }}>
+          <StatViewToggle dark />
+        </div>
 
         {/* Per Game header row */}
         <div
@@ -145,25 +145,30 @@ export function StatsTab({
         >
           <div />
           <div style={{ textAlign: "right", fontSize: 10, opacity: 0.6, fontWeight: 800 }}>
-            Per Game
+            {STAT_VIEW_LABEL[view]}
           </div>
         </div>
+
+        <StatRow label="Points" right={shown(pointsTotal)} />
+        <StatRow label="Minutes Played" right={view === "per80" ? "–" : shown(minutes)} />
+        <StatRow label="Tries Scored" right={shown(triesTotal)} />
+        <StatRow label="Try Assists" right={shown(tryAssistsTotal)} />
 
         {/* === Per game rows === */}
         {perGameRows.map((r) => {
           const missedKey = missedKeyByMadeKey[r.key];
-          const made = gp ? perGameDerived(rounds, r.key) : 0;
+          const made = totalDerived(rounds, r.key);
 
           // If it's a "missed" row, show missed underneath like screenshot
           if (missedKey) {
-            const missed = gp ? perGameDerived(rounds, missedKey) : 0;
+            const missed = totalDerived(rounds, missedKey);
 
             return (
               <StatRow
                 key={r.key}
                 label={r.label}
-                right={gp ? fmtPerGame(made) : "-"}
-                subRight={gp ? fmtPerGame(missed) : "-"}
+                right={shown(made)}
+                subRight={shown(missed)}
 
               />
             );
@@ -173,36 +178,16 @@ export function StatsTab({
             <StatRow
               key={r.key}
               label={r.label}
-              right={gp ? fmtPerGame(made) : "-"}
+              right={shown(made)}
             />
           );
         })}
 
-        {/* divider */}
-        <div style={{ height: 10 }} />
-
-        {/* Total header row */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 90px",
-            padding: "6px 0",
-            borderBottom: "1px solid rgba(0,0,0,0.18)",
-            alignItems: "end",
-          }}
-        >
-          <div />
-          <div style={{ textAlign: "right", fontSize: 10, opacity: 0.6, fontWeight: 800 }}>
-            Total
-          </div>
-        </div>
-
-        {/* === Totals === */}
         {totalRows.map((r) => (
           <StatRow
             key={r.key}
             label={r.label}
-            right={String(totalDerived(rounds, r.key) || "-")}
+            right={shown(totalDerived(rounds, r.key))}
           />
         ))}
       </div>
