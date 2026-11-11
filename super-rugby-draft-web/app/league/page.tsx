@@ -21,6 +21,7 @@ import { toMs, pickValue } from "@/lib/league/weekHelpers";
 import { toDatetimeLocal, ModalOverlay, inputStyle, selectStyle, parseDatetimeLocal, saveButton } from "./ui";
 import { LeagueSettingsModal } from "./LeagueSettingsModal";
 import { TeamAvatar } from "@/components/TeamAvatar";
+import { CrownIcon, SpoonIcon } from "@/components/AwardIcons";
 
 type LeagueTab = "Standings" | "Fixtures" | "Results";
 type Modal =
@@ -224,6 +225,8 @@ type SheetFixtureRow = {
 };
 
 const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
+// weekly crown / spoon count per team (E6)
+const [awardTally, setAwardTally] = useState<Record<string, { crowns: number; spoons: number }>>({});
 
 useEffect(() => {
   if (!league?.id) return;
@@ -232,8 +235,10 @@ useEffect(() => {
   fetch(`/api/fixtures/leagueMatches?season=${season}&leagueId=${encodeURIComponent(league.id)}`)
     .then((r) => r.json())
     .then((j) => {
-      if (j?.ok) setSheetFixtures(j.rows ?? []);
-      else console.error("fixtures fetch failed", j?.error);
+      if (j?.ok) {
+        setSheetFixtures(j.rows ?? []);
+        setAwardTally(j.awards?.tally ?? {});
+      } else console.error("fixtures fetch failed", j?.error);
     })
     .catch((e) => console.error(e));
 }, [league?.id]);
@@ -748,11 +753,11 @@ const MovementCircle = useStableComponent(MovementCircle__render);
       <>
         <div style={listBox}>
           <div style={{ padding: "10px 10px", overflowX: "auto" }}>
-            <div style={{ minWidth: 560 }}>
+            <div style={{ minWidth: 630 }}>
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "44px 1fr 40px 40px 40px 40px 50px 50px 50px 10px",
+                  gridTemplateColumns: "44px 1fr 62px 40px 40px 40px 40px 50px 50px 50px 10px",
 
                   gap: 8,
                   fontSize: 10,
@@ -763,6 +768,9 @@ const MovementCircle = useStableComponent(MovementCircle__render);
               >
                 <div>Rk</div>
                 <div>Team</div>
+                <div title="Weekly crowns (top score) and spoons (lowest score)" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                  <CrownIcon size={12} /> / <SpoonIcon size={12} />
+                </div>
                 <div>P</div>
                 <div>W</div>
                 <div>D</div>
@@ -778,7 +786,7 @@ const MovementCircle = useStableComponent(MovementCircle__render);
                   key={r.rank}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "44px 1fr 40px 40px 40px 40px 50px 50px 50px 10px",
+                    gridTemplateColumns: "44px 1fr 62px 40px 40px 40px 40px 50px 50px 50px 10px",
 
                     gap: 8,
                     alignItems: "center",
@@ -797,6 +805,13 @@ const MovementCircle = useStableComponent(MovementCircle__render);
                       return <TeamAvatar pictureUrl={t?.pictureUrl} initials={t?.userInitials ?? t?.initials} size={24} />;
                     })()}
                     <span style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.teamName}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 3, fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>
+                    <CrownIcon size={13} title="Weekly crowns" />
+                    {awardTally[r.teamId]?.crowns ?? 0}
+                    <span style={{ width: 4 }} />
+                    <SpoonIcon size={13} title="Weekly spoons" />
+                    {awardTally[r.teamId]?.spoons ?? 0}
                   </div>
                   <div>{r.played}</div>
                   <div>{r.wins}</div>

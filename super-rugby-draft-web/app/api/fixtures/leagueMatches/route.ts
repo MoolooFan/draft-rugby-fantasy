@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { getSeason, realRoundsForWeek, weekLabel, SEASONS } from "@/lib/season";
+import { weeklyAwards, type TeamWeekScore } from "@/lib/league/weeklyAwards";
 
 export const dynamic = "force-dynamic";
 
@@ -131,7 +132,17 @@ export async function GET(req: Request) {
     const order = (r: { kind: string }) => (r.kind === "regular" ? 0 : r.kind === "playoff" ? 1 : 2);
     rows.sort((a, b) => a.weekFantasy - b.weekFantasy || order(a) - order(b));
 
-    return NextResponse.json({ ok: true, rows });
+    // Weekly crown (top score) and spoon (lowest score) from the finalised regular-season rounds.
+    const weekScores: TeamWeekScore[] = [];
+    for (const r of rows) {
+      if (r.kind !== "regular" || r.scoreStatus !== "final") continue;
+      for (const [team, score] of [[r.homeTeamId, r.homeScore], [r.awayTeamId, r.awayScore]] as const) {
+        if (team && typeof score === "number") weekScores.push({ week: r.weekFantasy, teamId: String(team), score });
+      }
+    }
+    const awards = weeklyAwards(weekScores);
+
+    return NextResponse.json({ ok: true, rows, awards });
   } catch (e) {
     const { msg, status } = toHttpError(e);
     return NextResponse.json({ ok: false, error: msg }, { status });
