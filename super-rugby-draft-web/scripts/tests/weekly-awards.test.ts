@@ -26,7 +26,7 @@ check("week 1 spoon to the lowest score", JSON.stringify(r.weeks[0]?.spoon) === 
 check("ties: both get the crown", JSON.stringify(r.weeks[1]?.crown) === '["a","b"]');
 check("ties: both get the spoon", JSON.stringify(r.weeks[1]?.spoon) === '["c","d"]');
 check("a week with one team or everyone level has no awards", r.weeks.length === 2);
-check("tally", r.tally.a.crowns === 1 && r.tally.d.crowns === 1 && r.tally.c.spoons === 2 && r.tally.b.crowns === 1 && r.tally.d.spoons === 1);
+check("latest = the most recent round with awards (they move each week)", r.latest?.week === 2 && JSON.stringify(r.latest?.crown) === '["a","b"]');
 
 console.log(failures ? `\n${failures} FAILED` : "\nALL PASS");
 process.exit(failures ? 1 : 0);

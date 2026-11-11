@@ -132,7 +132,8 @@ export async function GET(req: Request) {
     const order = (r: { kind: string }) => (r.kind === "regular" ? 0 : r.kind === "playoff" ? 1 : 2);
     rows.sort((a, b) => a.weekFantasy - b.weekFantasy || order(a) - order(b));
 
-    // Weekly crown (top score) and spoon (lowest score) from the finalised regular-season rounds.
+    // Weekly crown (top score) and spoon (lowest score) from the finalised regular-season rounds;
+    // awards.latest is the one the pages show (it moves each week).
     const weekScores: TeamWeekScore[] = [];
     for (const r of rows) {
       if (r.kind !== "regular" || r.scoreStatus !== "final") continue;
