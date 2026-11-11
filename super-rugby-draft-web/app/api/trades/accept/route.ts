@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
 import { cancelPendingTradesTouchingPlayers, cancelInvalidPendingTradesForTeams } from "@/lib/trades/cancelPendingTrades";
 import { isPastWeekDeadline } from "@/lib/trades/deadlines";
+import { loadRosterPlayers, rosterProblem, updateLineupsAfterRosterChange } from "@/lib/league/rosterChange";
 
 type TradeOfferRow = {
   id: string;
@@ -208,6 +209,15 @@ const requested = uniq((offer.request_player_ids ?? []) as any);
     const nextFrom = fromExtract.ids.filter((id) => !offered.includes(id)).concat(requested);
     const nextTo = toExtract.ids.filter((id) => !requested.includes(id)).concat(offered);
 
+    // 9b) Both teams must keep the position rules (so each can always field a full XV)
+    const { data: lg, error: lgErr } = await supabaseAdmin.from("leagues").select("season").eq("id", offer.league_id).maybeSingle();
+    if (lgErr) throw new Error("League not found");
+    const rosterPlayers = await loadRosterPlayers(supabaseAdmin, Number(lg?.season), [...nextFrom, ...nextTo]);
+    const toProblem = rosterProblem(uniq(nextTo), rosterPlayers);
+    if (toProblem) throw new Error(`Your team: ${toProblem}`);
+    const fromProblem = rosterProblem(uniq(nextFrom), rosterPlayers);
+    if (fromProblem) throw new Error(`The other team: ${fromProblem}`);
+
     const nextFromData = writePlayerIds(fromRoster.data, fromExtract.key, uniq(nextFrom));
     const nextToData = writePlayerIds(toRoster.data, toExtract.key, uniq(nextTo));
 
@@ -235,6 +245,22 @@ const requested = uniq((offer.request_player_ids ?? []) as any);
   .eq("id", offer.id);
 
 if (acceptErr) throw new Error("Failed to finalize trade status");
+
+// New players take the spots of the players traded away (or the lineups are fixed up); captains too.
+// (After the trade is final: a problem here mustn't put the trade back to pending.)
+try {
+  await updateLineupsAfterRosterChange(
+    supabaseAdmin,
+    offer.league_id,
+    new Map([
+      [offer.from_team_id, uniq(nextFrom)],
+      [offer.to_team_id, uniq(nextTo)],
+    ]),
+    now
+  );
+} catch (e) {
+  console.error("[trades/accept] lineup update failed:", e);
+}
 
 // Cancel other pending trades that mention any moved player
 const movedPlayerIds = uniq([...offered, ...requested]);

@@ -5,6 +5,7 @@ import { waiverProcessFromMs } from "@/lib/league/deadlines";
 import { currentSeasonYear } from "@/lib/season";
 
 import { cancelPendingTradesTouchingPlayers, cancelInvalidPendingTradesForTeams } from "@/lib/trades/cancelPendingTrades";
+import { loadRosterPlayers, rosterProblem, updateLineupsAfterRosterChange } from "@/lib/league/rosterChange";
 
 function extractIds(data: any): string[] {
   if (Array.isArray(data?.playerIds)) return data.playerIds.map(String);
@@ -152,6 +153,14 @@ if (String(runRow.status).toUpperCase() === "RUNNING" && runRow.started_at_ms !=
     if (lErr) throw lErr;
     const lockedSet = new Set((locks ?? []).map((l: any) => String(l.player_id)));
 
+    // positions of every rostered and claimed player (for the position rules)
+    const { data: lgRow, error: lgErr } = await supabaseAdmin.from("leagues").select("season").eq("id", leagueId).maybeSingle();
+    if (lgErr) throw lgErr;
+    const rosterPlayers = await loadRosterPlayers(supabaseAdmin, Number(lgRow?.season), [
+      ...owned,
+      ...(claims ?? []).map((c: any) => String(c.add_player_id)),
+    ]);
+
     // group pending claims per team by (priority asc, created asc)
 const pendingByTeam = new Map<string, any[]>();
 for (const c of claims ?? []) {
@@ -268,7 +277,24 @@ const ids = new Set(baseIds);
 if (dropId) ids.delete(dropId);
 ids.add(addId);
 
-const nextRoster = { playerIds: Array.from(ids) };
+const nextRoster = { playerIds: Array.from(ids) as string[] };
+
+      // Position rules (so the team can always field a full XV)
+      const problem = rosterProblem(nextRoster.playerIds, rosterPlayers);
+      if (problem) {
+        const { error: claimFailErr } = await supabaseAdmin
+          .from("waiver_claims")
+          .update({
+            status: "FAILED",
+            decided_reason: problem,
+            decided_at_ms: processedAtMs,
+            processed_at_ms: processedAtMs,
+            updated_at_ms: processedAtMs,
+          })
+          .eq("id", id);
+        if (claimFailErr) throw claimFailErr;
+        continue;
+      }
 
       const { error: rosterUpsertErr } = await supabaseAdmin
   .from("rosters")
@@ -346,6 +372,17 @@ if (dropId) touchedPlayerIds.add(dropId);
         .insert(newLocks);
 
       if (insErr) throw insErr;
+    }
+
+    // Fix the lineups (and captains) of every team that got players
+    if (touchedTeamIds.size) {
+      const changed = new Map<string, string[]>();
+      for (const t of touchedTeamIds) changed.set(t, (rosterByTeam.get(t)?.playerIds ?? []).map(String));
+      try {
+        await updateLineupsAfterRosterChange(supabaseAdmin, leagueId, changed, processedAtMs);
+      } catch (e) {
+        console.error("[waivers/process] lineup update failed:", e);
+      }
     }
 
     // Mark run as processed

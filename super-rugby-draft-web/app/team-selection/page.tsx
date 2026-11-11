@@ -24,6 +24,8 @@ import { playerPositions } from "@/lib/players/positions";
 import { toMs, getWeekDeadlineMs, type SheetFixtureRow, currentWeekFromSheet, pickValue } from "@/lib/league/weekHelpers";
 import { JERSEYS } from "@/lib/teams/images";
 import { StatusTag } from "@/components/StatusTag";
+import { fixCaptains } from "@/lib/league/lineup";
+import type { Lineup as ServerLineup } from "@/lib/scoring/week";
 
 type ViewMode = "Fixture" | "Latest Score" | "PPG" | "Form";
 
@@ -751,6 +753,8 @@ const deadlineText = useMemo(() => {
 // Captain/VC (starter-only)
 const [captainId, setCaptainId] = useState<string | null>(null);
 const [viceId, setViceId] = useState<string | null>(null);
+// each player's pick number in this league's draft (for "highest draft pick")
+const [pickNumbers, setPickNumbers] = useState<Record<string, number>>({});
 
 // Save button state
 const [hasLoadedSaved, setHasLoadedSaved] = useState(false);
@@ -759,14 +763,6 @@ const [saveToast, setSaveToast] = useState<string | null>(null);
 const [loadedFromServer, setLoadedFromServer] = useState(false);
 const [loadedWeek, setLoadedWeek] = useState<number | null>(null);
 
-// Captain/VC storage keys (scoped per league + team)
-const storageKeyBase = useMemo(() => {
-  return `ts_caps_${activeLeague?.id ?? "no-league"}_${yourDraftTeamId ?? "no-team"}`;
-}, [activeLeague?.id, yourDraftTeamId]);
-
-const CAPTAIN_KEY = `${storageKeyBase}_captain`;
-const VICE_KEY = `${storageKeyBase}_vice`;
-const INIT_KEY = `${storageKeyBase}_initDone`;
 
 useEffect(() => {
   if (!yourDraftTeamId) return;
@@ -847,6 +843,9 @@ async function saveSelection(weekOverride?: number) {
       return;
     }
 
+    if (json.lineup) setLineup(reconcileLineupWithRoster(json.lineup as Lineup, rosterPool));
+    if ("captainId" in json) setCaptainId(json.captainId ?? null);
+    if ("viceId" in json) setViceId(json.viceId ?? null);
     setIsDirty(false);
     setSaveToast("Saved");
     window.setTimeout(() => setSaveToast(null), 1200);
@@ -880,6 +879,8 @@ useEffect(() => {
         return;
       }
 
+      setPickNumbers(json.pickNumbers ?? {});
+      // the lineup saved for this week, or the most recent earlier one (carried over)
       const row = (json.rows ?? []).find(
         (r: any) => String(r.team_id ?? r.teamId) === String(yourDraftTeamId)
       );
@@ -930,20 +931,19 @@ useEffect(() => {
   setIsDirty(false);
 }, [hasLoadedSaved, loadedFromServer, loadedWeek, selectionWeek, rosterPool.length, initialLineup, lineup]);
 
-// One-time default assignment (first open after draft):
-// C = starting flyhalf, V = first outside back
+// Captain / vice-captain rules (same as the server, lib/league/lineup.ts): both must be starting.
+// Start of the season: the team's 1st and 2nd draft picks. If the captain is benched (or leaves),
+// the vice becomes captain and the new vice is the starter taken earliest in the draft.
+const pickRank = useMemo(() => {
+  return (id: string) => pickNumbers[id] ?? 100_000 + Number(sheetPlayerByDraftId.get(normaliseId(id))?.draftRank ?? 9999);
+}, [pickNumbers, sheetPlayerByDraftId]);
 useEffect(() => {
-  // only set defaults if nothing chosen yet
-  if (captainId || viceId) return;
-
-  const fly = lineup["flyhalf1"];
-  const ob1 = lineup["outsideback1"];
-  if (!fly?.id || !ob1?.id) return;
-
-  setCaptainId(fly.id);
-  setViceId(ob1.id);
-  setIsDirty(true);
-}, [lineup, captainId, viceId]);
+  if (!hasLoadedSaved) return;
+  if (!Object.values(lineup).some((p) => p?.id)) return;
+  const caps = fixCaptains(lineup as unknown as ServerLineup, captainId, viceId, pickRank);
+  if (caps.captainId !== captainId) setCaptainId(caps.captainId);
+  if (caps.viceId !== viceId) setViceId(caps.viceId);
+}, [lineup, captainId, viceId, hasLoadedSaved, pickRank]);
 
 function hydratePlayer(p: Player): Player & { status?: any; weeklyStatus?: any } {
   const live = getLivePlayerById(p.id);
@@ -1027,35 +1027,7 @@ function isStarterSlotId(id: SlotId) {
   return !!s?.starter;
 }
 
-function findSlotOfPlayer(l: Lineup, playerId: string | null): SlotId | null {
-  if (!playerId) return null;
-  for (const s of SLOT_DEFS) {
-    const p = l[s.id];
-    if (p?.id === playerId) return s.id;
-  }
-  return null;
-}
 
-function adjustBadgeAfterLineupChange(prev: Lineup, next: Lineup, badgeId: string | null) {
-  if (!badgeId) return null;
-
-  const prevSlot = findSlotOfPlayer(prev, badgeId);
-  const nextSlot = findSlotOfPlayer(next, badgeId);
-
-  // If badge player is still in a starter slot, keep it on them
-  if (nextSlot && isStarterSlotId(nextSlot)) return badgeId;
-
-  // If they moved off the starters (bench), transfer badge to whoever replaced them
-  // in their previous STARTER slot (this matches your “bench -> starter swap means
-  // incoming player becomes captain/vice” rule)
-  if (prevSlot && isStarterSlotId(prevSlot)) {
-    const replacement = next[prevSlot];
-    if (replacement?.id) return replacement.id;
-  }
-
-  // If we can’t resolve, clear it
-  return null;
-}
 
   function onTilePress(slotId: SlotId) {
     const p = lineup[slotId];
@@ -1090,8 +1062,6 @@ if (swapFromSlot) {
     next = { ...prev, [pId]: a, [toId]: c, [fromId]: b };
   }
 
-  setCaptainId((cid) => adjustBadgeAfterLineupChange(prev, next, cid));
-  setViceId((vid) => adjustBadgeAfterLineupChange(prev, next, vid));
 setIsDirty(true);
 
   return next;
@@ -1539,9 +1509,9 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
       label: "Make Captain",
       onClick: () => {
         if (!isStarter) return;
+        // the vice made captain: the old captain becomes vice
+        if (viceId === modalPlayer.id) setViceId(captainId);
         setCaptainId(modalPlayer.id);
-        // prevent same id for VC
-        setViceId((v) => (v === modalPlayer.id ? null : v));
         setIsDirty(true);
 
         setModalPlayer(null);
@@ -1553,8 +1523,9 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
       label: "Make Vice",
       onClick: () => {
         if (!isStarter) return;
+        // the captain made vice: the old vice becomes captain
+        if (captainId === modalPlayer.id) setCaptainId(viceId);
         setViceId(modalPlayer.id);
-        setCaptainId((c) => (c === modalPlayer.id ? null : c));
         setIsDirty(true);
 
         setModalPlayer(null);
@@ -1564,7 +1535,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
 
     // If not starter, disable intent by no-op; you can later add UI disable inside PlayerCardModal if desired.
     return actions;
-  }, [modalPlayer, slotOfPlayer, swapFromSlot]);
+  }, [modalPlayer, slotOfPlayer, swapFromSlot, captainId, viceId]);
 
   return (
     <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>

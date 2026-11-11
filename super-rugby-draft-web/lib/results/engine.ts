@@ -13,7 +13,7 @@ import { loadSeasonPlayers } from "@/lib/players/db";
 import { statCountsFromRaw, isFrontRow, roundPoints, STATS, type StatCounts } from "@/lib/scoring";
 import { getLeagueScoringRules } from "@/lib/scoring/leagueRules";
 import { scoreTeamWeek, type Lineup, type LineupPlayer } from "@/lib/scoring/week";
-import { reconcileLineup } from "@/lib/league/lineup";
+import { fixCaptains, reconcileLineup } from "@/lib/league/lineup";
 import { bonusPoints, buildLadder, type LadderMatchup } from "@/lib/league/ladder";
 import {
   buildLeagueSchedule,
@@ -175,15 +175,19 @@ export async function lockWeek(db: Db, leagueId: string, week: number, nowMs: nu
   const selections = await q<Array<{ team_id: string; week: number; lineup: Lineup; captain_id: string | null; vice_id: string | null; locked_at: string | null }>>(
     db.from("team_selections").select("team_id, week, lineup, captain_id, vice_id, locked_at").eq("league_id", leagueId).lte("week", week)
   );
+  // "highest draft pick" for captains: this league's pick number, then never-drafted players by draft rank
+  const picks = await q<Array<{ player_id: string; pick_number: number }>>(db.from("draft_picks").select("player_id, pick_number").eq("league_id", leagueId));
+  const pickNo = new Map(picks.map((p) => [normId(p.player_id), Number(p.pick_number)]));
+  const pickRank = (id: string) => pickNo.get(normId(id)) ?? 100_000 + Number((playerInfo(id) as { draftRank?: number }).draftRank ?? 9999);
   let locked = 0;
   for (const t of teams) {
     const existing = selections.find((s) => s.team_id === t.id && s.week === week);
     if (existing?.locked_at) continue;
     const latest = existing ?? selections.filter((s) => s.team_id === t.id).sort((a, b) => b.week - a.week)[0] ?? null;
     const rosterIds = rosters.find((r) => r.team_id === t.id)?.data?.playerIds ?? [];
-    const lineup = reconcileLineup(latest?.lineup ?? null, rosterIds.map(playerInfo));
-    const inLineup = new Set(Object.values(lineup).filter(Boolean).map((p) => p!.id));
-    const keep = (id: string | null | undefined) => (id && inLineup.has(id) ? id : null);
+    const roster = rosterIds.map(playerInfo).sort((a, b) => pickRank(a.id) - pickRank(b.id));
+    const lineup = reconcileLineup(latest?.lineup ?? null, roster);
+    const caps = fixCaptains(lineup, latest?.captain_id, latest?.vice_id, pickRank);
     await q(
       db.from("team_selections").upsert(
         {
@@ -191,8 +195,8 @@ export async function lockWeek(db: Db, leagueId: string, week: number, nowMs: nu
           week,
           team_id: t.id,
           lineup,
-          captain_id: keep(latest?.captain_id),
-          vice_id: keep(latest?.vice_id),
+          captain_id: caps.captainId,
+          vice_id: caps.viceId,
           updated_at: new Date(nowMs).toISOString(),
           locked_at: new Date(nowMs).toISOString(),
         },

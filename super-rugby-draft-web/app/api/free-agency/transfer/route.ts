@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { buildAndValidateNextIds } from "@/lib/transactions/rosterValidate";
 import { cancelPendingTradesTouchingPlayers, cancelInvalidPendingTradesForTeams } from "@/lib/trades/cancelPendingTrades";
+import { loadRosterPlayers, rosterProblem, updateLineupsAfterRosterChange } from "@/lib/league/rosterChange";
 
 function extractIds(data: any): string[] {
   const ids: string[] = [];
@@ -180,6 +181,15 @@ export async function POST(req: Request) {
       return recordFailed("ROSTER_VALIDATION_FAILED", { validationError: built.error });
     }
 
+    // Position rules (so the team can always field a full XV), checked with the players table.
+    const { data: lg, error: lgErr } = await supabaseAdmin.from("leagues").select("season").eq("id", leagueId).maybeSingle();
+    if (lgErr) throw lgErr;
+    const rosterPlayers = await loadRosterPlayers(supabaseAdmin, Number(lg?.season), built.nextIds);
+    const problem = rosterProblem(built.nextIds, rosterPlayers);
+    if (problem) {
+      return recordFailed("ROSTER_VALIDATION_FAILED", { validationError: problem });
+    }
+
     // IMPORTANT: rosters DB should be authoritative by playerIds only.
 // Do NOT persist slots/wildcards here (they go stale and never remove players).
 const nextRoster = { playerIds: built.nextIds };
@@ -197,6 +207,13 @@ const nextRoster = { playerIds: built.nextIds };
     );
 
     if (upErr) throw upErr;
+
+    // The new player takes the dropped player's spot (or the lineup is fixed up); captains too.
+    try {
+      await updateLineupsAfterRosterChange(supabaseAdmin, leagueId, new Map([[teamId, built.nextIds]]), now);
+    } catch (e) {
+      console.error("[free-agency/transfer] lineup update failed:", e);
+    }
 
     // Cancel trades affected by free agency roster changes
 await cancelPendingTradesTouchingPlayers({

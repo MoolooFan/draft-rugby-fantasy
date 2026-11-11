@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { selectionDeadlineMs } from "@/lib/league/deadlines";
+import { loadPickRank, loadRosterPlayers } from "@/lib/league/rosterChange";
+import { fixCaptains, updateLineup } from "@/lib/league/lineup";
+import type { Lineup } from "@/lib/scoring/week";
 
 export async function POST(req: Request) {
   try {
@@ -68,6 +71,28 @@ export async function POST(req: Request) {
       );
     }
 
+    // Only the team's own players, in spots they can play (a valid lineup is saved as it is), and
+    // the captain / vice-captain must be starting (moved automatically if not).
+    const { data: rosterRow, error: rErr } = await supabaseAdmin
+      .from("rosters")
+      .select("data")
+      .eq("league_id", leagueId)
+      .eq("team_id", teamId)
+      .maybeSingle();
+    if (rErr) throw rErr;
+    const rosterIds: string[] = (rosterRow?.data?.playerIds ?? []).map(String);
+    const players = await loadRosterPlayers(supabaseAdmin, Number(league?.season), rosterIds);
+    const pickRank = await loadPickRank(supabaseAdmin, leagueId, players);
+    const roster = rosterIds
+      .map((id) => players.get(id))
+      .filter((p): p is NonNullable<typeof p> => !!p)
+      .sort((a, b) => pickRank(a.id) - pickRank(b.id));
+    const fixed = updateLineup(lineup as Lineup, roster);
+    if (!fixed.ok) {
+      return NextResponse.json({ ok: false, error: fixed.error }, { status: 400 });
+    }
+    const caps = fixCaptains(fixed.lineup, captainId, viceId, pickRank);
+
     const { error } = await supabaseAdmin
       .from("team_selections")
       .upsert(
@@ -75,9 +100,9 @@ export async function POST(req: Request) {
           league_id: leagueId,
           week,
           team_id: teamId,
-          lineup,
-          captain_id: captainId,
-          vice_id: viceId,
+          lineup: fixed.lineup,
+          captain_id: caps.captainId,
+          vice_id: caps.viceId,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "league_id,week,team_id" }
@@ -85,7 +110,7 @@ export async function POST(req: Request) {
 
     if (error) throw error;
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, lineup: fixed.lineup, captainId: caps.captainId, viceId: caps.viceId, moved: fixed.moved });
   } catch (e: any) {
     const { msg, status } = toHttpError(e);
     return NextResponse.json({ ok: false, error: msg }, { status });
