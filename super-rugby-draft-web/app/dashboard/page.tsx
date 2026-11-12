@@ -27,6 +27,7 @@ import { positionsLabel } from "@/lib/players/positions";
 import { TeamAvatar } from "@/components/TeamAvatar";
 import { WeeklyRecapModal } from "@/components/WeeklyRecapModal";
 import { statusKind } from "@/lib/status/kind";
+import { ShieldIcon } from "@/components/AwardIcons";
 import { formatProjection, useProjections } from "@/lib/projections/useProjections";
 import { teamOutlook, winProbability } from "@/lib/projections/live";
 import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
@@ -1158,6 +1159,18 @@ const upcomingWeek = seasonOver ? "Season complete" : upcomingMatch ? roundLabel
 const upcomingHome = seasonOver ? "—" : upcomingMatch ? upcomingMatch.leftName : "Loading…";
 const upcomingAway = seasonOver ? "—" : upcomingMatch ? upcomingMatch.rightName : "Loading…";
 
+// The Shield: the holder's icon, and whether the upcoming matchup is a shield game
+const shieldHolder = (teamId: string | null | undefined) =>
+  !!teamId && !!activeLeague?.shield?.enabled && activeLeague.shield.holderTeamId === teamId;
+const upcomingShield: "defending" | "challenging" | "other" | null = (() => {
+  const s = activeLeague?.shield;
+  const n = s?.enabled ? s.next : null;
+  if (!n || !upcomingMatch || n.week !== upcomingWeekNo) return null;
+  const ids = [upcomingMatch.leftId, upcomingMatch.rightId];
+  if (!ids.includes(n.homeTeamId) || !ids.includes(n.awayTeamId)) return null;
+  return yourLeagueTeamId === n.homeTeamId ? "defending" : yourLeagueTeamId === n.awayTeamId ? "challenging" : "other";
+})();
+
 // F2: projected scores and win chance for the upcoming matchup (both teams' saved lineups -
 // a team that hasn't saved one for that round uses its latest, the one that would lock)
 const upcomingProj = useProjections(leagueId, !seasonOver && upcomingMatch ? upcomingWeekNo : null);
@@ -1821,6 +1834,17 @@ const NoLeague = useStableComponent(NoLeague__render);
               <div style={{ textAlign: "right" }}>{upcomingAway}</div>
             </div>
 
+            {upcomingShield ? (
+              <div style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 11, fontWeight: 900 }}>
+                <ShieldIcon size={18} />
+                {upcomingShield === "defending"
+                  ? `Shield game: you're defending ${activeLeague?.shield?.name} at home`
+                  : upcomingShield === "challenging"
+                    ? `Shield game: you're challenging for ${activeLeague?.shield?.name} away`
+                    : `Shield game: ${activeLeague?.shield?.name} is on the line`}
+              </div>
+            ) : null}
+
             {upcomingOutlook ? (
               <div style={{ marginTop: 10 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10, fontSize: 12, fontWeight: 800 }}>
@@ -2105,7 +2129,11 @@ const PostDraft = useStableComponent(PostDraft__render);
           {t ? <TeamAvatar pictureUrl={t.pictureUrl} initials={t.userInitials ?? t.initials} size={36} stars={t.stars} /> : null}
           <div style={{ fontSize: 34, fontWeight: 900, lineHeight: "34px" }}>{score}</div>
         </div>
-        <div style={{ marginTop: 6, fontSize: 17, fontWeight: 900 }}>{team}</div>
+        <div style={{ marginTop: 6, fontSize: 17, fontWeight: 900, display: "flex", alignItems: "center", gap: 6, justifyContent: align === "right" ? "flex-end" : "flex-start" }}>
+          {align === "right" && shieldHolder(teamId) ? <ShieldIcon size={20} title={`${activeLeague?.shield?.name} holder`} /> : null}
+          {team}
+          {align !== "right" && shieldHolder(teamId) ? <ShieldIcon size={20} title={`${activeLeague?.shield?.name} holder`} /> : null}
+        </div>
         <div style={{ marginTop: 2, fontSize: 11, fontWeight: 800, opacity: 0.9 }}>{record}</div>
       </div>
     );

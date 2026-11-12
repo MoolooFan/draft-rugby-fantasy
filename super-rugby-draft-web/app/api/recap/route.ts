@@ -7,6 +7,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { buildRecap, type RecapMatchup, type RecapWeekResult } from "@/lib/league/recap";
 import { getSeason, SEASONS, weekLabel } from "@/lib/season";
+import { loadShield } from "@/lib/league/shieldServer";
+import { shieldRecap, type ShieldRecap } from "@/lib/league/shield";
 
 export const dynamic = "force-dynamic";
 
@@ -70,12 +72,21 @@ export async function GET(req: Request) {
     const teamInfo = Object.fromEntries(
       (teams.data ?? []).map((t) => [t.id, { name: t.name, initials: t.initials, pictureUrl: t.picture_url ?? null }])
     );
+    // The Shield: won / defended / lost this round, and whether your next game is a shield game
+    let shield: ShieldRecap | null = null;
+    try {
+      const s = await loadShield(supabaseAdmin, leagueId);
+      shield = shieldRecap({ name: s.name, enabled: s.enabled, events: s.events, week, myTeamId: teamId, next: s.next, myNextWeek: recap.next?.week ?? null });
+    } catch {
+      shield = null;
+    }
+
     const label = SEASONS[season] ? weekLabel(getSeason(season), week) : `Round ${week}`;
     const nextLabel = recap.next && SEASONS[season] ? weekLabel(getSeason(season), recap.next.week) : null;
 
     return NextResponse.json({
       ok: true,
-      recap: { ...recap, weekLabel: label, nextWeekLabel: nextLabel, myTeamId: teamId, teams: teamInfo },
+      recap: { ...recap, shield, weekLabel: label, nextWeekLabel: nextLabel, myTeamId: teamId, teams: teamInfo },
       seen: (me.data?.recap_seen_week ?? 0) >= week,
     });
   } catch (e) {

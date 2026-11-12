@@ -5,8 +5,9 @@
 
 import React, { useEffect, useState } from "react";
 import { TeamAvatar } from "@/components/TeamAvatar";
-import { CrownIcon, SpoonIcon } from "@/components/AwardIcons";
+import { CrownIcon, ShieldIcon, SpoonIcon } from "@/components/AwardIcons";
 import type { Recap } from "@/lib/league/recap";
+import type { ShieldRecap } from "@/lib/league/shield";
 
 type TeamInfo = { name: string; initials: string | null; pictureUrl: string | null };
 type RecapResponse = Recap & {
@@ -14,6 +15,7 @@ type RecapResponse = Recap & {
   nextWeekLabel: string | null;
   myTeamId: string;
   teams: Record<string, TeamInfo>;
+  shield?: ShieldRecap | null;
 };
 
 function ordinal(n: number) {
@@ -209,6 +211,30 @@ export function WeeklyRecapModal({ leagueId, leagueName }: { leagueId: string | 
           </div>
         ) : null}
 
+        {/* The Shield */}
+        {recap.shield?.thisWeek ? (
+          <div style={{ ...section, display: "flex", alignItems: "center", gap: 10 }}>
+            <ShieldIcon size={36} title={recap.shield.name} />
+            <div style={{ fontSize: 13, fontWeight: 800 }}>
+              {(() => {
+                const t = recap.shield.thisWeek;
+                const n = recap.shield.name;
+                const other = "otherTeamId" in t && t.otherTeamId ? team(t.otherTeamId).name : "";
+                const score = "homeScore" in t && t.homeScore != null && t.awayScore != null ? ` (${t.homeScore}–${t.awayScore})` : "";
+                switch (t.kind) {
+                  case "you_awarded": return <>You won {n} with the top score of the round!</>;
+                  case "you_won": return <>You took {n} off {other}{score}!</>;
+                  case "you_defended": return <>You defended {n} against {other}{score}.</>;
+                  case "you_lost": return <>You lost {n} to {other}{score}.</>;
+                  case "you_challenged": return <>You challenged {other} for {n} and fell short{score}.</>;
+                  case "news_awarded": return <>{team(t.holderTeamId).name} won {n} with the top score of the round.</>;
+                  case "news_won": return <>{team(t.holderTeamId).name} took {n} off {t.otherTeamId ? team(t.otherTeamId).name : "the holder"}.</>;
+                }
+              })()}
+            </div>
+          </div>
+        ) : null}
+
         {/* Next opponent */}
         {recap.next ? (
           <div style={section}>
@@ -219,6 +245,12 @@ export function WeeklyRecapModal({ leagueId, leagueName }: { leagueId: string | 
                 <div style={{ fontSize: 13, fontWeight: 800 }}>
                   v {team(recap.next.opponentId).name}
                   {recap.next.label ? ` · ${recap.next.label}` : ""}
+                  {recap.shield?.next ? (
+                    <div style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 900, color: "#6a4426" }}>
+                      <ShieldIcon size={16} />
+                      {recap.shield.next === "defending" ? `Shield game: you're defending ${recap.shield.name} at home` : `Shield game: you're challenging for ${recap.shield.name} away`}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : (

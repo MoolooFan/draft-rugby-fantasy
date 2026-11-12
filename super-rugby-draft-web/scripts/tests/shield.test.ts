@@ -1,5 +1,5 @@
 // Run: npx tsx scripts/tests/shield.test.ts — the Shield (lib/league/shield.ts).
-import { cleanShieldName, computeShield, nextShieldGame, type ShieldGame, type ShieldSeason } from "../../lib/league/shield";
+import { cleanShieldName, computeShield, nextShieldGame, shieldRecap, type ShieldGame, type ShieldSeason } from "../../lib/league/shield";
 
 let failures = 0;
 const check = (name: string, ok: boolean, extra = "") => {
@@ -85,6 +85,19 @@ check("next shield game: DT's next home game (round 11 v Josh)", next?.week === 
 
 // name
 check("name always ends in Shield", cleanShieldName("Ranfurly") === "Ranfurly Shield" && cleanShieldName("the shield") === "the Shield" && cleanShieldName("") === "The Shield");
+
+// weekly recap lines
+const ev = computeShield([s1]).events;
+const rc = (week: number, me: string, next: { week: number; homeTeamId: string; awayTeamId: string } | null = null, myNextWeek: number | null = null) =>
+  shieldRecap({ name: "The Shield", enabled: true, events: ev, week, myTeamId: me, next, myNextWeek });
+check("recap: Josh awarded it in round 1", rc(1, "josh2027")?.thisWeek?.kind === "you_awarded");
+check("recap: everyone else hears Josh won it in round 1", rc(1, "dt2027")?.thisWeek?.kind === "news_awarded");
+check("recap: Noah took it off Josh in round 6", rc(6, "noah2027")?.thisWeek?.kind === "you_won");
+check("recap: Josh lost it in round 6", rc(6, "josh2027")?.thisWeek?.kind === "you_lost");
+check("recap: DT defended v Josh in round 11; Josh challenged and fell short", rc(11, "dt2027")?.thisWeek?.kind === "you_defended" && rc(11, "josh2027")?.thisWeek?.kind === "you_challenged");
+check("recap: next game is a shield defence / challenge", rc(9, "dt2027", { week: 10, homeTeamId: "dt2027", awayTeamId: "noah2027" }, 10)?.next === "defending" && rc(9, "noah2027", { week: 10, homeTeamId: "dt2027", awayTeamId: "noah2027" }, 10)?.next === "challenging");
+check("recap: nothing to say = no shield section", rc(9, "hh2027") === null);
+check("recap: shield switched off = nothing", shieldRecap({ name: "x", enabled: false, events: ev, week: 6, myTeamId: "noah2027", next: null, myNextWeek: null }) === null);
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll passed");
 process.exit(failures ? 1 : 0);

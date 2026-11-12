@@ -26,6 +26,7 @@ import { toMs, pickValue } from "@/lib/league/weekHelpers";
 import { JERSEYS } from "@/lib/teams/images";
 import { formatStatCount } from "@/lib/scoring";
 import { TeamAvatar } from "@/components/TeamAvatar";
+import { ShieldIcon } from "@/components/AwardIcons";
 import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
 import { teamOutlook, winProbability, type PlayerWeekState } from "@/lib/projections/live";
 import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
@@ -1342,6 +1343,16 @@ const rightScore = totalForSlots(effectiveRightLineup, rightEffC, STARTER_SLOTS)
 const leftBenchScore = totalForSlots(effectiveLeftLineup, leftEffC, BENCH_SLOTS);
 const rightBenchScore = totalForSlots(effectiveRightLineup, rightEffC, BENCH_SLOTS);
 
+// ---- The Shield: the holder's icon, and whether this matchup is a shield game (holder at home)
+const shieldInfo = activeLeague?.shield?.enabled ? activeLeague.shield : null;
+const pairIs = (a: string | null | undefined, b: string | null | undefined) =>
+  !!a && !!b && ((a === leftTeamId && b === rightTeamId) || (a === rightTeamId && b === leftTeamId));
+const isShieldGame = !!shieldInfo && displayWeek > 0 && (
+  shieldInfo.games.some((g) => g.week === displayWeek && pairIs(g.holderTeamId, g.otherTeamId)) ||
+  (shieldInfo.next?.week === displayWeek && pairIs(shieldInfo.next.homeTeamId, shieldInfo.next.awayTeamId))
+);
+const holdsShield = (teamId: string | null) => !!shieldInfo && !!teamId && shieldInfo.holderTeamId === teamId;
+
 // ---- Expected points + win probability (F2, ESPN-style): while the week isn't final.
 // Real points for games that are over, real points so far + the rest of the projection for
 // games being played, the projection for games still to come; auto-subs for starters who are
@@ -1693,7 +1704,10 @@ return (
               {leftTeamId ? (
                 <TeamAvatar pictureUrl={teamPicture(leftTeamId)} initials={teamInitials(leftTeamId)} size={44} stars={teamStars(leftTeamId)} style={{ marginBottom: 6, marginTop: 6 }} />
               ) : null}
-              <div style={{ fontSize: 18, fontWeight: 950 }}>{leftName}</div>
+              <div style={{ fontSize: 18, fontWeight: 950, display: "flex", alignItems: "center", gap: 6 }}>
+                {leftName}
+                {holdsShield(leftTeamId) ? <ShieldIcon size={20} title={`${shieldInfo?.name} holder`} /> : null}
+              </div>
 
 <div style={{ fontSize: 13, fontWeight: 900, opacity: 0.75 }}>
   {recordText(leftRecord)}{" "}
@@ -1710,7 +1724,10 @@ return (
               {rightTeamId ? (
                 <TeamAvatar pictureUrl={teamPicture(rightTeamId)} initials={teamInitials(rightTeamId)} size={44} stars={teamStars(rightTeamId)} style={{ marginBottom: 6, marginTop: 6 }} />
               ) : null}
-              <div style={{ fontSize: 18, fontWeight: 950 }}>{rightName}</div>
+              <div style={{ fontSize: 18, fontWeight: 950, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+                {holdsShield(rightTeamId) ? <ShieldIcon size={20} title={`${shieldInfo?.name} holder`} /> : null}
+                {rightName}
+              </div>
 
 <div style={{ fontSize: 13, fontWeight: 900, opacity: 0.75 }}>
   {recordText(rightRecord)}{" "}
@@ -1744,6 +1761,11 @@ return (
     {mounted && (scoresLocked || displayLocked || (displayWeek > 0 && displayWeek === selectionWeek)) ? (
       <div style={{ marginTop: 2, fontSize: 9, fontWeight: 900, letterSpacing: 0.6, opacity: 0.6 }}>
         {scoresLocked ? "FINAL" : displayLocked ? "LIVE" : "UPCOMING"}
+      </div>
+    ) : null}
+    {mounted && isShieldGame ? (
+      <div style={{ marginTop: 3, fontSize: 9, fontWeight: 900, letterSpacing: 0.6, color: "#6a4426" }} title={`${shieldInfo?.name}: the holder is at home`}>
+        SHIELD GAME
       </div>
     ) : null}
   </div>

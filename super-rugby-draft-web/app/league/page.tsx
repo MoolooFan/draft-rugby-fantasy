@@ -22,9 +22,10 @@ import { toDatetimeLocal, ModalOverlay, inputStyle, selectStyle, parseDatetimeLo
 import { LeagueSettingsModal } from "./LeagueSettingsModal";
 import { TeamAvatar } from "@/components/TeamAvatar";
 import { PictureCropper } from "@/components/PictureCropper";
-import { CrownIcon, SpoonIcon } from "@/components/AwardIcons";
+import { CrownIcon, ShieldIcon, SpoonIcon } from "@/components/AwardIcons";
+import { ShieldTab } from "@/components/ShieldTab";
 
-type LeagueTab = "Standings" | "Fixtures" | "Results";
+type LeagueTab = "Standings" | "Fixtures" | "Results" | "Shield";
 type Modal =
   | null
   | { type: "join" }
@@ -727,10 +728,10 @@ const Hamburger = useStableComponent(Hamburger__render);
 const Header = useStableComponent(Header__render);
 
   function Tabs__render() {
-    const tabs: LeagueTab[] = ["Standings", "Fixtures", "Results"];
+    const tabs: LeagueTab[] = ["Standings", "Fixtures", "Results", ...(league?.shield?.enabled || league?.shield?.holderTeamId ? (["Shield"] as LeagueTab[]) : [])];
     return (
       <div style={tabBarStyle}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
           {tabs.map((t) => (
             <button key={t} onClick={() => setTab(t)} style={tabBtn(t === tab)}>
               {t}
@@ -841,6 +842,9 @@ const MovementCircle = useStableComponent(MovementCircle__render);
                         ) : null;
                       })()}
                     </span>
+                    {league?.shield?.enabled && league.shield.holderTeamId === r.teamId ? (
+                      <ShieldIcon size={16} title={`${league.shield.name} holder`} />
+                    ) : null}
                     {latestAward?.crown.includes(r.teamId) ? (
                       <CrownIcon size={15} title={`Top score in round ${latestAward.week}`} />
                     ) : null}
@@ -1727,6 +1731,7 @@ if (!league) {
         {tab === "Standings" && <StandingsTab />}
         {tab === "Fixtures" && <FixturesTab />}
         {tab === "Results" && <ResultsTab />}
+        {tab === "Shield" && league ? <ShieldTab leagueId={league.id} teams={(league.teams ?? []) as never} /> : null}
       </div>
 
       <AppMenu

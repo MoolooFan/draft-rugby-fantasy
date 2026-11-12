@@ -188,3 +188,43 @@ export function nextShieldGame(season: ShieldSeason, holderTeamId: string | null
   if (!holderTeamId || !season.enabled) return null;
   return [...season.games].sort((a, b) => a.week - b.week).find((g) => !g.final && g.homeTeamId === holderTeamId && !!g.awayTeamId) ?? null;
 }
+
+export type ShieldRecap = {
+  name: string;
+  /** what happened to the shield this round, from your point of view (or the league's news) */
+  thisWeek:
+    | { kind: "you_awarded" | "you_won" | "you_defended" | "you_lost" | "you_challenged"; otherTeamId: string | null; homeScore: number | null; awayScore: number | null }
+    | { kind: "news_awarded" | "news_won"; holderTeamId: string; otherTeamId: string | null }
+    | null;
+  /** your next game is a shield game: defending at home, or challenging away */
+  next: "defending" | "challenging" | null;
+};
+
+/** The weekly recap's shield lines (Ethan, Nov 2026). */
+export function shieldRecap(input: {
+  name: string;
+  enabled: boolean;
+  events: ShieldEvent[];
+  week: number;
+  myTeamId: string;
+  next: { week: number; homeTeamId: string; awayTeamId: string } | null;
+  myNextWeek: number | null;
+}): ShieldRecap | null {
+  if (!input.enabled) return null;
+  const e = input.events.find((x) => x.week === input.week) ?? null;
+  const me = input.myTeamId;
+  let thisWeek: ShieldRecap["thisWeek"] = null;
+  if (e) {
+    const scores = { homeScore: e.homeScore, awayScore: e.awayScore };
+    if (e.kind === "awarded") thisWeek = e.holderTeamId === me ? { kind: "you_awarded", otherTeamId: null, ...scores } : { kind: "news_awarded", holderTeamId: e.holderTeamId, otherTeamId: null };
+    else if (e.kind === "won" && e.holderTeamId === me) thisWeek = { kind: "you_won", otherTeamId: e.otherTeamId, ...scores };
+    else if (e.kind === "won" && e.otherTeamId === me) thisWeek = { kind: "you_lost", otherTeamId: e.holderTeamId, ...scores };
+    else if (e.kind === "won") thisWeek = { kind: "news_won", holderTeamId: e.holderTeamId, otherTeamId: e.otherTeamId };
+    else if (e.holderTeamId === me) thisWeek = { kind: "you_defended", otherTeamId: e.otherTeamId, ...scores };
+    else if (e.otherTeamId === me) thisWeek = { kind: "you_challenged", otherTeamId: e.holderTeamId, ...scores };
+  }
+  const n = input.next;
+  const next = n && input.myNextWeek === n.week ? (n.homeTeamId === me ? "defending" : n.awayTeamId === me ? "challenging" : null) : null;
+  if (!thisWeek && !next) return null;
+  return { name: input.name, thisWeek, next };
+}
