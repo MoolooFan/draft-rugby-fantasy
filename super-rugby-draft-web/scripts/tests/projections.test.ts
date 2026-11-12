@@ -1,6 +1,6 @@
 // Run: npx tsx scripts/tests/projections.test.ts — expected points (lib/projections/project.ts).
 import {
-  rankMultiplier, seasonPrior,
+  rankMinutes, rankMultiplier, seasonPrior,
   dutyKicker, expectedRole, kickingOrder, kickingPoints, projectPoints, projectTeamScore, scoringRate80, teamStrength,
   type PastGame, type StatRates,
 } from "../../lib/projections/project";
@@ -39,6 +39,11 @@ check("weak opponent: outside back up, lock unchanged", ob > 0 && lk === 0, `OB 
 // --- position minutes: a prop with no history starts ~53 minutes (1 pt for minutes, not 2)
 const propNew = projectPoints({ games: [], pos: "PR", frontRow: true, prior: {}, role: "starting" });
 check("new prop: under 61 minutes, so 1 minutes point", propNew === 1, String(propNew));
+
+// --- better players start with more minutes until they have their own
+check("rank minutes: rank 1 about +9, rank 100 about 0, worse ranks slightly fewer", rankMinutes(1) > 9 && Math.abs(rankMinutes(100)) < 0.5 && rankMinutes(300) < 0 && rankMinutes(null) === 0);
+const topNew = projectPoints({ games: [], pos: "FH", frontRow: false, prior: {}, role: "starting", draftRank: 1 });
+check("a top-ranked new 10 is expected to play 61+ minutes (2 pts for minutes)", topNew === 2, String(topNew));
 
 // --- goal kicking
 const team = [

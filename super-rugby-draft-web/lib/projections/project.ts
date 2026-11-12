@@ -177,12 +177,26 @@ export function seasonPrior(
   return out;
 }
 
+/**
+ * Better players are subbed off later (2026: McKenzie ~79 minutes a start vs ~70 for a 10,
+ * Jordan 79 vs 74; mostly forwards otherwise). Until a player has a few starts of his own, his
+ * starting minutes begin from his position's usual minutes + this many per step of draft rank:
+ * rank 1 ~+9 (up to 80), rank 10 ~+5, rank 100 ~0, rank 300 ~-2.
+ */
+export function rankMinutes(draftRank: number | null | undefined): number {
+  if (!draftRank || draftRank >= 9999 || draftRank < 1) return 0;
+  return 2 * (4.75 - Math.log(draftRank));
+}
+
 /** His usual minutes for this role (a start = named to start, or 40+ minutes if the list isn't known). */
-export function expectedMinutes(games: PastGame[], role: Role, pos: string, p: ProjectionParams = DEFAULT_PARAMS): number {
+export function expectedMinutes(
+  games: PastGame[], role: Role, pos: string, p: ProjectionParams = DEFAULT_PARAMS, draftRank: number | null = null
+): number {
   if (role === "out") return 0;
   const played = playedGames(games);
   const isStart = (g: PastGame) => (g.listed ? g.listed === "starting" : minutesOf(g) >= 40);
-  const usual = p.positionMinutes[pos] ?? { start: 68, bench: 22 };
+  const pm = p.positionMinutes[pos] ?? { start: 68, bench: 22 };
+  const usual = { start: Math.min(80, pm.start + rankMinutes(draftRank)), bench: pm.bench };
   if (role === "starting" || role === "bench") {
     const own = played.filter((g) => isStart(g) === (role === "starting")).map(minutesOf);
     const m = mean(own.slice(-6));
@@ -219,6 +233,8 @@ export function scoringRate80(
 export type PlayerInput = {
   /** his games this season before this one, oldest first */
   games: PastGame[];
+  /** Ethan's draft rank (better players play longer when they start) */
+  draftRank?: number | null;
   /** his games last season (for his usual minutes early in a new season) */
   lastSeasonGames?: PastGame[] | null;
   pos: string;
@@ -241,7 +257,7 @@ export type PlayerInput = {
 
 export function projectPoints(input: PlayerInput, p: ProjectionParams = DEFAULT_PARAMS): number {
   const rules = input.rules ?? STANDARD_SCORING;
-  const mins = expectedMinutes([...(input.lastSeasonGames ?? []), ...input.games], input.role, input.pos, p);
+  const mins = expectedMinutes([...(input.lastSeasonGames ?? []), ...input.games], input.role, input.pos, p, input.draftRank ?? null);
   if (mins <= 0) return 0;
 
   let play = Math.max(0, scoringRate80(input.games, input.frontRow, input.prior, rules, p, input)) * (mins / 80);

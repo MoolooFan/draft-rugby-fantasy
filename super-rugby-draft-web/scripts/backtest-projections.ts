@@ -202,7 +202,7 @@ function run(params: ProjectionParams = DEFAULT_PARAMS, firstRound = 3) {
       const kick = (stage: Stage) =>
         kicker.get(pl.team)?.[stage] === pl.id && own && opp ? kickingPoints(past, own, opp) : null;
       const base = {
-        games: past, pos: pl.posAbbrev, frontRow: pl.frontRow,
+        games: past, pos: pl.posAbbrev, frontRow: pl.frontRow, draftRank: USE_RANK ? pl.draftRank : null,
         prior: USE_RANK ? seasonPrior(b.priors.get(pl.posAbbrev) ?? {}, pl.draftRank) : b.priors.get(pl.posAbbrev) ?? {},
         fdr: fx.fdr, home: fx.home, opponentWeakness: opp ? opponentWeakness(opp) : null,
         opponentSteals: opp ? lineoutStealFactor(opp) : null,
