@@ -5,7 +5,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireSiteAdmin } from "@/lib/admin/server";
 import { toHttpError } from "@/lib/league/serverAuth";
 import { loadSeasonPlayers } from "@/lib/players/db";
-import { currentSeasonYear, SEASONS } from "@/lib/season";
+import { currentSeasonYear, getSeason, realRoundsForWeek, SEASONS } from "@/lib/season";
+import { currentStatusWeek } from "@/lib/status/kind";
 import { idStem, newPlayerId } from "@/lib/players/ids";
 
 export const dynamic = "force-dynamic";
@@ -76,6 +77,15 @@ export async function POST(req: Request) {
       }
     }
 
+    // A new card status counts from this week's round (for Questionable: lib/status/questionable.ts)
+    const status = String(p.status ?? "").trim() || null;
+    const { data: before } = await supabaseAdmin.from("players").select("status, status_round").eq("season", season).eq("id", id).maybeSingle();
+    const statusRound = before && before.status === status
+      ? before.status_round ?? null
+      : status
+        ? Math.min(...realRoundsForWeek(getSeason(season), currentStatusWeek(season)))
+        : null;
+
     const { error } = await supabaseAdmin.from("players").upsert(
       {
         season,
@@ -90,7 +100,8 @@ export async function POST(req: Request) {
         external_id: externalId,
         expected_role: expectedRole,
         kick_order: kickOrder,
-        status: String(p.status ?? "").trim() || null,
+        status,
+        status_round: statusRound,
         active: p.active !== false,
         updated_at: new Date().toISOString(),
         updated_by: admin,

@@ -12,7 +12,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { syncExternalStats } from "@/lib/players/syncStats";
 import { runResultsTick } from "@/lib/results/engine";
 import { currentSeasonYear, getSeason, liveRealRounds, realRoundsAwaitingFinalStats, realRoundsAwaitingTeamLists } from "@/lib/season";
-import { clearFinishedGameStatuses, importRoundStatus, type ImportReport } from "@/lib/status/import";
+import { applyQuestionable, clearFinishedGameStatuses, importRoundStatus, type ImportReport } from "@/lib/status/import";
 import { advanceDraft } from "@/lib/draft/engine";
 
 export const maxDuration = 60; // seconds (Vercel)
@@ -54,6 +54,8 @@ async function tick() {
   }
   // Once a game has finished, its players' Starting / Benched statuses are cleared.
   const statusesCleared = await clearFinishedGameStatuses(supabaseAdmin, seasonYear, now).catch(() => -1);
+  // Injured players due back next round turn Questionable once this round has finished.
+  const questionable = await applyQuestionable(supabaseAdmin, seasonYear, now).catch(() => -1);
 
   // Drafts: start any that are due and make overdue auto-picks (so a draft keeps going even
   // if nobody has the draft room open).
@@ -77,7 +79,7 @@ async function tick() {
     beforeFinalise: (realRounds) => sync(realRounds),
   });
 
-  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, statusImports, statusesCleared, drafts, ...results };
+  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, statusImports, statusesCleared, questionable, drafts, ...results };
 }
 
 async function handle(req: Request) {

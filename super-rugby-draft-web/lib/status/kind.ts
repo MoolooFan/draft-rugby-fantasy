@@ -1,7 +1,8 @@
 // lib/status/kind.ts
 // One place that decides what a player's status text means, so every page shows the same badge.
-//   Starting  → green  XV
-//   Benched   → yellow SUB
+//   Starting  → green  XV    (from the team lists with the jersey: "Starting - #12")
+//   Benched   → yellow SUB   ("Bench - #22")
+//   Questionable → red QUES  (due back this round, not confirmed yet: lib/status/questionable.ts)
 //   Injured   → red    INJ   (any injury, e.g. "Knee - TBC", "Injury - TBC")
 //   Suspended → red    SUS   (e.g. "Suspended - 2 weeks")
 //   Out       → red    OUT   (not injured: personal reasons, paternity leave, rested, ...)
@@ -9,7 +10,7 @@
 
 import { getSeason, SEASONS, totalFantasyWeeks, weekFinaliseAtMs, currentSeasonYear } from "@/lib/season";
 
-export type StatusKind = "starting" | "bench" | "injured" | "suspended" | "out";
+export type StatusKind = "starting" | "bench" | "questionable" | "injured" | "suspended" | "out";
 
 /** Reasons a player is out that aren't injuries (the start of the status text). */
 const OUT_REASONS = /^(out\b|personal|rested|rest\b|paternity|compassionate|bereavement|international|national|unavailable|not available|stood down|left|other)/;
@@ -17,16 +18,24 @@ const OUT_REASONS = /^(out\b|personal|rested|rest\b|paternity|compassionate|bere
 export function statusKind(raw: string | null | undefined): StatusKind | null {
   const s = String(raw ?? "").trim().toLowerCase();
   if (!s || s === "-") return null;
-  if (s === "starting") return "starting";
-  if (s === "benched" || s === "bench" || s === "sub" || s === "substitute" || s === "replacement") return "bench";
+  if (/^starting\b/.test(s)) return "starting";
+  if (/^(benched|bench|sub|substitute|replacement)\b/.test(s)) return "bench";
+  if (/^(questionable|ques)\b/.test(s)) return "questionable";
   if (s.startsWith("susp")) return "suspended";
   if (OUT_REASONS.test(s)) return "out";
   return "injured";
 }
 
+/** "Starting" / "Bench" plus the jersey from the team list if known: "Starting - #12". */
+export function jerseyLabel(base: string, text: string | null | undefined): string {
+  const m = String(text ?? "").match(/#\s*(\d{1,2})/);
+  return m ? `${base} - #${m[1]}` : base;
+}
+
 export const STATUS_TAG: Record<StatusKind, { tag: string; name: string; bg: string; fg: string }> = {
   starting: { tag: "XV", name: "Starting", bg: "#16a34a", fg: "#ffffff" },
   bench: { tag: "SUB", name: "Sub", bg: "#facc15", fg: "#3b2f00" },
+  questionable: { tag: "QUES", name: "Questionable", bg: "#dc2626", fg: "#ffffff" },
   injured: { tag: "INJ", name: "Injured", bg: "#dc2626", fg: "#ffffff" },
   suspended: { tag: "SUS", name: "Suspended", bg: "#dc2626", fg: "#ffffff" },
   out: { tag: "OUT", name: "Out", bg: "#dc2626", fg: "#ffffff" },
@@ -34,8 +43,9 @@ export const STATUS_TAG: Record<StatusKind, { tag: string; name: string; bg: str
 
 /** Ready-made statuses for the admin page (the text after " - " can be edited). */
 export const STATUS_PRESETS: string[] = [
-  "Starting",
-  "Benched",
+  "Starting - #",
+  "Bench - #",
+  "Questionable - TBC",
   "Injury - TBC",
   "Suspended - 1 week",
   "Out - Personal reasons",

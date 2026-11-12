@@ -43,7 +43,7 @@ export function ownedIdsOf(data: RosterData): string[] {
 /** Can a player with this status go in IR? Injured, or out for another reason. */
 export function irEligible(status: string | null | undefined): boolean {
   const k = statusKind(status);
-  return k === "injured" || k === "out";
+  return k === "injured" || k === "out" || k === "questionable";
 }
 
 export type IrAction =

@@ -46,10 +46,10 @@ export function matchesPoolFilters(p: PlayerLike, f: PoolFilters, live?: PlayerL
   if (f.statuses.length) {
     const k = currentStatusKind(live ?? p);
     const ok = f.statuses.some((s) =>
-      s === "available" ? k !== "injured" && k !== "out" && k !== "suspended"
+      s === "available" ? k !== "injured" && k !== "out" && k !== "suspended" && k !== "questionable"
       : s === "starting" ? k === "starting"
       : s === "sub" ? k === "bench"
-      : s === "injured" ? k === "injured" || k === "out"
+      : s === "injured" ? k === "injured" || k === "out" || k === "questionable"
       : k === "suspended"
     );
     if (!ok) return false;

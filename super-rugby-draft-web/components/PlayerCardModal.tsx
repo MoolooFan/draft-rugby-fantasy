@@ -15,7 +15,7 @@ import { useLeagueStore } from "@/lib/league/store";
 import { ResultsTab, StatsTab, FixturesTab } from "./playerCard/tabs";
 import { positionsLabel } from "@/lib/players/positions";
 import { formatStatCount } from "@/lib/scoring";
-import { currentStatusText, statusKind, STATUS_TAG } from "@/lib/status/kind";
+import { currentStatusText, jerseyLabel, statusKind, STATUS_TAG } from "@/lib/status/kind";
 import { StatusTag } from "@/components/StatusTag";
 
 export type PlayerStatus = "starting" | "benched" | "out" | null;
@@ -498,8 +498,8 @@ const computed = useMemo(() => {
     if (typeof v === "string" && v.trim() !== "") vals.push(v.trim().toLowerCase());
   }
 
-  const gamesPlayed = vals.filter((v) => v === "starting" || v === "benched").length;
-  const starts = vals.filter((v) => v === "starting").length;
+  const gamesPlayed = vals.filter((v) => { const k = statusKind(v); return k === "starting" || k === "bench"; }).length;
+  const starts = vals.filter((v) => statusKind(v) === "starting").length;
 
   return { gamesPlayed, starts };
 }, [weeklyFromSheet, p.weeklyStatus]);
@@ -587,9 +587,9 @@ if (!cancelled) {
 const statusStyle = !statusK
   ? null
   : statusK === "starting"
-  ? { bg: "#bbf7d0", text: "#111827", chipBg: STATUS_TAG.starting.bg, chipFg: STATUS_TAG.starting.fg, label: "Starting" }
+  ? { bg: "#bbf7d0", text: "#111827", chipBg: STATUS_TAG.starting.bg, chipFg: STATUS_TAG.starting.fg, label: jerseyLabel("Starting", statusText) }
   : statusK === "bench"
-  ? { bg: "#FFE65B", text: "#111827", chipBg: "#3b2f00", chipFg: "#FFE65B", label: "Sub" }
+  ? { bg: "#FFE65B", text: "#111827", chipBg: "#3b2f00", chipFg: "#FFE65B", label: jerseyLabel("Bench", statusText) }
   : {
       bg: "#C0020D",
       text: "#ffffff",

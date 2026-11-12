@@ -1,7 +1,7 @@
 // lib/status/import.ts
 // Fetches a round's official team-list and injury articles and turns them into player statuses
-// for the fantasy week: named in the XV -> "Starting", replacements -> "Benched", injury list ->
-// e.g. "Knee - Season". Names that don't clearly match a player are flagged for the admin page.
+// for the fantasy week: named in the XV -> "Starting - #12", replacements -> "Bench - #22" (the
+// jersey from the list's order: 1-15, then 16 on), injury list -> e.g. "Knee - Season". Names that don't clearly match a player are flagged for the admin page.
 // - Statuses Ethan set by hand ("manual") are never overwritten.
 // - Each article is read once (the articles aren't updated afterwards; late changes are made by
 //   Ethan by hand). Running it again is safe: it replaces its own earlier statuses and flags.
@@ -11,7 +11,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { candidateArticleUrls, injuryStatus, parseInjuryList, parseTeamLists, teamCodeFromName, type InjuryList, type TeamList } from "@/lib/status/articles";
 import { matchName, type MatchPlayer } from "@/lib/status/match";
-import { fantasyWeekForRealRound, getSeason, recentlyFinishedFixtures } from "@/lib/season";
+import { fantasyWeekForRealRound, getSeason, kickoffMs, recentlyFinishedFixtures } from "@/lib/season";
+import { dueQuestionable, questionableStatus } from "@/lib/status/questionable";
+import { GAME_OVER_AFTER_MS } from "@/lib/projections/live";
 
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36";
 
@@ -174,8 +176,8 @@ export async function importRoundStatus(
     const lists: TeamList[] = parseTeamLists(teamsDoc.html);
     if (lists.length) {
       const entries = lists.flatMap((t) => [
-        ...t.starting.map((name) => ({ team: t.team, name, status: "Starting" })),
-        ...t.replacements.map((name) => ({ team: t.team, name, status: "Benched" })),
+        ...t.starting.map((name, i) => ({ team: t.team, name, status: `Starting - #${i + 1}` })),
+        ...t.replacements.map((name, i) => ({ team: t.team, name, status: `Bench - #${16 + i}` })),
       ]);
       report.teamList = await apply("team-list", teamsDoc.url, lists.map((t) => t.team), entries);
     }
@@ -190,7 +192,7 @@ export async function importRoundStatus(
       const listTeams = lists.map((t) => t.team);
       const { error: cErr } = await db
         .from("players")
-        .update({ status: null, updated_at: now, updated_by: "articles" })
+        .update({ status: null, status_round: realRound, updated_at: now, updated_by: "articles" })
         .eq("season", seasonYear)
         .in("team_code", listTeams)
         .not("status", "is", null);
@@ -201,7 +203,7 @@ export async function importRoundStatus(
         if (m.kind === "match") injured.set(m.player.id, e.status);
       }
       for (const [id, status] of injured) {
-        await db.from("players").update({ status, updated_at: now, updated_by: "articles" }).eq("season", seasonYear).eq("id", id);
+        await db.from("players").update({ status, status_round: realRound, updated_at: now, updated_by: "articles" }).eq("season", seasonYear).eq("id", id);
       }
     }
   }
@@ -209,8 +211,8 @@ export async function importRoundStatus(
 }
 
 /**
- * Once a game has finished, its two teams' "Starting" / "Benched" statuses for that week are
- * cleared (injuries stay until the next injury list). Safe to run every few minutes.
+ * Once a game has finished, its two teams' "Starting - #N" / "Bench - #N" statuses for that week
+ * are cleared (injuries stay until the next injury list). Safe to run every few minutes.
  */
 export async function clearFinishedGameStatuses(db: SupabaseClient, seasonYear: number, nowMs: number): Promise<number> {
   const season = getSeason(seasonYear);
@@ -228,7 +230,7 @@ export async function clearFinishedGameStatuses(db: SupabaseClient, seasonYear: 
         .delete()
         .eq("season", seasonYear)
         .eq("week", week)
-        .in("status", ["Starting", "Benched", "starting", "benched"])
+        .or("status.ilike.starting%,status.ilike.bench%")
         .in("player_id", playerIds.slice(i, i + 200))
         .select("player_id");
       if (dErr) throw dErr;
@@ -236,4 +238,42 @@ export async function clearFinishedGameStatuses(db: SupabaseClient, seasonYear: 
     }
   }
   return cleared;
+}
+
+/**
+ * Questionable (QUES): once the round before a player's due return has finished, his card
+ * status "Hamstring - 1-2 weeks" becomes "Questionable - Hamstring" until the next injury list
+ * (lib/status/questionable.ts). Safe to run every few minutes. Returns how many changed.
+ */
+export async function applyQuestionable(db: SupabaseClient, seasonYear: number, nowMs: number): Promise<number> {
+  const season = getSeason(seasonYear);
+  const lastKickoff = new Map<number, number>();
+  for (const f of season.fixtures) {
+    const k = kickoffMs(f);
+    if (Number.isFinite(k)) lastKickoff.set(f.week, Math.max(lastKickoff.get(f.week) ?? 0, k));
+  }
+  const roundFinishedMs = (r: number) => {
+    const k = lastKickoff.get(r);
+    return k == null ? null : k + GAME_OVER_AFTER_MS;
+  };
+  const { data, error } = await db
+    .from("players")
+    .select("id, status, status_round")
+    .eq("season", seasonYear)
+    .not("status", "is", null)
+    .not("status_round", "is", null);
+  if (error) throw error;
+  let changed = 0;
+  for (const p of data ?? []) {
+    if (!dueQuestionable(p.status, p.status_round, roundFinishedMs, nowMs)) continue;
+    const { error: uErr } = await db
+      .from("players")
+      .update({ status: questionableStatus(String(p.status)), updated_at: new Date(nowMs).toISOString(), updated_by: "questionable" })
+      .eq("season", seasonYear)
+      .eq("id", p.id)
+      .eq("status", p.status); // only if it hasn't changed meanwhile
+    if (uErr) throw uErr;
+    changed++;
+  }
+  return changed;
 }

@@ -26,6 +26,7 @@ import { STARTER_SLOTS } from "@/lib/scoring/week";
 import { positionsLabel } from "@/lib/players/positions";
 import { TeamAvatar } from "@/components/TeamAvatar";
 import { WeeklyRecapModal } from "@/components/WeeklyRecapModal";
+import { statusKind } from "@/lib/status/kind";
 import { formatProjection, useProjections } from "@/lib/projections/useProjections";
 import { teamOutlook, winProbability } from "@/lib/projections/live";
 import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
@@ -747,9 +748,9 @@ const modalStatus = useMemo<PlayerStatus | undefined>(() => {
   const text = String(raw ?? "").trim();
   if (!text) return null;
 
-  const sl = text.toLowerCase();
-  if (sl === "starting") return "starting";
-  if (sl === "benched") return "benched";
+  const k = statusKind(text);
+  if (k === "starting") return "starting";
+  if (k === "bench") return "benched";
 
   // IMPORTANT:
   // For ANY other text (e.g. "Hamstring", "Suspended"), do NOT force "out" here.
