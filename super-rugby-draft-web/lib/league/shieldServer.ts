@@ -3,7 +3,7 @@
 // in lib/league/shield.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { leagueLineage } from "@/lib/league/honours";
-import { cleanShieldName, computeShield, nextShieldGame, type ShieldEvent, type ShieldGame, type ShieldReign, type ShieldSeason } from "@/lib/league/shield";
+import { cleanShieldName, computeShield, nextShieldGame, shieldSecuredWeek, type ShieldEvent, type ShieldGame, type ShieldReign, type ShieldSeason } from "@/lib/league/shield";
 
 export type LeagueShield = {
   enabled: boolean;
@@ -17,6 +17,9 @@ export type LeagueShield = {
   events: ShieldEvent[];
   /** every holder, newest first (all seasons) */
   reigns: ShieldReign[];
+  /** the holder has no home games left this regular season: secured for the season (from that week) */
+  secured: { teamId: string; week: number } | null;
+  season: number | null;
 };
 
 export async function loadShield(db: SupabaseClient, leagueId: string): Promise<LeagueShield> {
@@ -62,6 +65,7 @@ export async function loadShield(db: SupabaseClient, leagueId: string): Promise<
   const state = computeShield(seasons);
   const holderTeamId = state.holder && here ? here.teams.find((t) => t.owner === state.holder!.owner)?.id ?? null : null;
   const next = here && holderTeamId ? nextShieldGame(here, holderTeamId) : null;
+  const securedWeek = here && holderTeamId ? shieldSecuredWeek(here, holderTeamId, state.holder?.reign ?? null) : null;
   return {
     enabled: row?.shield_enabled !== false,
     name: cleanShieldName(row?.shield_name),
@@ -70,5 +74,7 @@ export async function loadShield(db: SupabaseClient, leagueId: string): Promise<
     next: next && next.awayTeamId ? { week: next.week, homeTeamId: next.homeTeamId, awayTeamId: next.awayTeamId } : null,
     events: state.events.filter((e) => e.leagueId === leagueId),
     reigns: [...state.reigns].reverse(),
+    secured: holderTeamId && securedWeek != null ? { teamId: holderTeamId, week: securedWeek } : null,
+    season: here?.season ?? null,
   };
 }

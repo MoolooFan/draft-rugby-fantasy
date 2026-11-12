@@ -1,5 +1,5 @@
 // Run: npx tsx scripts/tests/shield.test.ts — the Shield (lib/league/shield.ts).
-import { cleanShieldName, computeShield, nextShieldGame, shieldRecap, type ShieldGame, type ShieldSeason } from "../../lib/league/shield";
+import { cleanShieldName, computeShield, nextShieldGame, shieldRecap, shieldSecuredWeek, type ShieldGame, type ShieldSeason } from "../../lib/league/shield";
 
 let failures = 0;
 const check = (name: string, ok: boolean, extra = "") => {
@@ -92,6 +92,12 @@ check("next shield game: DT's next home game (round 11 v Josh)", next?.week === 
 
 // name
 check("name always ends in Shield", cleanShieldName("Ranfurly") === "Ranfurly Shield" && cleanShieldName("the shield") === "the Shield" && cleanShieldName("") === "The Shield");
+
+// secured for the season: no home games left
+const fin = computeShield([s1]);
+check("DT's last home game was round 12: secured from round 12", shieldSecuredWeek(s1, "dt2027", fin.holder!.reign) === 12);
+check("still a home game to play (after round 10): not secured", shieldSecuredWeek(live, "dt2027", computeShield([live]).holder!.reign) === null);
+check("recap: everyone hears DT secured it in round 12", shieldRecap({ name: "The Shield", enabled: true, events: fin.events, week: 12, myTeamId: "noah2027", next: null, myNextWeek: null, secured: { teamId: "dt2027", week: 12 } })?.secured?.mine === false);
 
 // weekly recap lines
 const ev = computeShield([s1]).events;

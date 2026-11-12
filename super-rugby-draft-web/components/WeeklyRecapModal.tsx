@@ -24,7 +24,11 @@ function ordinal(n: number) {
   return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
 }
 
-export function WeeklyRecapModal({ leagueId, leagueName }: { leagueId: string | null | undefined; leagueName?: string }) {
+/**
+ * The weekly recap. On its own it pops up once for the latest finalised round; with `week` it
+ * opens that round's recap on request (viewing it again) and calls onClose when closed.
+ */
+export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leagueId: string | null | undefined; leagueName?: string; week?: number; onClose?: () => void }) {
   // the recap and which league it's for (switching league never shows the other league's)
   const [recap, setRecap] = useState<(RecapResponse & { forLeague: string }) | null>(null);
   const [open, setOpen] = useState(false);
@@ -32,10 +36,11 @@ export function WeeklyRecapModal({ leagueId, leagueName }: { leagueId: string | 
   useEffect(() => {
     if (!leagueId) return;
     let cancelled = false;
-    fetch(`/api/recap?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store", credentials: "include" })
+    const qs = week ? `&week=${week}` : "";
+    fetch(`/api/recap?leagueId=${encodeURIComponent(leagueId)}${qs}`, { cache: "no-store", credentials: "include" })
       .then((r) => r.json())
       .then((j) => {
-        if (cancelled || !j?.ok || !j.recap || j.seen) return;
+        if (cancelled || !j?.ok || !j.recap || (!week && j.seen)) return;
         setRecap({ ...j.recap, forLeague: leagueId });
         setOpen(true);
       })
@@ -43,7 +48,7 @@ export function WeeklyRecapModal({ leagueId, leagueName }: { leagueId: string | 
     return () => {
       cancelled = true;
     };
-  }, [leagueId]);
+  }, [leagueId, week]);
 
   if (!open || !recap || !leagueId || recap.forLeague !== leagueId) return null;
 
@@ -53,6 +58,8 @@ export function WeeklyRecapModal({ leagueId, leagueName }: { leagueId: string | 
 
   function close() {
     setOpen(false);
+    onClose?.();
+    if (week) return; // viewing again: nothing to mark
     fetch("/api/recap", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -231,6 +238,17 @@ export function WeeklyRecapModal({ leagueId, leagueName }: { leagueId: string | 
                   case "news_won": return <>{team(t.holderTeamId).name} took {n} off {t.otherTeamId ? team(t.otherTeamId).name : "the holder"}.</>;
                 }
               })()}
+            </div>
+          </div>
+        ) : null}
+
+        {recap.shield?.secured ? (
+          <div style={{ ...section, display: "flex", alignItems: "center", gap: 10 }}>
+            <ShieldIcon size={30} />
+            <div style={{ fontSize: 13, fontWeight: 800 }}>
+              {recap.shield.secured.mine
+                ? <>You&apos;ve secured {recap.shield.name} for the season: no home games left to lose it!</>
+                : <>{team(recap.shield.secured.teamId).name} have secured {recap.shield.name} for the season: no home games left to lose it.</>}
             </div>
           </div>
         ) : null}

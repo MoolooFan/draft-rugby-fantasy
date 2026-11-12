@@ -211,6 +211,8 @@ export type ShieldRecap = {
     | null;
   /** your next game is a shield game: defending at home, or challenging away */
   next: "defending" | "challenging" | null;
+  /** this round the holder secured it for the season (no home games left) */
+  secured: { teamId: string; mine: boolean } | null;
 };
 
 /** The weekly recap's shield lines (Ethan, Nov 2026). */
@@ -222,6 +224,7 @@ export function shieldRecap(input: {
   myTeamId: string;
   next: { week: number; homeTeamId: string; awayTeamId: string } | null;
   myNextWeek: number | null;
+  secured?: { teamId: string; week: number } | null;
 }): ShieldRecap | null {
   if (!input.enabled) return null;
   const e = input.events.find((x) => x.week === input.week) ?? null;
@@ -238,6 +241,24 @@ export function shieldRecap(input: {
   }
   const n = input.next;
   const next = n && input.myNextWeek === n.week ? (n.homeTeamId === me ? "defending" : n.awayTeamId === me ? "challenging" : null) : null;
-  if (!thisWeek && !next) return null;
-  return { name: input.name, thisWeek, next };
+  const sec = input.secured && input.secured.week === input.week ? { teamId: input.secured.teamId, mine: input.secured.teamId === me } : null;
+  if (!thisWeek && !next && !sec) return null;
+  return { name: input.name, thisWeek, next, secured: sec };
+}
+
+/**
+ * Has the holder secured it for the rest of the regular season (no home games left to lose it)?
+ * Returns the week that happened: after their last home game, or the week they won it if they
+ * had none left. Null while they still have a home game to play, or if it's off now.
+ */
+export function shieldSecuredWeek(season: ShieldSeason, holderTeamId: string | null, reign: Pick<ShieldReign, "season" | "fromWeek"> | null): number | null {
+  if (!holderTeamId || !season.enabled || !reign) return null;
+  const homes = season.games.filter((g) => g.homeTeamId === holderTeamId && g.awayTeamId);
+  if (homes.some((g) => !g.final)) return null;
+  const firstWeek = Math.min(...season.games.map((g) => g.week));
+  const anyFinal = season.games.some((g) => g.final);
+  if (!anyFinal) return null;
+  const since = reign.season === season.season ? reign.fromWeek : firstWeek;
+  const lastHome = homes.length ? Math.max(...homes.map((g) => g.week)) : 0;
+  return Math.max(since, lastHome);
 }

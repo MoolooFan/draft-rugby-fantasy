@@ -26,6 +26,7 @@ import { STARTER_SLOTS } from "@/lib/scoring/week";
 import { positionsLabel } from "@/lib/players/positions";
 import { TeamAvatar } from "@/components/TeamAvatar";
 import { WeeklyRecapModal } from "@/components/WeeklyRecapModal";
+import { ShieldSecuredModal } from "@/components/ShieldSecuredModal";
 import { statusKind } from "@/lib/status/kind";
 import { ShieldIcon } from "@/components/AwardIcons";
 import { formatProjection, useProjections } from "@/lib/projections/useProjections";
@@ -2244,6 +2245,7 @@ const StandingsCard = useStableComponent(StandingsCard__render);
 
       {/* weekly recap pop-up (E7): once per league per finalised round */}
       <WeeklyRecapModal leagueId={activeLeague?.id} leagueName={activeLeague?.name} />
+      <ShieldSecuredModal leagueId={activeLeague?.id} />
 
       <AppMenu
   open={menuOpen}

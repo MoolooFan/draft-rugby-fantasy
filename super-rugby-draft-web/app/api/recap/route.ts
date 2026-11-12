@@ -26,8 +26,11 @@ export async function GET(req: Request) {
     if (lg.error) throw lg.error;
     if (done.error) throw done.error;
     if (me.error) throw me.error;
-    const week = done.data?.[0]?.week;
-    if (!week) return NextResponse.json({ ok: true, recap: null, seen: true });
+    const latest = done.data?.[0]?.week;
+    if (!latest) return NextResponse.json({ ok: true, recap: null, seen: true });
+    // ?week=N: view an earlier round's recap again (any finalised round this season)
+    const asked = Number(new URL(req.url).searchParams.get("week"));
+    const week = Number.isInteger(asked) && asked >= 1 && asked <= latest ? asked : latest;
 
     const [teams, matchups, results] = await Promise.all([
       supabaseAdmin.from("teams").select("id, name, initials, picture_url").eq("league_id", leagueId),
@@ -76,7 +79,7 @@ export async function GET(req: Request) {
     let shield: ShieldRecap | null = null;
     try {
       const s = await loadShield(supabaseAdmin, leagueId);
-      shield = shieldRecap({ name: s.name, enabled: s.enabled, events: s.events, week, myTeamId: teamId, next: s.next, myNextWeek: recap.next?.week ?? null });
+      shield = shieldRecap({ name: s.name, enabled: s.enabled, events: s.events, week, myTeamId: teamId, next: s.next, myNextWeek: recap.next?.week ?? null, secured: s.secured });
     } catch {
       shield = null;
     }
