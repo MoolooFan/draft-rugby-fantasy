@@ -11,6 +11,8 @@ import type { ShieldRecap } from "@/lib/league/shield";
 
 type TeamInfo = { name: string; initials: string | null; pictureUrl: string | null };
 type RecapResponse = Recap & {
+  latestWeek?: number;
+  firstWeek?: number;
   weekLabel: string;
   nextWeekLabel: string | null;
   myTeamId: string;
@@ -32,23 +34,26 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
   // the recap and which league it's for (switching league never shows the other league's)
   const [recap, setRecap] = useState<(RecapResponse & { forLeague: string }) | null>(null);
   const [open, setOpen] = useState(false);
+  // viewing on request: the round being shown (the arrows move it)
+  // (each opening mounts a fresh pop-up, so it starts at the asked round)
+  const [viewWeek, setViewWeek] = useState<number | undefined>(week);
 
   useEffect(() => {
     if (!leagueId) return;
     let cancelled = false;
-    const qs = week ? `&week=${week}` : "";
+    const qs = viewWeek ? `&week=${viewWeek}` : "";
     fetch(`/api/recap?leagueId=${encodeURIComponent(leagueId)}${qs}`, { cache: "no-store", credentials: "include" })
       .then((r) => r.json())
       .then((j) => {
-        if (cancelled || !j?.ok || !j.recap || (!week && j.seen)) return;
-        setRecap({ ...j.recap, forLeague: leagueId });
+        if (cancelled || !j?.ok || !j.recap || (!viewWeek && j.seen)) return;
+        setRecap({ ...j.recap, latestWeek: j.latestWeek, firstWeek: j.firstWeek, forLeague: leagueId });
         setOpen(true);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [leagueId, week]);
+  }, [leagueId, viewWeek]);
 
   if (!open || !recap || !leagueId || recap.forLeague !== leagueId) return null;
 
@@ -103,7 +108,29 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
         }}
       >
         <div style={{ padding: "12px 12px 10px", background: "linear-gradient(to right, rgb(15,23,42), rgb(13,148,136))", color: "white" }}>
-          <div style={{ fontSize: 18, fontWeight: 900, fontStyle: "italic" }}>{recap.weekLabel} recap</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <div style={{ fontSize: 18, fontWeight: 900, fontStyle: "italic" }}>{recap.weekLabel} recap</div>
+            {week ? (
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  aria-label="Previous round"
+                  disabled={recap.week <= (recap.firstWeek ?? recap.week)}
+                  onClick={() => setViewWeek(recap.week - 1)}
+                  style={{ width: 28, height: 28, borderRadius: 999, border: "1px solid rgba(255,255,255,0.5)", background: "transparent", color: "white", fontWeight: 900, cursor: "pointer", opacity: recap.week <= (recap.firstWeek ?? recap.week) ? 0.35 : 1 }}
+                >
+                  ‹
+                </button>
+                <button
+                  aria-label="Next round"
+                  disabled={recap.week >= (recap.latestWeek ?? recap.week)}
+                  onClick={() => setViewWeek(recap.week + 1)}
+                  style={{ width: 28, height: 28, borderRadius: 999, border: "1px solid rgba(255,255,255,0.5)", background: "transparent", color: "white", fontWeight: 900, cursor: "pointer", opacity: recap.week >= (recap.latestWeek ?? recap.week) ? 0.35 : 1 }}
+                >
+                  ›
+                </button>
+              </div>
+            ) : null}
+          </div>
           {leagueName ? <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.85 }}>{leagueName}</div> : null}
         </div>
 

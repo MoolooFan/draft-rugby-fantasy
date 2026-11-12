@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { AppMenu } from "@/components/AppMenu";
 import { TeamAvatar } from "@/components/TeamAvatar";
 import { PictureCropper } from "@/components/PictureCropper";
+import { WeeklyRecapModal } from "@/components/WeeklyRecapModal";
+import { SeasonRecapModal } from "@/components/SeasonRecapModal";
 import { useLeagueStore } from "@/lib/league/store";
 import { getActiveUsername } from "@/lib/session";
 
@@ -77,6 +79,35 @@ export default function TeamDetailsPage() {
       cancelled = true;
     };
   }, [router]);
+
+  // ---- recaps to view again (Ethan, Nov 2026): this season's rounds, and every season ----
+  const [recaps, setRecaps] = useState<{ forLeague: string; weeks: Array<{ week: number; label: string }>; seasons: Array<{ leagueId: string; season: number }> } | null>(null);
+  const [openWeek, setOpenWeek] = useState<number | null>(null);
+  const [openSeason, setOpenSeason] = useState<string | null>(null);
+  useEffect(() => {
+    if (!activeLeagueId) return;
+    let cancelled = false;
+    fetch(`/api/recap/list?leagueId=${encodeURIComponent(activeLeagueId)}`, { cache: "no-store", credentials: "include" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (!cancelled && j?.ok) setRecaps({ forLeague: activeLeagueId, weeks: j.weeks ?? [], seasons: j.seasons ?? [] });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLeagueId]);
+  const recapChip: React.CSSProperties = {
+    height: 30,
+    padding: "0 12px",
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.6)",
+    background: "rgba(255,255,255,0.12)",
+    color: "white",
+    fontSize: 12,
+    fontWeight: 900,
+    cursor: "pointer",
+  };
 
   // ---- team picture (E5) ----
   const myTeam: any = useMemo(() => {
@@ -325,6 +356,42 @@ export default function TeamDetailsPage() {
           </div>
 
           <div style={cardStyle}>
+            <div style={{ fontWeight: 900, fontSize: 12, marginBottom: 8 }}>Recaps</div>
+            {!recaps ? (
+              <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.8 }}>Loading…</div>
+            ) : !recaps.seasons.length && !recaps.weeks.length ? (
+              <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.8 }}>Your recaps will be here after the first round is finished.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {recaps.seasons.length ? (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", opacity: 0.75, marginBottom: 6 }}>Seasons</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {recaps.seasons.map((s) => (
+                        <button key={s.leagueId} onClick={() => setOpenSeason(s.leagueId)} style={recapChip}>
+                          {s.season} season
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {recaps.weeks.length ? (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", opacity: 0.75, marginBottom: 6 }}>This season</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {[...recaps.weeks].reverse().map((w) => (
+                        <button key={w.week} onClick={() => setOpenWeek(w.week)} style={recapChip}>
+                          {w.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+
+          <div style={cardStyle}>
             <div style={{ fontWeight: 900, fontSize: 12, marginBottom: 8 }}>Team Name</div>
             <input
               value={teamName}
@@ -345,6 +412,8 @@ export default function TeamDetailsPage() {
       </div>
 
       {cropFile ? <PictureCropper file={cropFile} busy={picBusy} onCancel={() => setCropFile(null)} onDone={uploadPicture} /> : null}
+      {openWeek ? <WeeklyRecapModal leagueId={activeLeagueId} week={openWeek} onClose={() => setOpenWeek(null)} /> : null}
+      {openSeason ? <SeasonRecapModal leagueId={openSeason} open onClose={() => setOpenSeason(null)} /> : null}
 
       <AppMenu
         open={menuOpen}

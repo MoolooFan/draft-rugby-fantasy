@@ -20,7 +20,7 @@ export async function GET(req: Request) {
 
     const [lg, done, me] = await Promise.all([
       supabaseAdmin.from("leagues").select("season").eq("id", leagueId).maybeSingle(),
-      supabaseAdmin.from("league_week_finalisations").select("week").eq("league_id", leagueId).order("week", { ascending: false }).limit(1),
+      supabaseAdmin.from("league_week_finalisations").select("week").eq("league_id", leagueId).order("week", { ascending: false }),
       supabaseAdmin.from("teams").select("recap_seen_week").eq("id", teamId).maybeSingle(),
     ]);
     if (lg.error) throw lg.error;
@@ -91,6 +91,8 @@ export async function GET(req: Request) {
       ok: true,
       recap: { ...recap, shield, weekLabel: label, nextWeekLabel: nextLabel, myTeamId: teamId, teams: teamInfo },
       seen: (me.data?.recap_seen_week ?? 0) >= week,
+      latestWeek: latest,
+      firstWeek: done.data?.[done.data.length - 1]?.week ?? latest,
     });
   } catch (e) {
     const { msg, status } = toHttpError(e);
