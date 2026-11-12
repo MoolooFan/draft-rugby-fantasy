@@ -176,6 +176,16 @@ npx tsx scripts/import-history.ts --live --confirm=<ref>.supabase.co
 ```
 It should say `No 2026 league in this database: imported the honours only (8 rows).`
 
+Then switch the players to the new clean ids (e.g. `D.McKenzie` becomes `mckenda01`). This also updates the 2026 stats and player photos that are already in the new project:
+```
+npx tsx scripts/migrate-player-ids.ts --live --confirm=<ref>.supabase.co
+```
+That's a dry run: it lists a few examples and how many rows it would change. If that looks right, run it again with `--apply` on the end:
+```
+npx tsx scripts/migrate-player-ids.ts --live --confirm=<ref>.supabase.co --apply
+```
+It ends with `Changed:` and the counts.
+
 ## 7. Vercel settings
 
 1. Go to **vercel.com**, open the project, then **Settings → Environment Variables**.

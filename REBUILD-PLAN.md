@@ -116,7 +116,7 @@ Agreed answers are recorded here so nothing is lost between sessions. Status: �
 
 | # | Change | Status | Agreed details |
 |---|---|---|---|
-| F1 | Better player ids | ⬜ | Replace ids like "T.Tele'a" with clean ones (official Super Rugby fantasy id, or a Basketball-Reference style id with no punctuation). Details to agree. |
+| F1 | Better player ids | 🔶 | Ethan chose our own Basketball-Reference style ids (12 Nov): first 5 letters of the last name + first 2 of the first name + 01/02..., no punctuation or accents (Damian McKenzie = mckenda01, Tanielu Tele'a = teleata01). The playfantasyrugby id stays stored alongside for stats. A player keeps his id every season (matched by playfantasyrugby id, else old id); numbers are never reused. Built: lib/players/ids.ts (checked on all 419 players of 2026: all clean and different), scripts/migrate-player-ids.ts switches every stored id (players, stats, photos, statuses, and all league data) - dry run unless --apply; the admin page gives new players ids this way (or their id from another season). **To run on the test database after the restart, and on the live project at launch (GO-LIVE step 6).** |
 | F2 | Expected points and power rankings | ⬜ | Projected points per player and per team each week (like ESPN NFL fantasy), then power rankings from them. Details to agree. |
 | F3 | Owner name on the ladder | 🔶 | First name and last initial (e.g. "Ethan S.") under the team name in smaller text, like FPL. Built 11 Nov. **Browser check pending.** |
 | F4 | Win / loss records stop after the regular season | 🔶 | Records and streaks (matchup and dashboard) count regular-season games only; the ladder already did. Built 11 Nov. **Browser check pending.** |

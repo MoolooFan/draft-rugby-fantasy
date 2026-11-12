@@ -6,6 +6,7 @@ import { requireSiteAdmin } from "@/lib/admin/server";
 import { toHttpError } from "@/lib/league/serverAuth";
 import { loadSeasonPlayers } from "@/lib/players/db";
 import { currentSeasonYear, SEASONS } from "@/lib/season";
+import { idStem, newPlayerId } from "@/lib/players/ids";
 
 export const dynamic = "force-dynamic";
 
@@ -58,15 +59,18 @@ export async function POST(req: Request) {
     if (externalId != null && (!Number.isInteger(externalId) || externalId < 1)) problems.push("playfantasyrugby id must be a whole number");
     if (problems.length) return NextResponse.json({ ok: false, error: problems.join(". ") }, { status: 400 });
 
-    // New player: an id like the others, e.g. "D.McKenzie" (made unique if needed).
+    // New player (F1): the id he had in another season if we know him (same playfantasyrugby
+    // id), otherwise a new clean id like "mckenda01" (lib/players/ids.ts).
     let id = String(p.id ?? "").trim();
     if (!id) {
-      const base = `${firstName[0].toUpperCase()}.${lastName.replace(/\s+/g, "")}`;
-      id = base;
-      for (let n = 2; ; n++) {
-        const { data } = await supabaseAdmin.from("players").select("id").eq("season", season).eq("id", id).maybeSingle();
-        if (!data) break;
-        id = `${base}${n}`;
+      if (externalId != null) {
+        const { data: known } = await supabaseAdmin.from("players").select("id").eq("external_id", externalId).limit(1);
+        if (known?.length) id = known[0].id;
+      }
+      if (!id) {
+        const { data: ids, error: idErr } = await supabaseAdmin.from("players").select("id").like("id", `${idStem(firstName, lastName)}%`);
+        if (idErr) throw idErr;
+        id = newPlayerId(firstName, lastName, new Set((ids ?? []).map((r) => r.id)));
       }
     }
 
