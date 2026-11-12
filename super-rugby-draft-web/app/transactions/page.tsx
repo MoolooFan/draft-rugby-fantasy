@@ -679,6 +679,8 @@ const ownerByPlayerId = useMemo(() => {
   // Tabs + Modal
   // -----------------------
   const [tab, setTab] = useState<TabKey>("Player Pool");
+  // Transactions tab: an earlier round's moves (null = the latest) (Ethan, 13 Nov 2026)
+  const [txWeek, setTxWeek] = useState<number | null>(null);
   const [modalPlayer, setModalPlayer] = useState<
   (Player & { status?: any; weeklyStatus?: any }) | null
 >(null);
@@ -3164,6 +3166,26 @@ const LeagueTradeRow = useStableComponent(LeagueTradeRow__render);
     // We show transfers created after the last waiver deadline.
     const freeAgencyCutoffMs = lastWaiverDeadlineMs;
 
+    // An earlier round's moves: from the previous round's lineup deadline to that round's
+    // (its waivers, free agent signings and trades). Rounds whose deadline has passed.
+    const pastTxWeeks = weeksSorted.filter((w) => {
+      const d = getWeekDeadlineMs(normalizedFixtures as Parameters<typeof getWeekDeadlineMs>[0], w);
+      return !!d && d <= nowMs;
+    });
+    const viewWindow = (() => {
+      if (txWeek == null) return null;
+      const idx = weeksSorted.indexOf(txWeek);
+      const prev = idx > 0 ? weeksSorted[idx - 1] : null;
+      return {
+        start: prev ? getWeekDeadlineMs(normalizedFixtures as Parameters<typeof getWeekDeadlineMs>[0], prev) || 0 : 0,
+        end: getWeekDeadlineMs(normalizedFixtures as Parameters<typeof getWeekDeadlineMs>[0], txWeek) || Number.MAX_SAFE_INTEGER,
+      };
+    })();
+    const viewStart = viewWindow?.start ?? null;
+    const viewEnd = viewWindow?.end ?? null;
+    const inView = (ms: number, latestFrom: number) =>
+      viewStart == null || viewEnd == null ? ms >= (latestFrom || 0) : ms >= viewStart && ms < viewEnd;
+
     // ---------- Pending Trades split ----------
    const pendingTradesAll = (tradesForUi as any[])
   .filter((t) => t.leagueId === leagueId)
@@ -3183,7 +3205,7 @@ const LeagueTradeRow = useStableComponent(LeagueTradeRow__render);
     const leagueTradesSinceDeadline = (tradesForUi as any[])
   .filter((t) => t.leagueId === leagueId)
   .filter((t) => String(t.status ?? "").toLowerCase() === "accepted")
-      .filter((t) => (t.acceptedAtMs ?? t.decidedAtMs ?? t.updatedAtMs ?? t.createdAtMs ?? 0) >= (lastSelectionDeadlineMs || 0))
+      .filter((t) => inView(t.acceptedAtMs ?? t.decidedAtMs ?? t.updatedAtMs ?? t.createdAtMs ?? 0, lastSelectionDeadlineMs))
       .slice()
       .sort(
         (a, b) =>
@@ -3206,7 +3228,7 @@ const waiverClaimsFeed = useMemo(() => {
     .filter((c) => {
       const ms = c.processedAtMs ?? c.decidedAtMs ?? c.updatedAtMs ?? 0;
       if (!ms) return false;
-      return ms >= (lastWaiverDeadlineMs || 0);
+      return inView(ms, lastWaiverDeadlineMs);
     });
 
   // group claims by team
@@ -3286,6 +3308,8 @@ const waiverClaimsFeed = useMemo(() => {
   claimsForUi,
   leagueId,
   lastWaiverDeadlineMs,
+  viewStart,
+  viewEnd,
   waiverOrderRows,
   waiverOrderIndexByTeamId,
 ]);
@@ -3293,7 +3317,7 @@ const waiverClaimsFeed = useMemo(() => {
     // ---------- Free agent transfers feed (latest free agency period) ----------
     const freeAgentFeed = (freeForUi as any[])
       .filter((x) => x.leagueId === leagueId)
-      .filter((x) => (x.createdAtMs ?? x.updatedAtMs ?? 0) >= (freeAgencyCutoffMs || 0))
+      .filter((x) => inView(x.createdAtMs ?? x.updatedAtMs ?? 0, freeAgencyCutoffMs))
       .slice()
       .sort((a, b) => (b.createdAtMs ?? b.updatedAtMs ?? 0) - (a.createdAtMs ?? a.updatedAtMs ?? 0));
 
@@ -3459,8 +3483,26 @@ const StatusPill = useStableComponent(StatusPill__render);
 
     return (
       <>
-{/* Pending Trades FIRST */}
-<div style={listBox}>
+{/* Which round's moves */}
+<div style={{ ...listBox, padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+  <span style={{ fontSize: 12, fontWeight: 900 }}>{txWeek == null ? "Latest moves" : `${roundLabel(txWeek)} moves`}</span>
+  <select
+    id="tx-week"
+    aria-label="Show moves from"
+    value={txWeek == null ? "" : String(txWeek)}
+    onChange={(e) => setTxWeek(e.target.value ? Number(e.target.value) : null)}
+    style={{ height: 30, borderRadius: 10, border: "1px solid rgba(0,0,0,0.15)", padding: "0 8px", fontSize: 12, fontWeight: 800, color: "#0f172a", background: "white" }}
+  >
+    <option value="">Latest</option>
+    {[...pastTxWeeks].reverse().map((w) => (
+      <option key={w} value={w}>{roundLabel(w)}</option>
+    ))}
+  </select>
+</div>
+
+{/* Pending Trades FIRST (only with the latest moves) */}
+{txWeek == null ? (
+<div style={{ ...listBox, marginTop: 10 }}>
   <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 900 }}>
     Pending Trades
   </div>
@@ -3543,7 +3585,9 @@ const StatusPill = useStableComponent(StatusPill__render);
   )}
 </div>
 
-        {/* League Trades since last team selection deadline */}
+) : null}
+
+        {/* League Trades since last team selection deadline (or in the chosen round) */}
         <div style={{ ...listBox, marginTop: 10 }}>
           <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 900 }}>League Trades</div>
 
