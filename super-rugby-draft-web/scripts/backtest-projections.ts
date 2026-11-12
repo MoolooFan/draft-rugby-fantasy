@@ -1,19 +1,26 @@
 // scripts/backtest-projections.ts
 // How accurate would expected points (lib/projections/project.ts) have been in 2026?
 // Goes through the 2026 season round by round using only what was known before each round
-// (earlier rounds' stats, that round's team lists, the fixture's FDR and home/away) and
-// compares the projection with what each player actually scored. Then the same for the
-// fantasy teams' lineups: projected team totals vs real scores, and how often the team
-// projected to win did win. Reads the 2026 backup files only (no database).
+// (earlier rounds' stats and results, the team lists / injury list as they came out, the
+// fixture's FDR and home/away) and compares the projection with what each player actually
+// scored. Then the same for the fantasy teams' lineups: projected team totals (with auto-subs
+// for ruled-out starters) vs real scores, and how often the team projected to win did win.
+// Reads the 2026 backup files only (no database).
+//
+// For reference, the first recipe (before the 12 Nov 2026 changes) missed by 10.66 pts per
+// player after the team lists (correlation 0.531), 11.19 before them, 10.08 midweek.
+// Even knowing every player's true 2026 average in advance would miss by 9.24 (game-day luck).
 //
 // Run (from super-rugby-draft-web): npx tsx scripts/backtest-projections.ts
 import fs from "node:fs";
 import path from "node:path";
-import { isFrontRow, playerPoints, statCountsFromRaw } from "../lib/scoring";
+import { isFrontRow, playerPoints, statCountsFromRaw, STANDARD_SCORING, type StatCounts } from "../lib/scoring";
 import { statusKind } from "../lib/status/kind";
+import type { Lineup } from "../lib/scoring/week";
 import {
-  DEFAULT_LINEUP_PARAMS, DEFAULT_PARAMS, eventRate80, expectedRole, projectPoints, projectPointsExpectedLineup,
-  type LineupParams, type ListRole, type PastGame, type ProjectionParams, type Role,
+  DEFAULT_PARAMS, averageRates, dutyKicker, expectedRole, kickingOrder, kickingPoints, opponentWeakness,
+  projectPoints, projectPointsExpectedLineup, projectTeamScore, teamStrength,
+  type ListRole, type PastGame, type ProjectionParams, type Role, type StatRates, type TeamGame, type TeamStrength,
 } from "../lib/projections/project";
 
 const LAST_LISTED_ROUND = 15; // the 2026 data has no team lists for round 16
@@ -39,58 +46,105 @@ function csv(text: string): Record<string, string>[] {
 const CODE: Record<string, string> = { Blues: "BLU", Brumbies: "BRU", Chiefs: "CHI", Crusaders: "CRU", Drua: "DRU", Force: "FOR", Highlanders: "HIG", Hurricanes: "HUR", Moana: "MOP", Reds: "RED", Waratahs: "WAR" };
 
 // ---- players: positions and team-list status per round
-type Pl = { id: string; team: string; posAbbrev: string; secondaryPosAbbrev: string | null; status: Record<number, string> };
+type Pl = { id: string; team: string; posAbbrev: string; secondaryPosAbbrev: string | null; frontRow: boolean; status: Record<number, string> };
 const players = new Map<string, Pl>();
 for (const r of csv(read("sheet-playersCsv.csv"))) {
   const id = r.PlayerId.toLowerCase();
   if (!id) continue;
   const status: Record<number, string> = {};
   for (let w = 1; w <= 16; w++) status[w] = r[`statusw${w}`] ?? "";
-  players.set(id, { id, team: (r.teamCode || "").toUpperCase().replace("MOA", "MOP"), posAbbrev: r.posAbbrev, secondaryPosAbbrev: r.secondaryPosAbbrev || null, status });
+  const pos = { posAbbrev: r.posAbbrev, secondaryPosAbbrev: r.secondaryPosAbbrev || null };
+  players.set(id, { id, team: (r.teamCode || "").toUpperCase().replace("MOA", "MOP"), ...pos, frontRow: isFrontRow(pos, STANDARD_SCORING), status });
 }
 
-// ---- stats: minutes and fantasy points per player per round
-const games = new Map<string, Map<number, PastGame>>();
+const listedAs = (st: string): "starting" | "bench" | null => {
+  const k = statusKind(st);
+  return k === "starting" || k === "bench" ? k : null;
+};
+
+// ---- stats per player per round
+const games = new Map<string, Map<number, PastGame & { points: number }>>();
 for (const s of JSON.parse(read("player_round_stats.json")) as Array<{ internal_player_id: string; round: number; raw_json: { stats?: unknown } }>) {
   const id = s.internal_player_id.toLowerCase();
   const pl = players.get(id);
-  const counts = statCountsFromRaw(s.raw_json?.stats);
-  const minutes = Number(counts.minutesPlayed) || 0;
-  const points = playerPoints(counts, isFrontRow(pl ?? { posAbbrev: "" }));
+  const counts: StatCounts = statCountsFromRaw(s.raw_json?.stats);
+  if (!(Number(counts.minutesPlayed) > 0)) continue;
   if (!games.has(id)) games.set(id, new Map());
-  games.get(id)!.set(s.round, { round: s.round, minutes, points });
+  games.get(id)!.set(s.round, {
+    round: s.round, counts, listed: pl ? listedAs(pl.status[s.round] ?? "") : null,
+    points: playerPoints(counts, pl?.frontRow ?? false, STANDARD_SCORING),
+  });
 }
+const pastOf = (id: string, R: number) => [...(games.get(id)?.values() ?? [])].filter((g) => g.round < R).sort((a, b) => a.round - b.round);
 
-// ---- fixtures: opponent difficulty and home/away per team per round
-const fixtureOf = new Map<string, { fdr: number; home: boolean }>();
+// ---- fixtures and real teams' games
+const fixtureOf = new Map<string, { fdr: number; home: boolean; opp: string; pf: number; pa: number }>();
 for (const f of csv(read("sheet-fixturesCsv.csv"))) {
   const w = Number(f.week);
   const h = CODE[f.homeTeam], a = CODE[f.awayTeam];
-  if (h) fixtureOf.set(`${h}|${w}`, { fdr: Number(f.fdrHome) || 3, home: true });
-  if (a) fixtureOf.set(`${a}|${w}`, { fdr: Number(f.fdrAway) || 3, home: false });
+  if (!h || !a) continue;
+  const hs = Number(f.homeScore) || 0, as = Number(f.awayScore) || 0;
+  fixtureOf.set(`${h}|${w}`, { fdr: Number(f.fdrHome) || 3, home: true, opp: a, pf: hs, pa: as });
+  fixtureOf.set(`${a}|${w}`, { fdr: Number(f.fdrAway) || 3, home: false, opp: h, pf: as, pa: hs });
+}
+const teamGames = new Map<string, TeamGame[]>();
+for (const [key, f] of fixtureOf) {
+  const [team, w] = key.split("|");
+  let tries = 0, penaltyShots = 0;
+  for (const pl of players.values()) {
+    if (pl.team !== team) continue;
+    const c = games.get(pl.id)?.get(Number(w))?.counts;
+    if (!c) continue;
+    tries += Number(c.tries) || 0;
+    penaltyShots += (Number(c.penaltyGoals) || 0) + (Number(c.penaltyGoalsMissed) || 0);
+  }
+  if (!teamGames.has(team)) teamGames.set(team, []);
+  teamGames.get(team)!.push({ round: Number(w), pointsFor: f.pf, pointsAgainst: f.pa, tries, penaltyShots });
+}
+
+// ---- what was known before each round
+type Before = { priors: Map<string, StatRates>; strength: Map<string, TeamStrength>; order: Map<string, string[]> };
+const beforeCache = new Map<number, Before>();
+function before(R: number): Before {
+  if (beforeCache.has(R)) return beforeCache.get(R)!;
+  const byPos = new Map<string, Array<{ games: PastGame[]; frontRow: boolean }>>();
+  const byTeam = new Map<string, Array<{ id: string; games: PastGame[] }>>();
+  for (const pl of players.values()) {
+    const past = pastOf(pl.id, R);
+    if (!byPos.has(pl.posAbbrev)) byPos.set(pl.posAbbrev, []);
+    byPos.get(pl.posAbbrev)!.push({ games: past, frontRow: pl.frontRow });
+    if (!byTeam.has(pl.team)) byTeam.set(pl.team, []);
+    byTeam.get(pl.team)!.push({ id: pl.id, games: past });
+  }
+  const priors = new Map([...byPos].map(([pos, g]) => [pos, averageRates(g)]));
+  const strength = new Map([...teamGames].map(([t, g]) => [t, teamStrength(g.filter((x) => x.round < R))]));
+  const order = new Map([...byTeam].map(([t, g]) => [t, kickingOrder(g, R)]));
+  const out = { priors, strength, order };
+  beforeCache.set(R, out);
+  return out;
 }
 
 const roleOf = (status: string): Role => {
   const k = statusKind(status);
   return k === "starting" ? "starting" : k === "bench" ? "bench" : "out";
 };
-const posGroup = (p: Pl | undefined) => (p ? p.posAbbrev : "??");
-
-/** Average scoring rate per 80 for each position from all games before this round. */
-function positionRates(beforeRound: number): Map<string, number> {
-  const acc = new Map<string, { points: number; minutes: number }>();
-  for (const [id, byRound] of games) {
-    const g = [...byRound.values()].filter((x) => x.round < beforeRound);
-    const r = eventRate80(g);
-    const k = posGroup(players.get(id));
-    const a = acc.get(k) ?? { points: 0, minutes: 0 };
-    a.points += r.points; a.minutes += r.minutes;
-    acc.set(k, a);
+const isOut = (status: string) => {
+  const k = statusKind(status);
+  return k === "injured" || k === "suspended" || k === "out";
+};
+/**
+ * His status before this week's injury list: the latest injury / suspension / "Out - reason" he
+ * had (it stays until it's changed). A plain "Out" in the 2026 lists just meant not picked
+ * that week, so it doesn't carry over.
+ */
+function carriedStatus(pl: Pl, R: number): string {
+  for (let r = R - 1; r >= 1; r--) {
+    const st = (pl.status[r] ?? "").trim();
+    if (!st) continue;
+    return st.toLowerCase() === "out" ? "" : st;
   }
-  return new Map([...acc].map(([k, a]) => [k, a.minutes ? (a.points * 80) / a.minutes : 20]));
+  return "";
 }
-
-type Pred = { id: string; round: number; role: Role; actual: number; model: number; ppg: number; ppgRole: number; pre: number; preOld: number; mid: number; namedOrPlayed: boolean };
 
 /** What the team list said about a player in a round (a game with no listed status: from his minutes). */
 function listRole(pl: Pl, R: number): ListRole {
@@ -101,45 +155,71 @@ function listRole(pl: Pl, R: number): ListRole {
     return k === "starting" ? "starting" : k === "bench" ? "bench" : "out";
   }
   const g = games.get(pl.id)?.get(R);
-  if (g && g.minutes > 0) return g.minutes >= 40 ? "starting" : "bench";
+  if (g) return Number(g.counts.minutesPlayed) >= 40 ? "starting" : "bench";
   return "notNamed";
 }
 
-function run(params: ProjectionParams, firstRound = 3, lp: LineupParams = DEFAULT_LINEUP_PARAMS): Pred[] {
-  const out: Pred[] = [];
+type Stage = "after" | "start" | "mid";
+type Pred = { id: string; round: number; role: Role; actual: number; after: number; start: number; mid: number; namedOrPlayed: boolean };
+
+function run(params: ProjectionParams = DEFAULT_PARAMS, firstRound = 3) {
+  const preds: Pred[] = [];
+  const ruledOut = new Map<string, Record<Stage, boolean>>(); // `${id}|${R}`
   for (let R = 1; R <= LAST_LISTED_ROUND; R++) {
-    const rates = positionRates(R);
-    const fallback = rates.size ? [...rates.values()].reduce((a, b) => a + b, 0) / rates.size : 20;
+    const b = before(R);
+    const teamPlayers = (t: string) => [...players.values()].filter((p) => p.team === t);
+    // this week's kicker at each stage
+    const kicker = new Map<string, Record<Stage, string | null>>();
+    for (const t of new Set([...players.values()].map((p) => p.team))) {
+      const order = b.order.get(t) ?? [];
+      const byId = new Map(teamPlayers(t).map((p) => [p.id, p]));
+      const likelyStarter = (id: string, outNow: (p: Pl) => boolean) => {
+        const p = byId.get(id);
+        if (!p || outNow(p)) return false;
+        const h: ListRole[] = [];
+        for (let r = 1; r < R; r++) h.push(listRole(p, r));
+        return expectedRole(h).start >= 0.5;
+      };
+      kicker.set(t, {
+        after: dutyKicker(order, (id) => roleOf(byId.get(id)?.status[R] ?? "") === "starting"),
+        start: dutyKicker(order, (id) => likelyStarter(id, (p) => isOut(carriedStatus(p, R)))),
+        mid: dutyKicker(order, (id) => likelyStarter(id, (p) => isOut(p.status[R] ?? ""))),
+      });
+    }
     for (const pl of players.values()) {
+      const fx = fixtureOf.get(`${pl.team}|${R}`);
       const role = roleOf(pl.status[R] ?? "");
       const actualGame = games.get(pl.id)?.get(R);
-      // not named and didn't play: nothing to judge after the lists, but before them he may have been tipped to play
-      const namedOrPlayed = !(role === "out" && !actualGame);
-      if (!namedOrPlayed && !fixtureOf.has(`${pl.team}|${R}`)) continue;
-      const past = [...(games.get(pl.id)?.values() ?? [])].filter((g) => g.round < R).sort((a, b) => a.round - b.round);
-      const fx = fixtureOf.get(`${pl.team}|${R}`);
-      const base = { games: past, priorRate80: rates.get(posGroup(pl)) ?? fallback, fdr: fx?.fdr ?? null, home: fx?.home ?? null };
-      const model = projectPoints({ ...base, role }, params);
-      // before the team lists: expected lineup from his earlier lists (and 0 if his team has a bye)
+      const outStart = !fx || isOut(carriedStatus(pl, R));
+      const outMid = !fx || isOut(pl.status[R] ?? "");
+      ruledOut.set(`${pl.id}|${R}`, { after: !fx || role === "out", start: outStart, mid: outMid });
+      if (!fx) continue;
+      const past = pastOf(pl.id, R);
+      const opp = b.strength.get(fx.opp);
+      const own = b.strength.get(pl.team);
+      const kick = (stage: Stage) =>
+        kicker.get(pl.team)?.[stage] === pl.id && own && opp ? kickingPoints(past, own, opp) : null;
+      const base = {
+        games: past, pos: pl.posAbbrev, frontRow: pl.frontRow, prior: b.priors.get(pl.posAbbrev) ?? {},
+        fdr: fx.fdr, home: fx.home, opponentWeakness: opp ? opponentWeakness(opp) : null,
+      };
+      const after = projectPoints({ ...base, role, kicking: kick("after") }, params);
       const history: ListRole[] = [];
       for (let r = 1; r < R; r++) history.push(listRole(pl, r));
-      const pre = fx ? projectPointsExpectedLineup({ ...base, chances: expectedRole(history, lp) }, params) : 0;
-      // midweek: the injury list is out (injured / suspended / out = 0), the team list isn't yet
-      const sk = statusKind(pl.status[R] ?? "");
-      const mid = sk === "injured" || sk === "out" || sk === "suspended" ? 0 : pre;
-      const preOld = fx ? projectPoints({ ...base, role: "unknown" }, params) : 0;
-      const played = past.filter((g) => g.minutes > 0);
-      const ppgRaw = played.length ? played.reduce((a, g) => a + g.points, 0) / played.length : 0;
-      const ppg = role === "out" ? 0 : ppgRaw;
-      const ppgRole = role === "starting" ? ppgRaw * 1.1 : role === "bench" ? ppgRaw * 0.45 : 0;
-      if (!namedOrPlayed && pre <= 0 && preOld <= 0) continue;
-      if (R >= firstRound) out.push({ id: pl.id, round: R, role, actual: actualGame?.points ?? 0, model, ppg, ppgRole, pre, preOld, mid, namedOrPlayed });
+      const chances = expectedRole(history);
+      const start = outStart ? 0 : projectPointsExpectedLineup({ ...base, chances, kicking: kick("start") }, params);
+      const mid = outMid ? 0 : projectPointsExpectedLineup({ ...base, chances, kicking: kick("mid") }, params);
+      const namedOrPlayed = !(role === "out" && !actualGame);
+      // judged: everyone named or who played, plus anyone in contention from his recent lists
+      // (so a player correctly held at 0 for an injury counts as a correct call)
+      if (!namedOrPlayed && chances.start + chances.bench <= 0) continue;
+      if (R >= firstRound) preds.push({ id: pl.id, round: R, role, actual: actualGame?.points ?? 0, after, start, mid, namedOrPlayed });
     }
   }
-  return out;
+  return { preds, ruledOut };
 }
 
-function stats(preds: Pred[], key: "model" | "ppg" | "ppgRole" | "pre" | "preOld" | "mid") {
+function stats(preds: Pred[], key: Stage) {
   const n = preds.length;
   const err = preds.map((p) => p[key] - p.actual);
   const mae = err.reduce((a, e) => a + Math.abs(e), 0) / n;
@@ -151,90 +231,57 @@ function stats(preds: Pred[], key: "model" | "ppg" | "ppgRole" | "pre" | "preOld
 }
 
 // ---- player level
-const all = run(DEFAULT_PARAMS);
-const preds = all.filter((p) => p.namedOrPlayed); // after the lists: the players named (or who played)
-const avgActual = preds.reduce((a, p) => a + p.actual, 0) / preds.length;
-console.log(`\nPLAYERS (rounds 3-${LAST_LISTED_ROUND}, ${preds.length} player-games; average actual ${avgActual.toFixed(1)} pts)`);
-console.log("  season average only         ", stats(preds, "ppg"));
-console.log("  season average x team list  ", stats(preds, "ppgRole"));
-console.log("  full recipe (expected pts)  ", stats(preds, "model"));
+const { preds: all } = run();
+const named = all.filter((p) => p.namedOrPlayed);
+console.log(`\nPLAYERS (rounds 3-${LAST_LISTED_ROUND}; average actual ${(named.reduce((a, p) => a + p.actual, 0) / named.length).toFixed(1)} pts)`);
+console.log(`  after the team lists (${named.length} named or played)  `, stats(named, "after"));
 for (const role of ["starting", "bench"] as Role[]) {
-  const sub = preds.filter((p) => p.role === role);
-  console.log(`    ${role.padEnd(9)} (${sub.length})`.padEnd(30), stats(sub, "model"), `avg actual ${(sub.reduce((a, p) => a + p.actual, 0) / sub.length).toFixed(1)}`);
+  const sub = named.filter((p) => p.role === role);
+  console.log(`    ${role.padEnd(9)} (${sub.length})`.padEnd(42), stats(sub, "after"));
 }
-console.log(`  BEFORE the team lists (every player whose team plays and who was tipped to play or did: ${all.length}):`);
-console.log("    recent minutes (old way)   ", stats(all, "preOld"));
-console.log("    expected lineup            ", stats(all, "pre"));
-console.log("    + injury list (midweek)    ", stats(all, "mid"));
-for (const lp of [{ backFromInjury: 0 }, { backFromInjury: 0.5 }, { fade: 0.4 }, { fade: 0.8 }, { lookback: 2 }, { lookback: 6 }]) {
-  console.log("      variant", JSON.stringify(lp).padEnd(22), stats(run(DEFAULT_PARAMS, 3, { ...DEFAULT_LINEUP_PARAMS, ...lp }), "pre"));
+console.log(`  before the lists (${all.length} whose team played, tipped to or did play):`);
+console.log("    start of week (last status carried)  ", stats(all, "start"));
+console.log("    midweek (this week's injury list)    ", stats(all, "mid"));
+for (const t of [{ formWeight: 0 }, { fdrStep: 0 }, { homeEdge: 0 }, { opponentEffect: {} }]) {
+  console.log("    variant", JSON.stringify(t).padEnd(22), stats(run({ ...DEFAULT_PARAMS, ...t }).preds.filter((p) => p.namedOrPlayed), "after"));
 }
-
-// a few settings around the defaults (to see how sensitive it is)
-const tries: Array<Partial<ProjectionParams>> = [
-  { formWeight: 0 }, { formWeight: 0.4 }, { fdrStep: 0 }, { fdrStep: 0.08 }, { homeEdge: 0 }, { priorMinutes: 120 }, { priorMinutes: 480 },
-  { formWeight: 0.1, priorMinutes: 480 }, { formWeight: 0.1, priorMinutes: 480, benchMinutes: 26 }, { formWeight: 0.1, priorMinutes: 800 },
-];
-for (const t of tries) console.log("    variant", JSON.stringify(t).padEnd(22), stats(run({ ...DEFAULT_PARAMS, ...t }), "model"));
 
 // ---- team level: the 2026 league's lineups (a week without a saved lineup uses the latest earlier one)
-type Sel = { team_id: string; week: number; lineup: Record<string, { id?: string } | null>; captain_id: string | null };
+type Sel = { team_id: string; week: number; lineup: Record<string, Record<string, unknown> | null>; captain_id: string | null; vice_id: string | null };
 const sels = (JSON.parse(read("team_selections.json")) as Array<Sel & { week: string }>).map((s) => ({ ...s, week: Number(s.week) }));
-const STARTERS = ["prop1", "hooker1", "prop2", "lock1", "lock2", "looseforward1", "looseforward2", "looseforward3", "halfback1", "flyhalf1", "centre1", "centre2", "outsideback1", "outsideback2", "outsideback3"];
-const projBy = new Map<string, number>();
-const preBy = new Map<string, number>();
-const oldBy = new Map<string, number>();
-const midBy = new Map<string, number>();
-for (const p of run(DEFAULT_PARAMS, 1)) { projBy.set(`${p.id}|${p.round}`, p.model); preBy.set(`${p.id}|${p.round}`, p.pre); oldBy.set(`${p.id}|${p.round}`, p.preOld); midBy.set(`${p.id}|${p.round}`, p.mid); }
-// players not named and not playing aren't in run(); before the lists they still get an expected-lineup projection
-for (let R = 1; R <= LAST_LISTED_ROUND; R++) {
-  const rates = positionRates(R);
-  for (const pl of players.values()) {
-    if (preBy.has(`${pl.id}|${R}`)) continue;
-    const fx = fixtureOf.get(`${pl.team}|${R}`);
-    if (!fx) continue;
-    const past = [...(games.get(pl.id)?.values() ?? [])].filter((g) => g.round < R).sort((a, b) => a.round - b.round);
-    const history: ListRole[] = [];
-    for (let r = 1; r < R; r++) history.push(listRole(pl, r));
-    preBy.set(`${pl.id}|${R}`, projectPointsExpectedLineup({ games: past, priorRate80: rates.get(posGroup(pl)) ?? 20, fdr: fx.fdr, home: fx.home, chances: expectedRole(history) }));
-  }
-}
+const full = run(DEFAULT_PARAMS, 1);
+const projBy = new Map<string, Pred>(full.preds.map((p) => [`${p.id}|${p.round}`, p]));
 
 const matchups = csv(read("league-fixtures-and-results-sheet.csv")).filter((m) => m.kind === "regular" && m.homeTeamId && m.awayTeamId && m.status === "complete" && Number(m.weekReal) <= LAST_LISTED_ROUND);
-const teamRows: Array<{ proj: number; actual: number }> = [];
-const teamRowsPre: Array<{ proj: number; actual: number }> = [];
-let right = 0, called = 0, rightPre = 0, rightOld = 0, rightMid = 0;
-for (const m of matchups) {
-  const wf = Number(m.weekFantasy), wr = Number(m.weekReal);
-  const projFor = (teamId: string, by: Map<string, number> = projBy) => {
-    const sel = sels.filter((s) => s.team_id === teamId && s.week <= wf).sort((a, b) => b.week - a.week)[0];
-    if (!sel) return null;
-    let t = 0;
-    for (const slot of STARTERS) {
-      const id = String(sel.lineup?.[slot]?.id ?? "").toLowerCase();
-      const v = by.get(`${id}|${wr}`) ?? 0;
-      t += id === String(sel.captain_id ?? "").toLowerCase() ? v * 2 : v;
-    }
-    return t;
-  };
-  const ph = projFor(m.homeTeamId), pa = projFor(m.awayTeamId);
-  if (ph == null || pa == null) continue;
-  const ah = Number(m.homeScore), aw = Number(m.awayScore);
-  teamRows.push({ proj: ph, actual: ah }, { proj: pa, actual: aw });
-  const qh = projFor(m.homeTeamId, preBy)!, qa = projFor(m.awayTeamId, preBy)!;
-  teamRowsPre.push({ proj: qh, actual: ah }, { proj: qa, actual: aw });
-  const oh = projFor(m.homeTeamId, oldBy)!, oa = projFor(m.awayTeamId, oldBy)!;
-  if (ah !== aw) { called++; if ((ph > pa) === (ah > aw)) right++; if ((qh > qa) === (ah > aw)) rightPre++; if ((oh > oa) === (ah > aw)) rightOld++; if ((projFor(m.homeTeamId, midBy)! > projFor(m.awayTeamId, midBy)!) === (ah > aw)) rightMid++; }
+function teamProjection(teamId: string, wf: number, wr: number, stage: Stage, autoSubs: boolean): number | null {
+  const sel = sels.filter((s) => s.team_id === teamId && s.week <= wf).sort((a, b) => b.week - a.week)[0];
+  if (!sel) return null;
+  const lineup: Lineup = {};
+  for (const [slot, p] of Object.entries(sel.lineup ?? {})) {
+    if (p && typeof p.id === "string") (lineup as Record<string, unknown>)[slot] = { ...p, id: p.id.toLowerCase() };
+  }
+  const out = (id: string) => full.ruledOut.get(`${id}|${wr}`)?.[stage] ?? true;
+  return projectTeamScore({
+    lineup,
+    captainId: sel.captain_id?.toLowerCase() ?? null,
+    viceId: sel.vice_id?.toLowerCase() ?? null,
+    projection: (id) => projBy.get(`${id}|${wr}`)?.[stage] ?? 0,
+    ruledOut: autoSubs ? out : () => false,
+  }).total;
 }
-const tm = teamRows.length;
-const tMae = teamRows.reduce((a, r) => a + Math.abs(r.proj - r.actual), 0) / tm;
-const tAvg = teamRows.reduce((a, r) => a + r.actual, 0) / tm;
-const tBias = teamRows.reduce((a, r) => a + (r.proj - r.actual), 0) / tm;
-console.log(`\nTEAMS (2026 league, ${tm} team-weeks, average score ${tAvg.toFixed(0)})`);
-console.log(`  average miss ${tMae.toFixed(0)} pts (${((tMae / tAvg) * 100).toFixed(1)}% of a score), bias ${tBias.toFixed(0)}`);
-console.log(`  projected winner won ${right} of ${called} matchups (${((right / called) * 100).toFixed(0)}%)`);
-const pMae = teamRowsPre.reduce((a, r) => a + Math.abs(r.proj - r.actual), 0) / tm;
-console.log(`  BEFORE the team lists, recent minutes (old way): projected winner won ${rightOld} of ${called} (${((rightOld / called) * 100).toFixed(0)}%)`);
-console.log(`  MIDWEEK (injury list out, team list not): projected winner won ${rightMid} of ${called} (${((rightMid / called) * 100).toFixed(0)}%)`);
-console.log(`  BEFORE the team lists, expected lineup: average miss ${pMae.toFixed(0)} pts (${((pMae / tAvg) * 100).toFixed(1)}%), projected winner won ${rightPre} of ${called} (${((rightPre / called) * 100).toFixed(0)}%)`);
-console.log("  (team totals here leave out auto-subs, so real scores run a little higher)");
+
+console.log(`\nTEAMS (2026 league, regular season rounds 1-${LAST_LISTED_ROUND})`);
+for (const [label, stage] of [["after the team lists", "after"], ["start of week", "start"], ["midweek", "mid"]] as Array<[string, Stage]>) {
+  for (const autoSubs of [false, true]) {
+    let miss = 0, bias = 0, sum = 0, n = 0, right = 0, called = 0;
+    for (const m of matchups) {
+      const wf = Number(m.weekFantasy), wr = Number(m.weekReal);
+      const ph = teamProjection(m.homeTeamId, wf, wr, stage, autoSubs), pa = teamProjection(m.awayTeamId, wf, wr, stage, autoSubs);
+      if (ph == null || pa == null) continue;
+      const ah = Number(m.homeScore), aw = Number(m.awayScore);
+      for (const [p, a] of [[ph, ah], [pa, aw]]) { miss += Math.abs(p - a); bias += p - a; sum += a; n++; }
+      if (ah !== aw) { called++; if ((ph > pa) === (ah > aw)) right++; }
+    }
+    console.log(`  ${label.padEnd(21)} ${autoSubs ? "with auto-subs   " : "no auto-subs     "} miss ${(miss / n).toFixed(0)} pts (${((miss / sum) * 100).toFixed(1)}% of a score), bias ${(bias / n).toFixed(0)}, projected winner won ${right} of ${called} (${((right / called) * 100).toFixed(0)}%)`);
+  }
+}

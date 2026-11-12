@@ -1,119 +1,291 @@
 // lib/projections/project.ts
 // Expected (projected) points for a player in his next game (plan item F2, agreed with Ethan
-// Nov 2026 - the "full recipe"). Pure code, so it can be tested on past seasons
-// (scripts/backtest-projections.ts).
+// Nov 2026). Pure code, so it can be tested on past seasons (scripts/backtest-projections.ts).
 //
 //   expected points = points for minutes played (from his expected minutes)
 //                   + his scoring rate per 80 minutes x expected minutes / 80
+//                     x how weak the opponent is, for his position
 //                     x opponent difficulty (FDR) x home / away
+//                   + goal-kicking points, if he's the team's kicker this week
 //
-// - Scoring rate: this season's points per 80 minutes (not counting the points for minutes),
-//   mixed with a starting estimate (last season's rate, or the average for his position) until
-//   he has played enough, and nudged by his last 3 games (form).
-// - Expected minutes come from the team list: named to start = his usual minutes when he
-//   starts; on the bench = his usual minutes off the bench; injured / out / suspended / not
-//   named once the lists are out = 0. Before the lists are out: his recent average.
-import { minutesPoints } from "@/lib/scoring";
+// What goes in (each part tested on 2026, 12 Nov 2026):
+// - Scoring rate, stat by stat: this season's points per 80 minutes for each stat, mixed with
+//   a starting estimate (last season, or his position's average). Steady stats (lineouts,
+//   turnovers) trust his own numbers quickly; streaky ones (tries, line breaks, try assists,
+//   errors, penalties, cards) lean on the starting estimate for longer (TRUST_MINUTES).
+// - Form: his last 3 games count a little (10%).
+// - Minutes: from the team list. Named to start = his usual minutes when he starts; on the
+//   bench = his usual minutes off the bench; with little history, his position's usual
+//   minutes (props ~53, outside backs ~74). Injured / suspended / out / not named = 0.
+// - Opponent: outside backs, centres and the front row score more against teams that leak
+//   points (tries, line breaks); locks, loose forwards and halves hardly change.
+// - Goal kicking: worked out per team. The kicker is the first player in the team's kicking
+//   order who is playing (so a back-up 10 takes the points when the first-choice kicker is
+//   out). His points come from how many tries his team is expected to score against this
+//   opponent (more conversions in a blowout), the team's usual penalty shots, and his own
+//   success rate.
+// - Uses the league's own scoring rules (Standard, Alternate or Custom).
+import {
+  CAPTAIN_MULTIPLIER, STANDARD_SCORING, STATS, minutesPoints, statPoints,
+  type EventStatKey, type ScoringRules, type StatCounts,
+} from "@/lib/scoring";
+import { applyAutoSubs, captainUsed, STARTER_SLOTS, type Lineup } from "@/lib/scoring/week";
 
-export type PastGame = { round: number; minutes: number; points: number };
+/** One past game: what the team list said (if known) and his stats. */
+export type PastGame = { round: number; counts: StatCounts; listed?: "starting" | "bench" | null };
 
 export type Role = "starting" | "bench" | "out" | "unknown";
 
+/** Points per 80 minutes for each stat (under one set of scoring rules). */
+export type StatRates = Partial<Record<EventStatKey, number>>;
+
+export const KICKING_STATS: EventStatKey[] = [
+  "conversions", "conversionsMissed", "penaltyGoals", "penaltyGoalsMissed", "dropGoals", "dropGoalsMissed",
+];
+const EVENT_STATS = STATS.map((s) => s.key).filter((k) => k !== "minutesPlayed") as EventStatKey[];
+/** Every stat except goal kicking (that's projected separately, per team). */
+export const PLAY_STATS: EventStatKey[] = EVENT_STATS.filter((k) => !KICKING_STATS.includes(k));
+
+/**
+ * How many minutes of the starting estimate each stat is mixed with (more = streakier stat,
+ * so a player's own numbers take longer to trust). From how well each stat in odd rounds
+ * predicted the same stat in even rounds, 2026.
+ */
+export const TRUST_MINUTES: Record<EventStatKey, number> = {
+  // steady: lineouts, lineout steals, turnovers
+  lineoutsWon: 150, lineoutSteals: 150, turnoversForced: 150,
+  // in between
+  metresGained: 500, defendersBeaten: 500, scrumsWon: 500, lineBreakAssists: 500, offloads: 500, lineoutErrors: 500,
+  // streaky
+  tries: 1000, lineBreaks: 1000, tackles: 1000, tacklesMissed: 1000,
+  // mostly luck
+  tryAssists: 3000, errors: 3000, penaltiesConceded: 3000, interceptions: 3000, fiftyTwentyTwos: 3000,
+  yellowCards: 3000, redCards: 3000,
+  // goal kicking (not used here - see kickingPoints)
+  conversions: 100, conversionsMissed: 100, penaltyGoals: 100, penaltyGoalsMissed: 100, dropGoals: 3000, dropGoalsMissed: 3000,
+};
+
+/** Usual minutes by position when named to start / on the bench (2026 team lists). */
+export const POSITION_MINUTES: Record<string, { start: number; bench: number }> = {
+  PR: { start: 53, bench: 27 }, HO: { start: 56, bench: 24 }, LK: { start: 70, bench: 23 }, LF: { start: 69, bench: 26 },
+  HB: { start: 61, bench: 22 }, FH: { start: 69, bench: 20 }, CE: { start: 72, bench: 23 }, OB: { start: 74, bench: 30 },
+};
+
+/**
+ * Change in a position's scoring for each 10 points the opponent is weaker than average
+ * (2026: outside backs ~+7 pts per 80, centres and front row ~+3; others about nothing).
+ */
+export const OPPONENT_EFFECT: Record<string, number> = { OB: 0.2, CE: 0.1, PR: 0.1, HO: 0.1 };
+
 export type ProjectionParams = {
-  /** minutes of the starting estimate mixed in with his own rate (more = trusts his own rate later) */
-  priorMinutes: number;
   /** how much his last 3 games count (0..1) */
   formWeight: number;
-  /** change per FDR step from 3 (e.g. 0.04: FDR 1 = +8%, FDR 5 = -8%) */
+  /** change per FDR step from 3 (0.03: FDR 1 = +6%, FDR 5 = -6%) */
   fdrStep: number;
   /** home +x, away -x */
   homeEdge: number;
-  /** minutes for a starter / bench player we have no history for */
-  startMinutes: number;
-  benchMinutes: number;
+  trustMinutes: Record<EventStatKey, number>;
+  opponentEffect: Record<string, number>;
+  positionMinutes: Record<string, { start: number; bench: number }>;
 };
 
-// Tested on the 2026 season (scripts/backtest-projections.ts, 12 Nov 2026): form, FDR and
-// home/away made very little difference there, so they're kept as small nudges.
 export const DEFAULT_PARAMS: ProjectionParams = {
-  priorMinutes: 480,
   formWeight: 0.1,
   fdrStep: 0.03,
   homeEdge: 0.02,
-  startMinutes: 68,
-  benchMinutes: 22,
+  trustMinutes: TRUST_MINUTES,
+  opponentEffect: OPPONENT_EFFECT,
+  positionMinutes: POSITION_MINUTES,
 };
 
-/** Points from everything except minutes played, per 80 minutes. */
-export function eventRate80(games: PastGame[]): { points: number; minutes: number } {
-  let points = 0;
-  let minutes = 0;
-  for (const g of games) {
-    if (g.minutes <= 0) continue;
-    points += g.points - minutesPoints(g.minutes);
-    minutes += g.minutes;
-  }
-  return { points, minutes };
-}
+const minutesOf = (g: PastGame) => Number(g.counts.minutesPlayed) || 0;
+const playedGames = (games: PastGame[]) => games.filter((g) => minutesOf(g) > 0);
 
 function mean(xs: number[]): number | null {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
 }
 
-/** His usual minutes for this role, from the games he's played (starts = 40+ minutes). */
-export function expectedMinutes(games: PastGame[], role: Role, p: ProjectionParams = DEFAULT_PARAMS): number {
-  const played = games.filter((g) => g.minutes > 0);
-  if (role === "out") return 0;
-  if (role === "starting") {
-    const starts = played.filter((g) => g.minutes >= 40).map((g) => g.minutes);
-    const m = mean(starts.slice(-6));
-    return m == null ? p.startMinutes : (m * starts.length + p.startMinutes * 2) / (starts.length + 2);
+/** Each stat's points over these games (games he played), and the minutes. */
+export function statTotals(games: PastGame[], frontRow: boolean, rules: ScoringRules = STANDARD_SCORING) {
+  const points: StatRates = {};
+  let minutes = 0;
+  for (const g of playedGames(games)) {
+    minutes += minutesOf(g);
+    for (const k of EVENT_STATS) {
+      const n = Number(g.counts[k]) || 0;
+      if (n) points[k] = (points[k] ?? 0) + statPoints(k, n, frontRow, rules);
+    }
   }
-  if (role === "bench") {
-    const subs = played.filter((g) => g.minutes < 40).map((g) => g.minutes);
-    const m = mean(subs.slice(-6));
-    return m == null ? p.benchMinutes : (m * subs.length + p.benchMinutes * 2) / (subs.length + 2);
-  }
-  // no team list yet: his recent games
-  const recent = mean(played.slice(-3).map((g) => g.minutes));
-  return recent ?? 0;
+  return { points, minutes };
 }
 
-export function projectPoints(
-  input: {
-    /** his games this season before this one, oldest first */
-    games: PastGame[];
-    /** starting estimate of his scoring rate per 80 (last season, or his position's average) */
-    priorRate80: number;
-    role: Role;
-    /** how hard this game is, 1 (easy) .. 5 (hard); null = unknown */
-    fdr?: number | null;
-    home?: boolean | null;
-  },
-  p: ProjectionParams = DEFAULT_PARAMS
+/** Average points per 80 for each stat over a group of players (e.g. everyone in one position). */
+export function averageRates(group: Array<{ games: PastGame[]; frontRow: boolean }>, rules: ScoringRules = STANDARD_SCORING): StatRates {
+  const sum: StatRates = {};
+  let minutes = 0;
+  for (const p of group) {
+    const t = statTotals(p.games, p.frontRow, rules);
+    minutes += t.minutes;
+    for (const [k, v] of Object.entries(t.points)) sum[k as EventStatKey] = (sum[k as EventStatKey] ?? 0) + (v as number);
+  }
+  const out: StatRates = {};
+  if (!minutes) return out;
+  for (const [k, v] of Object.entries(sum)) out[k as EventStatKey] = ((v as number) * 80) / minutes;
+  return out;
+}
+
+/** His usual minutes for this role (a start = named to start, or 40+ minutes if the list isn't known). */
+export function expectedMinutes(games: PastGame[], role: Role, pos: string, p: ProjectionParams = DEFAULT_PARAMS): number {
+  if (role === "out") return 0;
+  const played = playedGames(games);
+  const isStart = (g: PastGame) => (g.listed ? g.listed === "starting" : minutesOf(g) >= 40);
+  const usual = p.positionMinutes[pos] ?? { start: 68, bench: 22 };
+  if (role === "starting" || role === "bench") {
+    const own = played.filter((g) => isStart(g) === (role === "starting")).map(minutesOf);
+    const m = mean(own.slice(-6));
+    const fallback = role === "starting" ? usual.start : usual.bench;
+    return m == null ? fallback : (m * own.length + fallback * 2) / (own.length + 2);
+  }
+  // no team list yet: his recent games
+  return mean(played.slice(-3).map(minutesOf)) ?? 0;
+}
+
+/** His scoring rate per 80 minutes (not counting minutes played or goal kicking). */
+export function scoringRate80(
+  games: PastGame[], frontRow: boolean, prior: StatRates, rules: ScoringRules = STANDARD_SCORING, p: ProjectionParams = DEFAULT_PARAMS
 ): number {
-  const mins = expectedMinutes(input.games, input.role, p);
+  const own = statTotals(games, frontRow, rules);
+  let rate = 0;
+  for (const k of PLAY_STATS) {
+    const trust = p.trustMinutes[k];
+    rate += ((own.points[k] ?? 0) * 80 + (prior[k] ?? 0) * trust) / (own.minutes + trust);
+  }
+  // form: his last 3 games
+  const last3 = statTotals(playedGames(games).slice(-3), frontRow, rules);
+  if (last3.minutes >= 60) {
+    const recent = PLAY_STATS.reduce((a, k) => a + (last3.points[k] ?? 0), 0);
+    rate = rate * (1 - p.formWeight) + ((recent * 80) / last3.minutes) * p.formWeight;
+  }
+  return rate;
+}
+
+export type PlayerInput = {
+  /** his games this season before this one, oldest first */
+  games: PastGame[];
+  pos: string;
+  /** gets scrum points (props and hookers, under Standard) */
+  frontRow: boolean;
+  /** starting estimate of his rate per 80, stat by stat (last season, or his position's average) */
+  prior: StatRates;
+  role: Role;
+  /** how hard this game is, 1 (easy) .. 5 (hard); null = unknown */
+  fdr?: number | null;
+  home?: boolean | null;
+  /** how much weaker than average the opponent is, in points per game (+ = weaker); see opponentWeakness */
+  opponentWeakness?: number | null;
+  /** his goal-kicking points over a full game, if he's the team's kicker this week (see kickingPoints) */
+  kicking?: number | null;
+  rules?: ScoringRules;
+};
+
+export function projectPoints(input: PlayerInput, p: ProjectionParams = DEFAULT_PARAMS): number {
+  const rules = input.rules ?? STANDARD_SCORING;
+  const mins = expectedMinutes(input.games, input.role, input.pos, p);
   if (mins <= 0) return 0;
 
-  const season = eventRate80(input.games);
-  let rate = ((season.points * 80) / Math.max(1, season.minutes) * season.minutes + input.priorRate80 * p.priorMinutes) /
-    (season.minutes + p.priorMinutes);
-  const last3 = eventRate80(input.games.filter((g) => g.minutes > 0).slice(-3));
-  if (last3.minutes >= 60) rate = rate * (1 - p.formWeight) + ((last3.points * 80) / last3.minutes) * p.formWeight;
+  let play = Math.max(0, scoringRate80(input.games, input.frontRow, input.prior, rules, p)) * (mins / 80);
+  if (input.opponentWeakness != null) play *= Math.max(0.5, 1 + (p.opponentEffect[input.pos] ?? 0) * (input.opponentWeakness / 10));
 
-  let pts = minutesPoints(Math.round(mins)) + Math.max(0, rate) * (mins / 80);
+  let pts = minutesPoints(Math.round(mins), rules) + play;
   if (input.fdr != null && Number.isFinite(input.fdr)) pts *= 1 + p.fdrStep * (3 - input.fdr);
   if (input.home != null) pts *= input.home ? 1 + p.homeEdge : 1 - p.homeEdge;
+  if (input.kicking && input.role !== "bench") pts += input.kicking * Math.min(1, mins / 80);
   return Math.round(pts * 10) / 10;
+}
+
+// ---------------------------------------------------------------------------
+// Teams: how strong they are, and their goal kicking
+
+/** One of a real team's past games: score, and its tries and penalty-goal attempts (from player stats). */
+export type TeamGame = { round: number; pointsFor: number; pointsAgainst: number; tries: number; penaltyShots: number };
+
+export type TeamStrength = { pointsFor: number; pointsAgainst: number; triesPerGame: number; penaltyShotsPerGame: number };
+
+/** League-wide averages (2026) used as the starting estimate before a team has played much. */
+export const LEAGUE_AVERAGE = { points: 28.8, tries: 3.8, penaltyShots: 1.5 };
+
+/** A team's usual points for and against, tries and penalty shots per game, mixed with the league average (worth 3 games). */
+export function teamStrength(games: TeamGame[], avg = LEAGUE_AVERAGE, priorGames = 3): TeamStrength {
+  const n = games.length;
+  const mix = (sum: number, prior: number) => (sum + prior * priorGames) / (n + priorGames);
+  return {
+    pointsFor: mix(games.reduce((a, g) => a + g.pointsFor, 0), avg.points),
+    pointsAgainst: mix(games.reduce((a, g) => a + g.pointsAgainst, 0), avg.points),
+    triesPerGame: mix(games.reduce((a, g) => a + g.tries, 0), avg.tries),
+    penaltyShotsPerGame: mix(games.reduce((a, g) => a + g.penaltyShots, 0), avg.penaltyShots),
+  };
+}
+
+/** How much weaker than average a team is, in points per game (+ = concedes more than it scores). */
+export function opponentWeakness(opp: TeamStrength): number {
+  return (opp.pointsAgainst - opp.pointsFor) / 2;
+}
+
+/**
+ * A team's kicking order: players by goal-kicking attempts, recent games counting most
+ * (each round back counts 0.8 as much). Only players who have taken a shot are listed.
+ */
+export function kickingOrder(teamPlayers: Array<{ id: string; games: PastGame[] }>, beforeRound: number): string[] {
+  const score = teamPlayers.map((pl) => {
+    let s = 0;
+    for (const g of pl.games) {
+      if (g.round >= beforeRound) continue;
+      const c = g.counts;
+      const shots = (Number(c.conversions) || 0) + (Number(c.conversionsMissed) || 0) + (Number(c.penaltyGoals) || 0) + (Number(c.penaltyGoalsMissed) || 0);
+      s += shots * 0.8 ** (beforeRound - 1 - g.round);
+    }
+    return { id: pl.id, s };
+  });
+  return score.filter((x) => x.s > 0).sort((a, b) => b.s - a.s).map((x) => x.id);
+}
+
+/** This week's kicker: the first in the kicking order who is playing (starting, once the lists are out). */
+export function dutyKicker(order: string[], playing: (id: string) => boolean): string | null {
+  return order.find(playing) ?? null;
+}
+
+/**
+ * The kicker's goal-kicking points over a full game: conversions of the tries his team is
+ * expected to score against this opponent, plus the team's usual penalty shots, at his own
+ * success rate (mixed with the league's: 75% conversions, 78% penalties).
+ */
+export function kickingPoints(
+  kickerGames: PastGame[], team: TeamStrength, opponent: TeamStrength, rules: ScoringRules = STANDARD_SCORING, avg = LEAGUE_AVERAGE
+): number {
+  let cm = 0, ca = 0, pm = 0, pa = 0;
+  for (const g of kickerGames) {
+    const c = g.counts;
+    cm += Number(c.conversions) || 0;
+    ca += (Number(c.conversions) || 0) + (Number(c.conversionsMissed) || 0);
+    pm += Number(c.penaltyGoals) || 0;
+    pa += (Number(c.penaltyGoals) || 0) + (Number(c.penaltyGoalsMissed) || 0);
+  }
+  const conv = (cm + 0.75 * 8) / (ca + 8);
+  const pen = (pm + 0.78 * 6) / (pa + 6);
+  const tries = team.triesPerGame * (opponent.pointsAgainst / avg.points);
+  const e = rules.perEvent;
+  return tries * (conv * e.conversions + (1 - conv) * e.conversionsMissed) +
+    team.penaltyShotsPerGame * (pen * e.penaltyGoals + (1 - pen) * e.penaltyGoalsMissed);
 }
 
 // ---------------------------------------------------------------------------
 // Before the team lists are out: an expected lineup (Ethan, 12 Nov 2026)
 //
 // Each player's chance of starting / being on the bench, from his recent team lists (the most
-// recent count most), lowered if he was injured, suspended or out last time. The projection is
+// recent count most; weeks he was injured or out don't count against him). The projection is
 // then the mix: P(start) x his starting projection + P(bench) x his bench projection.
-// Once the lists are out, his real role is used instead.
+// A player whose status says injured, suspended or out stays on 0 until Ethan (or the injury
+// list) removes it. Once the lists are out, his real role is used instead.
 
 /** What a team list said about a player in an earlier round ("none" = his team didn't play). */
 export type ListRole = "starting" | "bench" | "out" | "notNamed" | "none";
@@ -124,19 +296,15 @@ export type LineupParams = {
   /** how many recent team lists count, and how quickly older ones fade (weight per step back) */
   lookback: number;
   fade: number;
-  /** chance a player injured / suspended / out last time is back this week (x his usual chances) */
-  backFromInjury: number;
 };
 
-export const DEFAULT_LINEUP_PARAMS: LineupParams = { lookback: 4, fade: 0.6, backFromInjury: 0.1 }; // tested on 2026 (12 Nov)
+export const DEFAULT_LINEUP_PARAMS: LineupParams = { lookback: 4, fade: 0.6 }; // tested on 2026 (12 Nov)
 
 /** His chances of starting / being on the bench this week, from his last few team lists (oldest first). */
 export function expectedRole(history: ListRole[], lp: LineupParams = DEFAULT_LINEUP_PARAMS): RoleChances {
   const lists = history.filter((r) => r !== "none");
-  if (!lists.length) return { start: 0, bench: 0 };
   const recent = lists.slice(-lp.lookback);
   let w = 1, total = 0, start = 0, bench = 0;
-  // available lists: what he did when he was available (injured weeks don't count against him)
   for (let i = recent.length - 1; i >= 0; i--, w *= lp.fade) {
     const r = recent[i];
     if (r === "out") continue;
@@ -144,23 +312,45 @@ export function expectedRole(history: ListRole[], lp: LineupParams = DEFAULT_LIN
     if (r === "starting") start += w;
     else if (r === "bench") bench += w;
   }
-  let chances = total ? { start: start / total, bench: bench / total } : { start: 0, bench: 0 };
-  // injured / suspended / out in the last list: probably still out
-  if (lists[lists.length - 1] === "out") {
-    chances = total
-      ? { start: chances.start * lp.backFromInjury, bench: chances.bench * lp.backFromInjury }
-      : { start: 0, bench: 0 };
-  }
-  return chances;
+  return total ? { start: start / total, bench: bench / total } : { start: 0, bench: 0 };
 }
 
 /** Expected points before the team lists: his starting and bench projections mixed by his chances. */
 export function projectPointsExpectedLineup(
-  input: Omit<Parameters<typeof projectPoints>[0], "role"> & { chances: RoleChances },
+  input: Omit<PlayerInput, "role"> & { chances: RoleChances },
   p: ProjectionParams = DEFAULT_PARAMS
 ): number {
   const { chances, ...rest } = input;
   const start = chances.start ? projectPoints({ ...rest, role: "starting" }, p) : 0;
   const bench = chances.bench ? projectPoints({ ...rest, role: "bench" }, p) : 0;
   return Math.round((chances.start * start + chances.bench * bench) * 10) / 10;
+}
+
+// ---------------------------------------------------------------------------
+// A fantasy team's projected score
+
+/**
+ * The team's projected score: its 15 starters' projections, captain x2. Auto-subs only come
+ * in for starters who are ruled out (injured / suspended / out, not named once the lists are
+ * out, or a bye) - otherwise bench points don't count (Ethan, 12 Nov 2026). The vice takes
+ * the x2 if the captain is ruled out.
+ */
+export function projectTeamScore(args: {
+  lineup: Lineup;
+  captainId: string | null;
+  viceId: string | null;
+  projection: (playerId: string) => number;
+  ruledOut: (playerId: string) => boolean;
+}): { total: number; finalLineup: Lineup; captainUsedId: string | null } {
+  const playing = (id: string) => !args.ruledOut(id);
+  const finalLineup = applyAutoSubs(args.lineup, playing);
+  const cap = captainUsed(finalLineup, args.captainId, args.viceId, playing);
+  let total = 0;
+  for (const slot of STARTER_SLOTS) {
+    const id = finalLineup[slot]?.id;
+    if (!id || !playing(id)) continue;
+    const v = args.projection(id);
+    total += id === cap ? v * CAPTAIN_MULTIPLIER : v;
+  }
+  return { total: Math.round(total * 10) / 10, finalLineup, captainUsedId: cap };
 }
