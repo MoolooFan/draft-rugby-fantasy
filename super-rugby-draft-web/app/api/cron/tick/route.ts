@@ -13,6 +13,7 @@ import { syncExternalStats } from "@/lib/players/syncStats";
 import { runResultsTick } from "@/lib/results/engine";
 import { currentSeasonYear, getSeason, liveRealRounds, realRoundsAwaitingFinalStats, realRoundsAwaitingTeamLists } from "@/lib/season";
 import { applyQuestionable, clearFinishedGameStatuses, importRoundStatus, type ImportReport } from "@/lib/status/import";
+import { runDueWaivers } from "@/lib/waivers/process";
 import { advanceDraft } from "@/lib/draft/engine";
 
 export const maxDuration = 60; // seconds (Vercel)
@@ -54,6 +55,10 @@ async function tick() {
   }
   // Once a game has finished, its players' Starting / Benched statuses are cleared.
   const statusesCleared = await clearFinishedGameStatuses(supabaseAdmin, seasonYear, now).catch(() => -1);
+  // Waivers run at their deadline (24 hours before the lineup deadline) even if nobody opens
+  // the Transactions page.
+  const waivers = await runDueWaivers(supabaseAdmin, seasonYear, now).catch((e) => [`failed: ${e instanceof Error ? e.message : String(e)}`]);
+
   // Injured players due back next round turn Questionable once this round has finished.
   const questionable = await applyQuestionable(supabaseAdmin, seasonYear, now).catch(() => -1);
 
@@ -79,7 +84,7 @@ async function tick() {
     beforeFinalise: (realRounds) => sync(realRounds),
   });
 
-  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, statusImports, statusesCleared, questionable, drafts, ...results };
+  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, statusImports, statusesCleared, questionable, waivers, drafts, ...results };
 }
 
 async function handle(req: Request) {
