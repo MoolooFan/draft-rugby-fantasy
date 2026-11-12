@@ -24,8 +24,9 @@ import { TeamAvatar } from "@/components/TeamAvatar";
 import { PictureCropper } from "@/components/PictureCropper";
 import { CrownIcon, ShieldIcon, SpoonIcon } from "@/components/AwardIcons";
 import { ShieldTab } from "@/components/ShieldTab";
+import { PowerTab } from "@/components/PowerTab";
 
-type LeagueTab = "Standings" | "Fixtures" | "Results" | "Shield";
+type LeagueTab = "Standings" | "Fixtures" | "Results" | "Power" | "Shield";
 type Modal =
   | null
   | { type: "join" }
@@ -728,7 +729,7 @@ const Hamburger = useStableComponent(Hamburger__render);
 const Header = useStableComponent(Header__render);
 
   function Tabs__render() {
-    const tabs: LeagueTab[] = ["Standings", "Fixtures", "Results", ...(league?.shield?.enabled || league?.shield?.holderTeamId ? (["Shield"] as LeagueTab[]) : [])];
+    const tabs: LeagueTab[] = ["Standings", "Fixtures", "Results", "Power", ...(league?.shield?.enabled || league?.shield?.holderTeamId ? (["Shield"] as LeagueTab[]) : [])];
     return (
       <div style={tabBarStyle}>
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
@@ -1737,6 +1738,7 @@ if (!league) {
         {tab === "Standings" && <StandingsTab />}
         {tab === "Fixtures" && <FixturesTab />}
         {tab === "Results" && <ResultsTab />}
+        {tab === "Power" && league ? <PowerTab leagueId={league.id} teams={(league.teams ?? []) as never} /> : null}
         {tab === "Shield" && league ? <ShieldTab leagueId={league.id} teams={(league.teams ?? []) as never} /> : null}
       </div>
 

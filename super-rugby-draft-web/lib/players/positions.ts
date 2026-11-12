@@ -2,7 +2,7 @@
 // A player can have up to three positions (main, second, third). Every "can this player play
 // there?" check uses these, so all three always count.
 
-type HasPositions = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null; thirdPosAbbrev?: string | null } | null | undefined;
+export type HasPositions = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null; thirdPosAbbrev?: string | null } | null | undefined;
 
 /** The player's positions, e.g. ["FH", "CE", "OB"] (upper case, no blanks or repeats). */
 export function playerPositions(p: HasPositions | Record<string, unknown>): string[] {
