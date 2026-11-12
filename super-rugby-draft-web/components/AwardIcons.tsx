@@ -23,8 +23,8 @@ export function SpoonIcon({ size = 16, title }: { size?: number; title?: string 
 }
 
 // The Shield holder (Ethan's pick, Nov 2026): drawn from the Ranfurly Shield - oak timber, a ring
-// of upright silver plaques, the silver heart plate with rugby posts behind a ball. The same
-// drawing at every size.
+// of upright silver plaques, the silver heart plate with rugby posts behind a ball. From 32px up
+// the posts get small flags.
 const SHIELD_OUTLINE = "M32 3 C49 3 60 13 60 27 C60 41 48 53 32 61 C16 53 4 41 4 27 C4 13 15 3 32 3 Z";
 const SHIELD_PLATE = "M18 14 C24 11 40 11 46 14 C49 20 49 28 46 34 C43 41 38 45 32 51 C26 45 21 41 18 34 C15 28 15 20 18 14 Z";
 /** Plaque positions round the rim. */
@@ -34,6 +34,7 @@ const SHIELD_PLAQUES: Array<[number, number]> = [
 ];
 
 export function ShieldIcon({ size = 16, title }: { size?: number; title?: string }) {
+  const flags = size >= 32;
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" role={title ? "img" : undefined} aria-hidden={title ? undefined : true} aria-label={title} style={{ display: "block", flex: "0 0 auto" }}>
       <path d={SHIELD_OUTLINE} fill="#6a4426" stroke="#452912" strokeWidth={2.4} />
@@ -41,10 +42,16 @@ export function ShieldIcon({ size = 16, title }: { size?: number; title?: string
         <ellipse key={`${x}-${y}`} cx={x} cy={y} rx={2.5} ry={3.3} fill="#e4e7eb" />
       ))}
       <path d={SHIELD_PLATE} fill="#e4e7eb" stroke="#7f8892" strokeWidth={1.6} />
-      <path d="M26.5 15 V41 M37.5 15 V41 M26.5 31 H37.5" stroke="#7f8892" strokeWidth={2} strokeLinecap="round" fill="none" />
-      <g transform="rotate(35 32 27)">
-        <ellipse cx={32} cy={27} rx={5.6} ry={8.6} fill="#9aa2ab" stroke="#6b737c" strokeWidth={1} />
-        <path d="M32 19.6 V34.4" stroke="#eef0f2" strokeWidth={0.9} />
+      <path d="M26.5 15 V42 M37.5 15 V42 M26.5 32 H37.5" stroke="#7f8892" strokeWidth={2} strokeLinecap="round" fill="none" />
+      {flags ? (
+        <>
+          <path d="M26.5 13 V15 M37.5 13 V15" stroke="#7f8892" strokeWidth={2} strokeLinecap="round" />
+          <path d="M26.5 12.6 C25 11.8 23.6 13.6 22 12.8 C23 14 24.6 15 26.5 14.6 Z M37.5 12.6 C36 11.8 34.6 13.6 33 12.8 C34 14 35.6 15 37.5 14.6 Z" fill="#7f8892" />
+        </>
+      ) : null}
+      <g transform="rotate(35 32 29)">
+        <ellipse cx={32} cy={29} rx={7} ry={10.75} fill="#9aa2ab" stroke="#6b737c" strokeWidth={1} />
+        <path d="M32 19.8 V38.2" stroke="#eef0f2" strokeWidth={0.9} />
       </g>
     </svg>
   );
