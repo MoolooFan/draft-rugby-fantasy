@@ -20,8 +20,9 @@ import { TEAM_OPTIONS } from "@/lib/constants";
 import { StatViewToggle } from "@/components/StatViewToggle";
 import { applyStatView, formatStatView, STAT_VIEW_LABEL, useStatView } from "@/lib/players/statView";
 import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
+import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
 
-type SortKey = "points" | "rank";
+type SortKey = "points" | "proj" | "rank";
 const POSITIONS = ["PR", "HO", "LK", "LF", "HB", "FH", "CE", "OB"];
 const PAGE = 60;
 
@@ -49,6 +50,8 @@ export default function PlayerPoolPage() {
   const [view] = useStatView(); // C1: per game / total / per 80
   const [shown, setShown] = useState(PAGE);
   const [card, setCard] = useState<PlayerFromSheet | null>(null);
+  // F2: this week's expected points (Standard scoring - no league here)
+  const proj = useProjections(null, "current");
 
   // season points and games for every player (stat rows are grouped by player once)
   const totals = useMemo(() => {
@@ -80,10 +83,11 @@ export default function PlayerPoolPage() {
     const val = (p: PlayerFromSheet) => {
       const t = totals.get(p.id);
       if (sort === "points") return t ? applyStatView(t.total, t.games, t.minutes, view) ?? -1 : -1;
+      if (sort === "proj") return projectionFor(proj, p.id)?.pts ?? -1;
       return -(p.draftRank ?? 9999);
     };
     return out.sort((a, b) => val(b) - val(a) || String(a.lastName).localeCompare(String(b.lastName)));
-  }, [players, search, team, pos, sort, totals, view]);
+  }, [players, search, team, pos, sort, totals, view, proj]);
 
   const selectStyle: React.CSSProperties = {
     height: 34,
@@ -150,6 +154,7 @@ export default function PlayerPoolPage() {
             </select>
             <select id="pool-sort" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} style={selectStyle} aria-label="Sort by">
               <option value="points">Points</option>
+              <option value="proj">Projected</option>
               <option value="rank">Draft rank</option>
             </select>
           </div>
@@ -162,10 +167,11 @@ export default function PlayerPoolPage() {
         </div>
 
         <div style={{ marginTop: 12, borderRadius: 18, overflow: "hidden", background: "rgba(255,255,255,0.92)", color: "#0f172a", boxShadow: "0 12px 30px rgba(0,0,0,0.18)" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "34px 1fr 36px 52px", gap: 8, padding: "8px 10px", fontSize: 10, fontWeight: 900, opacity: 0.6 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "34px 1fr 36px 40px 52px", gap: 8, padding: "8px 10px", fontSize: 10, fontWeight: 900, opacity: 0.6 }}>
             <span />
             <span>Player</span>
             <span style={{ textAlign: "right" }}>Games</span>
+            <span style={{ textAlign: "right" }} title={proj ? `Expected points, Round ${proj.week}` : "Expected points"}>Proj</span>
             <span style={{ textAlign: "right" }}>Pts {STAT_VIEW_LABEL[view].toLowerCase()}</span>
           </div>
           {list.slice(0, shown).map((p) => {
@@ -178,7 +184,7 @@ export default function PlayerPoolPage() {
                 style={{
                   width: "100%",
                   display: "grid",
-                  gridTemplateColumns: "34px 1fr 36px 52px",
+                  gridTemplateColumns: "34px 1fr 36px 40px 52px",
                   gap: 8,
                   alignItems: "center",
                   padding: "8px 10px",
@@ -203,6 +209,17 @@ export default function PlayerPoolPage() {
                   </span>
                 </span>
                 <span style={{ textAlign: "right", fontSize: 12, fontWeight: 800, opacity: 0.75, fontVariantNumeric: "tabular-nums" }}>{t?.games || "–"}</span>
+                {(() => {
+                  const pr = projectionFor(proj, p.id);
+                  return (
+                    <span
+                      style={{ textAlign: "right", fontSize: 12, fontWeight: 800, opacity: 0.75, fontVariantNumeric: "tabular-nums" }}
+                      title={pr && pr.pts > 0 ? `Expected ${formatProjection(pr.pts)} (usually ${pr.low}–${pr.high})` : undefined}
+                    >
+                      {pr ? (pr.pts > 0 ? formatProjection(pr.pts) : "0") : "–"}
+                    </span>
+                  );
+                })()}
                 <span style={{ textAlign: "right", fontSize: 12, fontWeight: 900, fontVariantNumeric: "tabular-nums" }}>{formatStatView(pts, view)}</span>
               </button>
             );

@@ -26,6 +26,9 @@ import { STARTER_SLOTS } from "@/lib/scoring/week";
 import { positionsLabel } from "@/lib/players/positions";
 import { TeamAvatar } from "@/components/TeamAvatar";
 import { WeeklyRecapModal } from "@/components/WeeklyRecapModal";
+import { formatProjection, useProjections } from "@/lib/projections/useProjections";
+import { teamOutlook, winProbability } from "@/lib/projections/live";
+import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
 
 type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null } | null;
 
@@ -1140,6 +1143,8 @@ const upcomingMatch = useMemo(() => {
 
   return {
     weekNo: upcomingWeekNo,
+    leftId,
+    rightId,
     leftName: nameByTeamId(leftId),
     rightName: nameByTeamId(rightId),
   };
@@ -1151,6 +1156,45 @@ const seasonOver = upcomingWeekNo > totalFantasyWeeks(getSeason(currentSeasonYea
 const upcomingWeek = seasonOver ? "Season complete" : upcomingMatch ? roundLabel(upcomingMatch.weekNo) : roundLabel(upcomingWeekNo);
 const upcomingHome = seasonOver ? "—" : upcomingMatch ? upcomingMatch.leftName : "Loading…";
 const upcomingAway = seasonOver ? "—" : upcomingMatch ? upcomingMatch.rightName : "Loading…";
+
+// F2: projected scores and win chance for the upcoming matchup (both teams' saved lineups -
+// a team that hasn't saved one for that round uses its latest, the one that would lock)
+const upcomingProj = useProjections(leagueId, !seasonOver && upcomingMatch ? upcomingWeekNo : null);
+const [upcomingSel, setUpcomingSel] = useState<{ week: number; rows: Array<{ team_id: string; lineup: unknown; captain_id: string | null; vice_id: string | null }> } | null>(null);
+useEffect(() => {
+  if (!leagueId || seasonOver || !upcomingMatch) return;
+  let cancelled = false;
+  fetch(`/api/team-selection/get?leagueId=${encodeURIComponent(leagueId)}&week=${upcomingWeekNo}`, { cache: "no-store", credentials: "include" })
+    .then((r) => r.json())
+    .then((j) => {
+      if (!cancelled && j?.ok) setUpcomingSel({ week: upcomingWeekNo, rows: j.rows ?? [] });
+    })
+    .catch(() => {});
+  return () => {
+    cancelled = true;
+  };
+}, [leagueId, seasonOver, upcomingMatch, upcomingWeekNo]);
+
+const upcomingOutlook = useMemo(() => {
+  if (!upcomingProj || upcomingProj.week !== upcomingWeekNo || !upcomingSel || upcomingSel.week !== upcomingWeekNo || !upcomingMatch) return null;
+  const forTeam = (teamId: string | null) => {
+    const row = upcomingSel.rows.find((r) => r.team_id === teamId);
+    if (!row?.lineup) return null;
+    return teamOutlook({
+      lineup: row.lineup as ScoringLineup,
+      captainId: row.captain_id,
+      viceId: row.vice_id,
+      nowMs: 0, // before any games: the full projections
+      state: (id) => {
+        const pr = upcomingProj.players[id] ?? upcomingProj.players[id.toLowerCase()];
+        return pr ? { projected: pr.pts, spread: pr.spread, actual: null, minutes: 0, kickoffMs: pr.kickoffMs, ruledOut: pr.role === "out" } : null;
+      },
+    });
+  };
+  const a = forTeam(upcomingMatch.leftId ?? null), b = forTeam(upcomingMatch.rightId ?? null);
+  if (!a || !b) return null;
+  return { left: a.expected, right: b.expected, leftWin: Math.round(winProbability(a, b) * 100) };
+}, [upcomingProj, upcomingSel, upcomingMatch, upcomingWeekNo]);
 
   // -----------------------
 // Standings (LIVE from sheetFixtures + activeLeague teams)
@@ -1775,6 +1819,24 @@ const NoLeague = useStableComponent(NoLeague__render);
               <div style={{ opacity: 0.85 }}>v</div>
               <div style={{ textAlign: "right" }}>{upcomingAway}</div>
             </div>
+
+            {upcomingOutlook ? (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10, fontSize: 12, fontWeight: 800 }}>
+                  <div style={{ textAlign: "left" }}>Proj {formatProjection(upcomingOutlook.left)}</div>
+                  <div style={{ fontSize: 11, opacity: 0.8 }}>Win probability</div>
+                  <div style={{ textAlign: "right" }}>Proj {formatProjection(upcomingOutlook.right)}</div>
+                </div>
+                <div style={{ marginTop: 6, display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 900 }}>
+                  <span>{upcomingOutlook.leftWin}%</span>
+                  <div style={{ height: 6, borderRadius: 999, overflow: "hidden", display: "flex", background: "rgba(255,255,255,0.25)" }}>
+                    <div style={{ width: `${upcomingOutlook.leftWin}%`, background: "#16a34a" }} />
+                    <div style={{ flex: 1, background: "rgba(15,23,42,0.45)" }} />
+                  </div>
+                  <span>{100 - upcomingOutlook.leftWin}%</span>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 

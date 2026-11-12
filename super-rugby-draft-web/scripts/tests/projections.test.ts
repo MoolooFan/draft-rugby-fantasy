@@ -6,6 +6,7 @@ import {
 } from "../../lib/projections/project";
 import { ALTERNATE_SCORING, STANDARD_SCORING } from "../../lib/scoring";
 import type { Lineup } from "../../lib/scoring/week";
+import { lineupSpread, playerSpread, projectionRange, teamOutlook, winProbability, type PlayerWeekState } from "../../lib/projections/live";
 
 let failures = 0;
 const check = (name: string, ok: boolean, extra = "") => {
@@ -113,6 +114,22 @@ check("...and the back-up kicks while he's out", dutyKicker(kickingOrder(injured
 const fullGames = [1, 2, 3, 4, 5, 6].map((r) => ({ round: r, counts: { minutesPlayed: 80 }, listed: "starting" as const }));
 const withLast = projectPoints({ games: [], lastSeasonGames: fullGames, pos: "FH", frontRow: false, prior: {}, role: "starting" });
 check("an 80-minute player last season starts the new season on his own minutes (2 pts for minutes)", withLast === 2, String(withLast));
+
+// --- live: ranges, team outlook during the week, win probability
+const r30 = projectionRange(30);
+check("range for 30: about 15 to 44", r30.low === 15 && r30.high === 44, JSON.stringify(r30));
+check("before the lists the spread is wider than once he's named", lineupSpread([{ chance: 0.6, projected: 30 }, { chance: 0.3, projected: 10 }]) > playerSpread(21));
+const KO = 1_000_000_000_000;
+const st = (over: Partial<PlayerWeekState>): PlayerWeekState => ({ projected: 20, actual: null, minutes: 0, kickoffMs: KO, ruledOut: false, ...over });
+const flat = (fn: (id: string) => Partial<PlayerWeekState>) => (id: string) => st(fn(id));
+const before = teamOutlook({ lineup, captainId: "fh", viceId: "c1", nowMs: KO - 1, state: flat((id) => ({ projected: id.startsWith("b") ? 5 : 20 })) });
+check("before kickoff: expected = the projections (captain x2), nothing scored yet", before.expected === 320 && before.scored === 0, String(before.expected));
+const after = teamOutlook({ lineup, captainId: "fh", viceId: "c1", nowMs: KO + 3 * 3600_000, state: flat((id) => ({ projected: id.startsWith("b") ? 5 : 20, actual: id === "o1" ? 0 : 30, minutes: id === "o1" ? 0 : 70 })) });
+check("games over: real points; a starter who didn't get on is auto-subbed", after.scored === after.expected && after.finalLineup.outsideback1?.id !== "o1" && after.variance === 0, `${after.expected}`);
+const half = teamOutlook({ lineup, captainId: null, viceId: null, nowMs: KO + 50 * 60_000, state: flat(() => ({ projected: 20, actual: 8, minutes: 40 })) });
+check("halfway through: points so far + half the projection still to come", Math.abs(half.expected - 15 * 18) < 1, String(half.expected));
+check("win probability: level = 50%, well ahead = near 100%", Math.abs(winProbability({ expected: 300, variance: 900 }, { expected: 300, variance: 900 }) - 0.5) < 1e-6 && winProbability({ expected: 400, variance: 400 }, { expected: 300, variance: 400 }) > 0.99);
+check("win probability once it's all over: 100% / 0%", winProbability({ expected: 310, variance: 0 }, { expected: 300, variance: 0 }) === 1);
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll passed");
 process.exit(failures ? 1 : 0);

@@ -26,6 +26,9 @@ import { toMs, pickValue } from "@/lib/league/weekHelpers";
 import { JERSEYS } from "@/lib/teams/images";
 import { formatStatCount } from "@/lib/scoring";
 import { TeamAvatar } from "@/components/TeamAvatar";
+import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
+import { teamOutlook, winProbability, type PlayerWeekState } from "@/lib/projections/live";
+import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
 
 
 function normaliseId(x: any) {
@@ -1330,6 +1333,45 @@ const rightScore = totalForSlots(effectiveRightLineup, rightEffC, STARTER_SLOTS)
 const leftBenchScore = totalForSlots(effectiveLeftLineup, leftEffC, BENCH_SLOTS);
 const rightBenchScore = totalForSlots(effectiveRightLineup, rightEffC, BENCH_SLOTS);
 
+// ---- Expected points + win probability (F2, ESPN-style): while the week isn't final.
+// Real points for games that are over, real points so far + the rest of the projection for
+// games being played, the projection for games still to come; auto-subs for starters who are
+// ruled out or didn't get on.
+const weekProj = useProjections(hasLeagueId ? leagueId : null, mounted && displayWeek > 0 && !scoresLocked ? displayWeek : null);
+const showProj = !!weekProj && weekProj.week === displayWeek && !scoresLocked;
+
+function weekStateFor(id: string): PlayerWeekState | null {
+  const pr = projectionFor(weekProj, id);
+  if (!pr) return null;
+  const ref = { id } as Player;
+  const { exact, norm } = getPlayerInternalIds(ref);
+  const minutes = (exact != null ? weekMinutesByPlayerId.get(exact) : undefined) ?? (norm != null ? weekMinutesByPlayerId.get(norm) : undefined) ?? 0;
+  return {
+    projected: pr.pts,
+    spread: pr.spread,
+    actual: hasScoreForPlayer(ref) ? pointsForPlayer(ref) : null,
+    minutes,
+    kickoffMs: pr.kickoffMs,
+    ruledOut: pr.role === "out",
+  };
+}
+
+function outlookFor(lineup: Lineup | null, captainId: string | null, viceId: string | null) {
+  if (!showProj || !lineup) return null;
+  return teamOutlook({ lineup: lineup as unknown as ScoringLineup, captainId, viceId, state: weekStateFor, nowMs });
+}
+const leftOutlook = outlookFor(effectiveLeftLineup, leftC, leftV);
+const rightOutlook = outlookFor(effectiveRightLineup, rightC, rightV);
+const leftWinPct = leftOutlook && rightOutlook ? Math.round(winProbability(leftOutlook, rightOutlook) * 100) : null;
+
+/** A player's projection for the row (x2 for the captain, like his points). */
+function projText(p: Player | null, captainId: string | null): string | null {
+  if (!showProj || !p?.id) return null;
+  const pr = projectionFor(weekProj, p.id);
+  if (!pr) return null;
+  return formatProjection(p.id === captainId ? pr.pts * CAP_MULT : pr.pts);
+}
+
 // -----------------------
 // RECORD + STREAK (TEMP MOCK)
 // -----------------------
@@ -1681,7 +1723,10 @@ return (
 >
   {/* Left total pulled inward */}
   <div style={{ display: "flex", justifyContent: "flex-end", paddingRight: 20 }}>
-    <div style={{ fontSize: 26, fontWeight: 900 }}>{leftScore}</div>
+    <div style={{ textAlign: "right" }}>
+      <div style={{ fontSize: 26, fontWeight: 900 }}>{leftScore}</div>
+      {leftOutlook ? <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.55 }}>Proj {formatProjection(leftOutlook.expected)}</div> : null}
+    </div>
   </div>
 
   <div style={{ textAlign: "center" }}>
@@ -1696,9 +1741,27 @@ return (
 
   {/* Right total pulled inward */}
   <div style={{ display: "flex", justifyContent: "flex-start", paddingLeft: 20 }}>
-    <div style={{ fontSize: 26, fontWeight: 900 }}>{rightScore}</div>
+    <div style={{ textAlign: "left" }}>
+      <div style={{ fontSize: 26, fontWeight: 900 }}>{rightScore}</div>
+      {rightOutlook ? <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.55 }}>Proj {formatProjection(rightOutlook.expected)}</div> : null}
+    </div>
   </div>
 </div>
+
+{/* Win probability (from the projections; moves as real points come in) */}
+{leftWinPct != null ? (
+  <div style={{ marginTop: 10 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, fontWeight: 900 }}>
+      <span>{leftWinPct}%</span>
+      <span style={{ fontSize: 11, fontWeight: 800, opacity: 0.6 }}>Win probability</span>
+      <span>{100 - leftWinPct}%</span>
+    </div>
+    <div style={{ marginTop: 4, height: 6, borderRadius: 999, overflow: "hidden", display: "flex", background: "rgba(15,23,42,0.12)" }}>
+      <div style={{ width: `${leftWinPct}%`, background: "#16a34a", transition: "width 0.4s" }} />
+      <div style={{ flex: 1, background: "rgba(15,23,42,0.35)" }} />
+    </div>
+  </div>
+) : null}
 
         </div>
 
@@ -1771,7 +1834,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 
                     </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
   
 
   {/* Score pill */}
@@ -1818,6 +1881,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 );
 
 })()}
+{projText(lp, leftC) ? <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(lp, leftC)}</div> : null}
 
 </div>
 
@@ -1830,7 +1894,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 
                 {/* Right player */}
                 <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 8, alignItems: "center", minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
   {/* Score pill */}
   {(() => {
   const isVice = !!rp?.id && rightV === rp.id;
@@ -1875,6 +1939,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
     </div>
   );
 })()}
+{projText(rp, rightC) ? <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(rp, rightC)}</div> : null}
 
 </div>
 
@@ -2042,7 +2107,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
         {/* MOVE pill closer to centre:
             keep this column, but align it to the right edge of the left side,
             which is closest to the middle */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
           {/* Bench score pill */}
           <div
   onClick={() => lp && openPointsBreakdown(lp, leftTeamId === yourLeagueTeamId, "left")
@@ -2064,6 +2129,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 >
   {lp?.id ? (hasScoreForPlayer(lp) ? pointsWithCaptain(lp, leftEffC) : "-") : "—"}
 </div>
+{projText(lp, null) ? <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(lp, null)}</div> : null}
 
           
         </div>
@@ -2086,7 +2152,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
       >
         {/* MOVE pill closer to centre:
             this column sits on the left of the right side, which is closest to middle */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 6 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
           
 
           {/* Bench score pill */}
@@ -2110,6 +2176,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 >
   {rp?.id ? (hasScoreForPlayer(rp) ? pointsWithCaptain(rp, rightEffC) : "-") : "—"}
 </div>
+{projText(rp, null) ? <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(rp, null)}</div> : null}
 
         </div>
 

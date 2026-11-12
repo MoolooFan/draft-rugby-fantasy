@@ -35,6 +35,7 @@ import { TeamAvatar } from "@/components/TeamAvatar";
 import { StatViewToggle } from "@/components/StatViewToggle";
 import { TradeReviewModal } from "@/components/TradeReviewModal";
 import { applyStatView, formatStatView, useStatView } from "@/lib/players/statView";
+import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
 
 // -----------------------
 // Types (match your player shape)
@@ -202,6 +203,7 @@ function extractRosterIdsClient(data: any): string[] {
 /** Sort options for the player pool (the metric shown on each row). */
 const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "DRAFT_RANK", label: "Draft Rank" },
+  { value: "PROJECTED", label: "Projected (this round)" },
   { value: "MATCH_AVG", label: "Match Average" },
   { value: "TOTAL_PTS", label: "Points" },
   { value: "FORM_3", label: "Form" },
@@ -981,6 +983,7 @@ useEffect(() => {
 
   type InfoMode =
   | "DRAFT_RANK"
+  | "PROJECTED"
   | "MATCH_AVG"
   | "TOTAL_PTS"
   | "FORM_3"
@@ -1012,6 +1015,8 @@ useEffect(() => {
 
 const [infoMode, setInfoMode] = useState<InfoMode>("TOTAL_PTS");
 const [statView] = useStatView(); // C1: per game (default) / total / per 80
+// F2: this round's expected points (the league's scoring)
+const weekProj = useProjections(activeLeague?.id ?? null, "current");
 
     // =========================
   // Drop-select modal (Claim / Add)
@@ -1905,6 +1910,7 @@ function getStatTotalCount(p: Player, header: string): number | null {
   function metricLabel(mode: InfoMode) {
   switch (mode) {
     case "DRAFT_RANK": return "Draft Rk";
+    case "PROJECTED": return "Proj";
     case "MATCH_AVG": return "Match Avg";
     case "TOTAL_PTS": return "Points";
     case "FORM_3": return "Form";
@@ -1942,6 +1948,10 @@ function getStatTotalCount(p: Player, header: string): number | null {
   if (VIEW_MODES.has(mode)) return formatStatView(metricSortValue(p, mode), statView);
   // Basic score-derived stats
   if (mode === "DRAFT_RANK") return typeof p.draftRank === "number" ? String(p.draftRank) : "-";
+  if (mode === "PROJECTED") {
+    const pr = projectionFor(weekProj, p.id);
+    return pr ? formatProjection(pr.pts) : "-";
+  }
 
   if (mode === "MATCH_AVG") {
     const v = getAvgPPG(p);
@@ -2106,6 +2116,7 @@ function metricSortValue(p: Player, mode: InfoMode): number | null {
 
 function metricRawValue(p: Player, mode: InfoMode): number | null {
   if (mode === "DRAFT_RANK") return typeof p.draftRank === "number" ? p.draftRank : null;
+  if (mode === "PROJECTED") return projectionFor(weekProj, p.id)?.pts ?? null;
 
   if (mode === "MATCH_AVG") return getAvgPPG(p);
   if (mode === "TOTAL_PTS") return getTotalPoints(p);
@@ -2295,7 +2306,7 @@ const pendingOffersCount = useMemo(() => {
         return (b.v ?? -Infinity) - (a.v ?? -Infinity);
       })
       .map((x) => x.p);
-  }, [baseOwnerList, search, poolFilters, infoMode, roundRows, statView, getLivePlayerById]);
+  }, [baseOwnerList, search, poolFilters, infoMode, roundRows, statView, getLivePlayerById, weekProj]);
 
   const ownerFilterOptions = useMemo(() => {
     const opts: Array<{ label: string; value: string }> = [];
