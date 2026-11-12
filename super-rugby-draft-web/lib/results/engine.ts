@@ -9,6 +9,7 @@
 // The database client is passed in, so the website, the scheduled job and test scripts
 // all run exactly the same code.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { postFreeAgentReport, postRoundPosts } from "@/lib/chat/server";
 import { loadSeasonPlayers } from "@/lib/players/db";
 import { statCountsFromRaw, isFrontRow, roundPoints, STATS, type StatCounts } from "@/lib/scoring";
 import { getLeagueScoringRules } from "@/lib/scoring/leagueRules";
@@ -448,6 +449,8 @@ export async function runResultsTick(db: Db, seasonYear: number, nowMs: number, 
         if (deadline != null && nowMs >= deadline && (await lockedTeamCount(db, league.id, w)) < teams.length) {
           const n = await lockWeek(db, league.id, w, nowMs);
           if (n) report.locked.push(`${league.id} week ${w} (${n} teams)`);
+          // chat: the free agent report (every add / drop since waivers ran)
+          await postFreeAgentReport(db, league.id, w);
         }
         const finaliseAt = weekFinaliseAtMs(season, w);
         if (finaliseAt != null && nowMs >= finaliseAt && !finalised.has(w)) {
@@ -455,6 +458,8 @@ export async function runResultsTick(db: Db, seasonYear: number, nowMs: number, 
           if (opts.beforeFinalise && !syncedWeeks.has(w)) { await opts.beforeFinalise(realRoundsForWeek(season, w)); syncedWeeks.add(w); }
           await finaliseWeek(db, league.id, w, nowMs);
           finalised.add(w);
+          // chat: the league's weekly recap and the shield
+          await postRoundPosts(db, league.id, w);
           report.finalised.push(`${league.id} week ${w}`);
         }
       } catch (e) {

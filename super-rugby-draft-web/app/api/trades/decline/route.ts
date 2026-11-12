@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { postTradeResult } from "@/lib/chat/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
 import { isPastWeekDeadline } from "@/lib/trades/deadlines";
@@ -68,6 +69,8 @@ export async function POST(req: Request) {
 
   if (upErr) return NextResponse.json({ ok: false, error: upErr.message }, { status: 500 });
   if (!updated) return NextResponse.json({ ok: false, error: "Trade already processed" }, { status: 409 });
+
+  await postTradeResult(supabaseAdmin, offer.id, "declined");
 
   return NextResponse.json({ ok: true, offer: updated });
 }

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import type { League } from "@/lib/league/types";
 import { currentSeasonYear } from "@/lib/season";
 import { getActiveUserProfile } from "@/lib/session";
+import { useChatUnread } from "@/lib/chat/store";
+import { ChatIcon } from "@/components/ChatIcon";
 
 type ActiveMenu =
   | "Dashboard"
@@ -35,6 +37,7 @@ export function AppMenu({
   activeItem: ActiveMenu;
 }) {
   const router = useRouter();
+  const unread = useChatUnread((s) => s.unread);
   if (!open) return null;
 
   function onMenuSelect(item: ActiveMenu) {
@@ -95,10 +98,55 @@ export function AppMenu({
         }}
       >
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <div style={{ fontWeight: 800, fontStyle: "italic", fontSize: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <div style={{ fontWeight: 800, fontStyle: "italic", fontSize: 16, flex: 1 }}>
             Draft Fantasy {currentSeasonYear()}
           </div>
+          {hasLeague ? (
+            <button
+              onClick={() => {
+                onClose();
+                router.push("/chat");
+              }}
+              aria-label={unread ? `Messages, ${unread} unread` : "Messages"}
+              style={{
+                position: "relative",
+                width: 34,
+                height: 34,
+                borderRadius: 999,
+                border: "1px solid rgba(255,255,255,0.45)",
+                background: "rgba(255,255,255,0.14)",
+                color: "white",
+                display: "grid",
+                placeItems: "center",
+                cursor: "pointer",
+              }}
+            >
+              <ChatIcon size={18} color="white" />
+              {unread ? (
+                <span
+                  style={{
+                    position: "absolute",
+                    top: -5,
+                    right: -5,
+                    minWidth: 17,
+                    height: 17,
+                    padding: "0 4px",
+                    borderRadius: 999,
+                    background: "#EF4444",
+                    color: "white",
+                    fontSize: 10,
+                    fontWeight: 900,
+                    display: "grid",
+                    placeItems: "center",
+                    border: "2px solid rgba(255,255,255,0.9)",
+                  }}
+                >
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              ) : null}
+            </button>
+          ) : null}
           <button
             onClick={onClose}
             aria-label="Close menu"

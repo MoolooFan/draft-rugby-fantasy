@@ -7,6 +7,7 @@ import { cancelPendingTradesTouchingPlayers, cancelInvalidPendingTradesForTeams 
 import { loadRosterPlayers, rosterProblem, updateLineupsAfterRosterChange } from "@/lib/league/rosterChange";
 import { healthyIrBlock, irIdsOf } from "@/lib/league/ir";
 import { waiverProcessFromMs } from "@/lib/league/deadlines";
+import { postWaiverReport } from "@/lib/chat/server";
 import { getSeason, totalFantasyWeeks } from "@/lib/season";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -434,6 +435,9 @@ if (touchedTeamsArr.length) {
     reason: "ROSTER_CHANGED_BY_WAIVER",
   });
 }
+
+    // chat: the waiver report in the league chat
+    await postWaiverReport(db, leagueId, week);
 
     return { ok: true, processedAtMs, processedCount: processedClaimIds.length };
   } catch (e: any) {

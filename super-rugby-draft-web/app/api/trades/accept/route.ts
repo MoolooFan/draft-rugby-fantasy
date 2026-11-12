@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { postTradeResult } from "@/lib/chat/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
 import { cancelPendingTradesTouchingPlayers, cancelInvalidPendingTradesForTeams } from "@/lib/trades/cancelPendingTrades";
@@ -288,6 +289,9 @@ await cancelInvalidPendingTradesForTeams({
   teamIds: [offer.from_team_id, offer.to_team_id],
   reason: "ROSTER_CHANGED_BY_ACCEPTED_TRADE",
 });
+
+// chat: a note in the two teams' DM, and the trade in the league chat
+await postTradeResult(supabaseAdmin, tradeOfferId, "accepted");
 
 return NextResponse.json({ ok: true });
 

@@ -1,5 +1,6 @@
 // app/api/trades/propose/route.ts
 import { NextResponse } from "next/server";
+import { postTradeOffer } from "@/lib/chat/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { isPastWeekDeadline, cancelExpiredPendingTrades } from "@/lib/trades/deadlines";
@@ -139,6 +140,9 @@ export async function POST(req: Request) {
       .single();
 
     if (error) throw error;
+
+    // the offer appears in the two teams' direct messages (with a Review button)
+    await postTradeOffer(supabaseAdmin, data);
 
     return NextResponse.json({ ok: true, trade: data });
   } catch (e: any) {

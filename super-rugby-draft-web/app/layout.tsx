@@ -5,6 +5,7 @@ import { getServerProfile } from "@/lib/serverSession";
 import { currentSeasonYear } from "@/lib/season";
 import ScoringRulesSync from "@/components/ScoringRulesSync";
 import LeagueSync from "@/components/LeagueSync";
+import ChatNotifier from "@/components/ChatNotifier";
 
 /**
  * Viewport configuration
@@ -68,6 +69,7 @@ export default async function RootLayout({
       >
         <SessionProvider profile={sessionProfile}>
           <LeagueSync username={sessionProfile?.username ?? null} />
+          {sessionProfile ? <ChatNotifier /> : null}
           <ScoringRulesSync>{children}</ScoringRulesSync>
         </SessionProvider>
 

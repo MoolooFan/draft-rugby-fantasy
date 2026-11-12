@@ -705,7 +705,7 @@ function ScoringTab({ setMsg }: { setMsg: (m: string | null) => void }) {
 
 // ---------------------------------------------------------------------------
 
-type Tab = "Players" | "Status" | "Difficulty" | "Rounds" | "Scoring" | "History";
+type Tab = "Players" | "Status" | "Difficulty" | "Rounds" | "Scoring" | "History" | "Taunts";
 
 // ---------------------------------------------------------------------------
 // History (E8): link past seasons to a league and history names to accounts, for the stars
@@ -716,6 +716,78 @@ type HistoryData = {
   leagues: Array<{ id: string; name: string; season: number; lineageId: string }>;
   users: Array<{ id: string; username: string }>;
 };
+
+// ---------------------------------------------------------------------------
+// Taunts: the ready-made lines people send their opponent (lib/chat/common.ts)
+
+type TauntLine = { id: string; kind: "try" | "card"; text: string; active: boolean };
+
+function TauntsTab({ setMsg }: { setMsg: (m: string | null) => void }) {
+  const [lines, setLines] = useState<TauntLine[] | null>(null);
+  const [kind, setKind] = useState<"try" | "card">("try");
+  const [text, setText] = useState("");
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const load = () =>
+    api<{ lines: TauntLine[] }>("/api/admin/taunts")
+      .then((r) => setLines(r.lines))
+      .catch((e) => setMsg(e instanceof Error ? e.message : "Couldn't load the taunts"));
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  async function post(body: Record<string, unknown>, done: string) {
+    try {
+      await api("/api/admin/taunts", body);
+      setMsg(done);
+      load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Something went wrong");
+    }
+  }
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={whiteBox}>
+        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 4 }}>Add a taunt</div>
+        <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75, marginBottom: 8 }}>
+          {"{player}"} = the player, {"{opponent}"} = the team being taunted, {"{card}"} = yellow / red (card taunts).
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "90px 1fr", gap: 8 }}>
+          <select id="taunt-kind" style={inputStyle} value={kind} onChange={(e) => setKind(e.target.value as "try" | "card")}>
+            <option value="try">Try</option>
+            <option value="card">Card</option>
+          </select>
+          <input id="taunt-text" style={inputStyle} value={text} maxLength={200} onChange={(e) => setText(e.target.value)} placeholder="{player} just scored..." />
+        </div>
+        <button
+          style={{ ...primaryButton, marginTop: 8 }}
+          onClick={() => {
+            post({ action: "add", kind, text }, "Taunt added");
+            setText("");
+          }}
+        >
+          Add taunt
+        </button>
+      </div>
+      {(["try", "card"] as const).map((k) => (
+        <div key={k} style={whiteBox}>
+          <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 6 }}>{k === "try" ? "Your player scores a try" : "Their player gets a card"}</div>
+          {(lines ?? []).filter((l) => l.kind === k).map((l) => (
+            <div key={l.id} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 6, alignItems: "center", padding: "6px 0", borderTop: "1px solid rgba(0,0,0,0.08)", opacity: l.active ? 1 : 0.5 }}>
+              <input id={`taunt-${l.id}`} style={inputStyle} value={edits[l.id] ?? l.text} maxLength={200} onChange={(e) => setEdits((x) => ({ ...x, [l.id]: e.target.value }))} />
+              <button style={{ ...primaryButton, padding: "0 10px" }} disabled={(edits[l.id] ?? l.text) === l.text} onClick={() => post({ action: "edit", id: l.id, text: edits[l.id] }, "Taunt saved")}>
+                Save
+              </button>
+              <button style={{ ...primaryButton, padding: "0 10px", background: "rgba(15,23,42,0.35)" }} onClick={() => post({ action: "toggle", id: l.id, active: !l.active }, l.active ? "Taunt hidden" : "Taunt back on")}>
+                {l.active ? "Hide" : "Show"}
+              </button>
+            </div>
+          ))}
+          {lines && !lines.some((l) => l.kind === k) ? <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.7 }}>None yet.</div> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function HistoryTab({ setMsg }: { setMsg: (m: string | null) => void }) {
   const [data, setData] = useState<HistoryData | null>(null);
@@ -842,7 +914,7 @@ export default function AdminPage() {
               </div>
             ) : null}
             <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-              {(["Players", "Status", "Difficulty", "Rounds", "Scoring", "History"] as Tab[]).map((t) => (
+              {(["Players", "Status", "Difficulty", "Rounds", "Scoring", "History", "Taunts"] as Tab[]).map((t) => (
                 <button key={t} style={tabButton(t === tab)} onClick={() => { setTab(t); setMsg(null); }}>{t}</button>
               ))}
             </div>
@@ -862,6 +934,7 @@ export default function AdminPage() {
             {tab === "Status" ? <StatusTab setMsg={setMsg} /> : null}
             {tab === "Scoring" ? <ScoringTab setMsg={setMsg} /> : null}
             {tab === "History" ? <HistoryTab setMsg={setMsg} /> : null}
+            {tab === "Taunts" ? <TauntsTab setMsg={setMsg} /> : null}
           </div>
         </div>
       </div>
