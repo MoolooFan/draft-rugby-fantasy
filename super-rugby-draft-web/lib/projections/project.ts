@@ -19,6 +19,8 @@
 //   minutes (props ~53, outside backs ~74). Injured / suspended / out / not named = 0.
 // - Opponent: outside backs, centres and the front row score more against teams that leak
 //   points (tries, line breaks); locks, loose forwards and halves hardly change.
+// - Lineouts: a hooker throws more lineout errors against a team that steals a lot of
+//   lineouts (2026, checked against super.rugby's set-piece numbers Ethan sent).
 // - Goal kicking: worked out per team. The kicker is the first player in the team's kicking
 //   order who is playing (so a back-up 10 takes the points when the first-choice kicker is
 //   out). His points come from how many tries his team is expected to score against this
@@ -152,13 +154,17 @@ export function expectedMinutes(games: PastGame[], role: Role, pos: string, p: P
 
 /** His scoring rate per 80 minutes (not counting minutes played or goal kicking). */
 export function scoringRate80(
-  games: PastGame[], frontRow: boolean, prior: StatRates, rules: ScoringRules = STANDARD_SCORING, p: ProjectionParams = DEFAULT_PARAMS
+  games: PastGame[], frontRow: boolean, prior: StatRates, rules: ScoringRules = STANDARD_SCORING, p: ProjectionParams = DEFAULT_PARAMS,
+  opp: { pos?: string; opponentSteals?: number | null } = {}
 ): number {
   const own = statTotals(games, frontRow, rules);
   let rate = 0;
   for (const k of PLAY_STATS) {
     const trust = p.trustMinutes[k];
-    rate += ((own.points[k] ?? 0) * 80 + (prior[k] ?? 0) * trust) / (own.minutes + trust);
+    let r = ((own.points[k] ?? 0) * 80 + (prior[k] ?? 0) * trust) / (own.minutes + trust);
+    // hookers: more lineout errors against a team that steals a lot
+    if (k === "lineoutErrors" && opp.pos === "HO" && opp.opponentSteals != null) r *= opp.opponentSteals;
+    rate += r;
   }
   // form: his last 3 games
   const last3 = statTotals(playedGames(games).slice(-3), frontRow, rules);
@@ -183,6 +189,8 @@ export type PlayerInput = {
   home?: boolean | null;
   /** how much weaker than average the opponent is, in points per game (+ = weaker); see opponentWeakness */
   opponentWeakness?: number | null;
+  /** the opponent's lineout steals per game ÷ the league average (1 = average); see lineoutStealFactor */
+  opponentSteals?: number | null;
   /** his goal-kicking points over a full game, if he's the team's kicker this week (see kickingPoints) */
   kicking?: number | null;
   rules?: ScoringRules;
@@ -193,7 +201,7 @@ export function projectPoints(input: PlayerInput, p: ProjectionParams = DEFAULT_
   const mins = expectedMinutes(input.games, input.role, input.pos, p);
   if (mins <= 0) return 0;
 
-  let play = Math.max(0, scoringRate80(input.games, input.frontRow, input.prior, rules, p)) * (mins / 80);
+  let play = Math.max(0, scoringRate80(input.games, input.frontRow, input.prior, rules, p, input)) * (mins / 80);
   if (input.opponentWeakness != null) play *= Math.max(0.5, 1 + (p.opponentEffect[input.pos] ?? 0) * (input.opponentWeakness / 10));
 
   let pts = minutesPoints(Math.round(mins), rules) + play;
@@ -206,13 +214,13 @@ export function projectPoints(input: PlayerInput, p: ProjectionParams = DEFAULT_
 // ---------------------------------------------------------------------------
 // Teams: how strong they are, and their goal kicking
 
-/** One of a real team's past games: score, and its tries and penalty-goal attempts (from player stats). */
-export type TeamGame = { round: number; pointsFor: number; pointsAgainst: number; tries: number; penaltyShots: number };
+/** One of a real team's past games: score, and its tries, penalty-goal attempts and lineout steals (from player stats). */
+export type TeamGame = { round: number; pointsFor: number; pointsAgainst: number; tries: number; penaltyShots: number; lineoutSteals?: number };
 
-export type TeamStrength = { pointsFor: number; pointsAgainst: number; triesPerGame: number; penaltyShotsPerGame: number };
+export type TeamStrength = { pointsFor: number; pointsAgainst: number; triesPerGame: number; penaltyShotsPerGame: number; stealsPerGame: number };
 
-/** League-wide averages (2026) used as the starting estimate before a team has played much. */
-export const LEAGUE_AVERAGE = { points: 28.8, tries: 3.8, penaltyShots: 1.5 };
+/** League-wide averages (2026, per team per game) used as the starting estimate before a team has played much. */
+export const LEAGUE_AVERAGE = { points: 28.8, tries: 3.8, penaltyShots: 1.5, lineoutSteals: 1.38 };
 
 /** A team's usual points for and against, tries and penalty shots per game, mixed with the league average (worth 3 games). */
 export function teamStrength(games: TeamGame[], avg = LEAGUE_AVERAGE, priorGames = 3): TeamStrength {
@@ -223,7 +231,13 @@ export function teamStrength(games: TeamGame[], avg = LEAGUE_AVERAGE, priorGames
     pointsAgainst: mix(games.reduce((a, g) => a + g.pointsAgainst, 0), avg.points),
     triesPerGame: mix(games.reduce((a, g) => a + g.tries, 0), avg.tries),
     penaltyShotsPerGame: mix(games.reduce((a, g) => a + g.penaltyShots, 0), avg.penaltyShots),
+    stealsPerGame: mix(games.reduce((a, g) => a + (g.lineoutSteals ?? avg.lineoutSteals), 0), avg.lineoutSteals),
   };
+}
+
+/** How much more than average a team steals lineouts (1 = average). */
+export function lineoutStealFactor(opp: TeamStrength, avg = LEAGUE_AVERAGE): number {
+  return opp.stealsPerGame / avg.lineoutSteals;
 }
 
 /** How much weaker than average a team is, in points per game (+ = concedes more than it scores). */

@@ -18,7 +18,7 @@ import { isFrontRow, playerPoints, statCountsFromRaw, STANDARD_SCORING, type Sta
 import { statusKind } from "../lib/status/kind";
 import type { Lineup } from "../lib/scoring/week";
 import {
-  DEFAULT_PARAMS, averageRates, dutyKicker, expectedRole, kickingOrder, kickingPoints, opponentWeakness,
+  DEFAULT_PARAMS, averageRates, dutyKicker, lineoutStealFactor, expectedRole, kickingOrder, kickingPoints, opponentWeakness,
   projectPoints, projectPointsExpectedLineup, projectTeamScore, teamStrength,
   type ListRole, type PastGame, type ProjectionParams, type Role, type StatRates, type TeamGame, type TeamStrength,
 } from "../lib/projections/project";
@@ -90,16 +90,17 @@ for (const f of csv(read("sheet-fixturesCsv.csv"))) {
 const teamGames = new Map<string, TeamGame[]>();
 for (const [key, f] of fixtureOf) {
   const [team, w] = key.split("|");
-  let tries = 0, penaltyShots = 0;
+  let tries = 0, penaltyShots = 0, lineoutSteals = 0;
   for (const pl of players.values()) {
     if (pl.team !== team) continue;
     const c = games.get(pl.id)?.get(Number(w))?.counts;
     if (!c) continue;
     tries += Number(c.tries) || 0;
     penaltyShots += (Number(c.penaltyGoals) || 0) + (Number(c.penaltyGoalsMissed) || 0);
+    lineoutSteals += Number(c.lineoutSteals) || 0;
   }
   if (!teamGames.has(team)) teamGames.set(team, []);
-  teamGames.get(team)!.push({ round: Number(w), pointsFor: f.pf, pointsAgainst: f.pa, tries, penaltyShots });
+  teamGames.get(team)!.push({ round: Number(w), pointsFor: f.pf, pointsAgainst: f.pa, tries, penaltyShots, lineoutSteals });
 }
 
 // ---- what was known before each round
@@ -202,6 +203,7 @@ function run(params: ProjectionParams = DEFAULT_PARAMS, firstRound = 3) {
       const base = {
         games: past, pos: pl.posAbbrev, frontRow: pl.frontRow, prior: b.priors.get(pl.posAbbrev) ?? {},
         fdr: fx.fdr, home: fx.home, opponentWeakness: opp ? opponentWeakness(opp) : null,
+        opponentSteals: opp ? lineoutStealFactor(opp) : null,
       };
       const after = projectPoints({ ...base, role, kicking: kick("after") }, params);
       const history: ListRole[] = [];
@@ -239,6 +241,7 @@ for (const role of ["starting", "bench"] as Role[]) {
   const sub = named.filter((p) => p.role === role);
   console.log(`    ${role.padEnd(9)} (${sub.length})`.padEnd(42), stats(sub, "after"));
 }
+console.log(`    hookers (${named.filter((p) => players.get(p.id)?.posAbbrev === "HO").length})`.padEnd(42), stats(named.filter((p) => players.get(p.id)?.posAbbrev === "HO"), "after"));
 console.log(`  before the lists (${all.length} whose team played, tipped to or did play):`);
 console.log("    start of week (last status carried)  ", stats(all, "start"));
 console.log("    midweek (this week's injury list)    ", stats(all, "mid"));
