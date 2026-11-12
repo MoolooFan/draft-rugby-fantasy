@@ -219,6 +219,8 @@ export function scoringRate80(
 export type PlayerInput = {
   /** his games this season before this one, oldest first */
   games: PastGame[];
+  /** his games last season (for his usual minutes early in a new season) */
+  lastSeasonGames?: PastGame[] | null;
   pos: string;
   /** gets scrum points (props and hookers, under Standard) */
   frontRow: boolean;
@@ -239,7 +241,7 @@ export type PlayerInput = {
 
 export function projectPoints(input: PlayerInput, p: ProjectionParams = DEFAULT_PARAMS): number {
   const rules = input.rules ?? STANDARD_SCORING;
-  const mins = expectedMinutes(input.games, input.role, input.pos, p);
+  const mins = expectedMinutes([...(input.lastSeasonGames ?? []), ...input.games], input.role, input.pos, p);
   if (mins <= 0) return 0;
 
   let play = Math.max(0, scoringRate80(input.games, input.frontRow, input.prior, rules, p, input)) * (mins / 80);
@@ -286,24 +288,48 @@ export function opponentWeakness(opp: TeamStrength): number {
   return (opp.pointsAgainst - opp.pointsFor) / 2;
 }
 
+const goalShots = (c: StatCounts) =>
+  (Number(c.conversions) || 0) + (Number(c.conversionsMissed) || 0) + (Number(c.penaltyGoals) || 0) + (Number(c.penaltyGoalsMissed) || 0);
+
+/** How many games of Ethan's kicker note count as (first choice = all the shots, second = half). */
+const KICK_NOTE_GAMES = 2;
+
 /**
- * A team's kicking order: players by goal-kicking attempts, recent games counting most
- * (each round back counts 0.8 as much). Only players who have taken a shot are listed.
+ * A team's kicking order: players by their share of the team's goal-kicking shots in the games
+ * THEY played (his recent games count most: each game back 0.8 as much). Games he missed don't
+ * count, so a first-choice kicker who's injured keeps his place while someone covers (Ethan,
+ * 12 Nov 2026); he only drops if he plays and someone else kicks. Ethan's note counts as games
+ * from before round 1. Players who've never taken a shot (and have no note) aren't listed.
  */
 export function kickingOrder(
   teamPlayers: Array<{ id: string; games: PastGame[]; /** Ethan's note: 1st / 2nd choice kicker */ kickOrder?: number | null }>,
   beforeRound: number
 ): string[] {
+  const teamShots = new Map<number, number>();
+  for (const pl of teamPlayers) {
+    for (const g of pl.games) if (g.round < beforeRound) teamShots.set(g.round, (teamShots.get(g.round) ?? 0) + goalShots(g.counts));
+  }
   const score = teamPlayers.map((pl) => {
-    // Ethan's note counts like shots taken just before round 1 (8 for first choice, 4 for second)
-    let s = pl.kickOrder === 1 ? 8 * 0.8 ** (beforeRound - 1) : pl.kickOrder === 2 ? 4 * 0.8 ** (beforeRound - 1) : 0;
-    for (const g of pl.games) {
-      if (g.round >= beforeRound) continue;
-      const c = g.counts;
-      const shots = (Number(c.conversions) || 0) + (Number(c.conversionsMissed) || 0) + (Number(c.penaltyGoals) || 0) + (Number(c.penaltyGoalsMissed) || 0);
-      s += shots * 0.8 ** (beforeRound - 1 - g.round);
+    const played = playedGames(pl.games).filter((g) => g.round < beforeRound).sort((a, b) => a.round - b.round);
+    let w = 1, sum = 0, weight = 0, anyShot = false;
+    for (let i = played.length - 1; i >= 0; i--) {
+      const team = teamShots.get(played[i].round) ?? 0;
+      if (!team) continue; // no shots at goal that game: tells us nothing
+      const mine = goalShots(played[i].counts);
+      if (mine) anyShot = true;
+      sum += w * (mine / team);
+      weight += w;
+      w *= 0.8;
     }
-    return { id: pl.id, s };
+    if (pl.kickOrder === 1 || pl.kickOrder === 2) {
+      anyShot = true;
+      for (let k = 0; k < KICK_NOTE_GAMES; k++, w *= 0.8) {
+        sum += w * (pl.kickOrder === 1 ? 1 : 0.5);
+        weight += w;
+      }
+    }
+    // +1 game of "no kicks" so one lucky game doesn't make someone first choice
+    return { id: pl.id, s: anyShot ? sum / (weight + 1) : 0 };
   });
   return score.filter((x) => x.s > 0).sort((a, b) => b.s - a.s).map((x) => x.id);
 }

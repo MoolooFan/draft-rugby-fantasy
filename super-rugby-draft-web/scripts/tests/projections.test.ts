@@ -95,8 +95,19 @@ check("role note 'squad': not expected to play", expectedRole([], undefined, "sq
 check("role note fades once real team lists come in", expectedRole(["bench", "bench", "bench"], undefined, "starter").bench > 0.9);
 const moved = [{ id: "new10", games: [] as PastGame[], kickOrder: 1 }, { id: "old", games: [game(1, { conversions: 2 })] }];
 check("kicker note: first-choice kicker leads the order at the start", kickingOrder(moved, 1)[0] === "new10");
-const later = [{ id: "new10", games: [] as PastGame[], kickOrder: 1 }, { id: "old", games: [3, 4, 5, 6, 7].map((r) => game(r, { conversions: 3, penaltyGoals: 1 })) }];
-check("kicker note fades once someone else does the kicking", kickingOrder(later, 8)[0] === "old");
+const later = [{ id: "new10", games: [3, 4, 5, 6, 7].map((r) => game(r, {})), kickOrder: 1 }, { id: "old", games: [3, 4, 5, 6, 7].map((r) => game(r, { conversions: 3, penaltyGoals: 1 })) }];
+check("kicker note fades once he plays and someone else does the kicking", kickingOrder(later, 8)[0] === "old");
+// injured first-choice kicker keeps his place while the back-up covers (Ethan, 12 Nov 2026)
+const injured = [
+  { id: "first", games: [1, 2, 3, 4, 5, 6].map((r) => game(r, { conversions: 3, penaltyGoals: 2 })) },
+  { id: "backup", games: [...[1, 2, 3, 4, 5, 6].map((r) => game(r, {}, "bench")), ...[7, 8, 9].map((r) => game(r, { conversions: 3, penaltyGoals: 2 }))] },
+];
+check("injured first-choice kicker stays first while the back-up covers", JSON.stringify(kickingOrder(injured, 10)) === '["first","backup"]', JSON.stringify(kickingOrder(injured, 10)));
+check("...and the back-up kicks while he's out", dutyKicker(kickingOrder(injured, 10), (id) => id !== "first") === "backup");
+// last season's minutes count early in a new season
+const fullGames = [1, 2, 3, 4, 5, 6].map((r) => ({ round: r, counts: { minutesPlayed: 80 }, listed: "starting" as const }));
+const withLast = projectPoints({ games: [], lastSeasonGames: fullGames, pos: "FH", frontRow: false, prior: {}, role: "starting" });
+check("an 80-minute player last season starts the new season on his own minutes (2 pts for minutes)", withLast === 2, String(withLast));
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll passed");
 process.exit(failures ? 1 : 0);
