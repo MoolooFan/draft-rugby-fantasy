@@ -8,7 +8,7 @@ import { getActiveUsername } from "@/lib/session";
 import { useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
 
-import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/season";
+import { currentSeasonYear, fixturesByFantasyWeek, getSeason, roundLabel, SEASONS, teamListsReadAtMs } from "@/lib/season";
 
 // This season's fixtures, numbered by fantasy week (see lib/season).
 const fixturesData = fixturesByFantasyWeek();
@@ -601,13 +601,22 @@ const deadlineMs = useMemo(() => {
 
 const deadlineLocked = deadlineMs ? nowMs >= deadlineMs : false;
 
+// The upcoming round's team lists are read at 4:30pm NZ time on the Wednesday before it
+// (lib/season). From then the page shows the upcoming matchup (Ethan, 12 Nov 2026): both
+// lineups as saved so far, projections and win probability based on the real team lists.
+const listsOutMs = useMemo(() => {
+  const yr = currentSeasonYear();
+  return SEASONS[yr] && selectionRealRound > 0 ? teamListsReadAtMs(getSeason(yr), selectionRealRound) : null;
+}, [selectionRealRound]);
+const upcomingShown = deadlineLocked || (listsOutMs != null && nowMs >= listsOutMs);
+
 // 2) The week the Matchup page should DISPLAY
-// - before deadline: previous week
-// - after deadline: selection week
+// - until the team lists come out (Wednesday 4:30pm NZ): the previous week's result
+// - from then: the selection week (before the deadline: "UPCOMING", lineups can still change)
 const displayWeek = useMemo(() => {
-  const w = deadlineLocked ? selectionWeek : selectionWeek - 1;
+  const w = upcomingShown ? selectionWeek : selectionWeek - 1;
   return w; // can be 0 (pre-season state) – we handle that below
-}, [deadlineLocked, selectionWeek]);
+}, [upcomingShown, selectionWeek]);
 
 // The round used for POINTS + fixture tags should match the DISPLAY week
 const displayRealRound = useMemo(() => {
@@ -1732,9 +1741,9 @@ return (
   <div style={{ textAlign: "center" }}>
     <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.7 }}>vs</div>
     {/* shown once the page has loaded in the browser (the server has no league data yet) */}
-    {mounted && (scoresLocked || displayLocked) ? (
+    {mounted && (scoresLocked || displayLocked || (displayWeek > 0 && displayWeek === selectionWeek)) ? (
       <div style={{ marginTop: 2, fontSize: 9, fontWeight: 900, letterSpacing: 0.6, opacity: 0.6 }}>
-        {scoresLocked ? "FINAL" : "LIVE"}
+        {scoresLocked ? "FINAL" : displayLocked ? "LIVE" : "UPCOMING"}
       </div>
     ) : null}
   </div>
