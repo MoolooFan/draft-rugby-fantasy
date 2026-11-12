@@ -106,3 +106,61 @@ export function projectPoints(
   if (input.home != null) pts *= input.home ? 1 + p.homeEdge : 1 - p.homeEdge;
   return Math.round(pts * 10) / 10;
 }
+
+// ---------------------------------------------------------------------------
+// Before the team lists are out: an expected lineup (Ethan, 12 Nov 2026)
+//
+// Each player's chance of starting / being on the bench, from his recent team lists (the most
+// recent count most), lowered if he was injured, suspended or out last time. The projection is
+// then the mix: P(start) x his starting projection + P(bench) x his bench projection.
+// Once the lists are out, his real role is used instead.
+
+/** What a team list said about a player in an earlier round ("none" = his team didn't play). */
+export type ListRole = "starting" | "bench" | "out" | "notNamed" | "none";
+
+export type RoleChances = { start: number; bench: number };
+
+export type LineupParams = {
+  /** how many recent team lists count, and how quickly older ones fade (weight per step back) */
+  lookback: number;
+  fade: number;
+  /** chance a player injured / suspended / out last time is back this week (x his usual chances) */
+  backFromInjury: number;
+};
+
+export const DEFAULT_LINEUP_PARAMS: LineupParams = { lookback: 4, fade: 0.6, backFromInjury: 0.1 }; // tested on 2026 (12 Nov)
+
+/** His chances of starting / being on the bench this week, from his last few team lists (oldest first). */
+export function expectedRole(history: ListRole[], lp: LineupParams = DEFAULT_LINEUP_PARAMS): RoleChances {
+  const lists = history.filter((r) => r !== "none");
+  if (!lists.length) return { start: 0, bench: 0 };
+  const recent = lists.slice(-lp.lookback);
+  let w = 1, total = 0, start = 0, bench = 0;
+  // available lists: what he did when he was available (injured weeks don't count against him)
+  for (let i = recent.length - 1; i >= 0; i--, w *= lp.fade) {
+    const r = recent[i];
+    if (r === "out") continue;
+    total += w;
+    if (r === "starting") start += w;
+    else if (r === "bench") bench += w;
+  }
+  let chances = total ? { start: start / total, bench: bench / total } : { start: 0, bench: 0 };
+  // injured / suspended / out in the last list: probably still out
+  if (lists[lists.length - 1] === "out") {
+    chances = total
+      ? { start: chances.start * lp.backFromInjury, bench: chances.bench * lp.backFromInjury }
+      : { start: 0, bench: 0 };
+  }
+  return chances;
+}
+
+/** Expected points before the team lists: his starting and bench projections mixed by his chances. */
+export function projectPointsExpectedLineup(
+  input: Omit<Parameters<typeof projectPoints>[0], "role"> & { chances: RoleChances },
+  p: ProjectionParams = DEFAULT_PARAMS
+): number {
+  const { chances, ...rest } = input;
+  const start = chances.start ? projectPoints({ ...rest, role: "starting" }, p) : 0;
+  const bench = chances.bench ? projectPoints({ ...rest, role: "bench" }, p) : 0;
+  return Math.round((chances.start * start + chances.bench * bench) * 10) / 10;
+}
