@@ -1458,6 +1458,8 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
   const [playoffs, setPlayoffs] = useState<PlayoffFormat>("final4");
   const [scoringSystem, setScoringSystem] = useState<"standard" | "alternate" | "custom">("standard");
   const [bonusPoints, setBonusPoints] = useState(true);
+  const [shieldEnabled, setShieldEnabled] = useState(true);
+  const [shieldName, setShieldName] = useState("The Shield");
   const [customRules, setCustomRules] = useState<ScoringRules>(STANDARD_SCORING);
   const [error, setError] = useState<string | null>(null);
 
@@ -1541,6 +1543,20 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
             Bonus points (win by 140+ / lose by 40 or less)
           </label>
 
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 800 }}>
+            <input type="checkbox" checked={shieldEnabled} onChange={(e) => setShieldEnabled(e.target.checked)} />
+            The Shield (won by beating the holder away; defended at home)
+          </label>
+          {shieldEnabled ? (
+            <input
+              aria-label="Shield name"
+              value={shieldName}
+              onChange={(e) => setShieldName(e.target.value)}
+              placeholder="The Shield"
+              style={inputStyle()}
+            />
+          ) : null}
+
           <input
   type="datetime-local"
   value={draftLocal}
@@ -1567,6 +1583,8 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
     draftAt,
     scoringSystem,
     bonusPoints,
+    shieldEnabled,
+    shieldName,
     ...(scoringSystem === "custom" ? { scoringCustom: customRules } : {}),
   });
 

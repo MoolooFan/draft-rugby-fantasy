@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cleanShieldName } from "@/lib/league/shield";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
@@ -38,6 +39,9 @@ export async function POST(req: Request) {
     scoringCustom = rules;
   }
   const bonusPoints = body?.bonusPoints !== false;
+  // The Shield: on unless switched off; the name always ends in "Shield"
+  const shieldEnabled = body?.shieldEnabled !== false;
+  const shieldName = cleanShieldName(body?.shieldName);
   const seasonWeeks = totalFantasyWeeks(getSeason(season));
   const draftDateTimeText = String(body?.draftDateTimeText ?? "");
   const draftAtRaw = body?.draftAt ?? null;
@@ -102,6 +106,8 @@ if (draftAtRaw !== null && draftAtRaw !== undefined && draftAtRaw !== "") {
     scoring_system: scoringSystem,
     scoring_custom: scoringCustom,
     bonus_points: bonusPoints,
+    shield_enabled: shieldEnabled,
+    shield_name: shieldName,
     real_regular_season_rounds: seasonWeeks,
     start_round: 1,
     total_weeks: seasonWeeks,

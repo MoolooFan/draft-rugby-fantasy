@@ -106,8 +106,29 @@ function roundToGames(r: RotationRound, week: number, flip: boolean): RegularGam
   return out;
 }
 
-export function buildRoundRobin(teamIds: string[], weeks: number[]): { fixed: RegularGame[]; toDecide: WeeksToDecide | null } {
-  const rounds = rotationRounds(teamIds);
+/**
+ * Mixes up who is at home (Ethan, Nov 2026 - home games matter for the Shield): the rounds are
+ * played in a random order, and in each game home goes to whichever team has had fewer home
+ * games so far in the rotation (a coin toss when level). Teams still get runs of home or away
+ * games like a real season, but no set pattern, and everyone ends up with about the same number.
+ */
+export function mixHomeAway(rounds: RotationRound[], rng: () => number): RotationRound[] {
+  const order = rounds.map((r) => ({ r, k: rng() })).sort((a, b) => a.k - b.k).map((x) => x.r);
+  const homes = new Map<string, number>();
+  return order.map((r) => ({
+    byeTeamId: r.byeTeamId,
+    games: r.games.map((g) => {
+      const h = homes.get(g.homeTeamId) ?? 0, a = homes.get(g.awayTeamId) ?? 0;
+      const swap = a < h || (a === h && rng() < 0.5);
+      const game = swap ? { homeTeamId: g.awayTeamId, awayTeamId: g.homeTeamId } : g;
+      homes.set(game.homeTeamId, (homes.get(game.homeTeamId) ?? 0) + 1);
+      return game;
+    }),
+  }));
+}
+
+export function buildRoundRobin(teamIds: string[], weeks: number[], rng?: () => number): { fixed: RegularGame[]; toDecide: WeeksToDecide | null } {
+  const rounds = rng ? mixHomeAway(rotationRounds(teamIds), rng) : rotationRounds(teamIds);
   if (!rounds.length) return { fixed: [], toDecide: null };
   const odd = teamIds.length % 2 === 1;
   const fullWeeks = odd ? weeks.length - (weeks.length % rounds.length) : weeks.length;
@@ -287,6 +308,8 @@ export function buildLeagueSchedule(params: {
   /** Season weeks the league plays, e.g. [1..16]. Finals take the last ones. */
   weeks: number[];
   finals: FinalsSize;
+  /** random numbers for mixing up home and away (leave out for a fixed, testable schedule) */
+  rng?: () => number;
 }): LeagueSchedule {
   const { teamIds, weeks, finals } = params;
   if (teamIds.length < 2) throw new Error("A league needs at least 2 teams");
@@ -298,7 +321,7 @@ export function buildLeagueSchedule(params: {
   const regularWeeks = weeks.slice(0, weeks.length - layout.weeks);
   const playoffWeeks = weeks.slice(weeks.length - layout.weeks);
 
-  const rr = buildRoundRobin(teamIds, regularWeeks);
+  const rr = buildRoundRobin(teamIds, regularWeeks, params.rng);
   return {
     regularWeeks,
     playoffWeeks,

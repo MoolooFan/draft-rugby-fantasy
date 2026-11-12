@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
 import { cleanScoringRules } from "@/lib/scoring/validate";
 import { getSystemRules } from "@/lib/scoring/leagueRules";
+import { cleanShieldName } from "@/lib/league/shield";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -84,6 +85,9 @@ export async function POST(req: Request) {
     dbPatch.scoring_custom = rules;
   }
   if ("bonusPoints" in patch) dbPatch.bonus_points = patch.bonusPoints !== false;
+  // The Shield can be switched on/off and renamed any time (off = that season doesn't count)
+  if ("shieldEnabled" in patch) dbPatch.shield_enabled = patch.shieldEnabled !== false;
+  if ("shieldName" in patch) dbPatch.shield_name = cleanShieldName(patch.shieldName);
 
   if ("startRound" in patch) dbPatch.start_round = patch.startRound ?? null;
   if ("totalWeeks" in patch) dbPatch.total_weeks = patch.totalWeeks ?? null;

@@ -4,6 +4,8 @@ import { getServerUsername } from "@/lib/serverSession";
 import { refreshDraftOrder } from "@/lib/draft/engine";
 import { rulesForLeagueRow } from "@/lib/scoring/leagueRules";
 import { championshipStars } from "@/lib/league/honours";
+import { loadShield } from "@/lib/league/shieldServer";
+import { cleanShieldName } from "@/lib/league/shield";
 import { currentSeasonYear, restartWindow } from "@/lib/season";
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -167,6 +169,10 @@ if (computedOrder.length) {
     scoringLocked: !!leagueRow.scoring_rules_locked,
     bonusPoints: leagueRow.bonus_points !== false,
     season: leagueRow.season,
+    // The Shield: who holds it, their next shield game, and this season's shield games
+    shield: await shieldSummary(),
+    shieldEnabled: leagueRow.shield_enabled !== false,
+    shieldName: cleanShieldName(leagueRow.shield_name),
     // E8: a league from an earlier season can be restarted for this season by its commissioner,
     // in the month before the season starts (restartOpensAt: when that month begins)
     ...(await restartInfo(leagueRow)),
@@ -180,6 +186,22 @@ draftOrder: computedOrder,
   };
 
   return NextResponse.json({ ok: true, league });
+
+  async function shieldSummary() {
+    try {
+      const s = await loadShield(supabaseAdmin, leagueId);
+      return {
+        enabled: s.enabled,
+        name: s.name,
+        holderTeamId: s.holderTeamId,
+        defences: s.holder?.defences ?? 0,
+        next: s.next,
+        games: s.events.filter((e) => e.kind !== "awarded").map((e) => ({ week: e.week, kind: e.kind, holderTeamId: e.holderTeamId, otherTeamId: e.otherTeamId })),
+      };
+    } catch {
+      return { enabled: leagueRow.shield_enabled !== false, name: "The Shield", holderTeamId: null, defences: 0, next: null, games: [] };
+    }
+  }
 
   async function restartInfo(row: { id: string; season: number; lineage_id?: string | null }) {
     const season = currentSeasonYear();

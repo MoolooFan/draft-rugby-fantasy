@@ -51,6 +51,8 @@ const computedSeasonWeeks = computedRegularWeeks + selectedPlayoffWeeks;
   const settingsLocked = readOnly || draftStarted;
   const [scoringSystem, setScoringSystem] = useState<"standard" | "alternate" | "custom">(league.scoringSystem ?? "standard");
   const [bonusPoints, setBonusPoints] = useState<boolean>(league.bonusPoints !== false);
+  const [shieldEnabled, setShieldEnabled] = useState<boolean>(league.shieldEnabled !== false);
+  const [shieldName, setShieldName] = useState<string>(league.shieldName ?? "The Shield");
   const [customRules, setCustomRules] = useState<ScoringRules>(() =>
     // Custom starts from the league's current values (e.g. Alternate), so switching keeps them
     completeRules((league.scoringCustom as Partial<ScoringRules> | null) ?? (league.scoringRules as Partial<ScoringRules> | undefined) ?? STANDARD_SCORING)
@@ -158,6 +160,17 @@ setDraftOrderIds((prev) => {
   <input type="checkbox" disabled={settingsLocked} checked={bonusPoints} onChange={(e) => setBonusPoints(e.target.checked)} />
   Win by 140+ or lose by 40 or less: +1 ladder point
 </label>
+</Field>
+
+<Field label="The Shield">
+<label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 800 }}>
+  <input type="checkbox" disabled={readOnly} checked={shieldEnabled} onChange={(e) => setShieldEnabled(e.target.checked)} />
+  On: won by beating the holder away, defended at home. Off pauses it (the holder keeps it).
+</label>
+{shieldEnabled ? (
+  <input aria-label="Shield name" disabled={readOnly} value={shieldName} onChange={(e) => setShieldName(e.target.value)} placeholder="The Shield" style={{ ...inputStyle(), marginTop: 6 }} />
+) : null}
+<div style={{ fontSize: 11, fontWeight: 700, opacity: 0.75, marginTop: 4 }}>The name always ends in &quot;Shield&quot;. Can be changed any time.</div>
 </Field>
 
 {draftStarted ? (
@@ -292,6 +305,8 @@ startRound,
 totalWeeks: computedSeasonWeeks, // ✅ IMPORTANT: includes finals weeks
 scoringSystem,
 bonusPoints,
+shieldEnabled,
+shieldName,
 ...(scoringSystem === "custom" ? { scoringCustom: customRules } : {}),
 });
 

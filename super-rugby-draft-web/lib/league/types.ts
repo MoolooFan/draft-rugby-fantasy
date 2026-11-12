@@ -34,6 +34,10 @@ export type League = {
   scoringLocked?: boolean;
   bonusPoints?: boolean;
   season?: number;
+  /** The Shield (lib/league/shield.ts): on/off, name, holder, next shield game, this season's shield games */
+  shield?: LeagueShieldSummary;
+  shieldEnabled?: boolean;
+  shieldName?: string;
   /** E8: the commissioner can restart this (earlier-season) league for the current season */
   canRestart?: boolean;
   /** E8: when restarting opens (a month before the season starts); null if it can't be restarted */
@@ -46,4 +50,13 @@ export type League = {
   totalWeeks: number;
   currentWeek: number;
 
+};
+
+export type LeagueShieldSummary = {
+  enabled: boolean;
+  name: string;
+  holderTeamId: string | null;
+  defences: number;
+  next: { week: number; homeTeamId: string; awayTeamId: string } | null;
+  games: Array<{ week: number; kind: "defended" | "won"; holderTeamId: string; otherTeamId: string | null }>;
 };

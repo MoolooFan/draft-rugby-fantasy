@@ -121,7 +121,7 @@ export async function buildScheduleForLeague(db: Db, leagueId: string, nowMs: nu
   }
   const weeks = leagueWeeksAfterDraft(season, nowMs);
   const finals = finalsSizeFromFormat(league.playoff_format);
-  const sch = buildLeagueSchedule({ teamIds, weeks, finals });
+  const sch = buildLeagueSchedule({ teamIds, weeks, finals, rng: opts.shuffle !== false ? Math.random : undefined });
 
   const rows = [
     ...sch.regular.map((g) => ({

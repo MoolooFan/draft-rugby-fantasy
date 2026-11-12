@@ -90,6 +90,8 @@ export async function POST(req: Request) {
     scoring_system: old.scoring_system ?? "standard",
     scoring_custom: old.scoring_custom ?? null,
     bonus_points: old.bonus_points !== false,
+    shield_enabled: old.shield_enabled !== false,
+    shield_name: old.shield_name ?? "The Shield",
     real_regular_season_rounds: seasonWeeks,
     start_round: 1,
     total_weeks: seasonWeeks,

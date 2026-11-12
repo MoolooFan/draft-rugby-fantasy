@@ -35,6 +35,8 @@ createLeague: (params: {
   scoringSystem?: "standard" | "alternate" | "custom";
   scoringCustom?: unknown;
   bonusPoints?: boolean;
+  shieldEnabled?: boolean;
+  shieldName?: string;
 }) => Promise<{ ok: true } | { ok: false; error: string }>;
 
 joinLeagueByCode: (params: {
@@ -63,6 +65,8 @@ joinLeagueByCode: (params: {
         | "scoringSystem"
         | "scoringCustom"
         | "bonusPoints"
+        | "shieldEnabled"
+        | "shieldName"
       >
     >
   ) => void;
@@ -162,7 +166,7 @@ refreshLeague: async (leagueId) => {
         }));
       },
 
-      createLeague: async ({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints }) => {
+      createLeague: async ({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints, shieldEnabled, shieldName }) => {
   const userId = getActiveUserId();
   if (!userId) return { ok: false, error: "Not signed in." };
 
@@ -170,7 +174,7 @@ refreshLeague: async (leagueId) => {
     const res = await fetch("/api/leagues/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints }),
+      body: JSON.stringify({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints, shieldEnabled, shieldName }),
     });
 
     const json = await res.json().catch(() => null);
