@@ -10,7 +10,8 @@
 //
 // What goes in (each part tested on 2026, 12 Nov 2026):
 // - Scoring rate, stat by stat: this season's points per 80 minutes for each stat, mixed with
-//   a starting estimate (last season, or his position's average). Steady stats (lineouts,
+//   a starting estimate (seasonPrior: his position's average scaled by his draft rank - Ethan's
+//   rank of how good he is - and his own numbers last season if he played). Steady stats (lineouts,
 //   turnovers) trust his own numbers quickly; streaky ones (tries, line breaks, try assists,
 //   errors, penalties, cards) lean on the starting estimate for longer (TRUST_MINUTES).
 // - Form: his last 3 games count a little (10%).
@@ -26,7 +27,13 @@
 //   out). His points come from how many tries his team is expected to score against this
 //   opponent (more conversions in a blowout), the team's usual penalty shots, and his own
 //   success rate.
+// - Ethan's notes for the start of a season (admin page): expected role (starter / bench /
+//   squad) and goal kicker (1st / 2nd choice), e.g. a player who moved team. They count like an
+//   extra team list / kicking record from before round 1, so real ones take over within a few rounds.
 // - Uses the league's own scoring rules (Standard, Alternate or Custom).
+// Tested and left out (2026): travel, short turnarounds, the week after a bye, first game back
+// from injury, blowouts cutting starters' minutes, key teammates missing, opponent discipline
+// (penalty shots), team-specific home advantage.
 import {
   CAPTAIN_MULTIPLIER, STANDARD_SCORING, STATS, minutesPoints, statPoints,
   type EventStatKey, type ScoringRules, type StatCounts,
@@ -133,6 +140,40 @@ export function averageRates(group: Array<{ games: PastGame[]; frontRow: boolean
   const out: StatRates = {};
   if (!minutes) return out;
   for (const [k, v] of Object.entries(sum)) out[k as EventStatKey] = ((v as number) * 80) / minutes;
+  return out;
+}
+
+/**
+ * How a player's draft rank scales his position's average (2026: rank 1 ~1.47x, rank 10 ~1.24x,
+ * rank 100 ~1.0x, rank 300 ~0.9x; the same from round 3 to round 10). No rank = 1.
+ */
+export function rankMultiplier(draftRank: number | null | undefined): number {
+  if (!draftRank || draftRank >= 9999 || draftRank < 1) return 1;
+  return Math.min(1.6, Math.max(0.6, 1 - 0.1 * (Math.log(draftRank) - 4.75)));
+}
+
+/**
+ * His starting estimate, stat by stat: his position's average x rankMultiplier (not for goal
+ * kicking), then his own numbers last season mixed in (same trust per stat as this season).
+ */
+export function seasonPrior(
+  positionAverage: StatRates, draftRank: number | null | undefined,
+  lastSeason: { games: PastGame[]; frontRow: boolean } | null = null,
+  rules: ScoringRules = STANDARD_SCORING, p: ProjectionParams = DEFAULT_PARAMS
+): StatRates {
+  const mult = rankMultiplier(draftRank);
+  const base: StatRates = {};
+  for (const [k, v] of Object.entries(positionAverage)) {
+    base[k as EventStatKey] = KICKING_STATS.includes(k as EventStatKey) ? (v as number) : (v as number) * mult;
+  }
+  if (!lastSeason) return base;
+  const own = statTotals(lastSeason.games, lastSeason.frontRow, rules);
+  if (!own.minutes) return base;
+  const out: StatRates = { ...base };
+  for (const k of PLAY_STATS) {
+    const trust = p.trustMinutes[k];
+    out[k] = ((own.points[k] ?? 0) * 80 + (base[k] ?? 0) * trust) / (own.minutes + trust);
+  }
   return out;
 }
 
@@ -249,9 +290,13 @@ export function opponentWeakness(opp: TeamStrength): number {
  * A team's kicking order: players by goal-kicking attempts, recent games counting most
  * (each round back counts 0.8 as much). Only players who have taken a shot are listed.
  */
-export function kickingOrder(teamPlayers: Array<{ id: string; games: PastGame[] }>, beforeRound: number): string[] {
+export function kickingOrder(
+  teamPlayers: Array<{ id: string; games: PastGame[]; /** Ethan's note: 1st / 2nd choice kicker */ kickOrder?: number | null }>,
+  beforeRound: number
+): string[] {
   const score = teamPlayers.map((pl) => {
-    let s = 0;
+    // Ethan's note counts like shots taken just before round 1 (8 for first choice, 4 for second)
+    let s = pl.kickOrder === 1 ? 8 * 0.8 ** (beforeRound - 1) : pl.kickOrder === 2 ? 4 * 0.8 ** (beforeRound - 1) : 0;
     for (const g of pl.games) {
       if (g.round >= beforeRound) continue;
       const c = g.counts;
@@ -314,9 +359,16 @@ export type LineupParams = {
 
 export const DEFAULT_LINEUP_PARAMS: LineupParams = { lookback: 4, fade: 0.6 }; // tested on 2026 (12 Nov)
 
-/** His chances of starting / being on the bench this week, from his last few team lists (oldest first). */
-export function expectedRole(history: ListRole[], lp: LineupParams = DEFAULT_LINEUP_PARAMS): RoleChances {
-  const lists = history.filter((r) => r !== "none");
+/** Ethan's start-of-season note on a player's role. */
+export type RoleNote = "starter" | "bench" | "squad";
+
+/**
+ * His chances of starting / being on the bench this week, from his last few team lists (oldest
+ * first). Ethan's role note counts as one more list from before round 1 (squad = not named).
+ */
+export function expectedRole(history: ListRole[], lp: LineupParams = DEFAULT_LINEUP_PARAMS, note: RoleNote | null = null): RoleChances {
+  const before: ListRole[] = note === "starter" ? ["starting"] : note === "bench" ? ["bench"] : note === "squad" ? ["notNamed"] : [];
+  const lists = [...before, ...history].filter((r) => r !== "none");
   const recent = lists.slice(-lp.lookback);
   let w = 1, total = 0, start = 0, bench = 0;
   for (let i = recent.length - 1; i >= 0; i--, w *= lp.fade) {

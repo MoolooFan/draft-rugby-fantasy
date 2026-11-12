@@ -18,11 +18,12 @@ import { isFrontRow, playerPoints, statCountsFromRaw, STANDARD_SCORING, type Sta
 import { statusKind } from "../lib/status/kind";
 import type { Lineup } from "../lib/scoring/week";
 import {
-  DEFAULT_PARAMS, averageRates, dutyKicker, lineoutStealFactor, expectedRole, kickingOrder, kickingPoints, opponentWeakness,
+  DEFAULT_PARAMS, averageRates, dutyKicker, lineoutStealFactor, seasonPrior, expectedRole, kickingOrder, kickingPoints, opponentWeakness,
   projectPoints, projectPointsExpectedLineup, projectTeamScore, teamStrength,
   type ListRole, type PastGame, type ProjectionParams, type Role, type StatRates, type TeamGame, type TeamStrength,
 } from "../lib/projections/project";
 
+const USE_RANK = !process.argv.includes("--no-rank"); // draft rank in the starting estimate
 const LAST_LISTED_ROUND = 15; // the 2026 data has no team lists for round 16
 const DIR = path.resolve(process.cwd(), "../backups/2026-11-04");
 const read = (f: string) => fs.readFileSync(path.join(DIR, f), "utf8");
@@ -46,7 +47,7 @@ function csv(text: string): Record<string, string>[] {
 const CODE: Record<string, string> = { Blues: "BLU", Brumbies: "BRU", Chiefs: "CHI", Crusaders: "CRU", Drua: "DRU", Force: "FOR", Highlanders: "HIG", Hurricanes: "HUR", Moana: "MOP", Reds: "RED", Waratahs: "WAR" };
 
 // ---- players: positions and team-list status per round
-type Pl = { id: string; team: string; posAbbrev: string; secondaryPosAbbrev: string | null; frontRow: boolean; status: Record<number, string> };
+type Pl = { id: string; team: string; posAbbrev: string; secondaryPosAbbrev: string | null; frontRow: boolean; draftRank: number | null; status: Record<number, string> };
 const players = new Map<string, Pl>();
 for (const r of csv(read("sheet-playersCsv.csv"))) {
   const id = r.PlayerId.toLowerCase();
@@ -54,7 +55,7 @@ for (const r of csv(read("sheet-playersCsv.csv"))) {
   const status: Record<number, string> = {};
   for (let w = 1; w <= 16; w++) status[w] = r[`statusw${w}`] ?? "";
   const pos = { posAbbrev: r.posAbbrev, secondaryPosAbbrev: r.secondaryPosAbbrev || null };
-  players.set(id, { id, team: (r.teamCode || "").toUpperCase().replace("MOA", "MOP"), ...pos, frontRow: isFrontRow(pos, STANDARD_SCORING), status });
+  players.set(id, { id, team: (r.teamCode || "").toUpperCase().replace("MOA", "MOP"), ...pos, frontRow: isFrontRow(pos, STANDARD_SCORING), draftRank: Number(r.draftRank) || null, status });
 }
 
 const listedAs = (st: string): "starting" | "bench" | null => {
@@ -201,7 +202,8 @@ function run(params: ProjectionParams = DEFAULT_PARAMS, firstRound = 3) {
       const kick = (stage: Stage) =>
         kicker.get(pl.team)?.[stage] === pl.id && own && opp ? kickingPoints(past, own, opp) : null;
       const base = {
-        games: past, pos: pl.posAbbrev, frontRow: pl.frontRow, prior: b.priors.get(pl.posAbbrev) ?? {},
+        games: past, pos: pl.posAbbrev, frontRow: pl.frontRow,
+        prior: USE_RANK ? seasonPrior(b.priors.get(pl.posAbbrev) ?? {}, pl.draftRank) : b.priors.get(pl.posAbbrev) ?? {},
         fdr: fx.fdr, home: fx.home, opponentWeakness: opp ? opponentWeakness(opp) : null,
         opponentSteals: opp ? lineoutStealFactor(opp) : null,
       };

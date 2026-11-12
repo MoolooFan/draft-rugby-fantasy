@@ -79,6 +79,8 @@ type AdminPlayer = {
   thirdPosAbbrev?: string;
   draftRank: number;
   externalId: number | null;
+  expectedRole?: "starter" | "bench" | "squad" | null;
+  kickOrder?: number | null;
   status: string | null;
   active: boolean;
   weeklyStatus: Record<string, string>;
@@ -122,6 +124,8 @@ function PlayerForm({
     thirdPosAbbrev: player?.thirdPosAbbrev ?? "",
     draftRank: player?.draftRank && player.draftRank < 9999 ? String(player.draftRank) : "",
     externalId: player?.externalId ? String(player.externalId) : "",
+    expectedRole: player?.expectedRole ?? "",
+    kickOrder: player?.kickOrder ? String(player.kickOrder) : "",
     status: player?.status ?? "",
     active: player?.active ?? true,
   });
@@ -199,9 +203,30 @@ function PlayerForm({
         </div>
         <div><div style={labelStyle}>playfantasyrugby id</div><input style={inputStyle} inputMode="numeric" value={f.externalId} onChange={set("externalId")} /></div>
         <div>
+          <div style={labelStyle}>Expected role (start of season)</div>
+          <select style={inputStyle} value={f.expectedRole} onChange={set("expectedRole")}>
+            <option value="">Not set (use team lists)</option>
+            <option value="starter">Starter</option>
+            <option value="bench">Bench</option>
+            <option value="squad">Squad (not expected to be named)</option>
+          </select>
+        </div>
+        <div>
+          <div style={labelStyle}>Goal kicker</div>
+          <select style={inputStyle} value={f.kickOrder} onChange={set("kickOrder")}>
+            <option value="">No</option>
+            <option value="1">First choice</option>
+            <option value="2">Second choice</option>
+          </select>
+        </div>
+        <div>
           <div style={labelStyle}>Current status (player card) <StatusTag text={f.status} /></div>
           <input style={inputStyle} list="status-presets" placeholder="e.g. Knee - TBC" value={f.status} onChange={set("status")} />
         </div>
+      </div>
+      <div style={{ fontSize: 11, opacity: 0.7, fontWeight: 700 }}>
+        Expected points: draft rank sets how good he&apos;s expected to be. Expected role and goal kicker help early in the
+        season (e.g. a player who moved team); they fade out as real team lists and kicking come in.
       </div>
       <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
         <input type="checkbox" checked={f.active} onChange={set("active")} /> In this season&apos;s player pool

@@ -29,6 +29,9 @@ export type PlayerRow = {
   external_id: number | null;
   status: string | null;
   active: boolean;
+  /** Ethan's start-of-season notes for expected points (migration 20261112000000) */
+  expected_role?: "starter" | "bench" | "squad" | null;
+  kick_order?: number | null;
 };
 
 export type SitePlayer = {
@@ -46,6 +49,9 @@ export type SitePlayer = {
   draftRank: number;
   externalId: number | null;
   active: boolean;
+  /** Ethan's start-of-season notes for expected points */
+  expectedRole?: "starter" | "bench" | "squad" | null;
+  kickOrder?: number | null;
   /** current status for the player card, e.g. 'Knee - TBC' */
   status: string | null;
   /** status by fantasy week, as written: { W1: "Starting", W2: "Benched", W3: "Knee - TBC" } (no entry = not named) */
@@ -67,6 +73,8 @@ export function toSitePlayer(p: PlayerRow, weekly: Record<string, string> = {}):
     draftRank: p.draft_rank ?? 9999,
     externalId: p.external_id,
     active: p.active,
+    expectedRole: p.expected_role ?? null,
+    kickOrder: p.kick_order ?? null,
     status: p.status,
     weeklyStatus: weekly,
     stats: { ...ZERO_STATS },

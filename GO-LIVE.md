@@ -130,7 +130,7 @@ The new project should have a **●** next to it in the `LINKED` column. If the 
 ```
 npx supabase db push --remote
 ```
-(Without `--remote`, the Supabase tool updates the test database on this PC instead.) It lists 16 changes and asks `Do you want to push these migrations?` Type `Y` and press Enter. It ends with `Finished supabase db push.`
+(Without `--remote`, the Supabase tool updates the test database on this PC instead.) It lists 17 changes and asks `Do you want to push these migrations?` Type `Y` and press Enter. It ends with `Finished supabase db push.`
 
 ## 4. Login settings (Supabase dashboard, new project)
 

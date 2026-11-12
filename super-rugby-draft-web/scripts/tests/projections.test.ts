@@ -1,5 +1,6 @@
 // Run: npx tsx scripts/tests/projections.test.ts — expected points (lib/projections/project.ts).
 import {
+  rankMultiplier, seasonPrior,
   dutyKicker, expectedRole, kickingOrder, kickingPoints, projectPoints, projectTeamScore, scoringRate80, teamStrength,
   type PastGame, type StatRates,
 } from "../../lib/projections/project";
@@ -80,6 +81,22 @@ const o1Out = projectTeamScore({ lineup, captainId: "fh", viceId: "c1", projecti
 check("starter ruled out: bench outside back auto-subs in", o1Out.total === 14 * 20 + 20 + 5, String(o1Out.total));
 const capOut = projectTeamScore({ lineup, captainId: "fh", viceId: "c1", projection: proj, ruledOut: (id) => id === "fh" });
 check("captain ruled out: vice gets the x2 (and the bench halfback covers 10 if he can)", capOut.captainUsedId === "c1", String(capOut.total));
+
+// --- draft rank and Ethan's start-of-season notes
+check("draft rank: top players start above their position's average", rankMultiplier(1) > 1.4 && rankMultiplier(100) > 0.95 && rankMultiplier(100) < 1.05 && rankMultiplier(400) < 0.95);
+check("no draft rank: position average", rankMultiplier(null) === 1 && rankMultiplier(9999) === 1);
+const posAvg: StatRates = { tries: 4, tackles: 8, conversions: 1 };
+const top = seasonPrior(posAvg, 2);
+check("starting estimate scales play stats by rank, not goal kicking", top.tries! > 5 && top.conversions === 1);
+const lastYear = seasonPrior(posAvg, 100, { games: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((r) => game(r, { tackles: 16 })), frontRow: false });
+check("last season's own numbers move the starting estimate", lastYear.tackles! > 10, String(lastYear.tackles?.toFixed(1)));
+check("role note 'starter' with no team lists yet: expected to start", expectedRole([], undefined, "starter").start === 1);
+check("role note 'squad': not expected to play", expectedRole([], undefined, "squad").start === 0 && expectedRole([], undefined, "squad").bench === 0);
+check("role note fades once real team lists come in", expectedRole(["bench", "bench", "bench"], undefined, "starter").bench > 0.9);
+const moved = [{ id: "new10", games: [] as PastGame[], kickOrder: 1 }, { id: "old", games: [game(1, { conversions: 2 })] }];
+check("kicker note: first-choice kicker leads the order at the start", kickingOrder(moved, 1)[0] === "new10");
+const later = [{ id: "new10", games: [] as PastGame[], kickOrder: 1 }, { id: "old", games: [3, 4, 5, 6, 7].map((r) => game(r, { conversions: 3, penaltyGoals: 1 })) }];
+check("kicker note fades once someone else does the kicking", kickingOrder(later, 8)[0] === "old");
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll passed");
 process.exit(failures ? 1 : 0);

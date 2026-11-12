@@ -32,7 +32,7 @@ export async function GET(req: Request) {
 
 /**
  * Body: { season, player: { id?, firstName, lastName, teamCode, posAbbrev, secondaryPosAbbrev?,
- * draftRank?, externalId?, status?, active } }. No id = a new player.
+ * draftRank?, externalId?, expectedRole?, kickOrder?, status?, active } }. No id = a new player.
  */
 export async function POST(req: Request) {
   try {
@@ -48,6 +48,8 @@ export async function POST(req: Request) {
     const pos3 = String(p.thirdPosAbbrev ?? "").trim().toUpperCase() || null;
     const draftRank = p.draftRank === "" || p.draftRank == null ? null : Number(p.draftRank);
     const externalId = p.externalId === "" || p.externalId == null ? null : Number(p.externalId);
+    const expectedRole = ["starter", "bench", "squad"].includes(String(p.expectedRole)) ? String(p.expectedRole) : null;
+    const kickOrder = [1, 2].includes(Number(p.kickOrder)) ? Number(p.kickOrder) : null;
 
     const problems: string[] = [];
     if (!firstName || !lastName) problems.push("First and last name are needed");
@@ -86,6 +88,8 @@ export async function POST(req: Request) {
         pos3,
         draft_rank: draftRank,
         external_id: externalId,
+        expected_role: expectedRole,
+        kick_order: kickOrder,
         status: String(p.status ?? "").trim() || null,
         active: p.active !== false,
         updated_at: new Date().toISOString(),
