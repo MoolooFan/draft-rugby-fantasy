@@ -47,8 +47,8 @@ export function ShieldIcon({ size = 16, title }: { size?: number; title?: string
         <>
           <path d="M26.5 15 V17 M37.5 15 V17" stroke="#7f8892" strokeWidth={2} strokeLinecap="round" />
           <path d="M26.5 14.6 C25 13.8 23.6 15.6 22 14.8 C23 16 24.6 17 26.5 16.6 Z M37.5 14.6 C36 13.8 34.6 15.6 33 14.8 C34 16 35.6 17 37.5 16.6 Z" fill="#7f8892" />
-          <rect x={24.6} y={33.5} width={3.8} height={7.5} rx={1.3} fill="#7f8892" />
-          <rect x={35.6} y={33.5} width={3.8} height={7.5} rx={1.3} fill="#7f8892" />
+          <rect x={24.6} y={33.5} width={3.8} height={8.5} rx={1.3} fill="#7f8892" />
+          <rect x={35.6} y={33.5} width={3.8} height={8.5} rx={1.3} fill="#7f8892" />
         </>
       ) : null}
       <g transform="rotate(35 32 29)">
