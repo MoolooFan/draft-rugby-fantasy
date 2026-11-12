@@ -17,6 +17,7 @@ import path from "node:path";
 import { isFrontRow, playerPoints, statCountsFromRaw, STANDARD_SCORING, type StatCounts } from "../lib/scoring";
 import { statusKind } from "../lib/status/kind";
 import type { Lineup } from "../lib/scoring/week";
+import { lineupSpread, teamOutlook, winProbability } from "../lib/projections/live";
 import {
   DEFAULT_PARAMS, averageRates, dutyKicker, lineoutStealFactor, seasonPrior, expectedRole, kickingOrder, kickingPoints, opponentWeakness,
   projectPoints, projectPointsExpectedLineup, projectTeamScore, teamStrength,
@@ -162,7 +163,7 @@ function listRole(pl: Pl, R: number): ListRole {
 }
 
 type Stage = "after" | "start" | "mid";
-type Pred = { id: string; round: number; role: Role; actual: number; after: number; start: number; mid: number; namedOrPlayed: boolean };
+type Pred = { id: string; round: number; role: Role; actual: number; after: number; start: number; mid: number; namedOrPlayed: boolean; preSpread: number };
 
 function run(params: ProjectionParams = DEFAULT_PARAMS, firstRound = 3) {
   const preds: Pred[] = [];
@@ -213,11 +214,15 @@ function run(params: ProjectionParams = DEFAULT_PARAMS, firstRound = 3) {
       const chances = expectedRole(history);
       const start = outStart ? 0 : projectPointsExpectedLineup({ ...base, chances, kicking: kick("start") }, params);
       const mid = outMid ? 0 : projectPointsExpectedLineup({ ...base, chances, kicking: kick("mid") }, params);
+      const preSpread = outStart ? 0 : lineupSpread([
+        { chance: chances.start, projected: projectPoints({ ...base, role: "starting", kicking: kick("start") }, params) },
+        { chance: chances.bench, projected: projectPoints({ ...base, role: "bench" }, params) },
+      ]);
       const namedOrPlayed = !(role === "out" && !actualGame);
       // judged: everyone named or who played, plus anyone in contention from his recent lists
       // (so a player correctly held at 0 for an injury counts as a correct call)
       if (!namedOrPlayed && chances.start + chances.bench <= 0) continue;
-      if (R >= firstRound) preds.push({ id: pl.id, round: R, role, actual: actualGame?.points ?? 0, after, start, mid, namedOrPlayed });
+      if (R >= firstRound) preds.push({ id: pl.id, round: R, role, actual: actualGame?.points ?? 0, after, start, mid, namedOrPlayed, preSpread });
     }
   }
   return { preds, ruledOut };
@@ -288,5 +293,45 @@ for (const [label, stage] of [["after the team lists", "after"], ["start of week
       if (ah !== aw) { called++; if ((ph > pa) === (ah > aw)) right++; }
     }
     console.log(`  ${label.padEnd(21)} ${autoSubs ? "with auto-subs   " : "no auto-subs     "} miss ${(miss / n).toFixed(0)} pts (${((miss / sum) * 100).toFixed(1)}% of a score), bias ${(bias / n).toFixed(0)}, projected winner won ${right} of ${called} (${((right / called) * 100).toFixed(0)}%)`);
+  }
+}
+
+// ---- win probability (before kickoff, after the team lists): is it well calibrated?
+{
+  const outlook = (teamId: string, wf: number, wr: number, stage: Stage) => {
+    const sel = sels.filter((s) => s.team_id === teamId && s.week <= wf).sort((a, b) => b.week - a.week)[0];
+    if (!sel) return null;
+    const lineup: Lineup = {};
+    for (const [slot, p] of Object.entries(sel.lineup ?? {})) {
+      if (p && typeof p.id === "string") (lineup as Record<string, unknown>)[slot] = { ...p, id: p.id.toLowerCase() };
+    }
+    return teamOutlook({
+      lineup, captainId: sel.captain_id?.toLowerCase() ?? null, viceId: sel.vice_id?.toLowerCase() ?? null, nowMs: 0,
+      state: (id) => {
+        const out = full.ruledOut.get(`${id}|${wr}`)?.[stage] ?? true;
+        const pr = projBy.get(`${id}|${wr}`);
+        return { projected: out ? 0 : pr?.[stage] ?? 0, spread: stage === "after" || !pr ? undefined : pr.preSpread, actual: null, minutes: 0, kickoffMs: out ? null : 1, ruledOut: out };
+      },
+    });
+  };
+  for (const stage of ["after", "start"] as Stage[]) {
+    let brier = 0, n = 0, zz = 0;
+    const buckets = new Map<number, { n: number; won: number; p: number }>();
+    for (const m of matchups) {
+      const wf = Number(m.weekFantasy), wr = Number(m.weekReal);
+      const a = outlook(m.homeTeamId, wf, wr, stage), b = outlook(m.awayTeamId, wf, wr, stage);
+      if (!a || !b) continue;
+      const ah = Number(m.homeScore), aw = Number(m.awayScore);
+      if (ah === aw) continue;
+      const p = winProbability(a, b), won = ah > aw ? 1 : 0;
+      brier += (p - won) ** 2; n++;
+      zz += (((ah - aw) - (a.expected - b.expected)) ** 2) / (a.variance + b.variance);
+      const k = Math.min(4, Math.floor(Math.max(p, 1 - p) * 10) - 5);
+      const bk = buckets.get(k) ?? { n: 0, won: 0, p: 0 };
+      bk.n++; bk.p += Math.max(p, 1 - p); bk.won += (p >= 0.5 ? won : 1 - won);
+      buckets.set(k, bk);
+    }
+    console.log(`\nWIN PROBABILITY (${stage === "after" ? "after the team lists" : "start of week"}, ${n} matchups): Brier ${(brier / n).toFixed(3)} (coin flip 0.250); spread check ${Math.sqrt(zz / n).toFixed(2)} (1.00 = right size)`);
+    for (const [k, b] of [...buckets].sort((x, y) => x[0] - y[0])) console.log(`  favourite given ${(50 + k * 10)}-${60 + k * 10}%: ${b.n} matchups, said ${((b.p / b.n) * 100).toFixed(0)}% on average, favourite won ${b.won} (${((b.won / b.n) * 100).toFixed(0)}%)`);
   }
 }
