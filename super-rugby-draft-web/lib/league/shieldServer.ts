@@ -23,7 +23,7 @@ export async function loadShield(db: SupabaseClient, leagueId: string): Promise<
   const lineage = await leagueLineage(db, leagueId);
   const { data: leagues, error } = await db
     .from("leagues")
-    .select("id, season, shield_enabled, shield_name")
+    .select("id, season, shield_enabled, shield_name, shield_toggles")
     .or(`lineage_id.eq.${lineage},id.eq.${lineage}`);
   if (error) throw error;
   const ids = (leagues ?? []).map((l) => l.id);
@@ -42,6 +42,7 @@ export async function loadShield(db: SupabaseClient, leagueId: string): Promise<
     leagueId: l.id,
     season: Number(l.season),
     enabled: l.shield_enabled !== false,
+    toggles: Array.isArray(l.shield_toggles) ? l.shield_toggles : [],
     teams: (teams.data ?? []).filter((t) => t.league_id === l.id).map((t) => ({ id: t.id, owner: String(t.owner_username ?? t.id), name: t.name })),
     games: (matchups.data ?? [])
       .filter((m) => m.league_id === l.id && m.home_team_id)

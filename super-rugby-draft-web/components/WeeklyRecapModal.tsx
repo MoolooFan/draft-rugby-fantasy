@@ -248,7 +248,7 @@ export function WeeklyRecapModal({ leagueId, leagueName }: { leagueId: string | 
                   {recap.shield?.next ? (
                     <div style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 900, color: "#6a4426" }}>
                       <ShieldIcon size={16} />
-                      {recap.shield.next === "defending" ? `Shield game: you're defending ${recap.shield.name} at home` : `Shield game: you're challenging for ${recap.shield.name} away`}
+                      {recap.shield.next === "defending" ? `Shield defence: ${recap.shield.name} on the line at home` : `Shield challenge: you can take ${recap.shield.name} away`}
                     </div>
                   ) : null}
                 </div>

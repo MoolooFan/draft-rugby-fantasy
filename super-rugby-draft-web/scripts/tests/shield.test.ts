@@ -77,6 +77,13 @@ const s3: ShieldSeason = { leagueId: "L3", season: 2029, enabled: true, teams: [
 check("DT back the season after missing one: no claim, Sam keeps it", computeShield([s1, noDtNoah, s3]).holder?.owner === "sam");
 check("switched off for a season: nothing happens, the holder keeps it", computeShield([s1, { ...s2, enabled: false }]).holder?.reign.defences === 3);
 
+// switched off part-way: the holder keeps it whatever happens while it's off
+const offMid: ShieldSeason = { ...s1, toggles: [{ week: 6, on: false }, { week: 8, on: true }] };
+const om = computeShield([offMid]);
+check("switched off for rounds 6-7: Josh keeps it (he'd have lost it in round 6)", om.reigns[0]?.owner === "josh" && !om.events.some((e) => e.week === 6 || e.week === 7));
+check("...and it's back on from round 8", om.events.some((e) => e.week >= 8));
+check("switched on part-way after starting off: awarded on that round's top score", computeShield([{ ...s1, enabled: true, toggles: [{ week: 4, on: true }] }]).events[0]?.week === 4);
+
 // next shield game: the holder's next home game
 const live: ShieldSeason = { ...s1, games: games(2027, R, 10) };
 const st = computeShield([live]);

@@ -86,7 +86,18 @@ export async function POST(req: Request) {
   }
   if ("bonusPoints" in patch) dbPatch.bonus_points = patch.bonusPoints !== false;
   // The Shield can be switched on/off and renamed any time (off = that season doesn't count)
-  if ("shieldEnabled" in patch) dbPatch.shield_enabled = patch.shieldEnabled !== false;
+  if ("shieldEnabled" in patch) {
+    const on = patch.shieldEnabled !== false;
+    dbPatch.shield_enabled = on;
+    // switched off / on part-way: from the first round not finalised yet (lib/league/shield.ts)
+    const { data: cur } = await supabaseAdmin.from("leagues").select("shield_enabled, shield_toggles").eq("id", leagueId).maybeSingle();
+    if (cur && (cur.shield_enabled !== false) !== on) {
+      const { data: done } = await supabaseAdmin.from("league_week_finalisations").select("week").eq("league_id", leagueId).order("week", { ascending: false }).limit(1);
+      const week = (done?.[0]?.week ?? 0) + 1;
+      const toggles = (Array.isArray(cur.shield_toggles) ? cur.shield_toggles : []).filter((t: { week: number }) => t.week < week);
+      dbPatch.shield_toggles = [...toggles, { week, on }];
+    }
+  }
   if ("shieldName" in patch) dbPatch.shield_name = cleanShieldName(patch.shieldName);
 
   if ("startRound" in patch) dbPatch.start_round = patch.startRound ?? null;

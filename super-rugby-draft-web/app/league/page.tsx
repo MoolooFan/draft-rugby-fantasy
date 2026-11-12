@@ -1051,8 +1051,14 @@ if (isBye) {
         {isHomeBye ? realTeam : r.home}
       </div>
 
-      <div style={{ opacity: 0.8, fontWeight: 700 }}>
+      <div style={{ opacity: 0.8, fontWeight: 700, textAlign: "center" }}>
         {isBye ? "BYE" : "v"}
+        {!isBye && !played && league?.shield?.enabled && league.shield.next?.week === w.weekNo &&
+        league.shield.next.homeTeamId === r.homeTeamId && league.shield.next.awayTeamId === r.awayTeamId ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 3, marginTop: 2, fontSize: 8, fontWeight: 900, letterSpacing: 0.5, color: "#6a4426" }}>
+            <ShieldIcon size={12} /> SHIELD CHALLENGE
+          </div>
+        ) : null}
       </div>
 
       <div style={{ textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

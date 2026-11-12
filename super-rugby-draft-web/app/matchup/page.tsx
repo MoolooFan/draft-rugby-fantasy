@@ -1347,10 +1347,20 @@ const rightBenchScore = totalForSlots(effectiveRightLineup, rightEffC, BENCH_SLO
 const shieldInfo = activeLeague?.shield?.enabled ? activeLeague.shield : null;
 const pairIs = (a: string | null | undefined, b: string | null | undefined) =>
   !!a && !!b && ((a === leftTeamId && b === rightTeamId) || (a === rightTeamId && b === leftTeamId));
-const isShieldGame = !!shieldInfo && displayWeek > 0 && (
-  shieldInfo.games.some((g) => g.week === displayWeek && pairIs(g.holderTeamId, g.otherTeamId)) ||
-  (shieldInfo.next?.week === displayWeek && pairIs(shieldInfo.next.homeTeamId, shieldInfo.next.awayTeamId))
-);
+// the team defending it in this game (the holder at home); the other team is challenging
+const shieldDefender: string | null = (() => {
+  if (!shieldInfo || displayWeek <= 0) return null;
+  const g = shieldInfo.games.find((x) => x.week === displayWeek && pairIs(x.holderTeamId, x.otherTeamId));
+  if (g) return g.kind === "defended" ? g.holderTeamId : g.otherTeamId;
+  const n = shieldInfo.next;
+  return n && n.week === displayWeek && pairIs(n.homeTeamId, n.awayTeamId) ? n.homeTeamId : null;
+})();
+const shieldTag = (teamId: string | null) =>
+  !shieldDefender || !teamId ? null : (
+    <div style={{ marginTop: 2, fontSize: 9, fontWeight: 900, letterSpacing: 0.6, color: "#6a4426" }}>
+      {teamId === shieldDefender ? "SHIELD DEFENCE" : "SHIELD CHALLENGE"}
+    </div>
+  );
 const holdsShield = (teamId: string | null) => !!shieldInfo && !!teamId && shieldInfo.holderTeamId === teamId;
 
 // ---- Expected points + win probability (F2, ESPN-style): while the week isn't final.
@@ -1715,6 +1725,7 @@ return (
     {streakText(leftStreak)}
   </span>
 </div>
+{mounted ? shieldTag(leftTeamId) : null}
 
             </div>
 
@@ -1735,6 +1746,7 @@ return (
     {streakText(rightStreak)}
   </span>
 </div>
+{mounted ? shieldTag(rightTeamId) : null}
 
             </div>
           </div>
@@ -1763,11 +1775,7 @@ return (
         {scoresLocked ? "FINAL" : displayLocked ? "LIVE" : "UPCOMING"}
       </div>
     ) : null}
-    {mounted && isShieldGame ? (
-      <div style={{ marginTop: 3, fontSize: 9, fontWeight: 900, letterSpacing: 0.6, color: "#6a4426" }} title={`${shieldInfo?.name}: the holder is at home`}>
-        SHIELD GAME
-      </div>
-    ) : null}
+
   </div>
 
   {/* Right total pulled inward */}

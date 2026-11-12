@@ -1838,10 +1838,10 @@ const NoLeague = useStableComponent(NoLeague__render);
               <div style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 11, fontWeight: 900 }}>
                 <ShieldIcon size={18} />
                 {upcomingShield === "defending"
-                  ? `Shield game: you're defending ${activeLeague?.shield?.name} at home`
+                  ? `Shield defence: ${activeLeague?.shield?.name} on the line at home`
                   : upcomingShield === "challenging"
-                    ? `Shield game: you're challenging for ${activeLeague?.shield?.name} away`
-                    : `Shield game: ${activeLeague?.shield?.name} is on the line`}
+                    ? `Shield challenge: you can take ${activeLeague?.shield?.name} away`
+                    : `Shield challenge: ${activeLeague?.shield?.name} on the line`}
               </div>
             ) : null}
 

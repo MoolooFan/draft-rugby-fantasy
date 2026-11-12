@@ -12,7 +12,8 @@
 // - It carries over to next season (leagues are linked by lineage). If the holder doesn't come
 //   back, it goes to the team that held it before them; if they're gone too, it's awarded again
 //   like the first time. Once someone else holds it, a returning team has no claim.
-// - A league can switch it off (that season doesn't count; the holder keeps it) and rename it.
+// - A league can switch it off and on any time (from that round on; while it's off the holder
+//   keeps it whatever the results) and rename it.
 // - Started fresh in 2027 (SHIELD_FIRST_SEASON): earlier seasons don't count.
 
 export const SHIELD_FIRST_SEASON = 2027;
@@ -40,7 +41,10 @@ export type ShieldGame = {
 export type ShieldSeason = {
   leagueId: string;
   season: number;
+  /** switched on now */
   enabled: boolean;
+  /** when it was switched off / on during the season (each from that week on) */
+  toggles?: Array<{ week: number; on: boolean }>;
   /** owner = the person (username), which links teams across seasons */
   teams: Array<{ id: string; owner: string; name: string }>;
   /** regular-season games only */
@@ -85,6 +89,14 @@ export type ShieldState = {
   holder: { owner: string; teamId: string | null; reign: ShieldReign } | null;
 };
 
+/** Was the shield on for this week's games? (no changes recorded: as it is now) */
+export function shieldOnAt(s: Pick<ShieldSeason, "enabled" | "toggles">, week: number): boolean {
+  const t = [...(s.toggles ?? [])].sort((a, b) => a.week - b.week);
+  if (!t.length) return s.enabled;
+  const before = t.filter((x) => x.week <= week);
+  return before.length ? before[before.length - 1].on : !t[0].on;
+}
+
 const scoreOf = (g: ShieldGame, side: "home" | "away") => Number(side === "home" ? g.homeScore : g.awayScore);
 const triesOf = (g: ShieldGame, side: "home" | "away") => Number((side === "home" ? g.homeTries : g.awayTries) ?? 0);
 
@@ -117,7 +129,7 @@ export function computeShield(seasons: ShieldSeason[]): ShieldState {
   };
 
   for (const s of [...seasons].filter((x) => x.season >= SHIELD_FIRST_SEASON).sort((a, b) => a.season - b.season)) {
-    if (!s.enabled) continue;
+    if (!s.enabled && !(s.toggles ?? []).some((t) => t.on)) continue; // off all season
     const teamOfOwner = (owner: string) => s.teams.find((t) => t.owner === owner) ?? null;
     const weeks = [...new Set(s.games.map((g) => g.week))].sort((a, b) => a - b);
 
@@ -152,6 +164,7 @@ export function computeShield(seasons: ShieldSeason[]): ShieldState {
     for (const w of weeks) {
       const games = s.games.filter((g) => g.week === w);
       if (!games.every((g) => g.final)) break; // stop at the first week not finished
+      if (!shieldOnAt(s, w)) continue; // switched off: nothing changes hands
       if (!holderTeam) {
         const top = topOfWeek(games);
         if (!top) continue;
