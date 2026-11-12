@@ -43,8 +43,8 @@ export function ShieldIcon({ size = 16, title }: { size?: number; title?: string
       <path d={SHIELD_PLATE} fill="#e4e7eb" stroke="#7f8892" strokeWidth={1.6} />
       <path d="M26.5 15 V41 M37.5 15 V41 M26.5 31 H37.5" stroke="#7f8892" strokeWidth={2} strokeLinecap="round" fill="none" />
       <g transform="rotate(35 32 27)">
-        <ellipse cx={32} cy={27} rx={4.4} ry={6.8} fill="#9aa2ab" stroke="#6b737c" strokeWidth={1} />
-        <path d="M32 21 V33" stroke="#eef0f2" strokeWidth={0.9} />
+        <ellipse cx={32} cy={27} rx={5.6} ry={8.6} fill="#9aa2ab" stroke="#6b737c" strokeWidth={1} />
+        <path d="M32 19.6 V34.4" stroke="#eef0f2" strokeWidth={0.9} />
       </g>
     </svg>
   );
