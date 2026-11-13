@@ -5,6 +5,8 @@
 // Review button), taunts and the league's automated posts. New messages are checked every few
 // seconds while a conversation is open. Rules: lib/chat/common.ts.
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import TauntGraphic from "@/components/TauntGraphic";
+import type { TauntGraphic as TauntGraphicData } from "@/lib/chat/tauntArt";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppMenu } from "@/components/AppMenu";
 import { TeamAvatar } from "@/components/TeamAvatar";
@@ -280,6 +282,10 @@ function ChatPageInner() {
             );
           })()
         ) : (
+          <>
+          {m.kind === "taunt" && (m.meta as { graphic?: TauntGraphicData | null })?.graphic ? (
+            <TauntGraphic graphic={(m.meta as { graphic: TauntGraphicData }).graphic} align={mine ? "end" : "start"} />
+          ) : null}
           <div style={base}>
             {m.kind === "taunt" ? <div style={{ fontSize: 10, fontWeight: 900, opacity: 0.85, marginBottom: 2 }}>TAUNT</div> : null}
             {m.image_url ? (
@@ -288,6 +294,7 @@ function ChatPageInner() {
             ) : null}
             {m.body}
           </div>
+          </>
         )}
         <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.45, padding: "0 4px" }}>{timeText(m.created_at)}</div>
       </div>

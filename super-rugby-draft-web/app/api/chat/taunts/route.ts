@@ -12,6 +12,14 @@ import { postMessage } from "@/lib/chat/server";
 import { getSeason, realRoundsForWeek, SEASONS } from "@/lib/season";
 import { statCountsFromRaw } from "@/lib/scoring";
 import { STARTER_SLOTS } from "@/lib/scoring/week";
+import { getLeagueScoringRules } from "@/lib/scoring/leagueRules";
+import { cardLine, pickArt, skinColour, teamColours, tryLine, type TauntGraphic } from "@/lib/chat/tauntArt";
+import { loadSkinTones, loadTauntArt, loadTeamColours } from "@/lib/chat/tauntArtServer";
+
+const TEAM_NAME: Record<string, string> = {
+  BLU: "Blues", BRU: "Brumbies", CHI: "Chiefs", CRU: "Crusaders", DRU: "Drua", FOR: "Force",
+  HIG: "Highlanders", HUR: "Hurricanes", MOA: "Moana", MOP: "Moana", RED: "Reds", WAR: "Waratahs",
+};
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +30,7 @@ async function context(leagueId: string, week: number) {
   const { data: games } = await supabaseAdmin.from("league_matchups").select("weeks, home_team_id, away_team_id").eq("league_id", leagueId);
   const game = (games ?? []).find((g) => (g.weeks ?? []).map(Number).includes(week) && (g.home_team_id === ctx.teamId || g.away_team_id === ctx.teamId) && g.home_team_id && g.away_team_id);
   const opponentId = game ? (game.home_team_id === ctx.teamId ? game.away_team_id : game.home_team_id) : null;
-  if (!opponentId || !SEASONS[season]) return { ctx, season, opponentId: null, events: [] as TauntEvent[], names: new Map<string, string>() };
+  if (!opponentId || !SEASONS[season]) return { ctx, season, opponentId: null, events: [] as TauntEvent[], names: new Map<string, string>(), teamOf: new Map<string, string>(), totals: new Map<string, { tries: number; yellowCards: number; redCards: number }>() };
 
   // each team's starters this round (its saved lineup, or its latest earlier one)
   const starters = async (teamId: string) => {
@@ -46,9 +54,50 @@ async function context(leagueId: string, week: number) {
     totals.set(r.internal_player_id, t);
   }
   const events = tauntEvents({ week, myStarters: mine, opponentStarters: theirs, statsOf: (id) => totals.get(id) ?? null });
-  const { data: players } = ids.length ? await supabaseAdmin.from("players").select("id, first_name, last_name").eq("season", season).in("id", ids) : { data: [] };
+  const { data: players } = ids.length ? await supabaseAdmin.from("players").select("id, first_name, last_name, team_code").eq("season", season).in("id", ids) : { data: [] };
   const names = new Map((players ?? []).map((p) => [p.id, `${p.first_name} ${p.last_name}`]));
-  return { ctx, season, opponentId, events, names };
+  const teamOf = new Map((players ?? []).map((p) => [p.id, String(p.team_code ?? "")]));
+  return { ctx, season, opponentId, events, names, teamOf, totals };
+}
+
+/** The graphic sent with a taunt (lib/chat/tauntArt.ts): points card, then TRY! or the card. */
+async function tauntGraphic(input: {
+  leagueId: string;
+  season: number;
+  week: number;
+  ev: TauntEvent;
+  name: string;
+  teamCode: string;
+  tries: number;
+}): Promise<TauntGraphic | null> {
+  try {
+    const [rules, saved] = await Promise.all([getLeagueScoringRules(supabaseAdmin, input.leagueId), loadTeamColours(supabaseAdmin)]);
+    const colours = teamColours(input.teamCode, saved);
+    const teamName = TEAM_NAME[input.teamCode.toUpperCase()] ?? input.teamCode;
+    if (input.ev.kind === "card") {
+      const card = input.ev.card === "red" ? "red" : "yellow";
+      const points = card === "red" ? rules.perEvent.redCards : rules.perEvent.yellowCards;
+      return { type: "card", card, points, line: cardLine(input.name, card), teamName, colours };
+    }
+    const [arts, tones, status] = await Promise.all([
+      loadTauntArt(supabaseAdmin, { activeOnly: true }),
+      loadSkinTones(supabaseAdmin, [input.ev.playerId]),
+      supabaseAdmin.from("player_week_status").select("status").eq("season", input.season).eq("week", input.week).eq("player_id", input.ev.playerId).maybeSingle(),
+    ]);
+    const num = String(status.data?.status ?? "").match(/#\s*(\d{1,2})/);
+    return {
+      type: "try",
+      points: rules.perEvent.tries * Math.max(1, input.tries),
+      line: tryLine(input.name, Math.max(1, input.tries)),
+      teamName,
+      colours,
+      skin: skinColour(tones.get(input.ev.playerId)),
+      art: pickArt(arts, input.ev.playerId),
+      number: num ? Number(num[1]) : null,
+    };
+  } catch {
+    return null; // the taunt still goes, just without the graphic
+  }
 }
 
 export async function GET(req: Request) {
@@ -85,7 +134,7 @@ export async function POST(req: Request) {
     const eventKey = String(b?.eventKey ?? "").trim();
     const lineId = String(b?.lineId ?? "").trim();
     if (!leagueId || !Number.isInteger(week) || !eventKey || !lineId) return NextResponse.json({ ok: false, error: "Missing details" }, { status: 400 });
-    const { ctx, opponentId, events, names } = await context(leagueId, week);
+    const { ctx, season, opponentId, events, names, teamOf, totals } = await context(leagueId, week);
     const ev = events.find((e) => e.key === eventKey);
     if (!opponentId || !ev) return NextResponse.json({ ok: false, error: "Nothing to taunt about there" }, { status: 400 });
     const { data: line } = await supabaseAdmin.from("taunt_lines").select("text, kind").eq("id", lineId).eq("active", true).maybeSingle();
@@ -97,7 +146,19 @@ export async function POST(req: Request) {
       senderTeamId: ctx.teamId,
       kind: "taunt",
       body: fillTaunt(line.text, { player: names.get(ev.playerId) ?? "your man", opponent, card: ev.card }),
-      meta: { event: ev, week },
+      meta: {
+        event: ev,
+        week,
+        graphic: await tauntGraphic({
+          leagueId,
+          season,
+          week,
+          ev,
+          name: names.get(ev.playerId) ?? "Your man",
+          teamCode: teamOf.get(ev.playerId) ?? "",
+          tries: totals.get(ev.playerId)?.tries ?? 1,
+        }),
+      },
       dedupeKey: `taunt:${ctx.teamId}:${ev.key}`,
     });
     return NextResponse.json({ ok: true });
