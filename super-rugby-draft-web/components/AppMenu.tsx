@@ -17,7 +17,7 @@ type ActiveMenu =
   | "Draft Room"
   | "Fixtures"
   | "Team Details"
-  | "Player Pool"
+  | "Stats Hub"
   | "Account"
   | "Admin";
 
@@ -53,18 +53,19 @@ export function AppMenu({
     if (item === "Team Selection") router.push("/team-selection");
     if (item === "Fixtures") router.push("/fixtures");
     if (item === "Team Details") router.push("/team-details");
-    if (item === "Player Pool") router.push("/player-pool");
+    if (item === "Stats Hub") router.push("/stats-hub");
     if (item === "Account") router.push("/account");
     if (item === "Admin") router.push("/admin");
 
   }
 
-  // No league joined yet: only the pages that work without one (plan item E2).
+  // No league joined yet: only the pages that work without one (plan item E2). The Stats Hub
+  // (was the no-league Player Pool) is for everyone (16 Nov 2026).
   const hasLeague = (leagues ?? []).length > 0;
   const items: ActiveMenu[] = [
     ...((hasLeague
-      ? ["Dashboard", "Matchup", "Team Selection", "Transactions", "League", "Draft Room", "Fixtures", "Team Details", "Account"]
-      : ["Dashboard", "League", "Fixtures", "Player Pool", "Account"]) as ActiveMenu[]),
+      ? ["Dashboard", "Matchup", "Team Selection", "Transactions", "Stats Hub", "League", "Draft Room", "Fixtures", "Team Details", "Account"]
+      : ["Dashboard", "League", "Fixtures", "Stats Hub", "Account"]) as ActiveMenu[]),
     // only for the site admin (the server checks again on the admin page)
     ...(getActiveUserProfile()?.isSiteAdmin ? (["Admin"] as ActiveMenu[]) : []),
   ];

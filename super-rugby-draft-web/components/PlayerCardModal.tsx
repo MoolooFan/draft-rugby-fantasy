@@ -6,6 +6,7 @@ import { PointsBreakdownModal } from "@/components/PointsBreakdownModal";
 
 import { usePlayersStore, usePlayers } from "@/lib/players/store";
 import { isFrontRow, pointsFromRow, statPoints, STATS, type StatKey, roundPoints } from "@/lib/scoring";
+import { useCompareStore } from "@/lib/players/compareStore";
 import { currentSeasonYear, statsSeasonYear, roundLabel } from "@/lib/season";
 import { cachedJson } from "@/lib/cachedJson";
 import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
@@ -460,6 +461,7 @@ const [selectedRound, setSelectedRound] = useState<PlayerRound | null>(null);
 );
 
   const [tab, setTab] = useState<PlayerCardTab>(initialTab);
+  const openCompare = useCompareStore((s) => s.openWith);
 
 // player is always set here (PlayerCardModal only renders this when it is)
 const p = player;
@@ -727,6 +729,29 @@ const teamLabelFull =
               }}
             >
               ×
+            </button>
+
+            {/* Compare with another player (components/PlayerCompare.tsx, opens over this card) */}
+            <button
+              onClick={() => openCompare(p.id)}
+              aria-label={`Compare ${p.firstName} ${p.lastName} with another player`}
+              style={{
+                position: "absolute",
+                top: 12,
+                right: 40,
+                zIndex: 3,
+                height: 24,
+                padding: "0 10px",
+                borderRadius: 999,
+                border: "1px solid rgba(255,255,255,0.85)",
+                background: "rgba(15,23,42,0.35)",
+                color: "white",
+                fontSize: 11,
+                fontWeight: 900,
+                cursor: "pointer",
+              }}
+            >
+              ⇄ Compare
             </button>
 
             <div>
