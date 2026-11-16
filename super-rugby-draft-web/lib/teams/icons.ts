@@ -105,13 +105,13 @@ function ball(c: string): string {
  *  sole line) and three stripes. */
 function boot(c: string, d: string): string {
   const upper =
-    "M10 45 C7 45 5.8 43.6 6.6 42.2 C8 40.8 11.6 40 15.6 39.2 C21.8 38 28.4 33.6 33.6 28.4 L37.4 27.4 C40 30.2 45 30.8 49.4 28.2 L52.6 26.6 C55.8 28.6 57.6 32.8 57.6 37.4 C57.6 40.6 57 43.2 55.8 45 Z";
+    "M7.8 45 C7.3 43.4 7.6 41.2 9.6 40 C11.4 39 13.6 38.7 15.6 38.4 C21.8 37.2 28.4 33.6 33.6 28.4 L37.4 27.4 C40 30.2 45 30.8 49.4 28.2 L52.6 26.6 C55.8 28.6 57.6 32.8 57.6 37.4 C57.6 40.6 57 43.2 55.8 45 Z";
   const sole = "M7.6 45 H56.6 C56.8 46.9 56 47.9 54.4 47.9 H10 C8.4 47.9 7.4 46.9 7.6 45 Z";
   const stud = (x: number) => `<path d="M${x} 47.6 l0.8 2.8 h1.8 l0.8 -2.8 Z" fill="${c}" stroke="${INK}" stroke-width="0.7" stroke-linejoin="round"/>`;
   // laces: short bars across the lace area, set in from the top edge so they stay on the boot
   const lace = (t: number) => {
-    const x = 15.6 + 18 * t + 1.18, y = 39.2 - 10.8 * t + 1.97;
-    return `<path d="M${(x - 0.77).toFixed(2)} ${(y - 1.29).toFixed(2)} L${(x + 0.77).toFixed(2)} ${(y + 1.29).toFixed(2)}"/>`;
+    const x = 15.6 + 18 * t + 1.13, y = 38.4 - 10 * t + 2.0;
+    return `<path d="M${(x - 0.74).toFixed(2)} ${(y - 1.3).toFixed(2)} L${(x + 0.74).toFixed(2)} ${(y + 1.3).toFixed(2)}"/>`;
   };
   return `<g transform="translate(32 33) rotate(-16) scale(1.06) translate(-32.4 -37.5)">
     ${[10.6, 16.4, 22.2, 43.4, 49.6].map(stud).join("")}
@@ -119,7 +119,7 @@ function boot(c: string, d: string): string {
     <path d="${upper}" fill="${c}" stroke="${INK}" stroke-width="0.85" stroke-linejoin="round"/>
     <g stroke="${d}" fill="none" stroke-linecap="round">
       <path d="M8.6 45 H56" stroke-width="0.9"/>
-      <path d="M8.6 43.6 C9.4 42.3 11 41.6 13.4 41.2 M11.6 44.2 C12.4 43.3 13.8 42.8 16 42.4" stroke-width="0.7"/>
+      <path d="M9.2 43.4 C9.8 42 11.2 41.2 13.4 40.6 M11.8 44.2 C12.5 43.1 13.9 42.4 16 42" stroke-width="0.7"/>
       <path d="M17 42.2 C21.6 41 26.2 38.6 30.4 35.6" stroke-width="0.7" opacity="0.85"/>
       <path d="M38 28.9 C40.6 31.4 45.2 31.9 49.4 29.8" stroke-width="1"/>
       <path d="M52.8 30.4 C55 32.4 55.8 36.4 55.2 42.6" stroke-width="0.8"/>
