@@ -100,26 +100,32 @@ function ball(c: string): string {
   </g>`;
 }
 
-/** Boot: toe to the left, heel raised, low and sleek; the colour with white cut-out lines and two stripes. */
+/** Boot (from Ethan's reference): small rounded toe to the left, top rising over the laces to a raised heel;
+ *  the colour with white / black cut-out lines (laces inside the lace area, collar, heel, toe stitching,
+ *  sole line) and two stripes. */
 function boot(c: string, d: string): string {
   const upper =
-    "M9 44 C5.8 44 5.2 40 7.4 38.2 C9.4 36.6 12.4 36 15.4 35.4 C22.4 34 29.4 30.6 34 26.6 L38 25.6 C40.6 28.4 45.4 29 49.4 26 L52.6 24.2 C55.6 26.4 57.6 31 57.6 35.4 C57.6 39.2 57 41.8 55.8 44 Z";
-  const sole = "M8 44 H56.4 C56.6 45.8 55.8 46.8 54.2 46.8 H10.4 C8.8 46.8 7.8 45.8 8 44 Z";
-  const stud = (x: number) => `<path d="M${x} 46.6 l1.1 3.4 h2 l1.1 -3.4 Z" fill="${c}" stroke="${INK}" stroke-width="0.8" stroke-linejoin="round"/>`;
-  const lace = (x: number, y: number) => `<path d="M${x - 1.4} ${y - 1.6} L${x + 1.4} ${y + 1.6}"/>`;
-  return `<g transform="translate(32 34) rotate(-12) translate(-32.5 -36)">
-    ${[11, 16.6, 22.4, 28, 43.4, 49.6].map(stud).join("")}
-    <path d="${sole}" fill="${c}" stroke="${INK}" stroke-width="0.9" stroke-linejoin="round"/>
-    <path d="${upper}" fill="${c}" stroke="${INK}" stroke-width="0.9" stroke-linejoin="round"/>
+    "M9 45 C6.2 45 5.6 41.4 7.6 39.6 C9.4 38 12.4 37.4 16 36.8 C22 35.6 28.6 32.6 33.6 28.4 L37.4 27.4 C40 30.2 45 30.8 49.4 28.2 L52.6 26.6 C55.8 28.6 57.6 32.8 57.6 37.4 C57.6 40.6 57 43.2 55.8 45 Z";
+  const sole = "M7.6 45 H56.6 C56.8 46.9 56 47.9 54.4 47.9 H10 C8.4 47.9 7.4 46.9 7.6 45 Z";
+  const stud = (x: number) => `<path d="M${x} 47.6 l1.1 3.5 h2.2 l1.1 -3.5 Z" fill="${c}" stroke="${INK}" stroke-width="0.7" stroke-linejoin="round"/>`;
+  // laces: short bars across the lace area, set in from the top edge so they stay on the boot
+  const lace = (t: number) => {
+    const x = 16 + 17.6 * t + 0.99, y = 36.8 - 8.4 * t + 2.08;
+    return `<path d="M${(x - 0.65).toFixed(2)} ${(y - 1.36).toFixed(2)} L${(x + 0.65).toFixed(2)} ${(y + 1.36).toFixed(2)}"/>`;
+  };
+  return `<g transform="translate(32 33) rotate(-16) scale(1.06) translate(-32.4 -37.5)">
+    ${[10.6, 16.4, 22.2, 43.4, 49.6].map(stud).join("")}
+    <path d="${sole}" fill="${c}" stroke="${INK}" stroke-width="0.85" stroke-linejoin="round"/>
+    <path d="${upper}" fill="${c}" stroke="${INK}" stroke-width="0.85" stroke-linejoin="round"/>
     <g stroke="${d}" fill="none" stroke-linecap="round">
-      <path d="M8.8 44 H55.8" stroke-width="1"/>
-      <path d="M9.4 41.8 C9.6 39.6 11.4 38.4 14.4 37.8 M12.6 42.4 C13 40.6 14.6 39.6 17.4 39" stroke-width="0.8"/>
-      <path d="M38.4 26.9 C41 29.6 45.4 30.2 49.6 27.4" stroke-width="1.2"/>
-      <path d="M52.6 28.4 C55 30.8 55.8 35 55 40.6" stroke-width="0.9"/>
-      <path d="M17.4 37.6 C24 36 30.4 32.6 34.6 28.4" stroke-width="0.7" opacity="0.85"/>
-      <g stroke-width="1.05">${lace(21.6, 34.4)}${lace(25.4, 32.6)}${lace(28.9, 30.6)}${lace(32.2, 28.4)}</g>
+      <path d="M8.6 45 H56" stroke-width="0.9"/>
+      <path d="M9 42.8 C9.6 41 11.4 40 14.2 39.6 M11.8 43.6 C12.4 42.3 13.8 41.6 16.2 41.2" stroke-width="0.75"/>
+      <path d="M17.4 40.4 C22 39.2 26.4 37 30.4 34.4" stroke-width="0.7" opacity="0.85"/>
+      <path d="M38 28.9 C40.6 31.4 45.2 31.9 49.4 29.8" stroke-width="1"/>
+      <path d="M52.8 30.4 C55 32.4 55.8 36.4 55.2 42.6" stroke-width="0.8"/>
+      <g stroke-width="0.95">${[0.3, 0.47, 0.64, 0.81].map(lace).join("")}</g>
     </g>
-    <path d="M30.8 33.4 L33.6 31.6 L39.4 43.4 L36.3 43.4 Z M35.8 30.4 L38.6 28.8 L44.6 43.4 L41.5 43.4 Z" fill="${d}"/>
+    <path d="M30.6 36 L33.4 34.6 L38.2 44.4 L35.2 44.4 Z M35.6 33.6 L38.4 32.4 L43.2 44.4 L40.2 44.4 Z" fill="${d}"/>
   </g>`;
 }
 
