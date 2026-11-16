@@ -66,11 +66,9 @@ export function detailColour(colour: string): string {
 /** A darker shade of a colour (for the ball's inner trim line). */
 function shade(hex: string, f: number): string {
   const v = parseInt(hex.slice(1), 16);
-  const ch = (x: number) => Math.round(x * f).toString(16).padStart(2, "0");
+  const ch = (x: number) => Math.max(0, Math.min(255, Math.round(x * f))).toString(16).padStart(2, "0");
   return `#${ch((v >> 16) & 255)}${ch((v >> 8) & 255)}${ch(v & 255)}`;
 }
-
-const OUT = `stroke="${INK}" stroke-width="0.9" stroke-linejoin="round"`;
 
 /** Posts: the Shield's posts (components/AwardIcons.tsx), always white; flags and pads in the colour. */
 function posts(c: string): string {
@@ -86,53 +84,64 @@ function posts(c: string): string {
   </g>`;
 }
 
-/** Ball: always white, the trim (a band just inside the edge) in the colour. */
+/** Ball: lying nearly flat (tilted up to the right), bold outline, shaded white, two trim bands hugging the top edge. */
 function ball(c: string): string {
-  return `<g transform="rotate(-35 32 32)">
-    <ellipse cx="32" cy="32" rx="14.5" ry="22" fill="#f1f5f9"/>
-    <path d="M32 10 C22 10 17.5 21 17.5 32 C17.5 43 22 54 32 54 C26 50 23.5 41 23.5 32 C23.5 23 26 14 32 10 Z" fill="#ffffff"/>
-    <path d="M39.5 13.5 C44 18 46.5 25 46.5 32 C46.5 43 41 52 32 54 C38 48.5 41.5 41 41.5 32 C41.5 25 40.8 19 39.5 13.5 Z" fill="#cbd5e1" opacity="0.8"/>
-    <ellipse cx="32" cy="32" rx="11.4" ry="18.6" fill="none" stroke="${INK}" stroke-width="3.5"/>
-    <ellipse cx="32" cy="32" rx="11.4" ry="18.6" fill="none" stroke="${c}" stroke-width="2.6"/>
-    <ellipse cx="32" cy="32" rx="9.2" ry="16.3" fill="none" stroke="${shade(c, 0.7)}" stroke-width="1"/>
-    <ellipse cx="32" cy="32" rx="14.5" ry="22" fill="none" stroke="${INK}" stroke-width="1.5"/>
-    <ellipse cx="24.8" cy="20.5" rx="1.5" ry="4.2" fill="#ffffff" transform="rotate(14 24.8 20.5)"/>
+  const light = luminance(c) > 0.75;
+  const outer = light ? "#d1d5db" : c;
+  const inner = light ? "#9ca3af" : shade(c, 0.62);
+  return `<defs><radialGradient id="tiBallShade" cx="0.38" cy="0.32" r="0.75"><stop offset="0" stop-color="#ffffff"/><stop offset="0.55" stop-color="#f3f4f6"/><stop offset="1" stop-color="#b8bec8"/></radialGradient></defs>
+  <ellipse cx="33" cy="53" rx="17" ry="2.2" fill="#000000" opacity="0.13"/>
+  <g transform="rotate(-27 32 31)">
+    <ellipse cx="32" cy="31" rx="25.5" ry="17" fill="url(#tiBallShade)"/>
+    <ellipse cx="31.6" cy="28.7" rx="23.5" ry="13.3" fill="none" stroke="${outer}" stroke-width="3.1"/>
+    <ellipse cx="31.8" cy="29.3" rx="21" ry="10.9" fill="none" stroke="${inner}" stroke-width="2"/>
+    <path d="M10.6 24 C14.6 18.2 22.6 15.6 31.6 15.6 C40.4 15.6 47.6 18.2 51.8 22.4" stroke="#ffffff" stroke-width="0.9" fill="none" opacity="0.65"/>
+    <ellipse cx="32" cy="31" rx="25.5" ry="17" fill="none" stroke="${INK}" stroke-width="2.1"/>
   </g>`;
 }
 
-/** Boot, side on (toe to the right): the colour, with white / black details and two stripes. */
+/** Boot: toe to the left, heel raised, low and sleek; the colour with white cut-out lines and two stripes. */
 function boot(c: string, d: string): string {
   const upper =
-    "M13 27.5 C15 26.5 17 26.8 19 28.2 C21 29.5 23 28.6 24.5 25.5 L27 24.8 C30 29 36 32.5 44 34.6 C51 36.4 56.5 37.6 57.5 40.2 C58 41.6 57.2 42.8 55.5 43 L14 44 C12.2 40 12 33 13 27.5 Z";
-  const sole = "M14 44 L55.5 43 C57.2 42.8 58 41.6 57.6 40.6 C58.6 41.6 58.8 43.6 57.6 44.8 C56.6 45.8 55.2 46 53.8 46 L15.6 46.8 C14 46.8 13.2 45.8 14 44 Z";
-  const stud = (x: number, y: number) => `<path d="M${x} ${y} h3.6 l-0.6 3.3 h-2.4 Z" fill="${c}" ${OUT}/>`;
-  const lace = (x: number, y: number) => `<path d="M${x - 1.3} ${y + 1.8} L${x + 1.3} ${y - 1.8}"/>`;
-  return `<g transform="translate(32 33) scale(1.12) translate(-35.5 -36)">
-    <path d="${upper}" fill="${c}" ${OUT}/>
-    <path d="${sole}" fill="${c}" ${OUT}/>
-    <path d="M14 44 L55.5 43" stroke="${d}" stroke-width="1.1"/>
-    <path d="M13.5 28.4 C15.3 27.6 17.1 27.9 18.9 29.2 C20.9 30.5 22.9 29.6 24.3 26.6" stroke="${d}" stroke-width="1" fill="none"/>
-    <path d="M14.3 31.5 C17.2 33 18.6 36.6 18.2 43.4" stroke="${d}" stroke-width="1" fill="none"/>
-    <path d="M47.4 35.8 C50.4 37.6 51.6 40.2 51.2 42.6" stroke="${d}" stroke-width="0.8" fill="none" opacity="0.9"/>
-    <path d="M33.2 30.6 L36.4 31.8 L32.4 43.3 L29 43.4 Z M39 32.8 L42.2 33.9 L38.6 43.1 L35.2 43.2 Z" fill="${d}"/>
-    <g stroke="${d}" stroke-width="1.15" stroke-linecap="round" fill="none">${lace(27.6, 27.2)}${lace(30.1, 29)}</g>
-    ${stud(16.2, 46.4)}${stud(22, 46.3)}${stud(34.5, 46.1)}${stud(41, 46)}${stud(47.5, 45.9)}${stud(53, 45.8)}
-    <path d="${upper}" fill="none" ${OUT}/>
+    "M9 44 C5.8 44 5.2 40 7.4 38.2 C9.4 36.6 12.4 36 15.4 35.4 C22.4 34 29.4 30.6 34 26.6 L38 25.6 C40.6 28.4 45.4 29 49.4 26 L52.6 24.2 C55.6 26.4 57.6 31 57.6 35.4 C57.6 39.2 57 41.8 55.8 44 Z";
+  const sole = "M8 44 H56.4 C56.6 45.8 55.8 46.8 54.2 46.8 H10.4 C8.8 46.8 7.8 45.8 8 44 Z";
+  const stud = (x: number) => `<path d="M${x} 46.6 l1.1 3.4 h2 l1.1 -3.4 Z" fill="${c}" stroke="${INK}" stroke-width="0.8" stroke-linejoin="round"/>`;
+  const lace = (x: number, y: number) => `<path d="M${x - 1.4} ${y - 1.6} L${x + 1.4} ${y + 1.6}"/>`;
+  return `<g transform="translate(32 34) rotate(-12) translate(-32.5 -36)">
+    ${[11, 16.6, 22.4, 28, 43.4, 49.6].map(stud).join("")}
+    <path d="${sole}" fill="${c}" stroke="${INK}" stroke-width="0.9" stroke-linejoin="round"/>
+    <path d="${upper}" fill="${c}" stroke="${INK}" stroke-width="0.9" stroke-linejoin="round"/>
+    <g stroke="${d}" fill="none" stroke-linecap="round">
+      <path d="M8.8 44 H55.8" stroke-width="1"/>
+      <path d="M9.4 41.8 C9.6 39.6 11.4 38.4 14.4 37.8 M12.6 42.4 C13 40.6 14.6 39.6 17.4 39" stroke-width="0.8"/>
+      <path d="M38.4 26.9 C41 29.6 45.4 30.2 49.6 27.4" stroke-width="1.2"/>
+      <path d="M52.6 28.4 C55 30.8 55.8 35 55 40.6" stroke-width="0.9"/>
+      <path d="M17.4 37.6 C24 36 30.4 32.6 34.6 28.4" stroke-width="0.7" opacity="0.85"/>
+      <g stroke-width="1.05">${lace(21.6, 34.4)}${lace(25.4, 32.6)}${lace(28.9, 30.6)}${lace(32.2, 28.4)}</g>
+    </g>
+    <path d="M30.8 33.4 L33.6 31.6 L39.4 43.4 L36.3 43.4 Z M35.8 30.4 L38.6 28.8 L44.6 43.4 L41.5 43.4 Z" fill="${d}"/>
   </g>`;
 }
 
-/** Jersey, from the back: the colour, white / black trim on the shoulders, cuffs and collar, a big number. */
+/** Jersey (back): the colour, wide white raglan shoulder panels, two-tone cuffs, tall number, dots at the hem. */
 function jersey(c: string, d: string, n: number): string {
-  const body = "M20 14 L27 11 C29 12.8 35 12.8 37 11 L44 14 L55 22.5 L50 31.5 L45 28.5 L45 53 L19 53 L19 28.5 L14 31.5 L9 22.5 Z";
+  const body = "M26 10.5 C30 12.4 34 12.4 38 10.5 L47 13.4 L57 24 L51.6 31.2 L46 26.6 L46 53.6 C37 55 27 55 18 53.6 L18 26.6 L12.4 31.2 L7 24 L17 13.4 Z";
+  const dots: string[] = [];
+  for (let r = 0; r < 4; r++) for (let k = 0; k < 4 - r; k++) {
+    const rad = 0.75 - r * 0.15;
+    const y = 52 - r * 2.1;
+    dots.push(`<circle cx="${19.6 + k * 2.1}" cy="${y}" r="${rad}"/><circle cx="${44.4 - k * 2.1}" cy="${y}" r="${rad}"/>`);
+  }
   const two = n > 9;
-  return `<path d="${body}" fill="${c}" ${OUT}/>
-    <path d="M37.6 12.9 L43.8 15.5 L54 23.3 M26.4 12.9 L20.2 15.5 L10 23.3" stroke="${d}" stroke-width="1.5" fill="none" stroke-linejoin="round"/>
-    <path d="M53.9 21.5 L48.9 30.5 M10.1 21.5 L15.1 30.5" stroke="${d}" stroke-width="1.7" fill="none"/>
-    <path d="M52.6 20.4 L47.6 29.4 M11.4 20.4 L16.4 29.4" stroke="${d}" stroke-width="0.6" fill="none"/>
-    <path d="M27 11 C29 12.8 35 12.8 37 11" stroke="${d}" stroke-width="1.8" fill="none"/>
-    <path d="M19.6 50.8 H44.4" stroke="${d}" stroke-width="0.7" opacity="0.7"/>
-    <text transform="translate(32 ${two ? 46.5 : 47}) scale(${two ? 0.68 : 0.82} 1)" text-anchor="middle" font-family="'Arial Black', 'Arial', system-ui, sans-serif" font-weight="900" font-size="25" fill="${d}">${n}</text>
-    <path d="${body}" fill="none" ${OUT}/>`;
+  return `<path d="${body}" fill="${c}" stroke="${INK}" stroke-width="0.9" stroke-linejoin="round"/>
+    <path d="M38 10.5 L47 13.4 L57 24 L55.8 25.4 L45.2 16.4 L37.4 13.8 Z M26 10.5 L17 13.4 L7 24 L8.2 25.4 L18.8 16.4 L26.6 13.8 Z" fill="${d}"/>
+    <path d="M37.2 13.6 C40.5 17 43.6 21.6 46 26.6 M26.8 13.6 C23.5 17 20.4 21.6 18 26.6" stroke="${d}" stroke-width="0.7" fill="none" opacity="0.75"/>
+    <path d="M55.6 23 L50.4 29.8 M8.4 23 L13.6 29.8" stroke="${shade(c, 0.6)}" stroke-width="2.4" fill="none"/>
+    <path d="M56.4 24.2 L51.2 31 M7.6 24.2 L12.8 31" stroke="${d}" stroke-width="1" fill="none"/>
+    <path d="M26 10.5 C30 12.4 34 12.4 38 10.5" stroke="${d}" stroke-width="2" fill="none"/>
+    <g fill="${d}" opacity="0.45">${dots.join("")}</g>
+    <text transform="translate(32 ${two ? 43 : 43.4}) scale(${two ? 0.62 : 0.78} 1)" text-anchor="middle" font-family="'Arial Black', 'Arial', system-ui, sans-serif" font-weight="900" font-size="25" fill="${d}">${n}</text>
+    <path d="${body}" fill="none" stroke="${INK}" stroke-width="0.9" stroke-linejoin="round"/>`;
 }
 
 /** The icon's drawing (viewBox 0 0 64 64), on a white circle (components/TeamAvatar.tsx). */
