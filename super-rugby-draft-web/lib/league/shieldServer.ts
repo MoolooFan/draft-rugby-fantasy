@@ -3,7 +3,10 @@
 // in lib/league/shield.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { leagueLineage } from "@/lib/league/honours";
-import { cleanShieldName, computeShield, nextShieldGame, shieldSecuredWeek, type ShieldEvent, type ShieldGame, type ShieldReign, type ShieldSeason } from "@/lib/league/shield";
+import {
+  cleanShieldName, cleanShieldRewards, computeShield, holderAfterWeek, nextShieldGame, shieldLadderPoints, shieldSecuredWeek,
+  type ShieldEvent, type ShieldGame, type ShieldReign, type ShieldRewards, type ShieldSeason,
+} from "@/lib/league/shield";
 
 export type LeagueShield = {
   enabled: boolean;
@@ -20,13 +23,17 @@ export type LeagueShield = {
   /** the holder has no home games left this regular season: secured for the season (from that week) */
   secured: { teamId: string; week: number } | null;
   season: number | null;
+  /** this league's team holding it before the season's first game (carried over), or null */
+  startHolderTeamId: string | null;
+  /** the commissioner's rewards for holding it */
+  rewards: ShieldRewards;
 };
 
 export async function loadShield(db: SupabaseClient, leagueId: string): Promise<LeagueShield> {
   const lineage = await leagueLineage(db, leagueId);
   const { data: leagues, error } = await db
     .from("leagues")
-    .select("id, season, shield_enabled, shield_name, shield_toggles")
+    .select("id, season, shield_enabled, shield_name, shield_toggles, shield_rewards")
     .or(`lineage_id.eq.${lineage},id.eq.${lineage}`);
   if (error) throw error;
   const ids = (leagues ?? []).map((l) => l.id);
@@ -76,5 +83,39 @@ export async function loadShield(db: SupabaseClient, leagueId: string): Promise<
     reigns: [...state.reigns].reverse(),
     secured: holderTeamId && securedWeek != null ? { teamId: holderTeamId, week: securedWeek } : null,
     season: here?.season ?? null,
+    startHolderTeamId: state.seasonStart[leagueId] ?? null,
+    rewards: cleanShieldRewards(row?.shield_rewards),
   };
+}
+
+/** This league's team holding the shield after a week's games (week 0 = before the season). */
+export function holderAfter(shield: LeagueShield, week: number): string | null {
+  return holderAfterWeek(shield.events, shield.startHolderTeamId, week);
+}
+
+/**
+ * Save the shield's ladder rewards on each finished regular-season game (so every ladder counts
+ * them): bonus ladder points for a defence / taking it, and (tie-break on) who held it after
+ * that game. Worked out again from all the results each time, so re-finalising a round fixes
+ * the later ones too.
+ */
+export async function syncShieldRewards(db: SupabaseClient, leagueId: string): Promise<void> {
+  const shield = await loadShield(db, leagueId);
+  const { data, error } = await db
+    .from("league_matchups")
+    .select("id, weeks, status, home_team_id, away_team_id, home_shield_pts, away_shield_pts, shield_holder_after")
+    .eq("league_id", leagueId)
+    .eq("kind", "regular");
+  if (error) throw error;
+  for (const m of data ?? []) {
+    const final = m.status === "final";
+    const weeks = (m.weeks ?? []).map(Number);
+    const week = weeks[0];
+    const hp = final && m.home_team_id ? shieldLadderPoints(shield.events, shield.rewards, week, m.home_team_id) : 0;
+    const ap = final && m.away_team_id ? shieldLadderPoints(shield.events, shield.rewards, week, m.away_team_id) : 0;
+    const after = final && shield.rewards.tieBreak ? holderAfter(shield, Math.max(...weeks)) : null;
+    if (Number(m.home_shield_pts ?? 0) === hp && Number(m.away_shield_pts ?? 0) === ap && (m.shield_holder_after ?? null) === after) continue;
+    const { error: uErr } = await db.from("league_matchups").update({ home_shield_pts: hp, away_shield_pts: ap, shield_holder_after: after }).eq("id", m.id);
+    if (uErr) throw uErr;
+  }
 }

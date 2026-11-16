@@ -1,6 +1,8 @@
 "use client";
 // app/league/LeagueSettingsModal.tsx
 // (moved out of page.tsx unchanged)
+import { ShieldRewardsFields } from "@/components/ShieldRewardsFields";
+import { NO_SHIELD_REWARDS, type ShieldRewards } from "@/lib/league/shield";
 import React, { useEffect, useState } from "react";
 
 import type { League, PlayoffFormat } from "@/lib/league/types";
@@ -53,6 +55,7 @@ const computedSeasonWeeks = computedRegularWeeks + selectedPlayoffWeeks;
   const [bonusPoints, setBonusPoints] = useState<boolean>(league.bonusPoints !== false);
   const [shieldEnabled, setShieldEnabled] = useState<boolean>(league.shieldEnabled !== false);
   const [shieldName, setShieldName] = useState<string>(league.shieldName ?? "The Shield");
+  const [shieldRewards, setShieldRewards] = useState<ShieldRewards>(league.shieldRewards ?? NO_SHIELD_REWARDS);
   const [customRules, setCustomRules] = useState<ScoringRules>(() =>
     // Custom starts from the league's current values (e.g. Alternate), so switching keeps them
     completeRules((league.scoringCustom as Partial<ScoringRules> | null) ?? (league.scoringRules as Partial<ScoringRules> | undefined) ?? STANDARD_SCORING)
@@ -171,11 +174,14 @@ setDraftOrderIds((prev) => {
   <input aria-label="Shield name" disabled={readOnly} value={shieldName} onChange={(e) => setShieldName(e.target.value)} placeholder="The Shield" style={{ ...inputStyle(), marginTop: 6 }} />
 ) : null}
 <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.75, marginTop: 4 }}>The name always ends in &quot;Shield&quot;. Can be changed any time.</div>
+<div style={{ marginTop: 8 }}>
+  <ShieldRewardsFields value={shieldRewards} onChange={setShieldRewards} disabled={settingsLocked} />
+</div>
 </Field>
 
 {draftStarted ? (
   <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>
-    Finals, scoring, bonus points and the draft order are locked now the draft has started.
+    Finals, scoring, bonus points, the Shield&apos;s rewards and the draft order are locked now the draft has started.
   </div>
 ) : null}
 
@@ -307,6 +313,7 @@ scoringSystem,
 bonusPoints,
 shieldEnabled,
 shieldName,
+...(!draftStarted ? { shieldRewards } : {}),
 ...(scoringSystem === "custom" ? { scoringCustom: customRules } : {}),
 });
 

@@ -5,7 +5,7 @@ import { refreshDraftOrder } from "@/lib/draft/engine";
 import { rulesForLeagueRow } from "@/lib/scoring/leagueRules";
 import { championshipStars } from "@/lib/league/honours";
 import { loadShield } from "@/lib/league/shieldServer";
-import { cleanShieldName } from "@/lib/league/shield";
+import { cleanShieldName, cleanShieldRewards } from "@/lib/league/shield";
 import { currentSeasonYear, restartWindow } from "@/lib/season";
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -173,6 +173,7 @@ if (computedOrder.length) {
     shield: await shieldSummary(),
     shieldEnabled: leagueRow.shield_enabled !== false,
     shieldName: cleanShieldName(leagueRow.shield_name),
+    shieldRewards: cleanShieldRewards(leagueRow.shield_rewards),
     // E8: a league from an earlier season can be restarted for this season by its commissioner,
     // in the month before the season starts (restartOpensAt: when that month begins)
     ...(await restartInfo(leagueRow)),

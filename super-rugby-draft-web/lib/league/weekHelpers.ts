@@ -43,6 +43,13 @@ export type SheetFixtureRow = {
   status: string; // upcoming | complete
   homeScore: number | null;
   awayScore: number | null;
+  /** ladder bonus points and the Shield's ladder rewards (finished games; /api/fixtures/leagueMatches) */
+  homeBonus?: number;
+  awayBonus?: number;
+  homeShieldPts?: number;
+  awayShieldPts?: number;
+  /** who held the Shield after this game (only when the league uses its tie-break) */
+  shieldHolderAfter?: string | null;
 };
 
 export function isSheetLabelRow(r: SheetFixtureRow) {

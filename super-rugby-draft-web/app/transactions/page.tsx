@@ -625,6 +625,8 @@ const [txDropLocks, setTxDropLocks] = useState<any[]>([]);
 const [txFreeAgents, setTxFreeAgents] = useState<any[]>([]);
 const [waiverOrderLoaded, setWaiverOrderLoaded] = useState(false);
 const [waiverOrderRows, setWaiverOrderRows] = useState<Array<{ teamId: string; rank: number }>>([]);
+// Shield reward: the holder picks first in round 1 of the claims (lib/waivers/order.ts)
+const [waiverShieldTeamId, setWaiverShieldTeamId] = useState<string | null>(null);
 
 // ✅ single source of truth for ownership checks
 const rostersForOwnership = useMemo(() => {
@@ -771,6 +773,7 @@ useEffect(() => {
       if (cancelled) return;
 
       if (res.ok && json?.ok && Array.isArray(json.data)) {
+        setWaiverShieldTeamId(json.shieldTeamId ? String(json.shieldTeamId) : null);
         // json.data is [{ teamId, rank }, ...] sorted by rank ASC
         setWaiverOrderRows(
           (json.data ?? []).map((r: any) => ({
@@ -780,9 +783,13 @@ useEffect(() => {
         );
       } else {
         setWaiverOrderRows([]);
+        setWaiverShieldTeamId(null);
       }
     } catch {
-      if (!cancelled) setWaiverOrderRows([]);
+      if (!cancelled) {
+        setWaiverOrderRows([]);
+        setWaiverShieldTeamId(null);
+      }
     } finally {
       if (!cancelled) setWaiverOrderLoaded(true);
     }
@@ -3005,6 +3012,11 @@ const WaiverClaimsTab = useStableComponent(WaiverClaimsTab__render);
 
 const yourWaiverRank = waiverOrderIndexByTeamId.get(String(yourId));
 const yourWaiverRankText = typeof yourWaiverRank === "number" ? `#${yourWaiverRank + 1}` : "—";
+const shieldPickText = !waiverShieldTeamId
+  ? null
+  : waiverShieldTeamId === String(yourId)
+    ? "🛡️ You hold the Shield: you pick first in round 1 of the claims, then your usual spot."
+    : `🛡️ ${(activeLeague?.teams ?? []).find((t) => t.id === waiverShieldTeamId)?.name ?? "The Shield holder"} picks first in round 1 (Shield holder), then the usual order.`;
 // ---------- helpers (MOVE UP HERE) ----------
 const teamById = (activeLeague?.teams ?? []).reduce((acc: any, t: any) => {
   acc[t.id] = t;
@@ -3280,11 +3292,18 @@ const waiverClaimsFeed = useMemo(() => {
 
   const result: any[] = [];
   let madeProgress = true;
+  // round 1 starts with the Shield holder (if the league has that reward), then the usual order
+  const firstRoundIds = waiverShieldTeamId && orderedTeamIds.includes(waiverShieldTeamId)
+    ? [waiverShieldTeamId, ...orderedTeamIds.filter((t) => t !== waiverShieldTeamId)]
+    : orderedTeamIds;
+  let feedRound = 0;
 
   while (madeProgress) {
     madeProgress = false;
+    const roundIds = feedRound === 0 ? firstRoundIds : orderedTeamIds;
+    feedRound++;
 
-    for (const teamId of orderedTeamIds) {
+    for (const teamId of roundIds) {
       const queue = queues.get(teamId) ?? [];
       if (!queue.length) continue;
 
@@ -3312,6 +3331,7 @@ const waiverClaimsFeed = useMemo(() => {
   viewEnd,
   waiverOrderRows,
   waiverOrderIndexByTeamId,
+  waiverShieldTeamId,
 ]);
 
     // ---------- Free agent transfers feed (latest free agency period) ----------
@@ -3605,6 +3625,7 @@ const StatusPill = useStableComponent(StatusPill__render);
           <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 900 }}>Waiver Claims</div>
           <div style={{ padding: "0 10px 10px", fontSize: 10, fontWeight: 900, opacity: 0.7 }}>
   Your waiver priority: {waiverOrderLoaded ? yourWaiverRankText : "Loading…"}
+  {waiverOrderLoaded && shieldPickText ? <div style={{ marginTop: 2 }}>{shieldPickText}</div> : null}
 </div>
 
           {waiverClaimsFeed.length === 0 ? (

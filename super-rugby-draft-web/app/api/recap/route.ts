@@ -36,7 +36,7 @@ export async function GET(req: Request) {
       supabaseAdmin.from("teams").select("id, name, initials, picture_url").eq("league_id", leagueId),
       supabaseAdmin
         .from("league_matchups")
-        .select("kind, status, label, weeks, home_team_id, away_team_id, home_score, away_score, home_bonus, away_bonus")
+        .select("kind, status, label, weeks, home_team_id, away_team_id, home_score, away_score, home_bonus, away_bonus, home_shield_pts, away_shield_pts, shield_holder_after")
         .eq("league_id", leagueId),
       supabaseAdmin
         .from("team_week_results")

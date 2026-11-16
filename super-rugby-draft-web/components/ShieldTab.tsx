@@ -7,6 +7,7 @@ import { ShieldIcon } from "@/components/AwardIcons";
 import { TeamAvatar } from "@/components/TeamAvatar";
 import { roundLabel } from "@/lib/season";
 import type { LeagueShield } from "@/lib/league/shieldServer";
+import { cleanShieldRewards, shieldRewardLines } from "@/lib/league/shield";
 
 type TeamLite = { id: string; name: string; ownerName?: string | null; pictureUrl?: string | null; userInitials?: string | null; initials?: string | null; stars?: number };
 
@@ -91,6 +92,21 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
           )}
         </div>
       </div>
+
+      {/* What the holder gets (the commissioner's choice) */}
+      {(() => {
+        const lines = shieldRewardLines(cleanShieldRewards(s.rewards));
+        return lines.length ? (
+          <div style={box}>
+            <div style={heading}>Holder&apos;s rewards</div>
+            {lines.map((l) => (
+              <div key={l} style={{ ...row, fontWeight: 800 }}>
+                {l}
+              </div>
+            ))}
+          </div>
+        ) : null;
+      })()}
 
       {/* Next shield game */}
       {s.enabled ? (

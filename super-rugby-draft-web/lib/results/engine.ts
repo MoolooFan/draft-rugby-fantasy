@@ -18,6 +18,7 @@ import { fixCaptains, reconcileLineup } from "@/lib/league/lineup";
 import { activeIdsOf } from "@/lib/league/ir";
 import { recordSeasonHonours } from "@/lib/league/honours";
 import { bonusPoints, buildLadder, type LadderMatchup } from "@/lib/league/ladder";
+import { syncShieldRewards } from "@/lib/league/shieldServer";
 import {
   buildLeagueSchedule,
   pickRoundForWeek,
@@ -361,6 +362,12 @@ export async function finaliseWeek(
     );
   }
   await q(db.from("league_week_finalisations").upsert({ league_id: leagueId, week, finalised_at: nowIso }, { onConflict: "league_id,week" }));
+  // The Shield's ladder rewards on each game (before the ladder decides anything below)
+  try {
+    await syncShieldRewards(db, leagueId);
+  } catch (e) {
+    console.error("[results] shield rewards not saved:", e);
+  }
   await prepareUpcoming(db, leagueId);
   // Season over? Record the honours (champion, runner-up, wooden spoon...) for the stars (E8).
   try {

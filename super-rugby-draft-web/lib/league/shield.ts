@@ -87,6 +87,8 @@ export type ShieldState = {
   events: ShieldEvent[];
   /** the current holder (null = not awarded yet) */
   holder: { owner: string; teamId: string | null; reign: ShieldReign } | null;
+  /** each league season's holder before its first game (carried over from last season), by league id */
+  seasonStart: Record<string, string | null>;
 };
 
 /** Was the shield on for this week's games? (no changes recorded: as it is now) */
@@ -117,6 +119,7 @@ function topOfWeek(games: ShieldGame[]): string | null {
 export function computeShield(seasons: ShieldSeason[]): ShieldState {
   const reigns: ShieldReign[] = [];
   const events: ShieldEvent[] = [];
+  const seasonStart: Record<string, string | null> = {};
   let current: ShieldReign | null = null;
 
   const startReign = (s: ShieldSeason, teamId: string, week: number, how: ShieldReign["how"], wonFrom: string | null) => {
@@ -160,6 +163,7 @@ export function computeShield(seasons: ShieldSeason[]): ShieldState {
       }
     }
     const reawardHow: ShieldReign["how"] = reigns.length ? "reawarded" : "awarded";
+    seasonStart[s.leagueId] = holderTeam;
 
     for (const w of weeks) {
       const games = s.games.filter((g) => g.week === w);
@@ -193,7 +197,51 @@ export function computeShield(seasons: ShieldSeason[]): ShieldState {
   }
 
   const last = current as ShieldReign | null;
-  return { reigns, events, holder: last ? { owner: last.owner, teamId: last.teamId, reign: last } : null };
+  return { reigns, events, holder: last ? { owner: last.owner, teamId: last.teamId, reign: last } : null, seasonStart };
+}
+
+/** Who held it after a week's games (week 0 = before the season): one league season's events. */
+export function holderAfterWeek(events: Pick<ShieldEvent, "week" | "holderTeamId">[], startHolder: string | null, week: number): string | null {
+  let h = startHolder;
+  for (const e of [...events].sort((a, b) => a.week - b.week)) if (e.week <= week) h = e.holderTeamId;
+  return h;
+}
+
+// ---------------------------------------------------------------------------
+// Rewards for holding it (Ethan, 16 Nov 2026), chosen by the commissioner before the draft
+// (locked once it starts). The holder keeps them while it's switched off or during the finals.
+//   firstWaiverPick: the holder picks first in the first round of each week's waivers (the rest
+//                    of that round in the usual order without him; later rounds as usual)
+//   defencePoints:   ladder points for each successful defence
+//   winPoints:       ladder points for taking it off the holder
+//   tieBreak:        level on ladder points -> the holder ranks higher
+
+export type ShieldRewards = { firstWaiverPick: boolean; defencePoints: number; winPoints: number; tieBreak: boolean };
+export const NO_SHIELD_REWARDS: ShieldRewards = { firstWaiverPick: false, defencePoints: 0, winPoints: 0, tieBreak: false };
+export const MAX_SHIELD_LADDER_POINTS = 2;
+
+export function cleanShieldRewards(raw: unknown): ShieldRewards {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const pts = (v: unknown) => Math.max(0, Math.min(MAX_SHIELD_LADDER_POINTS, Math.round(Number(v) || 0)));
+  return { firstWaiverPick: r.firstWaiverPick === true, defencePoints: pts(r.defencePoints), winPoints: pts(r.winPoints), tieBreak: r.tieBreak === true };
+}
+
+/** Bonus ladder points a team gets from the shield in a week's game (0 if none). */
+export function shieldLadderPoints(events: Pick<ShieldEvent, "week" | "kind" | "holderTeamId">[], rewards: ShieldRewards, week: number, teamId: string): number {
+  const e = events.find((x) => x.week === week && x.holderTeamId === teamId);
+  if (!e) return 0;
+  return e.kind === "defended" ? rewards.defencePoints : e.kind === "won" ? rewards.winPoints : 0;
+}
+
+/** Short descriptions of the rewards that are on (for the pages). */
+export function shieldRewardLines(r: ShieldRewards): string[] {
+  const out: string[] = [];
+  const pt = (n: number) => `${n} ladder point${n === 1 ? "" : "s"}`;
+  if (r.firstWaiverPick) out.push("First waiver pick each week");
+  if (r.defencePoints) out.push(`${pt(r.defencePoints)} for each defence`);
+  if (r.winPoints) out.push(`${pt(r.winPoints)} for taking it`);
+  if (r.tieBreak) out.push("Ranks higher when level on ladder points");
+  return out;
 }
 
 /** The holder's next shield game this season: his first home regular-season game not yet played. */

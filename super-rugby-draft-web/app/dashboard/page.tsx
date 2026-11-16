@@ -33,6 +33,7 @@ import { ShieldIcon } from "@/components/AwardIcons";
 import { formatProjection, useProjections } from "@/lib/projections/useProjections";
 import { teamOutlook, winProbability } from "@/lib/projections/live";
 import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
+import { ladderOrder, tieBreakHolder } from "@/lib/league/ladder";
 
 type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null } | null;
 
@@ -1305,6 +1306,10 @@ function buildStandingsFromResults(uptoWeekInclusive: number): StandingCalc[] {
       away.pts += 2;
     }
 
+    // bonus ladder points (if the league uses them) and the Shield's ladder rewards, as on the League page
+    home.pts += Number(m.homeBonus ?? 0) + Number(m.homeShieldPts ?? 0);
+    away.pts += Number(m.awayBonus ?? 0) + Number(m.awayShieldPts ?? 0);
+
     home.pd = home.pf - home.pa;
     away.pd = away.pf - away.pa;
   }
@@ -1325,11 +1330,18 @@ const standings: StandingRow[] = useMemo(() => {
   const curr = buildStandingsFromResults(playedNow);
   const prev = buildStandingsFromResults(playedPrev);
 
-  const sortRows = (arr: StandingCalc[]) =>
-    arr.slice().sort((a, b) => b.pts - a.pts || b.pf - a.pf || b.pd - a.pd);
+  // level on points: the Shield holder first, if the league uses that tie-break (lib/league/ladder.ts)
+  const holderUpTo = (upto: number) =>
+    tieBreakHolder(
+      sheetFixtures
+        .filter((r) => Number(r.weekFantasy) <= upto && isSheetRegularRow(r) && isSheetMatchRow(r) && String(r.status ?? "").toLowerCase() === "complete")
+        .map((r) => ({ week: Number(r.weekFantasy), holder: r.shieldHolderAfter ?? null }))
+    );
+  const sortRows = (arr: StandingCalc[], upto: number) =>
+    arr.slice().sort(ladderOrder<StandingCalc>(holderUpTo(upto), (r) => r.teamId, (r) => r.pts, (r) => r.pf, (r) => r.pd));
 
-  const currSorted = sortRows(curr);
-  const prevSorted = sortRows(prev);
+  const currSorted = sortRows(curr, playedNow);
+  const prevSorted = sortRows(prev, playedPrev);
 
   const prevRankById = new Map(prevSorted.map((r, i) => [r.teamId, i + 1]));
 

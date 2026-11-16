@@ -36,6 +36,9 @@ type MatchupRow = {
   away_tries: number | null;
   home_bonus: number;
   away_bonus: number;
+  home_shield_pts?: number | null;
+  away_shield_pts?: number | null;
+  shield_holder_after?: string | null;
   winner_team_id: string | null;
   decides: string | null;
 };
@@ -119,6 +122,10 @@ export async function GET(req: Request) {
           awayScore: final ? awayScore : null,
           homeBonus: last && m.status === "final" ? m.home_bonus ?? 0 : 0,
           awayBonus: last && m.status === "final" ? m.away_bonus ?? 0 : 0,
+          // the Shield's ladder rewards (lib/league/shield.ts) and, with its tie-break, who held it after
+          homeShieldPts: last && m.status === "final" ? Number(m.home_shield_pts ?? 0) : 0,
+          awayShieldPts: last && m.status === "final" ? Number(m.away_shield_pts ?? 0) : 0,
+          shieldHolderAfter: last && m.status === "final" ? m.shield_holder_after ?? null : null,
           winnerTeamId: last && m.status === "final" ? m.winner_team_id : null,
           decides: m.decides,
           aggregate:

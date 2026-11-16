@@ -1,13 +1,14 @@
 // lib/waivers/process.ts (server only)
 // Runs one league's waiver claims for a week, once (guarded by waiver_runs). Moved out of
 // app/api/waivers/process so the 5-minute job can run waivers at the deadline even when nobody
-// opens the Transactions page (13 Nov 2026); the logic is unchanged.
+// opens the Transactions page (13 Nov 2026). The order comes from lib/waivers/order.ts (16 Nov).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cancelPendingTradesTouchingPlayers, cancelInvalidPendingTradesForTeams } from "@/lib/trades/cancelPendingTrades";
 import { loadRosterPlayers, rosterProblem, updateLineupsAfterRosterChange } from "@/lib/league/rosterChange";
 import { healthyIrBlock, irIdsOf } from "@/lib/league/ir";
 import { waiverProcessFromMs } from "@/lib/league/deadlines";
 import { postWaiverReport } from "@/lib/chat/server";
+import { buildWaiverOrder, saveWaiverOrder, waiverRounds } from "@/lib/waivers/order";
 import { getSeason, totalFantasyWeeks } from "@/lib/season";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -19,22 +20,6 @@ function extractIds(data: any): string[] {
   }
   for (const p of (data?.wildcards ?? []) as any[]) if (p?.id) ids.push(String(p.id));
   return ids;
-}
-
-async function getWaiverTeamOrder(db: SupabaseClient, leagueId: string, week: number): Promise<string[]> {
-  // waiver_order is one row per team (league_id, week, team_id, rank)
-  const { data, error } = await db
-    .from("waiver_order")
-    .select("team_id, rank")
-    .eq("league_id", leagueId)
-    .eq("week", week)
-    .order("rank", { ascending: true });
-
-  if (error) throw error;
-
-  return (data ?? [])
-    .map((r: any) => String(r.team_id))
-    .filter(Boolean);
 }
 
 export type WaiverRunResult =
@@ -177,11 +162,15 @@ for (const [teamId, arr] of pendingByTeam.entries()) {
   });
 }
 
-// waiver team order
-let teamOrder = await getWaiverTeamOrder(db, leagueId, week);
-
-// fallback if table not present/empty: use all teams seen in claims
-if (!teamOrder.length) teamOrder = Array.from(pendingByTeam.keys());
+// waiver team order (lib/waivers/order.ts): reverse ladder, worked out now; round 1 may start
+// with the Shield holder (league reward). Saved so the order can be looked back on.
+const waiverOrder = await buildWaiverOrder(db, leagueId, week);
+await saveWaiverOrder(db, leagueId, week, waiverOrder.order);
+const usualOrder = waiverOrder.order.length ? waiverOrder.order : Array.from(pendingByTeam.keys());
+// any team with claims missing from the order goes last
+for (const teamId of pendingByTeam.keys()) if (!usualOrder.includes(teamId)) usualOrder.push(teamId);
+const firstRoundOrder = waiverOrder.shieldTeamId ? waiverRounds(usualOrder, waiverOrder.shieldTeamId).firstRound : usualOrder;
+let waiverRound = 0;
 
 // process in passes: each team can get at most 1 SUCCESS per pass
 const processedClaimIds: string[] = [];
@@ -190,6 +179,8 @@ const newLocks: any[] = [];
 let madeProgress = true;
 while (madeProgress) {
   madeProgress = false;
+  const teamOrder = waiverRound === 0 ? firstRoundOrder : usualOrder;
+  waiverRound++;
 
   for (const teamId of teamOrder) {
     const queue = pendingByTeam.get(teamId) ?? [];

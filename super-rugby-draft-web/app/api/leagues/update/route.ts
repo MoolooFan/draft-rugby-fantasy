@@ -3,7 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
 import { cleanScoringRules } from "@/lib/scoring/validate";
 import { getSystemRules } from "@/lib/scoring/leagueRules";
-import { cleanShieldName } from "@/lib/league/shield";
+import { cleanShieldName, cleanShieldRewards } from "@/lib/league/shield";
+import { syncShieldRewards } from "@/lib/league/shieldServer";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -43,8 +44,8 @@ export async function POST(req: Request) {
     );
   }
 
-  // Finals, scoring and bonus points lock once the draft starts.
-  const lockedKeys = ["playoffFormat", "bonusPoints", "scoringSystem", "scoringCustom"];
+  // Finals, scoring, bonus points and the Shield's rewards lock once the draft starts.
+  const lockedKeys = ["playoffFormat", "bonusPoints", "scoringSystem", "scoringCustom", "shieldRewards"];
   const locked = !!leagueRow.settings_locked_at || (leagueRow.draft_status ?? "scheduled") !== "scheduled";
   if (locked && lockedKeys.some((k) => k in patch)) {
     return NextResponse.json(
@@ -99,6 +100,7 @@ export async function POST(req: Request) {
     }
   }
   if ("shieldName" in patch) dbPatch.shield_name = cleanShieldName(patch.shieldName);
+  if ("shieldRewards" in patch) dbPatch.shield_rewards = cleanShieldRewards(patch.shieldRewards);
 
   if ("startRound" in patch) dbPatch.start_round = patch.startRound ?? null;
   if ("totalWeeks" in patch) dbPatch.total_weeks = patch.totalWeeks ?? null;
@@ -113,6 +115,15 @@ export async function POST(req: Request) {
 
   if (updErr) {
     return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 });
+  }
+
+  // switching the Shield off / on changes who held it when: refresh its ladder rewards
+  if ("shieldEnabled" in dbPatch || "shield_rewards" in dbPatch) {
+    try {
+      await syncShieldRewards(supabaseAdmin, leagueId);
+    } catch (e) {
+      console.error("[leagues/update] shield rewards not refreshed:", e);
+    }
   }
 
   return NextResponse.json({ ok: true });

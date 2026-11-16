@@ -78,7 +78,7 @@ export async function recordSeasonHonours(db: Db, leagueId: string): Promise<boo
   if (planWeeks.some((w) => !finalised.has(w))) return false;
   const [teams, matchups] = await Promise.all([
     db.from("teams").select("id, owner_username, name").eq("league_id", leagueId),
-    db.from("league_matchups").select("kind, status, playoff_key, decides, winner_team_id, home_team_id, away_team_id, home_score, away_score, home_bonus, away_bonus").eq("league_id", leagueId),
+    db.from("league_matchups").select("kind, status, weeks, playoff_key, decides, winner_team_id, home_team_id, away_team_id, home_score, away_score, home_bonus, away_bonus, home_shield_pts, away_shield_pts, shield_holder_after").eq("league_id", leagueId),
   ]);
   if (teams.error) throw teams.error;
   if (matchups.error) throw matchups.error;

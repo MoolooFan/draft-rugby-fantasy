@@ -148,7 +148,7 @@ export async function postRoundPosts(db: SupabaseClient, leagueId: string, week:
   await safely("league recap", async () => {
     const { season, teamName, roundName } = await leagueBasics(db, leagueId);
     const [{ data: matchups }, { data: results }] = await Promise.all([
-      db.from("league_matchups").select("kind, status, label, weeks, home_team_id, away_team_id, home_score, away_score, home_bonus, away_bonus").eq("league_id", leagueId),
+      db.from("league_matchups").select("kind, status, label, weeks, home_team_id, away_team_id, home_score, away_score, home_bonus, away_bonus, home_shield_pts, away_shield_pts, shield_holder_after").eq("league_id", leagueId),
       db.from("team_week_results").select("team_id, week, score, player_points").eq("league_id", leagueId),
     ]);
     const thisWeek = (matchups ?? []).filter((m) => (m.weeks ?? []).map(Number).includes(week));

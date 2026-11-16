@@ -23,7 +23,7 @@ export async function GET(req: Request) {
       supabaseAdmin.from("teams").select("id, name, initials, picture_url").eq("league_id", leagueId),
       supabaseAdmin
         .from("league_matchups")
-        .select("kind, status, label, weeks, home_team_id, away_team_id, home_score, away_score, home_bonus, away_bonus, playoff_key, decides, winner_team_id")
+        .select("kind, status, label, weeks, home_team_id, away_team_id, home_score, away_score, home_bonus, away_bonus, home_shield_pts, away_shield_pts, shield_holder_after, playoff_key, decides, winner_team_id")
         .eq("league_id", leagueId),
       supabaseAdmin.from("team_week_results").select("week, team_id, score, player_points").eq("league_id", leagueId),
       supabaseAdmin.from("draft_picks").select("team_id, player_id, pick_number").eq("league_id", leagueId),

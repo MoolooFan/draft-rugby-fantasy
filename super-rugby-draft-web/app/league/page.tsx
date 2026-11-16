@@ -18,6 +18,9 @@ const fixturesData = fixturesByFantasyWeek();
 import type { Fixture } from "@/lib/fixtures/types";
 import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { toMs, pickValue } from "@/lib/league/weekHelpers";
+import { ladderOrder, tieBreakHolder } from "@/lib/league/ladder";
+import { ShieldRewardsFields } from "@/components/ShieldRewardsFields";
+import { NO_SHIELD_REWARDS, type ShieldRewards } from "@/lib/league/shield";
 import { toDatetimeLocal, ModalOverlay, inputStyle, selectStyle, parseDatetimeLocal, saveButton } from "./ui";
 import { LeagueSettingsModal } from "./LeagueSettingsModal";
 import { TeamAvatar } from "@/components/TeamAvatar";
@@ -225,6 +228,9 @@ type SheetFixtureRow = {
   awayScore: number | null;
   homeBonus?: number; // bonus ladder points (from the database)
   awayBonus?: number;
+  homeShieldPts?: number; // the Shield's ladder rewards (lib/league/shield.ts)
+  awayShieldPts?: number;
+  shieldHolderAfter?: string | null; // who held the Shield after this game (tie-break reward only)
 };
 
 const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
@@ -537,6 +543,9 @@ function buildStandingsFromResults(uptoWeekInclusive: number): Omit<StandingRow,
   // bonus ladder points (win by a lot / lose by a little), if the league uses them
   home.pts += Number(m.homeBonus ?? 0);
   away.pts += Number(m.awayBonus ?? 0);
+  // the Shield's ladder points (defence / taking it), if the league uses them
+  home.pts += Number(m.homeShieldPts ?? 0);
+  away.pts += Number(m.awayShieldPts ?? 0);
 
   home.pd = home.pf - home.pa;
   away.pd = away.pf - away.pa;
@@ -553,11 +562,18 @@ const standings = useMemo<StandingRow[]>(() => {
   const curr = buildStandingsFromResults(playedNow);
   const prev = buildStandingsFromResults(playedPrev);
 
-    const sortRows = (arr: any[]) =>
-    arr.slice().sort((a, b) => b.pts - a.pts || b.pf - a.pf || b.pd - a.pd);
+  // level on points: the Shield holder first, if the league uses that tie-break (lib/league/ladder.ts)
+  const holderUpTo = (upto: number) =>
+    tieBreakHolder(
+      sheetFixtures
+        .filter((r) => Number(r.weekFantasy) <= upto && isSheetRegularRow(r) && !isSheetLabelRow(r) && String(r.status ?? "").toLowerCase() === "complete")
+        .map((r) => ({ week: Number(r.weekFantasy), holder: r.shieldHolderAfter ?? null }))
+    );
+  const sortRows = (arr: any[], upto: number) =>
+    arr.slice().sort(ladderOrder<{ teamId: string; pts: number; pf: number; pd: number }>(holderUpTo(upto), (r) => r.teamId, (r) => r.pts, (r) => r.pf, (r) => r.pd));
 
-  const currSorted = sortRows(curr);
-  const prevSorted = sortRows(prev);
+  const currSorted = sortRows(curr, playedNow);
+  const prevSorted = sortRows(prev, playedPrev);
 
   const prevRankById = new Map(prevSorted.map((r, i) => [r.teamId, i + 1]));
 
@@ -1471,6 +1487,7 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
   const [bonusPoints, setBonusPoints] = useState(true);
   const [shieldEnabled, setShieldEnabled] = useState(true);
   const [shieldName, setShieldName] = useState("The Shield");
+  const [shieldRewards, setShieldRewards] = useState<ShieldRewards>(NO_SHIELD_REWARDS);
   const [customRules, setCustomRules] = useState<ScoringRules>(STANDARD_SCORING);
   const [error, setError] = useState<string | null>(null);
 
@@ -1567,6 +1584,7 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
               style={inputStyle()}
             />
           ) : null}
+          {shieldEnabled ? <ShieldRewardsFields value={shieldRewards} onChange={setShieldRewards} /> : null}
 
           <input
   type="datetime-local"
@@ -1596,6 +1614,7 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
     bonusPoints,
     shieldEnabled,
     shieldName,
+    shieldRewards,
     ...(scoringSystem === "custom" ? { scoringCustom: customRules } : {}),
   });
 

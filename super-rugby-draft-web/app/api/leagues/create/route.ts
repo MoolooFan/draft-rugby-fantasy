@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cleanShieldName } from "@/lib/league/shield";
+import { cleanShieldName, cleanShieldRewards } from "@/lib/league/shield";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
@@ -42,6 +42,7 @@ export async function POST(req: Request) {
   // The Shield: on unless switched off; the name always ends in "Shield"
   const shieldEnabled = body?.shieldEnabled !== false;
   const shieldName = cleanShieldName(body?.shieldName);
+  const shieldRewards = cleanShieldRewards(body?.shieldRewards);
   const seasonWeeks = totalFantasyWeeks(getSeason(season));
   const draftDateTimeText = String(body?.draftDateTimeText ?? "");
   const draftAtRaw = body?.draftAt ?? null;
@@ -108,6 +109,7 @@ if (draftAtRaw !== null && draftAtRaw !== undefined && draftAtRaw !== "") {
     bonus_points: bonusPoints,
     shield_enabled: shieldEnabled,
     shield_name: shieldName,
+    shield_rewards: shieldRewards,
     real_regular_season_rounds: seasonWeeks,
     start_round: 1,
     total_weeks: seasonWeeks,

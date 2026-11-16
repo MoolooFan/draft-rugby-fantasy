@@ -1,4 +1,5 @@
 // lib/league/store.ts
+import type { ShieldRewards } from "@/lib/league/shield";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { League, LeagueTeam, PlayoffFormat } from "./types";
@@ -37,6 +38,7 @@ createLeague: (params: {
   bonusPoints?: boolean;
   shieldEnabled?: boolean;
   shieldName?: string;
+  shieldRewards?: ShieldRewards;
 }) => Promise<{ ok: true } | { ok: false; error: string }>;
 
 joinLeagueByCode: (params: {
@@ -67,6 +69,7 @@ joinLeagueByCode: (params: {
         | "bonusPoints"
         | "shieldEnabled"
         | "shieldName"
+        | "shieldRewards"
       >
     >
   ) => void;
@@ -79,7 +82,7 @@ function sendablePatch(league: League | undefined, patch: Record<string, unknown
   const started = league?.draftStatus === "live" || league?.draftStatus === "complete";
   if (!started) return patch;
   const out = { ...patch };
-  for (const k of ["playoffFormat", "scoringSystem", "scoringCustom", "bonusPoints", "draftAt", "draftDateTimeText"]) delete out[k];
+  for (const k of ["playoffFormat", "scoringSystem", "scoringCustom", "bonusPoints", "shieldRewards", "draftAt", "draftDateTimeText"]) delete out[k];
   return out;
 }
 
@@ -166,7 +169,7 @@ refreshLeague: async (leagueId) => {
         }));
       },
 
-      createLeague: async ({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints, shieldEnabled, shieldName }) => {
+      createLeague: async ({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints, shieldEnabled, shieldName, shieldRewards }) => {
   const userId = getActiveUserId();
   if (!userId) return { ok: false, error: "Not signed in." };
 
@@ -174,7 +177,7 @@ refreshLeague: async (leagueId) => {
     const res = await fetch("/api/leagues/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints, shieldEnabled, shieldName }),
+      body: JSON.stringify({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints, shieldEnabled, shieldName, shieldRewards }),
     });
 
     const json = await res.json().catch(() => null);
