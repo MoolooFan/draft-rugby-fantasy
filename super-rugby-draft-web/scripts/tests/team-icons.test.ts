@@ -17,7 +17,7 @@ check("rejected: unknown icon, bad colour, jersey number outside 1-23",
 check("read back", JSON.stringify(parseTeamIcon("icon:jersey:ffc600:23")) === JSON.stringify({ kind: "jersey", colour: "#ffc600", number: 23 })
   && JSON.stringify(parseTeamIcon("icon:posts:111827")) === JSON.stringify({ kind: "posts", colour: "#111827" }));
 check("a photo address is not an icon", !isTeamIcon("https://x.supabase.co/storage/v1/object/public/team-pictures/a.jpg") && !isTeamIcon(null) && !isTeamIcon("icon:boot:zzzzzz"));
-check("details: white, or dark on very light colours", detailColour("#ef4444") === "#ffffff" && detailColour("#111827") === "#ffffff" && detailColour("#ffffff") === "#0f172a" && detailColour("#facc15") === "#0f172a");
+check("details: white, or black where white would be hard to see", detailColour("#ef4444") === "#ffffff" && detailColour("#111827") === "#ffffff" && detailColour("#3b82f6") === "#ffffff" && detailColour("#ffffff") === "#111111" && detailColour("#facc15") === "#111111" && detailColour("#38bdf8") === "#111111");
 for (const { kind } of TEAM_ICON_KINDS) {
   const svg = teamIconSvg({ kind, colour: "#22c55e", ...(kind === "jersey" ? { number: 7 } : {}) });
   check(`${kind}: draws in the chosen colour`, svg.startsWith("<svg") && svg.includes("#22c55e") && !svg.includes("undefined") && !svg.includes("NaN"));

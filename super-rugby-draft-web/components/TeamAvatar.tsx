@@ -45,7 +45,8 @@ export function TeamAvatar({
           height: size,
           borderRadius: 999,
           overflow: "hidden",
-          background: "linear-gradient(135deg, rgb(29,78,216), rgb(15,23,42))",
+          // icons sit on a white circle; photos / initials on the dark blue one
+          background: icon ? "#ffffff" : "linear-gradient(135deg, rgb(29,78,216), rgb(15,23,42))",
           color: "white",
           fontSize: Math.max(8, Math.round(size * 0.36)),
           fontWeight: 900,
