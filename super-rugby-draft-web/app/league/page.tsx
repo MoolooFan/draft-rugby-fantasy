@@ -20,6 +20,8 @@ import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { toMs, pickValue } from "@/lib/league/weekHelpers";
 import { ladderOrder, tieBreakHolder } from "@/lib/league/ladder";
 import { ShieldRewardsFields } from "@/components/ShieldRewardsFields";
+import { TeamIconPicker } from "@/components/TeamIconPicker";
+import { parseTeamIcon } from "@/lib/teams/icons";
 import { NO_SHIELD_REWARDS, type ShieldRewards } from "@/lib/league/shield";
 import { toDatetimeLocal, ModalOverlay, inputStyle, selectStyle, parseDatetimeLocal, saveButton } from "./ui";
 import { LeagueSettingsModal } from "./LeagueSettingsModal";
@@ -1302,8 +1304,9 @@ function JoinLeagueModal__render() {
   const [leagueTitle, setLeagueTitle] = useState("");
   const [rejoining, setRejoining] = useState(false);
   // the picture: the one from last time, a new one (chosen here), or none
-  const [pic, setPic] = useState<{ kind: "previous"; url: string } | { kind: "new"; blob: Blob; url: string } | { kind: "none" }>({ kind: "none" });
+  const [pic, setPic] = useState<{ kind: "previous"; url: string } | { kind: "new"; blob: Blob; url: string } | { kind: "icon"; url: string } | { kind: "none" }>({ kind: "none" });
   const [cropFile, setCropFile] = useState<File | null>(null);
+  const [iconOpen, setIconOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1340,6 +1343,14 @@ function JoinLeagueModal__render() {
         form.append("leagueId", res.leagueId);
         form.append("file", pic.blob, "team.jpg");
         await fetch("/api/teams/picture", { method: "POST", body: form, credentials: "include" }).catch(() => null);
+      }
+      if (pic.kind === "icon") {
+        await fetch("/api/teams/picture", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ leagueId: res.leagueId, icon: parseTeamIcon(pic.url) }),
+        }).catch(() => null);
       }
       refreshLeague(res.leagueId);
       setModal(null);
@@ -1423,6 +1434,12 @@ function JoinLeagueModal__render() {
                       }}
                     />
                   </label>
+                  <button
+                    onClick={() => setIconOpen(true)}
+                    style={{ background: "transparent", border: "none", color: "white", fontSize: 11, fontWeight: 800, textDecoration: "underline", cursor: "pointer", justifySelf: "start", padding: 0 }}
+                  >
+                    Or choose an icon
+                  </button>
                   {pic.kind !== "none" ? (
                     <button
                       onClick={() => setPic({ kind: "none" })}
@@ -1464,6 +1481,16 @@ function JoinLeagueModal__render() {
           onDone={(blob) => {
             setPic({ kind: "new", blob, url: URL.createObjectURL(blob) });
             setCropFile(null);
+          }}
+        />
+      ) : null}
+      {iconOpen ? (
+        <TeamIconPicker
+          current={pic.kind === "icon" ? pic.url : null}
+          onCancel={() => setIconOpen(false)}
+          onSave={(value) => {
+            setPic({ kind: "icon", url: value });
+            setIconOpen(false);
           }}
         />
       ) : null}

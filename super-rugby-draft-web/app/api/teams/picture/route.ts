@@ -1,10 +1,13 @@
 // POST   /api/teams/picture  (form data: leagueId, file)  -> sets your team's picture
+// PUT    /api/teams/picture  { leagueId, icon: { kind, colour, number? } } -> a default icon instead
+//        (boot / posts / ball / jersey 1-23, in a colour: lib/teams/icons.ts)
 // DELETE /api/teams/picture?leagueId=...                  -> removes it (back to initials)
 // The browser crops and shrinks the photo first (a 256 x 256 JPEG); this checks it and stores it
 // in the public "team-pictures" bucket. Only your own team, in a league you're in.
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
+import { teamIconValue } from "@/lib/teams/icons";
 
 const BUCKET = "team-pictures";
 const MAX_BYTES = 1024 * 1024; // 1 MB (the browser sends about 30 KB)
@@ -57,6 +60,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, pictureUrl: url });
   } catch (e: unknown) {
     console.error("[teams/picture][POST]", e);
+    const { msg, status } = toHttpError(e);
+    return NextResponse.json({ ok: false, error: msg }, { status });
+  }
+}
+
+export async function PUT(req: Request) {
+  try {
+    const b = await req.json().catch(() => ({}));
+    const leagueId = String(b?.leagueId ?? "").trim();
+    const value = teamIconValue(b?.icon ?? {});
+    if (!leagueId || !value) return NextResponse.json({ ok: false, error: "Pick an icon, a colour (and a jersey number from 1 to 23)" }, { status: 400 });
+    const { teamId } = await requireLeagueTeam(leagueId);
+    const { data: team, error: tErr } = await supabaseAdmin.from("teams").select("picture_url").eq("id", teamId).maybeSingle();
+    if (tErr) throw tErr;
+    const { error } = await supabaseAdmin.from("teams").update({ picture_url: value }).eq("id", teamId);
+    if (error) throw error;
+    await removeOld(team?.picture_url).catch((e) => console.error("[teams/picture] old picture not removed:", e));
+    return NextResponse.json({ ok: true, pictureUrl: value });
+  } catch (e: unknown) {
     const { msg, status } = toHttpError(e);
     return NextResponse.json({ ok: false, error: msg }, { status });
   }

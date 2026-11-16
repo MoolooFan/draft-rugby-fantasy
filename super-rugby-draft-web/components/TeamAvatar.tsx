@@ -1,10 +1,12 @@
 "use client";
 
 // A team's picture in a circle (plan item E5), or its initials if it has no picture, with a gold
-// star on the top edge for each championship its owner has won in this league (E8).
+// star on the top edge for each championship its owner has won in this league (E8). A picture
+// can also be one of the default icons (boot / posts / ball / jersey: lib/teams/icons.ts).
 
 import React, { useState } from "react";
 import { StarShape, starPositions } from "@/components/ChampionStar";
+import { parseTeamIcon, teamIconSvg } from "@/lib/teams/icons";
 
 export function TeamAvatar({
   pictureUrl,
@@ -21,7 +23,8 @@ export function TeamAvatar({
   style?: React.CSSProperties;
 }) {
   const [broken, setBroken] = useState(false);
-  const showPicture = !!pictureUrl && !broken;
+  const icon = parseTeamIcon(pictureUrl);
+  const showPicture = !icon && !!pictureUrl && !broken;
   const text = String(initials ?? "").trim().slice(0, 3).toUpperCase() || "?";
   const n = Math.max(0, Math.min(9, Math.floor(stars || 0)));
   const R = size / 2;
@@ -50,7 +53,10 @@ export function TeamAvatar({
           boxShadow: "0 0 0 2px rgba(255,255,255,0.9), 0 4px 10px rgba(0,0,0,0.18)",
         }}
       >
-        {showPicture ? (
+        {icon ? (
+          // our own drawing (checked colour and number), not anything a user typed
+          <span style={{ display: "block", width: "100%", height: "100%" }} dangerouslySetInnerHTML={{ __html: teamIconSvg(icon) }} />
+        ) : showPicture ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={pictureUrl!}

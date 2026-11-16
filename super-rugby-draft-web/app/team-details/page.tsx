@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 
 import { AppMenu } from "@/components/AppMenu";
 import { TeamAvatar } from "@/components/TeamAvatar";
+import { TeamIconPicker } from "@/components/TeamIconPicker";
+import { parseTeamIcon } from "@/lib/teams/icons";
 import { PictureCropper } from "@/components/PictureCropper";
 import { WeeklyRecapModal } from "@/components/WeeklyRecapModal";
 import { SeasonRecapModal } from "@/components/SeasonRecapModal";
@@ -117,6 +119,33 @@ export default function TeamDetailsPage() {
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [picBusy, setPicBusy] = useState(false);
   const [picMsg, setPicMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [iconOpen, setIconOpen] = useState(false);
+
+  // a default icon instead of a photo (lib/teams/icons.ts)
+  async function saveIcon(value: string) {
+    if (!activeLeagueId) return;
+    const icon = parseTeamIcon(value);
+    if (!icon) return;
+    setPicBusy(true);
+    setPicMsg(null);
+    try {
+      const res = await fetch("/api/teams/picture", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ leagueId: activeLeagueId, icon }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!j?.ok) throw new Error(j?.error ?? "Couldn't save the icon");
+      setIconOpen(false);
+      setPicMsg({ kind: "ok", text: "Team picture updated." });
+      refreshLeague(activeLeagueId);
+    } catch (e) {
+      setPicMsg({ kind: "err", text: e instanceof Error ? e.message : "Couldn't save the icon" });
+    } finally {
+      setPicBusy(false);
+    }
+  }
 
   async function uploadPicture(jpeg: Blob) {
     if (!activeLeagueId) return;
@@ -327,6 +356,13 @@ export default function TeamDetailsPage() {
                     }}
                   />
                 </label>
+                <button
+                  onClick={() => setIconOpen(true)}
+                  disabled={picBusy || !yourTeamId}
+                  style={{ height: 30, borderRadius: 999, border: "2px solid rgba(255,255,255,0.85)", background: "transparent", color: "white", fontSize: 12, fontWeight: 900, cursor: "pointer" }}
+                >
+                  Choose an icon
+                </button>
                 {myTeam?.pictureUrl ? (
                   <button
                     onClick={removePicture}
@@ -412,6 +448,7 @@ export default function TeamDetailsPage() {
       </div>
 
       {cropFile ? <PictureCropper file={cropFile} busy={picBusy} onCancel={() => setCropFile(null)} onDone={uploadPicture} /> : null}
+      {iconOpen ? <TeamIconPicker current={myTeam?.pictureUrl} busy={picBusy} onCancel={() => setIconOpen(false)} onSave={saveIcon} /> : null}
       {openWeek ? <WeeklyRecapModal leagueId={activeLeagueId} week={openWeek} onClose={() => setOpenWeek(null)} /> : null}
       {openSeason ? <SeasonRecapModal leagueId={openSeason} open onClose={() => setOpenSeason(null)} /> : null}
 
