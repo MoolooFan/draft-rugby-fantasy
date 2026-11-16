@@ -2,6 +2,8 @@
 // app/league/LeagueSettingsModal.tsx
 // (moved out of page.tsx unchanged)
 import { ShieldRewardsFields } from "@/components/ShieldRewardsFields";
+import { BonusPointsFields } from "@/components/BonusPointsFields";
+import { cleanBonusRules, type BonusRules } from "@/lib/league/bonus";
 import { NO_SHIELD_REWARDS, type ShieldRewards } from "@/lib/league/shield";
 import React, { useEffect, useState } from "react";
 
@@ -52,7 +54,7 @@ const computedSeasonWeeks = computedRegularWeeks + selectedPlayoffWeeks;
   const draftStarted = league.draftStatus === "live" || league.draftStatus === "complete";
   const settingsLocked = readOnly || draftStarted;
   const [scoringSystem, setScoringSystem] = useState<"standard" | "alternate" | "custom">(league.scoringSystem ?? "standard");
-  const [bonusPoints, setBonusPoints] = useState<boolean>(league.bonusPoints !== false);
+  const [bonusRules, setBonusRules] = useState<BonusRules>(league.bonusRules ?? cleanBonusRules(null, league.bonusPoints !== false));
   const [shieldEnabled, setShieldEnabled] = useState<boolean>(league.shieldEnabled !== false);
   const [shieldName, setShieldName] = useState<string>(league.shieldName ?? "The Shield");
   const [shieldRewards, setShieldRewards] = useState<ShieldRewards>(league.shieldRewards ?? NO_SHIELD_REWARDS);
@@ -159,10 +161,7 @@ setDraftOrderIds((prev) => {
 ) : null}
 
 <Field label="Bonus Points">
-<label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 800 }}>
-  <input type="checkbox" disabled={settingsLocked} checked={bonusPoints} onChange={(e) => setBonusPoints(e.target.checked)} />
-  Win by 140+ or lose by 40 or less: +1 ladder point
-</label>
+<BonusPointsFields value={bonusRules} onChange={setBonusRules} disabled={settingsLocked} />
 </Field>
 
 <Field label="The Shield">
@@ -310,7 +309,7 @@ draftAt,
 startRound,
 totalWeeks: computedSeasonWeeks, // ✅ IMPORTANT: includes finals weeks
 scoringSystem,
-bonusPoints,
+...(!draftStarted ? { bonusRules } : {}),
 shieldEnabled,
 shieldName,
 ...(!draftStarted ? { shieldRewards } : {}),

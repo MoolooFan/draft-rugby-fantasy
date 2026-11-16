@@ -6,6 +6,7 @@
 // for, then points difference.
 // A bye: the team's score counts toward points for, but no win, loss or ladder points.
 import { BONUS_POINTS, LADDER_POINTS } from "@/lib/season";
+import { cleanBonusRules, type BonusRules } from "@/lib/league/bonus";
 import { roundPoints } from "@/lib/scoring";
 
 export type LadderMatchup = {
@@ -41,12 +42,16 @@ export type LadderRow = {
   ladderPoints: number;
 };
 
-/** Bonus ladder points for a finished regular-season game. */
-export function bonusPoints(homeScore: number, awayScore: number, enabled: boolean): { home: number; away: number } {
-  if (!enabled || homeScore === awayScore) return { home: 0, away: 0 };
+/**
+ * Bonus ladder points for a finished regular-season game. `rules`: the league's bonus rules
+ * (lib/league/bonus.ts: each bonus on/off with its own margin), or the old on/off switch.
+ */
+export function bonusPoints(homeScore: number, awayScore: number, rules: BonusRules | boolean): { home: number; away: number } {
+  const r = typeof rules === "boolean" ? cleanBonusRules(null, rules) : rules;
+  if (homeScore === awayScore) return { home: 0, away: 0 };
   const margin = Math.abs(homeScore - awayScore);
-  const winnerBonus = margin >= BONUS_POINTS.winMarginAtLeast ? BONUS_POINTS.ladderPoints : 0;
-  const loserBonus = margin <= BONUS_POINTS.loseMarginAtMost ? BONUS_POINTS.ladderPoints : 0;
+  const winnerBonus = r.win.on && margin >= r.win.margin ? BONUS_POINTS.ladderPoints : 0;
+  const loserBonus = r.lose.on && margin <= r.lose.margin ? BONUS_POINTS.ladderPoints : 0;
   return homeScore > awayScore ? { home: winnerBonus, away: loserBonus } : { home: loserBonus, away: winnerBonus };
 }
 

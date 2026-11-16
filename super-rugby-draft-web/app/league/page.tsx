@@ -20,6 +20,8 @@ import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { toMs, pickValue } from "@/lib/league/weekHelpers";
 import { ladderOrder, tieBreakHolder } from "@/lib/league/ladder";
 import { ShieldRewardsFields } from "@/components/ShieldRewardsFields";
+import { BonusPointsFields } from "@/components/BonusPointsFields";
+import { DEFAULT_BONUS_RULES, type BonusRules } from "@/lib/league/bonus";
 import { TeamIconPicker } from "@/components/TeamIconPicker";
 import { parseTeamIcon } from "@/lib/teams/icons";
 import { NO_SHIELD_REWARDS, type ShieldRewards } from "@/lib/league/shield";
@@ -1511,7 +1513,7 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
 
   const [playoffs, setPlayoffs] = useState<PlayoffFormat>("final4");
   const [scoringSystem, setScoringSystem] = useState<"standard" | "alternate" | "custom">("standard");
-  const [bonusPoints, setBonusPoints] = useState(true);
+  const [bonusRules, setBonusRules] = useState<BonusRules>(DEFAULT_BONUS_RULES);
   const [shieldEnabled, setShieldEnabled] = useState(true);
   const [shieldName, setShieldName] = useState("The Shield");
   const [shieldRewards, setShieldRewards] = useState<ShieldRewards>(NO_SHIELD_REWARDS);
@@ -1593,10 +1595,7 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
             </div>
           ) : null}
 
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 800 }}>
-            <input type="checkbox" checked={bonusPoints} onChange={(e) => setBonusPoints(e.target.checked)} />
-            Bonus points (win by 140+ / lose by 40 or less)
-          </label>
+          <BonusPointsFields value={bonusRules} onChange={setBonusRules} />
 
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 800 }}>
             <input type="checkbox" checked={shieldEnabled} onChange={(e) => setShieldEnabled(e.target.checked)} />
@@ -1638,7 +1637,7 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
     draftDateTimeText: draftLocal,
     draftAt,
     scoringSystem,
-    bonusPoints,
+    bonusRules,
     shieldEnabled,
     shieldName,
     shieldRewards,

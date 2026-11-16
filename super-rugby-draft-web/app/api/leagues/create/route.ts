@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cleanShieldName, cleanShieldRewards } from "@/lib/league/shield";
+import { anyBonus, cleanBonusRules } from "@/lib/league/bonus";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
@@ -38,7 +39,9 @@ export async function POST(req: Request) {
     if (!rules) return NextResponse.json({ ok: false, error }, { status: 400 });
     scoringCustom = rules;
   }
-  const bonusPoints = body?.bonusPoints !== false;
+  // bonus points: each on/off with its own margin (lib/league/bonus.ts); older pages send just on/off
+  const bonusRules = cleanBonusRules(body?.bonusRules ?? null, body?.bonusPoints !== false);
+  const bonusPoints = anyBonus(bonusRules);
   // The Shield: on unless switched off; the name always ends in "Shield"
   const shieldEnabled = body?.shieldEnabled !== false;
   const shieldName = cleanShieldName(body?.shieldName);
@@ -107,6 +110,7 @@ if (draftAtRaw !== null && draftAtRaw !== undefined && draftAtRaw !== "") {
     scoring_system: scoringSystem,
     scoring_custom: scoringCustom,
     bonus_points: bonusPoints,
+    bonus_rules: bonusRules,
     shield_enabled: shieldEnabled,
     shield_name: shieldName,
     shield_rewards: shieldRewards,

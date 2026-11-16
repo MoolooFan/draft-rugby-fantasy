@@ -6,6 +6,7 @@ import { rulesForLeagueRow } from "@/lib/scoring/leagueRules";
 import { championshipStars } from "@/lib/league/honours";
 import { loadShield } from "@/lib/league/shieldServer";
 import { cleanShieldName, cleanShieldRewards } from "@/lib/league/shield";
+import { bonusRulesFromRow } from "@/lib/league/bonus";
 import { currentSeasonYear, restartWindow } from "@/lib/season";
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -168,6 +169,7 @@ if (computedOrder.length) {
     scoringCustom: leagueRow.scoring_custom ?? null,
     scoringLocked: !!leagueRow.scoring_rules_locked,
     bonusPoints: leagueRow.bonus_points !== false,
+    bonusRules: bonusRulesFromRow(leagueRow),
     season: leagueRow.season,
     // The Shield: who holds it, their next shield game, and this season's shield games
     shield: await shieldSummary(),

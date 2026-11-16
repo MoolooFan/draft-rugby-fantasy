@@ -4,6 +4,7 @@ import { getServerUsername } from "@/lib/serverSession";
 import { cleanScoringRules } from "@/lib/scoring/validate";
 import { getSystemRules } from "@/lib/scoring/leagueRules";
 import { cleanShieldName, cleanShieldRewards } from "@/lib/league/shield";
+import { anyBonus, cleanBonusRules } from "@/lib/league/bonus";
 import { syncShieldRewards } from "@/lib/league/shieldServer";
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
   }
 
   // Finals, scoring, bonus points and the Shield's rewards lock once the draft starts.
-  const lockedKeys = ["playoffFormat", "bonusPoints", "scoringSystem", "scoringCustom", "shieldRewards"];
+  const lockedKeys = ["playoffFormat", "bonusPoints", "bonusRules", "scoringSystem", "scoringCustom", "shieldRewards"];
   const locked = !!leagueRow.settings_locked_at || (leagueRow.draft_status ?? "scheduled") !== "scheduled";
   if (locked && lockedKeys.some((k) => k in patch)) {
     return NextResponse.json(
@@ -86,6 +87,11 @@ export async function POST(req: Request) {
     dbPatch.scoring_custom = rules;
   }
   if ("bonusPoints" in patch) dbPatch.bonus_points = patch.bonusPoints !== false;
+  if ("bonusRules" in patch) {
+    const rules = cleanBonusRules(patch.bonusRules);
+    dbPatch.bonus_rules = rules;
+    dbPatch.bonus_points = anyBonus(rules);
+  }
   // The Shield can be switched on/off and renamed any time (off = that season doesn't count)
   if ("shieldEnabled" in patch) {
     const on = patch.shieldEnabled !== false;

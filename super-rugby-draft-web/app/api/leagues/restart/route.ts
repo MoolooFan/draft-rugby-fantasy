@@ -90,6 +90,7 @@ export async function POST(req: Request) {
     scoring_system: old.scoring_system ?? "standard",
     scoring_custom: old.scoring_custom ?? null,
     bonus_points: old.bonus_points !== false,
+    bonus_rules: old.bonus_rules ?? null,
     shield_enabled: old.shield_enabled !== false,
     shield_name: old.shield_name ?? "The Shield",
     shield_rewards: old.shield_rewards ?? {},

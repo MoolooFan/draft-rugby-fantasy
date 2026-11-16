@@ -1,5 +1,6 @@
 // lib/league/types.ts
 import type { ShieldRewards } from "@/lib/league/shield";
+import type { BonusRules } from "@/lib/league/bonus";
 export type PlayoffFormat = "none" | "final2" | "final3" | "final4" | "final6";
 
 export type LeagueTeam = {
@@ -34,6 +35,8 @@ export type League = {
   scoringCustom?: import("@/lib/scoring").ScoringRules | Record<string, unknown> | null;
   scoringLocked?: boolean;
   bonusPoints?: boolean;
+  /** each bonus on/off with its margin (lib/league/bonus.ts) */
+  bonusRules?: BonusRules;
   season?: number;
   /** The Shield (lib/league/shield.ts): on/off, name, holder, next shield game, this season's shield games */
   shield?: LeagueShieldSummary;

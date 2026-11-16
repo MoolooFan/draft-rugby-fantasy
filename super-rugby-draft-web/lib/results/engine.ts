@@ -19,6 +19,7 @@ import { activeIdsOf } from "@/lib/league/ir";
 import { recordSeasonHonours } from "@/lib/league/honours";
 import { bonusPoints, buildLadder, type LadderMatchup } from "@/lib/league/ladder";
 import { syncShieldRewards } from "@/lib/league/shieldServer";
+import { bonusRulesFromRow } from "@/lib/league/bonus";
 import {
   buildLeagueSchedule,
   pickRoundForWeek,
@@ -55,6 +56,7 @@ type LeagueRow = {
   season: number;
   playoff_format: string;
   bonus_points: boolean;
+  bonus_rules?: unknown;
   first_week: number | null;
   schedule_plan: SchedulePlan | null;
   schedule_built_at: string | null;
@@ -347,7 +349,7 @@ export async function finaliseWeek(
     let hb = 0, ab = 0;
     if (home.score !== away.score) winner = home.score > away.score ? m.home_team_id : m.away_team_id;
     if (m.kind === "regular") {
-      const b = bonusPoints(home.score, away.score, league.bonus_points);
+      const b = bonusPoints(home.score, away.score, bonusRulesFromRow(league));
       hb = b.home; ab = b.away;
     } else if (!winner) {
       // playoffs can't be drawn: most tries, then the higher seed

@@ -1,4 +1,5 @@
 // Run: npx tsx scripts/tests/ladder-lineup.test.ts — ladder, bonus points and carried-forward lineups.
+import { bonusRulesFromRow, cleanBonusRules } from "../../lib/league/bonus";
 import { bonusPoints, buildLadder } from "../../lib/league/ladder";
 import { reconcileLineup } from "../../lib/league/lineup";
 import { STARTER_SLOTS, SLOT_POSITION, type Lineup } from "../../lib/scoring/week";
@@ -17,6 +18,13 @@ check("lose by 40: loser bonus", eq(bonusPoints(400, 440, true), { home: 1, away
 check("lose by 41: no bonus", eq(bonusPoints(400, 441, true), { home: 0, away: 0 }));
 check("draw: no bonus", eq(bonusPoints(400, 400, true), { home: 0, away: 0 }));
 check("bonus points switched off", eq(bonusPoints(600, 300, false), { home: 0, away: 0 }));
+// each bonus on/off with its own margin (lib/league/bonus.ts)
+const onlyLose = cleanBonusRules({ win: { on: false, margin: 140 }, lose: { on: true, margin: 40 } });
+check("winning bonus off: a big win earns nothing, a close loss still does", eq(bonusPoints(600, 300, onlyLose), { home: 0, away: 0 }) && eq(bonusPoints(400, 430, onlyLose), { home: 1, away: 0 }));
+const custom = cleanBonusRules({ win: { on: true, margin: 100 }, lose: { on: true, margin: 20 } });
+check("custom margins: win by 100+, lose by 20 or less", eq(bonusPoints(500, 400, custom), { home: 1, away: 0 }) && eq(bonusPoints(500, 401, custom), { home: 0, away: 0 }) && eq(bonusPoints(480, 500, custom), { home: 1, away: 0 }) && eq(bonusPoints(479, 500, custom), { home: 0, away: 0 }));
+check("old leagues: on/off switch = both bonuses with the usual margins", eq(bonusRulesFromRow({ bonus_points: true }), cleanBonusRules(null, true)) && !bonusRulesFromRow({ bonus_points: false }).win.on && bonusRulesFromRow({ bonus_points: true }).win.margin === 140);
+check("margins are kept sensible", cleanBonusRules({ win: { on: true, margin: -5 }, lose: { on: true, margin: 99999 } }).win.margin === 1 && cleanBonusRules({ lose: { margin: 99999 } }).lose.margin === 1000);
 
 // ---- ladder
 const m = (h: string, a: string | null, hs: number, as: number | null, hb = 0, ab = 0) => ({

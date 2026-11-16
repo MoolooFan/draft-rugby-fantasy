@@ -1,5 +1,6 @@
 // lib/league/store.ts
 import type { ShieldRewards } from "@/lib/league/shield";
+import type { BonusRules } from "@/lib/league/bonus";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { League, LeagueTeam, PlayoffFormat } from "./types";
@@ -36,6 +37,7 @@ createLeague: (params: {
   scoringSystem?: "standard" | "alternate" | "custom";
   scoringCustom?: unknown;
   bonusPoints?: boolean;
+  bonusRules?: BonusRules;
   shieldEnabled?: boolean;
   shieldName?: string;
   shieldRewards?: ShieldRewards;
@@ -67,6 +69,7 @@ joinLeagueByCode: (params: {
         | "scoringSystem"
         | "scoringCustom"
         | "bonusPoints"
+        | "bonusRules"
         | "shieldEnabled"
         | "shieldName"
         | "shieldRewards"
@@ -82,7 +85,7 @@ function sendablePatch(league: League | undefined, patch: Record<string, unknown
   const started = league?.draftStatus === "live" || league?.draftStatus === "complete";
   if (!started) return patch;
   const out = { ...patch };
-  for (const k of ["playoffFormat", "scoringSystem", "scoringCustom", "bonusPoints", "shieldRewards", "draftAt", "draftDateTimeText"]) delete out[k];
+  for (const k of ["playoffFormat", "scoringSystem", "scoringCustom", "bonusPoints", "bonusRules", "shieldRewards", "draftAt", "draftDateTimeText"]) delete out[k];
   return out;
 }
 
@@ -169,7 +172,7 @@ refreshLeague: async (leagueId) => {
         }));
       },
 
-      createLeague: async ({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints, shieldEnabled, shieldName, shieldRewards }) => {
+      createLeague: async ({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints, bonusRules, shieldEnabled, shieldName, shieldRewards }) => {
   const userId = getActiveUserId();
   if (!userId) return { ok: false, error: "Not signed in." };
 
@@ -177,7 +180,7 @@ refreshLeague: async (leagueId) => {
     const res = await fetch("/api/leagues/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints, shieldEnabled, shieldName, shieldRewards }),
+      body: JSON.stringify({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints, bonusRules, shieldEnabled, shieldName, shieldRewards }),
     });
 
     const json = await res.json().catch(() => null);
