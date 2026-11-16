@@ -11,8 +11,6 @@ import { ScoringEditor } from "@/components/ScoringEditor";
 import type { ScoringRules } from "@/lib/scoring";
 import { StatusTag } from "@/components/StatusTag";
 import { STATUS_PRESETS } from "@/lib/status/kind";
-import { TauntArtwork } from "@/components/TauntGraphic";
-import { DEFAULT_TEAM_COLOURS, SKIN_TONES, skinColour, teamColours, type TauntArt, type TeamColours } from "@/lib/chat/tauntArt";
 
 // ---------------------------------------------------------------------------
 // Styles (same look as the other pages)
@@ -242,8 +240,6 @@ function PlayerForm({
       <datalist id="status-presets">
         {STATUS_PRESETS.map((x) => <option key={x} value={x} />)}
       </datalist>
-
-      {player ? <PlayerTauntArt player={player} /> : null}
 
       {player ? (
         <div style={{ borderTop: "1px solid rgba(0,0,0,0.1)", paddingTop: 8, display: "grid", gap: 6 }}>
@@ -709,7 +705,7 @@ function ScoringTab({ setMsg }: { setMsg: (m: string | null) => void }) {
 
 // ---------------------------------------------------------------------------
 
-type Tab = "Players" | "Status" | "Difficulty" | "Rounds" | "Scoring" | "History" | "Taunts";
+type Tab = "Players" | "Status" | "Difficulty" | "Rounds" | "Scoring" | "History";
 
 // ---------------------------------------------------------------------------
 // History (E8): link past seasons to a league and history names to accounts, for the stars
@@ -720,356 +716,6 @@ type HistoryData = {
   leagues: Array<{ id: string; name: string; season: number; lineageId: string }>;
   users: Array<{ id: string; username: string }>;
 };
-
-// ---------------------------------------------------------------------------
-// Taunts: the ready-made lines people send their opponent (lib/chat/common.ts)
-
-type TauntLine = { id: string; kind: "try" | "card"; text: string; active: boolean };
-
-// ---------------------------------------------------------------------------
-// Try taunt pictures (lib/chat/tauntArt.ts)
-
-type ArtInfo = { arts: TauntArt[]; colours: Record<string, TeamColours>; skinTone?: number | null };
-
-async function uploadArt(file: File, playerId?: string) {
-  const form = new FormData();
-  form.append("file", file);
-  if (playerId) form.append("playerId", playerId);
-  const res = await fetch("/api/admin/taunt-art", { method: "POST", body: form });
-  const j = await res.json().catch(() => null);
-  if (!res.ok || !j?.ok) throw new Error(j?.error ?? "Upload failed");
-}
-
-const smallButton: React.CSSProperties = { ...primaryButton, height: 30, width: "auto", padding: "0 12px", fontSize: 12 };
-
-function ArtTile({
-  art,
-  preview,
-  onChange,
-  setMsg,
-}: {
-  art: TauntArt;
-  preview: { colours: TeamColours; skin: string; teamName: string };
-  onChange: () => void;
-  setMsg: (m: string | null) => void;
-}) {
-  const [confirm, setConfirm] = useState(false);
-  async function act(body: Record<string, unknown>, done: string) {
-    try {
-      await api("/api/admin/taunt-art", body);
-      setMsg(done);
-      onChange();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Something went wrong");
-    }
-  }
-  return (
-    <div style={{ display: "grid", gap: 6, justifyItems: "center", opacity: art.active ? 1 : 0.5 }}>
-      <TauntArtwork
-        size={150}
-        graphic={{ type: "try", points: 0, line: "preview", teamName: preview.teamName, colours: preview.colours, skin: preview.skin, art: { url: art.url, generic: !art.player_id } }}
-      />
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
-        <button style={smallButton} onClick={() => act({ action: "toggle", id: art.id, active: !art.active }, art.active ? "Picture hidden" : "Picture back on")}>
-          {art.active ? "Hide" : "Show"}
-        </button>
-        {confirm ? (
-          <button style={{ ...smallButton, background: "#b91c1c" }} onClick={() => act({ action: "delete", id: art.id }, "Picture deleted")}>
-            Sure? Delete
-          </button>
-        ) : (
-          <button style={{ ...smallButton, background: "rgba(15,23,42,0.35)" }} onClick={() => setConfirm(true)}>
-            Delete
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function UploadButton({ label, onFile }: { label: string; onFile: (f: File) => Promise<void> }) {
-  const [busy, setBusy] = useState(false);
-  return (
-    <label style={{ ...smallButton, display: "inline-flex", alignItems: "center", justifyContent: "center", opacity: busy ? 0.6 : 1 }}>
-      {busy ? "Uploading…" : label}
-      <input
-        type="file"
-        accept="image/png,image/webp"
-        style={{ display: "none" }}
-        disabled={busy}
-        onChange={async (e) => {
-          const f = e.target.files?.[0];
-          e.target.value = "";
-          if (!f) return;
-          setBusy(true);
-          try {
-            await onFile(f);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      />
-    </label>
-  );
-}
-
-/** In a player's edit form: his skin tone for the generic pictures, and his own pictures. */
-function PlayerTauntArt({ player }: { player: AdminPlayer }) {
-  const [info, setInfo] = useState<ArtInfo | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
-  const load = useCallback(() => {
-    api<ArtInfo>(`/api/admin/taunt-art?playerId=${encodeURIComponent(player.id)}`)
-      .then(setInfo)
-      .catch((e) => setMsg(e instanceof Error ? e.message : "Couldn't load the taunt pictures"));
-  }, [player.id]);
-  useEffect(() => {
-    load();
-  }, [load]);
-  const colours = teamColours(player.teamCode, info?.colours);
-  const tone = info?.skinTone ?? null;
-  return (
-    <div style={{ borderTop: "1px solid rgba(0,0,0,0.1)", paddingTop: 8, display: "grid", gap: 6 }}>
-      <div style={{ fontWeight: 900, fontSize: 13 }}>Try taunt picture</div>
-      <div style={{ fontSize: 11, opacity: 0.7, fontWeight: 700 }}>
-        Skin tone repaints the generic pictures for him. Upload his own picture to use instead (top players); it shows as
-        it is, so draw him in his team&apos;s real jersey.
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "end" }}>
-        <div>
-          <div style={labelStyle}>Skin tone (generic pictures)</div>
-          <select
-            style={inputStyle}
-            value={tone ?? ""}
-            onChange={async (e) => {
-              try {
-                await api("/api/admin/taunt-art", { action: "skin", playerId: player.id, tone: e.target.value });
-                setMsg("Skin tone saved");
-                load();
-              } catch (err) {
-                setMsg(err instanceof Error ? err.message : "Save failed");
-              }
-            }}
-          >
-            <option value="">Not set (medium)</option>
-            {SKIN_TONES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <span aria-hidden="true" style={{ width: 36, height: 36, borderRadius: 999, background: skinColour(tone), border: "2px solid white", boxShadow: "0 0 0 1px rgba(0,0,0,0.15)" }} />
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
-        {(info?.arts ?? []).map((a) => (
-          <ArtTile key={a.id} art={a} preview={{ colours, skin: skinColour(tone), teamName: player.teamCode }} onChange={load} setMsg={setMsg} />
-        ))}
-      </div>
-      {info && !info.arts.length ? <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.7 }}>No picture of his own: taunts use a generic one.</div> : null}
-      <div>
-        <UploadButton
-          label="Upload his picture"
-          onFile={async (f) => {
-            try {
-              await uploadArt(f, player.id);
-              setMsg("Picture added");
-              load();
-            } catch (e) {
-              setMsg(e instanceof Error ? e.message : "Upload failed");
-            }
-          }}
-        />
-      </div>
-      {msg ? <div style={{ fontSize: 12, fontWeight: 800 }}>{msg}</div> : null}
-    </div>
-  );
-}
-
-/** On the Taunts tab: the generic pictures (with a preview in any team / skin tone) and team colours. */
-function TauntArtSection({ setMsg }: { setMsg: (m: string | null) => void }) {
-  const [info, setInfo] = useState<ArtInfo | null>(null);
-  const [team, setTeam] = useState("HUR");
-  const [tone, setTone] = useState(2);
-  const [edit, setEdit] = useState<Record<string, TeamColours>>({});
-  const load = useCallback(() => {
-    api<ArtInfo>("/api/admin/taunt-art")
-      .then(setInfo)
-      .catch((e) => setMsg(e instanceof Error ? e.message : "Couldn't load the taunt pictures"));
-  }, [setMsg]);
-  useEffect(() => {
-    load();
-  }, [load]);
-  const colourOf = (code: string) => edit[code] ?? teamColours(code, info?.colours);
-  const generic = (info?.arts ?? []).filter((a) => !a.player_id);
-  const own = (info?.arts ?? []).filter((a) => a.player_id);
-  const teamName = TEAMS.find(([c]) => c === team)?.[1] ?? team;
-  return (
-    <>
-      <div style={{ ...whiteBox, display: "grid", gap: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 900 }}>Try pictures (generic)</div>
-        <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75, lineHeight: 1.4 }}>
-          PNG or WebP with a see-through background. Draw the jersey bright green, the skin bright blue, and (optional)
-          collar / trim / shorts / socks bright magenta: the site repaints them in the player&apos;s team colours and skin
-          tone. Each taunt picks one at random (players with their own picture use theirs: set on the Players tab).
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <div>
-            <div style={labelStyle}>Preview team</div>
-            <select style={inputStyle} value={team} onChange={(e) => setTeam(e.target.value)}>
-              {TEAMS.map(([c, n]) => (
-                <option key={c} value={c}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <div style={labelStyle}>Preview skin tone</div>
-            <select style={inputStyle} value={tone} onChange={(e) => setTone(Number(e.target.value))}>
-              {SKIN_TONES.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
-          {generic.map((a) => (
-            <ArtTile key={a.id} art={a} preview={{ colours: colourOf(team), skin: skinColour(tone), teamName }} onChange={load} setMsg={setMsg} />
-          ))}
-        </div>
-        {info && !generic.length ? <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.7 }}>None yet: try taunts show a drawn jersey until you add some.</div> : null}
-        <div>
-          <UploadButton
-            label="Upload a generic picture"
-            onFile={async (f) => {
-              try {
-                await uploadArt(f);
-                setMsg("Picture added");
-                load();
-              } catch (e) {
-                setMsg(e instanceof Error ? e.message : "Upload failed");
-              }
-            }}
-          />
-        </div>
-        {own.length ? (
-          <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75 }}>Players with their own picture: {[...new Set(own.map((a) => a.player_id))].join(", ")}</div>
-        ) : null}
-      </div>
-
-      <div style={{ ...whiteBox, display: "grid", gap: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 900 }}>Team colours (taunt graphics)</div>
-        <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75 }}>Jersey = the green in the pictures and the background; second colour = the magenta and the rays.</div>
-        {TEAMS.map(([code, name]) => {
-          const c = colourOf(code);
-          const setC = (k: keyof TeamColours) => (e: React.ChangeEvent<HTMLInputElement>) => setEdit((x) => ({ ...x, [code]: { ...c, [k]: e.target.value } }));
-          return (
-            <div key={code} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "center" }}>
-              <div style={{ fontSize: 13, fontWeight: 800 }}>{name}</div>
-              <label style={{ fontSize: 11, fontWeight: 800, display: "flex", gap: 4, alignItems: "center" }}>
-                Jersey <input type="color" value={c.jersey} onChange={setC("jersey")} aria-label={`${name} jersey colour`} />
-              </label>
-              <label style={{ fontSize: 11, fontWeight: 800, display: "flex", gap: 4, alignItems: "center" }}>
-                Second <input type="color" value={c.trim} onChange={setC("trim")} aria-label={`${name} second colour`} />
-              </label>
-            </div>
-          );
-        })}
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            style={primaryButton}
-            disabled={!Object.keys(edit).length}
-            onClick={async () => {
-              try {
-                await api("/api/admin/taunt-art", { action: "colours", colours: edit });
-                setEdit({});
-                setMsg("Team colours saved");
-                load();
-              } catch (e) {
-                setMsg(e instanceof Error ? e.message : "Save failed");
-              }
-            }}
-          >
-            Save colours
-          </button>
-          <button style={{ ...primaryButton, background: "rgba(15,23,42,0.35)" }} onClick={() => setEdit({ ...DEFAULT_TEAM_COLOURS })} title="Back to the site's starting colours (then Save)">
-            Reset all
-          </button>
-        </div>
-      </div>
-    </>
-  );
-}
-
-function TauntsTab({ setMsg }: { setMsg: (m: string | null) => void }) {
-  const [lines, setLines] = useState<TauntLine[] | null>(null);
-  const [kind, setKind] = useState<"try" | "card">("try");
-  const [text, setText] = useState("");
-  const [edits, setEdits] = useState<Record<string, string>>({});
-  const load = () =>
-    api<{ lines: TauntLine[] }>("/api/admin/taunts")
-      .then((r) => setLines(r.lines))
-      .catch((e) => setMsg(e instanceof Error ? e.message : "Couldn't load the taunts"));
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  async function post(body: Record<string, unknown>, done: string) {
-    try {
-      await api("/api/admin/taunts", body);
-      setMsg(done);
-      load();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Something went wrong");
-    }
-  }
-  return (
-    <div style={{ display: "grid", gap: 10 }}>
-      <div style={whiteBox}>
-        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 4 }}>Add a taunt</div>
-        <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75, marginBottom: 8 }}>
-          {"{player}"} = the player, {"{opponent}"} = the team being taunted, {"{card}"} = yellow / red (card taunts).
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "90px 1fr", gap: 8 }}>
-          <select id="taunt-kind" style={inputStyle} value={kind} onChange={(e) => setKind(e.target.value as "try" | "card")}>
-            <option value="try">Try</option>
-            <option value="card">Card</option>
-          </select>
-          <input id="taunt-text" style={inputStyle} value={text} maxLength={200} onChange={(e) => setText(e.target.value)} placeholder="{player} just scored..." />
-        </div>
-        <button
-          style={{ ...primaryButton, marginTop: 8 }}
-          onClick={() => {
-            post({ action: "add", kind, text }, "Taunt added");
-            setText("");
-          }}
-        >
-          Add taunt
-        </button>
-      </div>
-      {(["try", "card"] as const).map((k) => (
-        <div key={k} style={whiteBox}>
-          <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 6 }}>{k === "try" ? "Your player scores a try" : "Their player gets a card"}</div>
-          {(lines ?? []).filter((l) => l.kind === k).map((l) => (
-            <div key={l.id} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 6, alignItems: "center", padding: "6px 0", borderTop: "1px solid rgba(0,0,0,0.08)", opacity: l.active ? 1 : 0.5 }}>
-              <input id={`taunt-${l.id}`} style={inputStyle} value={edits[l.id] ?? l.text} maxLength={200} onChange={(e) => setEdits((x) => ({ ...x, [l.id]: e.target.value }))} />
-              <button style={{ ...primaryButton, padding: "0 10px" }} disabled={(edits[l.id] ?? l.text) === l.text} onClick={() => post({ action: "edit", id: l.id, text: edits[l.id] }, "Taunt saved")}>
-                Save
-              </button>
-              <button style={{ ...primaryButton, padding: "0 10px", background: "rgba(15,23,42,0.35)" }} onClick={() => post({ action: "toggle", id: l.id, active: !l.active }, l.active ? "Taunt hidden" : "Taunt back on")}>
-                {l.active ? "Hide" : "Show"}
-              </button>
-            </div>
-          ))}
-          {lines && !lines.some((l) => l.kind === k) ? <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.7 }}>None yet.</div> : null}
-        </div>
-      ))}
-      <TauntArtSection setMsg={setMsg} />
-    </div>
-  );
-}
 
 function HistoryTab({ setMsg }: { setMsg: (m: string | null) => void }) {
   const [data, setData] = useState<HistoryData | null>(null);
@@ -1196,7 +842,7 @@ export default function AdminPage() {
               </div>
             ) : null}
             <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-              {(["Players", "Status", "Difficulty", "Rounds", "Scoring", "History", "Taunts"] as Tab[]).map((t) => (
+              {(["Players", "Status", "Difficulty", "Rounds", "Scoring", "History"] as Tab[]).map((t) => (
                 <button key={t} style={tabButton(t === tab)} onClick={() => { setTab(t); setMsg(null); }}>{t}</button>
               ))}
             </div>
@@ -1216,7 +862,6 @@ export default function AdminPage() {
             {tab === "Status" ? <StatusTab setMsg={setMsg} /> : null}
             {tab === "Scoring" ? <ScoringTab setMsg={setMsg} /> : null}
             {tab === "History" ? <HistoryTab setMsg={setMsg} /> : null}
-            {tab === "Taunts" ? <TauntsTab setMsg={setMsg} /> : null}
           </div>
         </div>
       </div>

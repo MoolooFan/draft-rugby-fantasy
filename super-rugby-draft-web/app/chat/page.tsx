@@ -2,11 +2,9 @@
 // app/chat/page.tsx
 // League chat and direct messages (Ethan, 13 Nov 2026). The list of conversations (league chat +
 // one with each other team), then a conversation: messages, pictures, trade offers (with a
-// Review button), taunts and the league's automated posts. New messages are checked every few
+// Review button) and the league's automated posts. New messages are checked every few
 // seconds while a conversation is open. Rules: lib/chat/common.ts.
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import TauntGraphic from "@/components/TauntGraphic";
-import type { TauntGraphic as TauntGraphicData } from "@/lib/chat/tauntArt";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppMenu } from "@/components/AppMenu";
 import { TeamAvatar } from "@/components/TeamAvatar";
@@ -23,7 +21,7 @@ type Msg = {
   id: string;
   channel: string;
   sender_team_id: string | null;
-  kind: "text" | "image" | "trade" | "system" | "taunt";
+  kind: "text" | "image" | "trade" | "system";
   body: string | null;
   image_url: string | null;
   meta: Record<string, unknown>;
@@ -248,8 +246,8 @@ function ChatPageInner() {
       lineHeight: 1.35,
       whiteSpace: "pre-wrap",
       overflowWrap: "anywhere",
-      background: m.kind === "taunt" ? "rgba(168,85,247,0.95)" : mine ? "rgb(13,148,136)" : "rgba(15,23,42,0.07)",
-      color: m.kind === "taunt" || mine ? "white" : "#0f172a",
+      background: mine ? "rgb(13,148,136)" : "rgba(15,23,42,0.07)",
+      color: mine ? "white" : "#0f172a",
     };
     return (
       <div style={{ display: "grid", justifyItems: mine ? "end" : "start", gap: 2 }}>
@@ -282,19 +280,13 @@ function ChatPageInner() {
             );
           })()
         ) : (
-          <>
-          {m.kind === "taunt" && (m.meta as { graphic?: TauntGraphicData | null })?.graphic ? (
-            <TauntGraphic graphic={(m.meta as { graphic: TauntGraphicData }).graphic} align={mine ? "end" : "start"} />
-          ) : null}
           <div style={base}>
-            {m.kind === "taunt" ? <div style={{ fontSize: 10, fontWeight: 900, opacity: 0.85, marginBottom: 2 }}>TAUNT</div> : null}
             {m.image_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={m.image_url} alt="" style={{ display: "block", maxWidth: 220, maxHeight: 260, borderRadius: 10, marginBottom: m.body ? 6 : 0 }} />
             ) : null}
             {m.body}
           </div>
-          </>
         )}
         <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.45, padding: "0 4px" }}>{timeText(m.created_at)}</div>
       </div>

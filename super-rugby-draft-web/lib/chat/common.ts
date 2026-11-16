@@ -1,6 +1,6 @@
 // lib/chat/common.ts
-// League chat and direct messages (Ethan, 13 Nov 2026): conversation keys, automated post text,
-// and taunts. Pure code (tested in scripts/tests/chat.test.ts); the database side is
+// League chat and direct messages (Ethan, 13 Nov 2026): conversation keys and automated post
+// text. Pure code (tested in scripts/tests/chat.test.ts); the database side is
 // lib/chat/server.ts.
 //
 // Conversations ("channels"):
@@ -27,11 +27,10 @@ export function canUseChannel(channel: string, teamId: string, leagueTeamIds: st
   return !!t && t[0] !== t[1] && t.includes(teamId) && t.every((x) => leagueTeamIds.includes(x));
 }
 
-export type ChatKind = "text" | "image" | "trade" | "system" | "taunt";
+export type ChatKind = "text" | "image" | "trade" | "system";
 
 /** Which notification setting (lib/notifications/types.ts) mutes a message. */
-export function muteKeyFor(m: { channel: string; kind: ChatKind; sender_team_id: string | null }): "chat_dm" | "chat_league" | "chat_auto" | "taunts" {
-  if (m.kind === "taunt") return "taunts";
+export function muteKeyFor(m: { channel: string; kind: ChatKind; sender_team_id: string | null }): "chat_dm" | "chat_league" | "chat_auto" {
   if (m.channel === LEAGUE_CHANNEL) return m.sender_team_id ? "chat_league" : "chat_auto";
   return "chat_dm";
 }
@@ -89,36 +88,4 @@ export function shieldReportText(name: string, e: { kind: "awarded" | "defended"
   if (e.kind === "awarded") return `🛡️ ${e.holder} win ${name} with the top score of the round.`;
   if (e.kind === "won") return `🛡️ ${e.holder} take ${name} off ${e.other}!${score ? ` (${score.trim()})` : ""}`;
   return `🛡️ ${e.holder} keep ${name}, beating ${e.other}${score ? ` ${score.trim()}` : ""}. ${e.defences} defence${e.defences === 1 ? "" : "s"}.`;
-}
-
-// ---------------------------------------------------------------------------
-// Taunts (like ESPN fantasy): when your player scores a try, or your opponent's player gets a
-// yellow / red card, you can send your opponent a ready-made taunt.
-
-export type TauntKind = "try" | "card";
-export type TauntEvent = { key: string; kind: TauntKind; playerId: string; card?: "yellow" | "red" };
-
-/** The events you can taunt about this week, from your starters' and your opponent's starters' stats. */
-export function tauntEvents(input: {
-  week: number;
-  myStarters: string[];
-  opponentStarters: string[];
-  statsOf: (playerId: string) => { tries?: number; yellowCards?: number; redCards?: number } | null;
-}): TauntEvent[] {
-  const out: TauntEvent[] = [];
-  for (const id of input.myStarters) {
-    const s = input.statsOf(id);
-    if (s && Number(s.tries) > 0) out.push({ key: `try:${input.week}:${id}`, kind: "try", playerId: id });
-  }
-  for (const id of input.opponentStarters) {
-    const s = input.statsOf(id);
-    if (s && Number(s.redCards) > 0) out.push({ key: `card:${input.week}:${id}`, kind: "card", playerId: id, card: "red" });
-    else if (s && Number(s.yellowCards) > 0) out.push({ key: `card:${input.week}:${id}`, kind: "card", playerId: id, card: "yellow" });
-  }
-  return out;
-}
-
-/** Fill in a taunt line: {player}, {opponent}, {card}. */
-export function fillTaunt(line: string, v: { player: string; opponent: string; card?: string }): string {
-  return line.replace(/\{player\}/g, v.player).replace(/\{opponent\}/g, v.opponent).replace(/\{card\}/g, v.card ?? "");
 }

@@ -13,7 +13,6 @@ export const NOTIFICATION_TYPES = [
   { key: "chat_dm", label: "Direct messages", hint: "Someone messages you (incl. trade offers in chat)" },
   { key: "chat_league", label: "League chat", hint: "Someone posts in your league chat" },
   { key: "chat_auto", label: "League updates in chat", hint: "Weekly recap, trades, waiver and free agent reports, the shield" },
-  { key: "taunts", label: "Taunts", hint: "Your opponent taunts you after a try or one of your players' cards" },
 ] as const;
 
 export type NotificationKey = (typeof NOTIFICATION_TYPES)[number]["key"];

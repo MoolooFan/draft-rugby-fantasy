@@ -27,7 +27,6 @@ import { JERSEYS } from "@/lib/teams/images";
 import { formatStatCount } from "@/lib/scoring";
 import { TeamAvatar } from "@/components/TeamAvatar";
 import { ShieldIcon } from "@/components/AwardIcons";
-import { fillTaunt, type TauntEvent } from "@/lib/chat/common";
 import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
 import { teamOutlook, winProbability, type PlayerWeekState } from "@/lib/projections/live";
 import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
@@ -1344,49 +1343,6 @@ const rightScore = totalForSlots(effectiveRightLineup, rightEffC, STARTER_SLOTS)
 const leftBenchScore = totalForSlots(effectiveLeftLineup, leftEffC, BENCH_SLOTS);
 const rightBenchScore = totalForSlots(effectiveRightLineup, rightEffC, BENCH_SLOTS);
 
-// ---- Taunts (like ESPN fantasy): your starter scores a try, or your opponent's starter gets a
-// yellow / red card -> a 😏 button beside him sends your opponent a ready-made taunt in your DM.
-type TauntInfo = { key: string; events: Array<TauntEvent & { playerName: string; sent: boolean }>; lines: Array<{ id: string; kind: string; text: string }>; opponentId: string | null };
-const [taunts, setTaunts] = useState<TauntInfo | null>(null);
-const [tauntPick, setTauntPick] = useState<(TauntEvent & { playerName: string }) | null>(null);
-const [tauntMsg, setTauntMsg] = useState<string | null>(null);
-const inThisMatchup = !!yourLeagueTeamId && (leftTeamId === yourLeagueTeamId || rightTeamId === yourLeagueTeamId);
-const tauntKey = hasLeagueId && inThisMatchup && displayWeek > 0 ? `${leagueId}|${displayWeek}` : "";
-const [tauntTick, setTauntTick] = useState(0);
-useEffect(() => {
-  if (!tauntKey) return;
-  let cancelled = false;
-  fetch(`/api/chat/taunts?leagueId=${encodeURIComponent(leagueId as string)}&week=${displayWeek}`, { cache: "no-store", credentials: "include" })
-    .then((r) => r.json())
-    .then((j) => {
-      if (!cancelled && j?.ok) setTaunts({ key: tauntKey, events: j.events ?? [], lines: j.lines ?? [], opponentId: j.opponentId ?? null });
-    })
-    .catch(() => {});
-  const t = setTimeout(() => setTauntTick((n) => n + 1), 60_000);
-  return () => {
-    cancelled = true;
-    clearTimeout(t);
-  };
-}, [tauntKey, leagueId, displayWeek, tauntTick]);
-const tauntFor = (p: Player | null) => {
-  if (!p?.id || !taunts || taunts.key !== tauntKey) return null;
-  return taunts.events.find((e) => e.playerId === p.id && !e.sent) ?? null;
-};
-async function sendTaunt(ev: TauntEvent, lineId: string) {
-  setTauntPick(null);
-  const r = await fetch("/api/chat/taunts", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ leagueId, week: displayWeek, eventKey: ev.key, lineId }),
-  });
-  const j = await r.json().catch(() => null);
-  setTauntMsg(j?.ok ? "Taunt sent 😏" : j?.error ?? "Couldn't send the taunt");
-  setTimeout(() => setTauntMsg(null), 3000);
-  if (j?.ok) setTaunts((t) => (t ? { ...t, events: t.events.map((e) => (e.key === ev.key ? { ...e, sent: true } : e)) } : t));
-}
-const tauntBtn: React.CSSProperties = { border: "none", background: "rgba(168,85,247,0.15)", borderRadius: 999, width: 22, height: 18, fontSize: 12, lineHeight: "18px", padding: 0, cursor: "pointer" };
-
 // ---- The Shield: the holder's icon, and whether this matchup is a shield game (holder at home)
 const shieldInfo = activeLeague?.shield?.enabled ? activeLeague.shield : null;
 const pairIs = (a: string | null | undefined, b: string | null | undefined) =>
@@ -1965,7 +1921,6 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 
 })()}
 {projText(lp, leftC) ? <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(lp, leftC)}</div> : null}
-{tauntFor(lp) ? <button onClick={() => setTauntPick(tauntFor(lp))} aria-label="Taunt your opponent" title="Taunt your opponent" style={tauntBtn}>😏</button> : null}
 
 </div>
 
@@ -2024,7 +1979,6 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
   );
 })()}
 {projText(rp, rightC) ? <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(rp, rightC)}</div> : null}
-{tauntFor(rp) ? <button onClick={() => setTauntPick(tauntFor(rp))} aria-label="Taunt your opponent" title="Taunt your opponent" style={tauntBtn}>😏</button> : null}
 
 </div>
 
@@ -2392,38 +2346,6 @@ onClick: selectedIsWatched ? removeSelectedFromWatchlist : addSelectedToWatchlis
   />
 ) : null}
 
-      {tauntPick ? (
-        <div onClick={() => setTauntPick(null)} style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(0,0,0,0.6)", display: "grid", placeItems: "center", padding: 18 }}>
-          <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Pick a taunt" style={{ width: "100%", maxWidth: 360, borderRadius: 16, background: "white", color: "#0f172a", overflow: "hidden" }}>
-            <div style={{ padding: "10px 12px", background: "rgba(168,85,247,0.95)", color: "white", fontWeight: 900 }}>
-              😏 Taunt {(activeLeague?.teams ?? []).find((t) => t.id === taunts?.opponentId)?.name ?? "your opponent"}
-            </div>
-            <div style={{ display: "grid" }}>
-              {(taunts?.lines ?? []).filter((l) => l.kind === tauntPick.kind).map((l) => (
-                <button
-                  key={l.id}
-                  onClick={() => sendTaunt(tauntPick, l.id)}
-                  style={{ border: "none", borderTop: "1px solid rgba(0,0,0,0.08)", background: "transparent", padding: "10px 12px", textAlign: "left", fontSize: 13, fontWeight: 700, cursor: "pointer", color: "#0f172a" }}
-                >
-                  {fillTaunt(l.text, {
-                    player: tauntPick.playerName,
-                    opponent: (activeLeague?.teams ?? []).find((t) => t.id === taunts?.opponentId)?.name ?? "mate",
-                    card: tauntPick.card,
-                  })}
-                </button>
-              ))}
-            </div>
-            <button onClick={() => setTauntPick(null)} style={{ width: "100%", height: 38, border: "none", borderTop: "1px solid rgba(0,0,0,0.08)", background: "rgba(15,23,42,0.05)", fontWeight: 900, cursor: "pointer", color: "#0f172a" }}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : null}
-      {tauntMsg ? (
-        <div style={{ position: "fixed", bottom: "calc(18px + env(safe-area-inset-bottom, 0px))", left: "50%", transform: "translateX(-50%)", zIndex: 81, background: "rgba(15,23,42,0.95)", color: "white", borderRadius: 999, padding: "8px 14px", fontSize: 12, fontWeight: 900 }}>
-          {tauntMsg}
-        </div>
-      ) : null}
     </main>
   );
 }

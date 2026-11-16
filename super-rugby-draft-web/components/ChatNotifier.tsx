@@ -51,7 +51,7 @@ export default function ChatNotifier() {
           }
           if (window.location.pathname.startsWith("/chat")) return;
           const sender = (j.teams ?? []).find((t: { id: string }) => t.id === n.sender_team_id)?.name;
-          const title = n.kind === "taunt" ? `${sender ?? "Your opponent"} taunted you` : n.channel === "league" ? (sender ? `${sender} in league chat` : "League update") : `${sender ?? "Message"}`;
+          const title = n.channel === "league" ? (sender ? `${sender} in league chat` : "League update") : `${sender ?? "Message"}`;
           const text = n.kind === "trade" ? "Sent you a trade offer" : n.kind === "image" ? "Sent a picture" : String(n.body ?? "").split("\n")[0].slice(0, 90);
           setBanner({ id: n.id, channel: n.channel, title, text });
           setTimeout(() => setBanner((b) => (b?.id === n.id ? null : b)), 6000);

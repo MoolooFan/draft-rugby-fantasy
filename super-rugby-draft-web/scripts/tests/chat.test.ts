@@ -1,6 +1,6 @@
-// Run: npx tsx scripts/tests/chat.test.ts — chat conversations, automated posts and taunts (lib/chat/common.ts).
+// Run: npx tsx scripts/tests/chat.test.ts — chat conversations and automated posts (lib/chat/common.ts).
 import {
-  canUseChannel, dmChannel, dmTeams, fillTaunt, freeAgentReportText, leagueRecapText, muteKeyFor, shieldReportText, tauntEvents,
+  canUseChannel, dmChannel, dmTeams, freeAgentReportText, leagueRecapText, muteKeyFor, shieldReportText,
   tradeText, waiverReportText,
 } from "../../lib/chat/common";
 
@@ -19,10 +19,9 @@ check("only the two teams can read their DM", canUseChannel("dm:a:b", "a", teams
 check("no DM with a team outside the league, or with yourself", !canUseChannel("dm:a:z", "a", teams) && !canUseChannel("dm:a:a", "a", teams));
 
 // muting
-check("mute: DMs / league chat / automated posts / taunts", muteKeyFor({ channel: "dm:a:b", kind: "text", sender_team_id: "a" }) === "chat_dm"
+check("mute: DMs / league chat / automated posts", muteKeyFor({ channel: "dm:a:b", kind: "text", sender_team_id: "a" }) === "chat_dm"
   && muteKeyFor({ channel: "league", kind: "text", sender_team_id: "a" }) === "chat_league"
-  && muteKeyFor({ channel: "league", kind: "system", sender_team_id: null }) === "chat_auto"
-  && muteKeyFor({ channel: "dm:a:b", kind: "taunt", sender_team_id: "a" }) === "taunts");
+  && muteKeyFor({ channel: "league", kind: "system", sender_team_id: null }) === "chat_auto");
 
 // automated posts
 check("no waiver report when nothing went through", waiverReportText("Round 3", []) === null);
@@ -35,17 +34,6 @@ const r = leagueRecapText({ roundName: "Round 4", games: [{ home: "A", away: "B"
 check("league recap: results, byes, crown", r.includes("A 500 – 450 B") && r.includes("C: bye") && r.includes("Top score: A (500)"), r);
 check("shield report: kept", shieldReportText("The Shield", { kind: "defended", holder: "A", other: "B", homeScore: 500, awayScore: 480, defences: 3 }).includes("keep The Shield"));
 check("shield report: taken", shieldReportText("The Shield", { kind: "won", holder: "B", other: "A", homeScore: 450, awayScore: 480, defences: 0 }).includes("take The Shield off A"));
-
-// taunts
-const ev = tauntEvents({
-  week: 5,
-  myStarters: ["p1", "p2"],
-  opponentStarters: ["o1", "o2", "o3"],
-  statsOf: (id) => ({ p1: { tries: 2 }, p2: { tries: 0 }, o1: { yellowCards: 1 }, o2: { redCards: 1, yellowCards: 1 } } as Record<string, { tries?: number; yellowCards?: number; redCards?: number }>)[id] ?? null,
-});
-check("taunts: your try scorer, their carded players (red beats yellow)", ev.map((e) => `${e.kind}:${e.playerId}:${e.card ?? ""}`).join(",") === "try:p1:,card:o1:yellow,card:o2:red", JSON.stringify(ev));
-check("one taunt per player per week (the key)", ev[0].key === "try:5:p1");
-check("filling a taunt line", fillTaunt("{player} scored, {opponent}! A {card} card", { player: "Jordan", opponent: "Josh", card: "red" }) === "Jordan scored, Josh! A red card");
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll passed");
 process.exit(failures ? 1 : 0);

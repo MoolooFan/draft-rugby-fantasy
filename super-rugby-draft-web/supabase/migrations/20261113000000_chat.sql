@@ -9,7 +9,7 @@ create table if not exists public.chat_messages (
   league_id text not null references public.leagues (id) on delete cascade,
   channel text not null,
   sender_team_id text references public.teams (id) on delete set null,
-  kind text not null default 'text' check (kind in ('text', 'image', 'trade', 'system', 'taunt')),
+  kind text not null default 'text' check (kind in ('text', 'image', 'trade', 'system')),
   body text,
   image_url text,
   meta jsonb not null default '{}'::jsonb,
@@ -34,25 +34,5 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values ('chat-images', 'chat-images', true, 2097152, array['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 on conflict (id) do nothing;
 
--- Taunts (like ESPN fantasy): ready-made lines Ethan can edit on the admin page.
---   kind 'try'  : your player scored a try       ({player}, {opponent})
---   kind 'card' : their player got a yellow / red ({player}, {card}, {opponent})
-create table if not exists public.taunt_lines (
-  id uuid primary key default gen_random_uuid(),
-  kind text not null check (kind in ('try', 'card')),
-  text text not null,
-  active boolean not null default true,
-  created_at timestamptz not null default now()
-);
-alter table public.taunt_lines enable row level security;
-insert into public.taunt_lines (kind, text) values
-  ('try', '{player} just scored. Hope you''re watching, {opponent}.'),
-  ('try', 'Over the line goes {player}. Try defending that.'),
-  ('try', '{player} with the try. That''s 15 more for me.'),
-  ('try', 'Another one for {player}. Starting to feel sorry for you.'),
-  ('card', '{player} in the bin? Ouch. Discipline issues at your club, {opponent}?'),
-  ('card', 'A {card} card for {player}. Couldn''t have planned it better myself.'),
-  ('card', '{player} costing you points from the sideline. Love to see it.');
-
 -- Muting chat: the notification settings (users.notification_settings) gain chat_dm,
--- chat_league, chat_auto and taunts (lib/notifications/types.ts); nothing to change here.
+-- chat_league and chat_auto (lib/notifications/types.ts); nothing to change here.
