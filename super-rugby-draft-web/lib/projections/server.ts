@@ -48,9 +48,9 @@ const team = (code: string | null | undefined) => normalizeTeamCode(code);
 const fixtureTeam = (name: string) => team(teamCodeFromName(name) ?? name);
 const isOutKind = (k: ReturnType<typeof statusKind>) => k === "injured" || k === "suspended" || k === "out";
 
-type StatRow = { internal_player_id: string; round: number; stats: unknown };
+export type StatRow = { internal_player_id: string; round: number; stats: unknown };
 
-async function loadStats(db: SupabaseClient, season: number, beforeRound: number): Promise<StatRow[]> {
+export async function loadStats(db: SupabaseClient, season: number, beforeRound: number): Promise<StatRow[]> {
   const out: StatRow[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await db
@@ -86,7 +86,7 @@ function gamesByPlayer(rows: StatRow[], season: number, players: Map<string, Sit
 }
 
 /** Real teams' games (score from player stats: tries, conversions, penalties, drop goals). */
-function teamGames(rows: StatRow[], season: number, teamOf: (id: string) => string | null): Map<string, TeamGame[]> {
+export function teamGames(rows: StatRow[], season: number, teamOf: (id: string) => string | null): Map<string, TeamGame[]> {
   const s = SEASONS[season] ? getSeason(season) : null;
   const opp = new Map<string, string>(); // `${team}|${round}` -> opponent
   for (const f of s?.fixtures ?? []) {

@@ -13,6 +13,7 @@
 | ✅ | Scheduler passwords (Vault `site_url`, `cron_secret`); job `results-tick` every 5 minutes |
 | ✅ | Vercel: new keys + `CRON_SECRET` (all environments), old `SESSION_SECRET` and `FIXTURES_SHEET_CSV_URL` deleted, function region **Sydney (syd1)**, address **sr-draft-fantasy.vercel.app** (old `…-foa5` address redirects) |
 | ✅ | Ethan's account **Stoutman** made site admin (on the test site) |
+| ⬜ | AI coach: Anthropic account with credit, API key added in Vercel as `ANTHROPIC_API_KEY` (Production and Preview), then switched on in Admin → Coach (lib/coach) |
 
 - **Test site:** https://draft-rugby-fantasy-foa5-git-rebuild-2027-mooloofans-projects.vercel.app (only Ethan can open it while signed in to Vercel; it shows the latest `rebuild-2027` code and uses the **new** database).
 - **The live site** (sr-draft-fantasy.vercel.app) still runs the old code on the old database until launch.
@@ -130,7 +131,7 @@ The new project should have a **●** next to it in the `LINKED` column. If the 
 ```
 npx supabase db push --remote
 ```
-(Without `--remote`, the Supabase tool updates the test database on this PC instead.) It lists 26 changes and asks `Do you want to push these migrations?` Type `Y` and press Enter. It ends with `Finished supabase db push.`
+(Without `--remote`, the Supabase tool updates the test database on this PC instead.) It lists 27 changes and asks `Do you want to push these migrations?` Type `Y` and press Enter. It ends with `Finished supabase db push.`
 
 ## 4. Login settings (Supabase dashboard, new project)
 
@@ -194,6 +195,7 @@ It ends with `Changed:` and the counts.
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY` → the publishable key
    - `SUPABASE_SERVICE_ROLE_KEY` → the secret key
 3. **Add New:** `CRON_SECRET` → the cron password (the same one you put in step 5).
+   **Add New:** `ANTHROPIC_API_KEY` → the AI coach's key from platform.claude.com (only if the coach is ready; without it the coach just stays quiet).
 4. Delete `SESSION_SECRET` and `FIXTURES_SHEET_CSV_URL` if they're there, plus any old Google Sheets ones. Click each one's **⋯ → Delete**.
 
 5. **Put Vercel's servers in Sydney too** (next to the database): **Settings → Functions** (on some screens **Settings → General**) → **Function Region** → choose **Sydney, Australia (syd1)** → **Save**.

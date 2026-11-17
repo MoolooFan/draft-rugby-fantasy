@@ -1,6 +1,8 @@
 // app/api/admin/player-status/route.ts — admin only. Set (or clear) a player's status for a
 // week by hand, e.g. a late injury after the Wednesday team lists.
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { writeNoteNow } from "@/lib/coach/run";
+import { currentStatusWeek } from "@/lib/status/kind";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireSiteAdmin } from "@/lib/admin/server";
 import { toHttpError } from "@/lib/league/serverAuth";
@@ -18,6 +20,7 @@ export async function POST(req: Request) {
     if (!playerId || !Number.isInteger(week) || week < 1 || week > totalFantasyWeeks(getSeason(season))) {
       return NextResponse.json({ ok: false, error: "Missing player or week" }, { status: 400 });
     }
+    const { data: before } = await supabaseAdmin.from("player_week_status").select("status").eq("season", season).eq("week", week).eq("player_id", playerId).maybeSingle();
     if (!status) {
       const { error } = await supabaseAdmin.from("player_week_status").delete().eq("season", season).eq("week", week).eq("player_id", playerId);
       if (error) throw error;
@@ -27,6 +30,16 @@ export async function POST(req: Request) {
         { onConflict: "season,week,player_id" }
       );
       if (error) throw error;
+    }
+    // this week's status changed by hand: the AI coach writes a note about it (in the background)
+    if (week === currentStatusWeek(season) && (before?.status ?? "") !== status) {
+      after(async () => {
+        try {
+          await writeNoteNow(supabaseAdmin, { season, playerId, kind: "status", statusChange: { from: before?.status ?? null, to: status || null }, sourceKey: `status:${season}:${playerId}:${Date.now()}` });
+        } catch (e) {
+          console.error("[coach] status note failed:", e);
+        }
+      });
     }
     return NextResponse.json({ ok: true });
   } catch (e) {

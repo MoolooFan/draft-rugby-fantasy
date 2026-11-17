@@ -15,6 +15,7 @@ import { currentSeasonYear, getSeason, liveRealRounds, realRoundsAwaitingFinalSt
 import { applyQuestionable, clearFinishedGameStatuses, importRoundStatus, type ImportReport } from "@/lib/status/import";
 import { runDueWaivers } from "@/lib/waivers/process";
 import { advanceDraft } from "@/lib/draft/engine";
+import { coachTick } from "@/lib/coach/run";
 
 export const maxDuration = 60; // seconds (Vercel)
 
@@ -62,6 +63,9 @@ async function tick() {
   // Injured players due back next round turn Questionable once this round has finished.
   const questionable = await applyQuestionable(supabaseAdmin, seasonYear, now).catch(() => -1);
 
+  // AI coach: collect finished batches; send after-game and team-list notes that are due (lib/coach)
+  const coach = await coachTick(supabaseAdmin, seasonYear, now).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
+
   // Drafts: start any that are due and make overdue auto-picks (so a draft keeps going even
   // if nobody has the draft room open).
   const drafts: Array<{ leagueId: string; autoPicks?: number; error?: string }> = [];
@@ -84,7 +88,7 @@ async function tick() {
     beforeFinalise: (realRounds) => sync(realRounds),
   });
 
-  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, statusImports, statusesCleared, questionable, waivers, drafts, ...results };
+  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, statusImports, statusesCleared, questionable, waivers, drafts, coach, ...results };
 }
 
 async function handle(req: Request) {

@@ -1,6 +1,7 @@
 // app/api/admin/players/route.ts — admin only. List every player in a season (including
 // hidden ones), and add or edit a player.
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { writeNoteNow } from "@/lib/coach/run";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireSiteAdmin } from "@/lib/admin/server";
 import { toHttpError } from "@/lib/league/serverAuth";
@@ -109,6 +110,16 @@ export async function POST(req: Request) {
       { onConflict: "season,id" }
     );
     if (error) throw error;
+    // status changed by hand: the AI coach writes a note about it (in the background; lib/coach)
+    if (before && (before.status ?? null) !== status) {
+      after(async () => {
+        try {
+          await writeNoteNow(supabaseAdmin, { season, playerId: id, kind: "status", statusChange: { from: before.status ?? null, to: status }, sourceKey: `status:${season}:${id}:${Date.now()}` });
+        } catch (e) {
+          console.error("[coach] status note failed:", e);
+        }
+      });
+    }
     return NextResponse.json({ ok: true, id });
   } catch (e) {
     const { msg, status } = toHttpError(e);

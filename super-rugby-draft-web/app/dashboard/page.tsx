@@ -4,7 +4,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { leagueRefreshMs, usePoll } from "@/lib/hooks/usePoll";
 import { useRouter } from "next/navigation";
 
-import { PlayerCardModal, type PlayerStatus } from "@/components/PlayerCardModal";
+import { PlayerCardModal, type PlayerStatus, type PlayerCardTab } from "@/components/PlayerCardModal";
+import { CoachFeed } from "@/components/CoachFeed";
 import { AppMenu } from "@/components/AppMenu";
 import { loadMyLeagues, useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
@@ -76,6 +77,8 @@ type Modal =
       player: Player;
       ownerTeamId?: string | null;
       teamLabel?: string;
+      /** e.g. open on the AI Coach tab from Coach News */
+      tab?: PlayerCardTab;
     };
 
   type AnyFixture = {
@@ -1970,6 +1973,22 @@ const NoLeague = useStableComponent(NoLeague__render);
           </button>
         </div>
 
+        {/* AI coach: the latest notes about your players (lib/coach) */}
+        {activeLeague?.id ? (
+          <CoachFeed
+            leagueId={activeLeague.id}
+            style={cardStyle}
+            nameOf={(id) => {
+              const p = (allPlayers as Player[]).find((x) => normaliseId(x.id) === normaliseId(id));
+              return p ? `${p.firstName} ${p.lastName}` : null;
+            }}
+            onOpen={(id) => {
+              const p = (allPlayers as Player[]).find((x) => normaliseId(x.id) === normaliseId(id));
+              if (p) setModal({ type: "playerCard", player: p, ownerTeamId: ownerTeamIdByPlayerId.get(normaliseId(p.id)) ?? null, tab: "AI Coach" });
+            }}
+          />
+        ) : null}
+
         {/* Best available players */}
         <div style={cardStyle}>
           <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 8 }}>
@@ -2292,6 +2311,7 @@ const StandingsCard = useStableComponent(StandingsCard__render);
           }}
           status={modalStatus}
 teamLabel={modalTeamLabel}
+          initialTab={modal.tab}
                     actions={[
             {
               label: isWatched(modal.player.id) ? "Remove from Watchlist" : "Add to Watchlist",

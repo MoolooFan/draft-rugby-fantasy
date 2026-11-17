@@ -967,7 +967,7 @@ const teamLabelFull =
   <HistoryTab leagueId={leagueId} playerId={p.id} />
 
 ) : tab === "AI Coach" ? (
-  <CoachTab />
+  <CoachTab playerId={p.id} />
 
 ) : null
 
