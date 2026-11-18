@@ -5,7 +5,7 @@
 import React from "react";
 import { MAX_SHIELD_LADDER_POINTS, type ShieldRewards } from "@/lib/league/shield";
 
-const row: React.CSSProperties = { display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 800 };
+const row: React.CSSProperties = { display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600 };
 const select: React.CSSProperties = {
   height: 28,
   borderRadius: 8,
@@ -13,7 +13,7 @@ const select: React.CSSProperties = {
   background: "white",
   color: "#0f172a",
   fontSize: 12,
-  fontWeight: 800,
+  fontWeight: 600,
   padding: "0 6px",
 };
 
@@ -33,7 +33,7 @@ export function ShieldRewardsFields({ value, onChange, disabled }: { value: Shie
   );
   return (
     <div style={{ display: "grid", gap: 6 }}>
-      <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.8 }}>Rewards for holding it (locked once the draft starts)</div>
+      <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.8 }}>Rewards for holding it (locked once the draft starts)</div>
       <label style={row}>
         <input type="checkbox" disabled={disabled} checked={value.firstWaiverPick} onChange={(e) => set("firstWaiverPick", e.target.checked)} />
         First waiver pick each week (first round of claims only; then the usual order)
@@ -44,7 +44,7 @@ export function ShieldRewardsFields({ value, onChange, disabled }: { value: Shie
         <input type="checkbox" disabled={disabled} checked={value.tieBreak} onChange={(e) => set("tieBreak", e.target.checked)} />
         Tie-breaker: level on ladder points, the holder ranks higher
       </label>
-      <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.75 }}>The holder keeps these while the Shield is switched off and during the finals.</div>
+      <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.75 }}>The holder keeps these while the Shield is switched off and during the finals.</div>
     </div>
   );
 }

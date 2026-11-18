@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { card as themeCard } from "@/lib/ui/theme";
 
 import { AppMenu } from "@/components/AppMenu";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
@@ -1226,12 +1227,7 @@ function tileSubtext(p: Player | null) {
   // -----------------------
   // Styles (match your app)
   // -----------------------
-  const card35: React.CSSProperties = {
-    borderRadius: 18,
-    background: "rgba(255,255,255,0.35)",
-    backdropFilter: "blur(10px)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.18)",
-  };
+  const card35: React.CSSProperties = { ...themeCard, padding: undefined };
 
   const listBox: React.CSSProperties = {
     borderRadius: 14,
@@ -1250,9 +1246,9 @@ function tileSubtext(p: Player | null) {
           border: "none",
           padding: 0,
           margin: 0,
-          color: "white",
+          color: "inherit",
           fontSize: 30,
-          fontWeight: 900,
+          fontWeight: 700,
           lineHeight: "30px",
           cursor: "pointer",
         }}
@@ -1277,7 +1273,7 @@ const pulseStyle: React.CSSProperties = {
           border: "1px solid rgba(255,255,255,0.9)",
 
           fontSize: 10,
-          fontWeight: 900,
+          fontWeight: 700,
           display: "grid",
           placeItems: "center",
           boxShadow: "0 6px 12px rgba(0,0,0,0.18)",
@@ -1344,7 +1340,8 @@ const jerseyUrl = p ? jerseySrcForTeam(p.teamCode) : "";
         borderRadius: 14,
         border,
 
-        background: p ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.10)",
+        // bench tiles sit on a white card (design refresh): light grey; pitch tiles stay see-through
+        background: String(slotId).startsWith("bench") ? (p ? "#eef2f6" : "#f8fafc") : p ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.10)",
         backdropFilter: "blur(8px)",
         boxShadow,
 opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
@@ -1439,7 +1436,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
                 textAlign: "center",
                 padding: "0px 0px",
                 fontSize: 10,
-                fontWeight: 700,
+                fontWeight: 500,
                 lineHeight: "12px",
                 borderTop: "1px solid rgba(15,23,42,0.10)",
                 whiteSpace: "nowrap",
@@ -1463,7 +1460,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     justifyContent: "center",
     padding: "0 6px",
     fontSize: 10,
-    fontWeight: 900,
+    fontWeight: 700,
     opacity: 0.75,
     lineHeight: "12px", // 👈 tighter
     textAlign: "center",
@@ -1506,9 +1503,8 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
           height: 70,
           borderRadius: 14,
           border: irPlayerFit ? "2px solid rgba(250,204,21,0.95)" : "1px dashed rgba(248,113,113,0.85)",
-          background: p ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.10)",
-          backdropFilter: "blur(8px)",
-          boxShadow: "0 10px 22px rgba(0,0,0,0.16)",
+          background: p ? "#eef2f6" : "#f8fafc",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.10)",
           opacity: swapping ? 0.45 : 1,
           padding: 0,
           cursor: "pointer",
@@ -1520,7 +1516,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
         {p ? (
           <>
             <div style={{ position: "absolute", top: -6, left: -2, zIndex: 3 }}>
-              <span style={{ display: "inline-block", fontSize: 8, fontWeight: 900, padding: "1px 3px", borderRadius: 4, background: "#dc2626", color: "#ffffff", boxShadow: "0 1px 2px rgba(0,0,0,0.35)", lineHeight: "10px" }}>
+              <span style={{ display: "inline-block", fontSize: 8, fontWeight: 700, padding: "1px 3px", borderRadius: 4, background: "#dc2626", color: "#ffffff", boxShadow: "0 1px 2px rgba(0,0,0,0.35)", lineHeight: "10px" }}>
                 IR
               </span>
             </div>
@@ -1534,13 +1530,13 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
               <div style={{ background: "rgba(255,255,255,0.95)", color: "#0f2a4a", textAlign: "center", padding: "3px 6px", fontSize: 10, fontWeight: 500, lineHeight: "8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {p.lastName}
               </div>
-              <div style={{ background: "#7f1d1d", color: "white", textAlign: "center", fontSize: 10, fontWeight: 700, lineHeight: "12px", borderTop: "1px solid rgba(15,23,42,0.10)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div style={{ background: "#7f1d1d", color: "white", textAlign: "center", fontSize: 10, fontWeight: 500, lineHeight: "12px", borderTop: "1px solid rgba(15,23,42,0.10)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {irPlayerFit ? "Fit - activate" : "IR"}
               </div>
             </div>
           </>
         ) : (
-          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 900, opacity: 0.75, lineHeight: "12px", textAlign: "center" }}>
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, opacity: 0.75, lineHeight: "12px", textAlign: "center" }}>
             <span>IR</span>
             <span style={{ fontWeight: 600, fontSize: 9 }}>Injury reserve</span>
           </div>
@@ -1601,7 +1597,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
   function BenchPanel() {
     return (
       <div style={{ marginTop: 10, ...card35, padding: 12, borderRadius: 18 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.95, marginBottom: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.95, marginBottom: 8 }}>
           Substitutes &amp; IR
         </div>
 
@@ -1642,7 +1638,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
 </div>
 
         {irPlayerFit && !irNotice ? (
-          <div style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: "#FACC15", textAlign: "center" }}>
+          <div style={{ marginTop: 8, fontSize: 11, fontWeight: 500, color: "#FACC15", textAlign: "center" }}>
             {nameOf(irPlayer)} is fit again - activate him before making adds, claims or trades
           </div>
         ) : null}
@@ -1653,7 +1649,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
               padding: "6px 10px",
               borderRadius: 10,
               fontSize: 11,
-              fontWeight: 700,
+              fontWeight: 500,
               textAlign: "center",
               background: irNotice.kind === "error" ? "rgba(220,38,38,0.9)" : "rgba(15,23,42,0.55)",
               color: "white",
@@ -1663,7 +1659,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
             {irDropMode ? (
               <button
                 onClick={() => { setIrDropMode(false); setIrNotice(null); }}
-                style={{ marginLeft: 8, border: "1px solid rgba(255,255,255,0.8)", background: "transparent", color: "white", borderRadius: 8, fontSize: 11, fontWeight: 800, padding: "1px 8px", cursor: "pointer" }}
+                style={{ marginLeft: 8, border: "1px solid rgba(255,255,255,0.8)", background: "transparent", color: "white", borderRadius: 8, fontSize: 11, fontWeight: 600, padding: "1px 8px", cursor: "pointer" }}
               >
                 Cancel
               </button>
@@ -1776,7 +1772,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
 
       {!ready ? (
   <div style={{ minHeight: "100svh", display: "grid", placeItems: "center", color: "white" }}>
-    <div style={{ fontWeight: 900 }}>Loading…</div>
+    <div style={{ fontWeight: 700 }}>Loading…</div>
   </div>
 ) : (
   <div
@@ -1818,7 +1814,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
       color: "#0f172a",
       textAlign: "center",
       padding: "3px 12px",
-      fontWeight: 800,
+      fontWeight: 600,
       fontSize: 11,
     }}
   >
@@ -1833,7 +1829,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
       color: "#0f172a",
       textAlign: "center",
       padding: "3px 12px",
-      fontWeight: 700,
+      fontWeight: 500,
       fontSize: 11,
       borderTop: "1px solid rgba(15,23,42,0.12)",
     }}
@@ -1841,7 +1837,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     {deadlineText}
   </div>
 </div>
-<div style={{ marginTop: 10, fontSize: 18, fontWeight: 900 }}>
+<div style={{ marginTop: 10, fontSize: 18, fontWeight: 700 }}>
   Team Selection
 </div>
 
@@ -1868,7 +1864,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
       outline: "none",
       padding: "0 10px",
       fontSize: 11,
-      fontWeight: 700,
+      fontWeight: 500,
       color: "#0f172a",
       background: "rgba(255,255,255,0.9)",
       boxShadow: "0 10px 20px rgba(0,0,0,0.18)",
@@ -1890,7 +1886,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
       borderRadius: 12,
       border: "none",
       fontSize: 11,
-      fontWeight: 900,
+      fontWeight: 700,
       cursor: !hasLoadedSaved || !isDirty ? "default" : "pointer",
       color: "#0f172a",
       background: !hasLoadedSaved || !isDirty ? "rgba(255,255,255,0.55)" : "#FACC15",

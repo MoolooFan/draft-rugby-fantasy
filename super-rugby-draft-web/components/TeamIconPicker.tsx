@@ -37,7 +37,7 @@ export function TeamIconPicker({
         onClick={(e) => e.stopPropagation()}
         style={{ width: "100%", maxWidth: 380, borderRadius: 18, background: "white", color: "#0f172a", padding: 14, display: "grid", gap: 12 }}
       >
-        <div style={{ fontWeight: 900, fontSize: 15 }}>Choose an icon</div>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>Choose an icon</div>
 
         <div style={{ display: "grid", placeItems: "center" }}>
           <TeamAvatar pictureUrl={value} initials="?" size={96} />
@@ -63,13 +63,13 @@ export function TeamIconPicker({
               }}
             >
               <TeamAvatar pictureUrl={preview(k.kind)} initials="?" size={40} />
-              <span style={{ fontSize: 11, fontWeight: 900 }}>{k.label}</span>
+              <span style={{ fontSize: 11, fontWeight: 700 }}>{k.label}</span>
             </button>
           ))}
         </div>
 
         <div>
-          <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.7, marginBottom: 6 }}>Colour</div>
+          <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.7, marginBottom: 6 }}>Colour</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             {TEAM_ICON_COLOURS.map((c) => (
               <button
@@ -90,7 +90,7 @@ export function TeamIconPicker({
                 }}
               />
             ))}
-            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 900 }}>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700 }}>
               <input type="color" value={colour} onChange={(e) => setColour(e.target.value.toLowerCase())} aria-label="Your own colour" style={{ width: 32, height: 28, padding: 0, border: "none", background: "transparent" }} />
               Other
             </label>
@@ -98,12 +98,12 @@ export function TeamIconPicker({
         </div>
 
         {kind === "jersey" ? (
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 900 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 700 }}>
             Jersey number
             <select
               value={number}
               onChange={(e) => setNumber(Number(e.target.value))}
-              style={{ height: 32, borderRadius: 10, border: "1px solid rgba(0,0,0,0.15)", padding: "0 8px", fontSize: 13, fontWeight: 800, color: "#0f172a", background: "white" }}
+              style={{ height: 32, borderRadius: 10, border: "1px solid rgba(0,0,0,0.15)", padding: "0 8px", fontSize: 13, fontWeight: 600, color: "#0f172a", background: "white" }}
             >
               {Array.from({ length: 23 }, (_, i) => i + 1).map((n) => (
                 <option key={n} value={n}>
@@ -119,7 +119,7 @@ export function TeamIconPicker({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            style={{ flex: 1, height: 38, borderRadius: 999, border: "1px solid rgba(15,23,42,0.2)", background: "white", color: "#0f172a", fontWeight: 900, cursor: "pointer" }}
+            style={{ flex: 1, height: 38, borderRadius: 999, border: "1px solid rgba(15,23,42,0.2)", background: "white", color: "#0f172a", fontWeight: 700, cursor: "pointer" }}
           >
             Cancel
           </button>
@@ -127,7 +127,7 @@ export function TeamIconPicker({
             type="button"
             onClick={() => value && onSave(value)}
             disabled={busy || !value}
-            style={{ flex: 1, height: 38, borderRadius: 999, border: "none", background: "linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))", color: "white", fontWeight: 900, cursor: "pointer", opacity: busy ? 0.7 : 1 }}
+            style={{ flex: 1, height: 38, borderRadius: 999, border: "none", background: "linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))", color: "white", fontWeight: 700, cursor: "pointer", opacity: busy ? 0.7 : 1 }}
           >
             {busy ? "Saving…" : "Use this icon"}
           </button>

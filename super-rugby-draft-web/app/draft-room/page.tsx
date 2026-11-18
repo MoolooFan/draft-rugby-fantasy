@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { card as themeCard } from "@/lib/ui/theme";
 import { leagueRefreshMs, usePoll } from "@/lib/hooks/usePoll";
 import { useRouter } from "next/navigation";
 import { getActiveUser } from "@/lib/session";
@@ -410,12 +411,7 @@ const firstPickTeamName = useMemo(() => {
   // -----------------------
   // Styles
   // -----------------------
-  const card35: React.CSSProperties = {
-    borderRadius: 18,
-    background: "rgba(255,255,255,0.35)",
-    backdropFilter: "blur(10px)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.18)",
-  };
+  const card35: React.CSSProperties = { ...themeCard, padding: undefined };
 
   const tabBarStyle: React.CSSProperties = {
     marginTop: 10,
@@ -430,7 +426,7 @@ const firstPickTeamName = useMemo(() => {
     background: active ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.10)",
     color: "white",
     fontSize: 11,
-    fontWeight: 900,
+    fontWeight: 700,
     cursor: "pointer",
   });
 
@@ -488,7 +484,7 @@ const JerseyTile = useStableComponent(JerseyTile__render);
           border: "none",
           background: enabled ? "#6366F1" : "rgba(0,0,0,0.25)",
           color: "white",
-          fontWeight: 900,
+          fontWeight: 700,
           fontSize: 12,
           cursor: enabled ? "pointer" : "not-allowed",
           opacity: enabled ? 1 : 0.55,
@@ -516,7 +512,7 @@ const DraftButton = useStableComponent(DraftButton__render);
           cursor: "pointer",
           color: "#0f172a",
           fontSize: 16,
-          fontWeight: 900,
+          fontWeight: 700,
         }}
       >
         {active ? "★" : "☆"}
@@ -535,9 +531,9 @@ const StarButton = useStableComponent(StarButton__render);
           border: "none",
           padding: 0,
           margin: 0,
-          color: "white",
+          color: "inherit",
           fontSize: 36,
-          fontWeight: 900,
+          fontWeight: 700,
           lineHeight: "36px",
           cursor: "pointer",
         }}
@@ -551,8 +547,8 @@ const Hamburger = useStableComponent(Hamburger__render);
   function TimeBlock__render({ value, label }: { value: string; label: string }) {
     return (
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 28, fontWeight: 900, lineHeight: "30px" }}>{value}</div>
-        <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.9, marginTop: 2 }}>{label}</div>
+        <div style={{ fontSize: 28, fontWeight: 700, lineHeight: "30px" }}>{value}</div>
+        <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.9, marginTop: 2 }}>{label}</div>
       </div>
     );
   }
@@ -580,11 +576,11 @@ const isTbd = !deadline;
           <Hamburger />
         </div>
 
-        <div style={{ marginTop: 8, fontSize: 22, fontWeight: 900 }}>Draft Starts In</div>
+        <div style={{ marginTop: 8, fontSize: 22, fontWeight: 700 }}>Draft Starts In</div>
 
         <div style={{ marginTop: 10 }}>
           {isTbd ? (
-  <div style={{ fontSize: 14, fontWeight: 800, opacity: 0.95 }}>
+  <div style={{ fontSize: 14, fontWeight: 600, opacity: 0.95 }}>
     Draft time not set yet.
   </div>
 ) : (
@@ -597,8 +593,8 @@ const isTbd = !deadline;
 )}
         </div>
 
-        <div style={{ marginTop: 10, fontSize: 13, fontWeight: 900, opacity: 0.95 }}>
-          First Pick: <span style={{ fontWeight: 800 }}>{firstPickTeamName || "TBC"}</span>
+        <div style={{ marginTop: 10, fontSize: 13, fontWeight: 700, opacity: 0.95 }}>
+          First Pick: <span style={{ fontWeight: 600 }}>{firstPickTeamName || "TBC"}</span>
         </div>
       </div>
     );
@@ -625,12 +621,12 @@ const PreDraftHeader = useStableComponent(PreDraftHeader__render);
         <div style={{ marginTop: 2, display: "grid", gridTemplateColumns: "1fr 1fr", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 18, opacity: 0.95 }}>🕒</span>
-            <div style={{ fontSize: 20, fontWeight: 900, color: timeColor }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: timeColor }}>
               {draftComplete ? "Draft Complete" : formatMMSS(secondsLeft)}
             </div>
           </div>
 
-          <div style={{ textAlign: "right", fontSize: 18, fontWeight: 900 }}>
+          <div style={{ textAlign: "right", fontSize: 18, fontWeight: 700 }}>
             Pick {currentPick} of {totalPicks}
           </div>
         </div>
@@ -643,7 +639,7 @@ const PreDraftHeader = useStableComponent(PreDraftHeader__render);
             borderRadius: 999,
             padding: "7px 12px",
             fontSize: 11,
-            fontWeight: 700,
+            fontWeight: 500,
             boxShadow: "0 10px 18px rgba(0,0,0,0.16)",
             textAlign: "center",
           }}
@@ -653,13 +649,13 @@ const PreDraftHeader = useStableComponent(PreDraftHeader__render);
 
         <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div style={{ display: "grid", gap: 2 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.95 }}>Your Next Pick in:</div>
-            <div style={{ fontSize: 12, fontWeight: 800 }}>{draftComplete ? "—" : `${nextPickInTurns} turns`}</div>
+            <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.95 }}>Your Next Pick in:</div>
+            <div style={{ fontSize: 12, fontWeight: 600 }}>{draftComplete ? "—" : `${nextPickInTurns} turns`}</div>
           </div>
 
           <div style={{ display: "grid", gap: 2, textAlign: "right" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.95 }}>On the Clock:</div>
-            <div style={{ fontSize: 12, fontWeight: 800 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.95 }}>On the Clock:</div>
+            <div style={{ fontSize: 12, fontWeight: 600 }}>
               {draftComplete ? "—" : teams.find((t) => t.id === onTheClockTeamId)?.name ?? "TBC"}
             </div>
           </div>
@@ -692,7 +688,7 @@ const Filters = useStableComponent(Filters__render);
 
   function PlayerRow__render({ p, draftEnabled, reorder }: { p: Player; draftEnabled: boolean; reorder?: { index: number; count: number } }) {
     const isStar = !!watchlist[p.id];
-    const arrow: React.CSSProperties = { border: "none", background: "transparent", fontSize: 12, fontWeight: 900, padding: "0 2px", cursor: "pointer", lineHeight: "12px" };
+    const arrow: React.CSSProperties = { border: "none", background: "transparent", fontSize: 12, fontWeight: 700, padding: "0 2px", cursor: "pointer", lineHeight: "12px" };
 
     return (
       <div
@@ -710,14 +706,14 @@ const Filters = useStableComponent(Filters__render);
             {reorder ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 18 }} onClick={(e) => e.stopPropagation()}>
                 <button aria-label="Move up" style={{ ...arrow, opacity: reorder.index === 0 ? 0.25 : 1 }} onClick={() => moveWatchlist(p.id, -1)}>▲</button>
-                <div style={{ fontSize: 10, fontWeight: 900 }}>{reorder.index + 1}</div>
+                <div style={{ fontSize: 10, fontWeight: 700 }}>{reorder.index + 1}</div>
                 <button aria-label="Move down" style={{ ...arrow, opacity: reorder.index === reorder.count - 1 ? 0.25 : 1 }} onClick={() => moveWatchlist(p.id, 1)}>▼</button>
               </div>
             ) : null}
             <JerseyTile teamCode={p.teamCode} size={32} />
 
             <div>
-              <div style={{ fontWeight: 700, fontSize: 12 }}>
+              <div style={{ fontWeight: 500, fontSize: 12 }}>
                 {p.firstName[0]}. {p.lastName} <StatusTag player={p} />
               </div>
               <div style={{ fontSize: 10, opacity: 0.7 }}>
@@ -730,7 +726,7 @@ const Filters = useStableComponent(Filters__render);
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 }}>
-          <div style={{ fontSize: 12, fontWeight: 900, width: 34, textAlign: "right" }}>{p.draftRank}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, width: 34, textAlign: "right" }}>{p.draftRank}</div>
           <StarButton active={isStar} onClick={() => toggleWatchlist(p.id)} />
           <DraftButton enabled={draftEnabled} onClick={() => onDraftClick(p)} />
         </div>
@@ -755,7 +751,7 @@ const PlayerRow = useStableComponent(PlayerRow__render);
           </div>
 
           {playerPoolPlayers.length === 0 ? (
-            <div style={{ padding: 14, fontSize: 12, fontWeight: 700, opacity: 0.7 }}>
+            <div style={{ padding: 14, fontSize: 12, fontWeight: 500, opacity: 0.7 }}>
               No eligible players available for your remaining roster slots.
             </div>
           ) : (
@@ -783,7 +779,7 @@ const PlayerPoolTab = useStableComponent(PlayerPoolTab__render);
           </div>
 
           {watchlistPlayers.length === 0 ? (
-            <div style={{ padding: 14, fontSize: 12, fontWeight: 700, opacity: 0.7 }}>
+            <div style={{ padding: 14, fontSize: 12, fontWeight: 500, opacity: 0.7 }}>
               No players in your watchlist yet.
             </div>
           ) : (
@@ -813,7 +809,7 @@ useEffect(() => {
     if (!roster) {
     return (
       <div style={{ ...listBox, marginTop: 10, padding: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.7 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>
           Loading rosters…
         </div>
       </div>
@@ -832,7 +828,7 @@ useEffect(() => {
                 outline: "none",
                 background: "transparent",
                 fontSize: 13,
-                fontWeight: 700,
+                fontWeight: 500,
                 color: "#0f172a",
               }}
             >
@@ -855,7 +851,7 @@ useEffect(() => {
 
           {rosterSlots.map((slot) => (
             <div key={slot.slotId} style={{ borderTop: "1px solid rgba(0,0,0,0.08)" }}>
-              <div style={{ padding: "8px 10px", fontSize: 11, fontWeight: 900, opacity: 0.75 }}>
+              <div style={{ padding: "8px 10px", fontSize: 11, fontWeight: 700, opacity: 0.75 }}>
                 {slot.label}
               </div>
 
@@ -882,7 +878,7 @@ const entry = resolvePlayer(rawEntry);
                       <div onClick={() => openPlayerCard(entry)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
                         <JerseyTile teamCode={entry.teamCode} size={32} />
                         <div>
-                          <div style={{ fontSize: 12, fontWeight: 700 }}>
+                          <div style={{ fontSize: 12, fontWeight: 500 }}>
                             {(entry.firstName?.[0] ?? "?")}. {entry.lastName ?? ""}
                           </div>
                           <div style={{ fontSize: 10, opacity: 0.7 }}>
@@ -902,7 +898,7 @@ const entry = resolvePlayer(rawEntry);
                             border: "1px solid rgba(0,0,0,0.10)",
                             display: "grid",
                             placeItems: "center",
-                            fontWeight: 700,
+                            fontWeight: 500,
                             fontSize: 22,
                             color: "rgba(15,23,42,0.55)",
                           }}
@@ -915,7 +911,7 @@ const entry = resolvePlayer(rawEntry);
                       </div>
                     )}
 
-                    <div style={{ textAlign: "right", fontSize: 12, fontWeight: 900, opacity: 0.8 }}>
+                    <div style={{ textAlign: "right", fontSize: 12, fontWeight: 700, opacity: 0.8 }}>
                       {entry ? (getPlayerPickNumber(entry.id) ?? "") : ""}
                     </div>
                   </div>
@@ -973,7 +969,7 @@ const TeamsTab = useStableComponent(TeamsTab__render);
                 opacity: hasPlayer ? 1 : 0.85,
               }}
             >
-              <div style={{ padding: "0px 4px", fontSize: 12, fontWeight: 900 }}>{r.pickNumber}</div>
+              <div style={{ padding: "0px 4px", fontSize: 12, fontWeight: 700 }}>{r.pickNumber}</div>
 
               {r.player ? (
                 (() => {
@@ -988,7 +984,7 @@ const TeamsTab = useStableComponent(TeamsTab__render);
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <JerseyTile teamCode={player.teamCode} size={32} />
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: 12 }}>
+                          <div style={{ fontWeight: 500, fontSize: 12 }}>
                             {player.firstName[0]}. {player.lastName}
                           </div>
                           <div style={{ fontSize: 10, opacity: 0.7 }}>
@@ -1000,7 +996,7 @@ const TeamsTab = useStableComponent(TeamsTab__render);
                   );
                 })()
               ) : (
-                <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.55 }}>—</div>
+                <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.55 }}>—</div>
               )}
 
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -1016,14 +1012,14 @@ const TeamsTab = useStableComponent(TeamsTab__render);
                       display: "inline-flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontWeight: 900,
+                      fontWeight: 700,
                       fontSize: 12,
                     }}
                   >
                     {r.ownerInitials}
                   </span>
                 ) : (
-                  <span style={{ opacity: 0.4, fontWeight: 900 }}> </span>
+                  <span style={{ opacity: 0.4, fontWeight: 700 }}> </span>
                 )}
               </div>
             </div>
@@ -1047,7 +1043,7 @@ const DraftResultsTab = useStableComponent(DraftResultsTab__render);
             color: "#0f172a",
           }}
         >
-          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 10 }}>Draft the following player?</div>
+          <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 10 }}>Draft the following player?</div>
 
           <div
             style={{
@@ -1065,7 +1061,7 @@ const DraftResultsTab = useStableComponent(DraftResultsTab__render);
               <JerseyTile teamCode={player.teamCode} size={40} />
 
               <div>
-                <div style={{ fontWeight: 700, fontSize: 12 }}>
+                <div style={{ fontWeight: 500, fontSize: 12 }}>
                   {player.firstName[0]}. {player.lastName}
                 </div>
                 <div style={{ fontSize: 11, opacity: 0.7 }}>
@@ -1076,7 +1072,7 @@ const DraftResultsTab = useStableComponent(DraftResultsTab__render);
 
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.65 }}>Draft Rank</div>
-              <div style={{ fontSize: 12, fontWeight: 900 }}>{player.draftRank}</div>
+              <div style={{ fontSize: 12, fontWeight: 700 }}>{player.draftRank}</div>
             </div>
           </div>
 
@@ -1089,7 +1085,7 @@ const DraftResultsTab = useStableComponent(DraftResultsTab__render);
                 border: "none",
                 background: "#EF4444",
                 color: "white",
-                fontWeight: 700,
+                fontWeight: 500,
                 fontSize: 14,
                 cursor: "pointer",
               }}
@@ -1108,7 +1104,7 @@ confirmDraft(player, leagueId, (lid) => completeDraft?.(lid));
                 border: "none",
                 background: "#10B981",
                 color: "white",
-                fontWeight: 700,
+                fontWeight: 500,
                 fontSize: 14,
                 cursor: "pointer",
               }}

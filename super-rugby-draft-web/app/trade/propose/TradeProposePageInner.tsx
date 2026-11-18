@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { card as themeCard } from "@/lib/ui/theme";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { TEAM_OPTIONS } from "@/lib/constants";
@@ -849,12 +850,7 @@ const offPlayers = offeringIds
 }
 
   // UI styles (match your Transactions vibe)
-  const card35: React.CSSProperties = {
-    borderRadius: 18,
-    background: "rgba(255,255,255,0.35)",
-    backdropFilter: "blur(10px)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.18)",
-  };
+  const card35: React.CSSProperties = { ...themeCard, padding: undefined };
 
   const listBox: React.CSSProperties = {
     marginTop: 10,
@@ -888,7 +884,7 @@ const offPlayers = offeringIds
             border: "none",
             background: canNext ? "#2563EB" : "rgba(0,0,0,0.20)",
             color: "white",
-            fontWeight: 900,
+            fontWeight: 700,
             cursor: canNext ? "pointer" : "not-allowed",
           }}
         >
@@ -912,7 +908,7 @@ const offPlayers = offeringIds
             border: "3px solid rgba(37,99,235,0.90)",
             background: "white",
             color: "#2563EB",
-            fontWeight: 900,
+            fontWeight: 700,
             cursor: "pointer",
           }}
         >
@@ -928,7 +924,7 @@ const offPlayers = offeringIds
             border: "none",
             background: canReview ? "#2563EB" : "rgba(0,0,0,0.20)",
             color: "white",
-            fontWeight: 900,
+            fontWeight: 700,
             cursor: canReview ? "pointer" : "not-allowed",
           }}
         >
@@ -950,7 +946,7 @@ if (step === "REVIEW") {
           border: "3px solid rgba(37,99,235,0.90)",
           background: "white",
           color: "#2563EB",
-          fontWeight: 900,
+          fontWeight: 700,
           cursor: "pointer",
         }}
       >
@@ -970,7 +966,7 @@ const StepButtons = useStableComponent(StepButtons__render);
     return (
       <div style={{ ...card35, padding: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
         <div style={{ display: "flex", alignItems: "center" }}>
-          <div style={{ fontSize: 18, fontWeight: 900 }}>Propose Trade</div>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>Propose Trade</div>
           <div style={{ flex: 1 }} />
           <button
             onClick={goBackToReturnTo}
@@ -983,7 +979,7 @@ const StepButtons = useStableComponent(StepButtons__render);
               background: "rgba(255,255,255,0.18)",
               color: "white",
               fontSize: 18,
-              fontWeight: 900,
+              fontWeight: 700,
               cursor: "pointer",
             }}
           >
@@ -1006,7 +1002,7 @@ const StepButtons = useStableComponent(StepButtons__render);
         outline: "none",
         background: "transparent",
         fontSize: 13,
-        fontWeight: 800,
+        fontWeight: 600,
         color: partnerTeamId ? "#0f172a" : "rgba(15,23,42,0.55)",
         WebkitAppearance: "none",
         appearance: "none",
@@ -1043,7 +1039,7 @@ const StepButtons = useStableComponent(StepButtons__render);
     style={{
       ...inputWrap,
       fontSize: 13,
-      fontWeight: 900,
+      fontWeight: 700,
       color: "#0f172a",
       height: 34,
       display: "flex",
@@ -1073,7 +1069,7 @@ const StepButtons = useStableComponent(StepButtons__render);
                 outline: "none",
                 background: "transparent",
                 fontSize: 13,
-                fontWeight: 800,
+                fontWeight: 600,
                 color: "#0f172a",
                 WebkitAppearance: "none",
                 appearance: "none",
@@ -1119,7 +1115,7 @@ const TopBar = useStableComponent(TopBar__render);
           borderTop: "1px solid rgba(0,0,0,0.08)",
           borderBottom: "1px solid rgba(0,0,0,0.08)",
           fontSize: 12,
-          fontWeight: 900,
+          fontWeight: 700,
           color,
         }}
       >
@@ -1162,7 +1158,7 @@ function PlayerRow__render({
         <JerseyTile teamCode={p.teamCode} size={26} />
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {shortName(p)}
             </div>
             <StatusTag player={p} />
@@ -1170,7 +1166,7 @@ function PlayerRow__render({
           <div
             style={{
               fontSize: 10,
-              fontWeight: 800,
+              fontWeight: 600,
               opacity: 0.7,
               whiteSpace: "nowrap",
               overflow: "visible",
@@ -1183,7 +1179,7 @@ function PlayerRow__render({
       </div>
 
       {/* Metric + live week points */}
-      <div style={{ textAlign: "right", fontSize: 12, fontWeight: 900 }}>
+      <div style={{ textAlign: "right", fontSize: 12, fontWeight: 700 }}>
   {metricValue(p, infoMode, roundRows ?? [], statView)}
 
 </div>
@@ -1200,7 +1196,7 @@ function PlayerRow__render({
           border: "2px solid #2563EB",
           background: selected ? "#2563EB" : "transparent",
           color: selected ? "white" : "#2563EB",
-          fontWeight: 900,
+          fontWeight: 700,
           fontSize: 12,
           cursor: "pointer",
           whiteSpace: "nowrap",
@@ -1240,7 +1236,7 @@ function GroupedList__render({
         {groups.map((g) => (
           <div key={g.pos}>
             {!hidePositionHeaders && (
-  <div style={{ padding: "6px 10px", fontSize: 11, fontWeight: 900, opacity: 0.55 }}>
+  <div style={{ padding: "6px 10px", fontSize: 11, fontWeight: 700, opacity: 0.55 }}>
     {g.pos === "HO" ? "Hookers" :
      g.pos === "PR" ? "Props" :
      g.pos === "LK" ? "Locks" :
@@ -1287,7 +1283,7 @@ function Footer__render() {
           border: "2px solid rgba(239,68,68,0.9)",
           background: "transparent",
           color: "rgba(239,68,68,0.95)",
-          fontWeight: 900,
+          fontWeight: 700,
           cursor: "pointer",
         }}
       >
@@ -1303,7 +1299,7 @@ function Footer__render() {
           border: "none",
           background: canPropose && !isProposing ? "#22C55E" : "rgba(0,0,0,0.20)",
           color: "white",
-          fontWeight: 900,
+          fontWeight: 700,
           cursor: canPropose && !isProposing ? "pointer" : "not-allowed",
         }}
       >
@@ -1345,7 +1341,7 @@ const reviewOfferPlayers = offeringIds
         <TopBar />
 
 {step !== "REVIEW" && (
-  <div style={{ marginTop: 10, fontSize: 12, fontWeight: 900 }}>
+  <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700 }}>
     {step === "REQUESTING" ? (
       <span>
         <span style={{ color: "white" }}>Players Selected:</span> {requestingCount}
@@ -1414,7 +1410,7 @@ const reviewOfferPlayers = offeringIds
 
 <div style={{ ...inputWrap, marginTop: 10 }}>
   {/* Valid / Invalid message */}
-  <div style={{ fontSize: 12, fontWeight: 900 }}>
+  <div style={{ fontSize: 12, fontWeight: 700 }}>
     {tradeWindowClosed ? (
       <span style={{ color: "rgba(239,68,68,0.95)" }}>
         Trade window closed (regular season deadline passed)
@@ -1427,7 +1423,7 @@ const reviewOfferPlayers = offeringIds
   </div>
 
   {proposeError ? (
-  <div style={{ marginTop: 8, fontSize: 12, fontWeight: 900, color: "rgba(239,68,68,0.95)" }}>
+  <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: "rgba(239,68,68,0.95)" }}>
     {proposeError}
   </div>
 ) : null}

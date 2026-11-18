@@ -51,7 +51,7 @@ export function ModalOverlay({ children, onClose }: { children: React.ReactNode;
 export function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: "grid", gap: 6 }}>
-      <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.9 }}>{label}</div>
+      <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.9 }}>{label}</div>
       {children}
     </div>
   );
@@ -62,12 +62,12 @@ return {
   width: "100%",
   height: 36,
   borderRadius: 10,
-  border: "1px solid rgba(0,0,0,0.18)",
+  border: "1px solid #cbd5e1",
   padding: "0 10px",
   fontSize: 13,
-  fontWeight: 800,
+  fontWeight: 600,
   outline: "none",
-  background: disabled ? "rgba(255,255,255,0.75)" : "#FFFFFF",
+  background: disabled ? "#f1f5f9" : "#FFFFFF",
   color: "#0f172a",
   opacity: disabled ? 0.75 : 1,
 };
@@ -78,12 +78,12 @@ return {
   width: "100%",
   height: 36,
   borderRadius: 10,
-  border: "1px solid rgba(0,0,0,0.18)",
+  border: "1px solid #cbd5e1",
   padding: "0 10px",
   fontSize: 13,
-  fontWeight: 800,
+  fontWeight: 600,
   outline: "none",
-  background: disabled ? "rgba(255,255,255,0.75)" : "#FFFFFF",
+  background: disabled ? "#f1f5f9" : "#FFFFFF",
   color: "#0f172a",
   opacity: disabled ? 0.75 : 1,
 };
@@ -97,7 +97,7 @@ export function saveButton(): React.CSSProperties {
     background: "#22C55E",
     border: "none",
     color: "white",
-    fontWeight: 900,
+    fontWeight: 700,
     fontSize: 12,
     cursor: "pointer",
   };

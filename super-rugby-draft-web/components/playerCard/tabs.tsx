@@ -144,7 +144,7 @@ export function StatsTab({
           }}
         >
           <div />
-          <div style={{ textAlign: "right", fontSize: 10, opacity: 0.6, fontWeight: 800 }}>
+          <div style={{ textAlign: "right", fontSize: 10, opacity: 0.6, fontWeight: 600 }}>
             {STAT_VIEW_LABEL[view]}
           </div>
         </div>
@@ -310,7 +310,7 @@ const rows = useMemo(() => {
           gap: 10,
           alignItems: "center",
           fontSize: 12,
-          fontWeight: 900,
+          fontWeight: 700,
         }}
       >
         <div style={{ display: "flex", justifyContent: "center", opacity: 0.6 }}>
@@ -337,7 +337,7 @@ const rows = useMemo(() => {
         gap: 10,
         alignItems: "center",
         fontSize: 12,
-        fontWeight: 900,
+        fontWeight: 700,
       }}
     >
           
@@ -378,7 +378,7 @@ const rows = useMemo(() => {
       border: hasPlayed
         ? "1px solid rgba(5,150,105,0.35)"
         : "1px solid rgba(0,0,0,0.10)",
-      fontWeight: 900,
+      fontWeight: 700,
       cursor: hasPlayed ? "pointer" : "default",
       opacity: hasPlayed ? 1 : 0.8,
     }}
@@ -461,7 +461,7 @@ export function FixturesTab({
                 gap: 10,
                 alignItems: "center",
                 fontSize: 12,
-                fontWeight: 900,
+                fontWeight: 700,
               }}
             >
               <div style={{ display: "flex", justifyContent: "center", opacity: 0.6 }}>
@@ -494,7 +494,7 @@ export function FixturesTab({
               gap: 10,
               alignItems: "center",
               fontSize: 12,
-              fontWeight: 900,
+              fontWeight: 700,
             }}
           >
             {/* week number + opponent logo (same as Results) */}
@@ -534,7 +534,7 @@ export function FixturesTab({
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontWeight: 950,
+                    fontWeight: 700,
                     width: 50,
                     justifySelf: "end",
                   }}

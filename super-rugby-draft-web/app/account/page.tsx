@@ -3,6 +3,7 @@
 // Account page (plan item E1): switch team, change password, notification settings, log out.
 
 import React, { useEffect, useMemo, useState } from "react";
+import { card as themeCard } from "@/lib/ui/theme";
 import { useRouter } from "next/navigation";
 
 import { AppMenu } from "@/components/AppMenu";
@@ -31,13 +32,7 @@ export default function AccountPage() {
   }, []);
 
   // ---- styles (same as Team Details) ----
-  const cardStyle: React.CSSProperties = {
-    borderRadius: 18,
-    background: "rgba(255,255,255,0.35)",
-    padding: 14,
-    backdropFilter: "blur(10px)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.18)",
-  };
+  const cardStyle: React.CSSProperties = { ...themeCard };
   const primaryButton: React.CSSProperties = {
     height: 38,
     width: "100%",
@@ -45,7 +40,7 @@ export default function AccountPage() {
     background: "linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))",
     color: "white",
     fontSize: 13,
-    fontWeight: 900,
+    fontWeight: 700,
     border: "2px solid rgba(255,255,255,0.85)",
     boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)",
     cursor: "pointer",
@@ -60,11 +55,11 @@ export default function AccountPage() {
     outline: "none",
     padding: "0 12px",
     fontSize: 13,
-    fontWeight: 700,
+    fontWeight: 500,
     color: "#0f172a",
     boxSizing: "border-box",
   };
-  const sectionTitle: React.CSSProperties = { fontWeight: 900, fontSize: 12, marginBottom: 8 };
+  const sectionTitle: React.CSSProperties = { fontWeight: 700, fontSize: 12, marginBottom: 8 };
   const note = (kind: "ok" | "err"): React.CSSProperties => ({
     marginTop: 10,
     borderRadius: 12,
@@ -72,7 +67,7 @@ export default function AccountPage() {
     background: kind === "err" ? "rgba(239,68,68,0.22)" : "rgba(34,197,94,0.18)",
     border: kind === "err" ? "1px solid rgba(239,68,68,0.45)" : "1px solid rgba(34,197,94,0.35)",
     fontSize: 12,
-    fontWeight: 800,
+    fontWeight: 600,
   });
 
   // ---- switch team ----
@@ -177,7 +172,7 @@ export default function AccountPage() {
           <button
             onClick={() => setMenuOpen(true)}
             aria-label="Open menu"
-            style={{ background: "transparent", border: "none", padding: 0, margin: 0, color: "white", fontSize: 36, fontWeight: 900, lineHeight: "36px", cursor: "pointer" }}
+            style={{ background: "transparent", border: "none", padding: 0, margin: 0, color: "inherit", fontSize: 36, fontWeight: 700, lineHeight: "36px", cursor: "pointer" }}
           >
             ☰
           </button>
@@ -186,9 +181,9 @@ export default function AccountPage() {
 
         <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
           <div style={cardStyle}>
-            <div style={{ textAlign: "center", fontWeight: 900, fontSize: 22 }}>Account</div>
+            <div style={{ textAlign: "center", fontWeight: 700, fontSize: 22 }}>Account</div>
             {me ? (
-              <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 800, opacity: 0.9 }}>
+              <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
                 {fullName ? `${fullName} · ` : ""}
                 {me.displayName}
               </div>
@@ -200,7 +195,7 @@ export default function AccountPage() {
             <div style={sectionTitle}>Your team</div>
             {myLeagues.length ? (
               <>
-                <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.9, marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.9, marginBottom: 8 }}>
                   Pick which league and team you&apos;re looking at.
                 </div>
                 <select
@@ -218,7 +213,7 @@ export default function AccountPage() {
               </>
             ) : (
               <>
-                <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.9, marginBottom: 10 }}>You haven&apos;t joined a league yet.</div>
+                <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.9, marginBottom: 10 }}>You haven&apos;t joined a league yet.</div>
                 <button style={primaryButton} onClick={() => router.push("/league")}>
                   Join or create a league
                 </button>
@@ -243,7 +238,7 @@ export default function AccountPage() {
           {/* Notifications */}
           <div style={cardStyle}>
             <div style={sectionTitle}>Notifications</div>
-            <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.9, marginBottom: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.9, marginBottom: 8 }}>
               Choose which notifications you get. Notifications aren&apos;t switched on for the site yet; your choices are saved for when they are.
             </div>
             <div style={{ display: "grid", gap: 6 }}>
@@ -271,8 +266,8 @@ export default function AccountPage() {
                     }}
                   >
                     <span style={{ minWidth: 0 }}>
-                      <span style={{ display: "block", fontSize: 13, fontWeight: 900 }}>{t.label}</span>
-                      <span style={{ display: "block", fontSize: 11, fontWeight: 700, opacity: 0.7 }}>{t.hint}</span>
+                      <span style={{ display: "block", fontSize: 13, fontWeight: 700 }}>{t.label}</span>
+                      <span style={{ display: "block", fontSize: 11, fontWeight: 500, opacity: 0.7 }}>{t.hint}</span>
                     </span>
                     <span
                       aria-hidden="true"

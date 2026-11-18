@@ -5,6 +5,7 @@
 // Review button) and the league's automated posts. New messages are checked every few
 // seconds while a conversation is open. Rules: lib/chat/common.ts.
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { card as themeCard } from "@/lib/ui/theme";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppMenu } from "@/components/AppMenu";
 import { TeamAvatar } from "@/components/TeamAvatar";
@@ -214,7 +215,7 @@ function ChatPageInner() {
     return team(other)?.name ?? "Messages";
   })();
 
-  const card: React.CSSProperties = { borderRadius: 18, background: "rgba(255,255,255,0.35)", padding: 14, backdropFilter: "blur(10px)", boxShadow: "0 12px 30px rgba(0,0,0,0.18)" };
+  const card: React.CSSProperties = { ...themeCard };
   const listBox: React.CSSProperties = { marginTop: 12, borderRadius: 14, overflow: "hidden", background: "rgba(255,255,255,0.92)", color: "#0f172a", boxShadow: "0 12px 30px rgba(0,0,0,0.18)" };
 
   function preview(m: Msg | undefined) {
@@ -229,9 +230,9 @@ function ChatPageInner() {
     const mine = m.sender_team_id === myTeamId;
     if (m.kind === "system") {
       return (
-        <div style={{ justifySelf: "center", maxWidth: "92%", borderRadius: 12, background: "rgba(15,23,42,0.06)", padding: "8px 10px", fontSize: 12, fontWeight: 700, whiteSpace: "pre-line", lineHeight: 1.4 }}>
+        <div style={{ justifySelf: "center", maxWidth: "92%", borderRadius: 12, background: "rgba(15,23,42,0.06)", padding: "8px 10px", fontSize: 12, fontWeight: 500, whiteSpace: "pre-line", lineHeight: 1.4 }}>
           {m.body}
-          <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.5, marginTop: 4 }}>{timeText(m.created_at)}</div>
+          <div style={{ fontSize: 9, fontWeight: 600, opacity: 0.5, marginTop: 4 }}>{timeText(m.created_at)}</div>
         </div>
       );
     }
@@ -251,7 +252,7 @@ function ChatPageInner() {
     };
     return (
       <div style={{ display: "grid", justifyItems: mine ? "end" : "start", gap: 2 }}>
-        {!mine && channel === LEAGUE_CHANNEL ? <div style={{ fontSize: 10, fontWeight: 900, opacity: 0.6, paddingLeft: 4 }}>{sender?.name ?? "—"}</div> : null}
+        {!mine && channel === LEAGUE_CHANNEL ? <div style={{ fontSize: 10, fontWeight: 700, opacity: 0.6, paddingLeft: 4 }}>{sender?.name ?? "—"}</div> : null}
         {m.kind === "trade" ? (
           (() => {
             const meta = m.meta as { tradeId?: string; fromTeamId?: string; toTeamId?: string; offer?: Array<{ id: string; name: string }>; request?: Array<{ id: string; name: string }> };
@@ -259,7 +260,7 @@ function ChatPageInner() {
             const forMe = meta.toTeamId === myTeamId;
             return (
               <div style={{ ...base, background: "white", color: "#0f172a", border: "2px solid rgb(13,148,136)", display: "grid", gap: 6, minWidth: 220 }}>
-                <div style={{ fontSize: 12, fontWeight: 900 }}>Trade offer from {team(meta.fromTeamId)?.name ?? "—"}</div>
+                <div style={{ fontSize: 12, fontWeight: 700 }}>Trade offer from {team(meta.fromTeamId)?.name ?? "—"}</div>
                 <div style={{ fontSize: 12 }}>
                   <b>{team(meta.fromTeamId)?.name ?? "They"} give:</b> {(meta.offer ?? []).map((p) => p.name).join(", ") || "nothing"}
                 </div>
@@ -268,11 +269,11 @@ function ChatPageInner() {
                 </div>
                 {m.body ? <div style={{ fontSize: 12, fontStyle: "italic", opacity: 0.8 }}>&ldquo;{m.body}&rdquo;</div> : null}
                 {status === "pending" && forMe ? (
-                  <button onClick={() => setReview(m)} style={{ height: 30, borderRadius: 999, border: "none", background: "#22C55E", color: "white", fontWeight: 900, fontSize: 12, cursor: "pointer" }}>
+                  <button onClick={() => setReview(m)} style={{ height: 30, borderRadius: 999, border: "none", background: "#22C55E", color: "white", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
                     Review
                   </button>
                 ) : (
-                  <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.7 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.7 }}>
                     {status === "pending" ? "Waiting for an answer" : status === "accepted" ? "Accepted" : status === "declined" ? "Declined" : "No longer open"}
                   </div>
                 )}
@@ -288,7 +289,7 @@ function ChatPageInner() {
             {m.body}
           </div>
         )}
-        <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.45, padding: "0 4px" }}>{timeText(m.created_at)}</div>
+        <div style={{ fontSize: 9, fontWeight: 600, opacity: 0.45, padding: "0 4px" }}>{timeText(m.created_at)}</div>
       </div>
     );
   }
@@ -303,7 +304,7 @@ function ChatPageInner() {
           <button
             onClick={() => setMenuOpen(true)}
             aria-label="Open menu"
-            style={{ background: "transparent", border: "none", padding: 0, margin: 0, color: "white", fontSize: 36, fontWeight: 900, lineHeight: "36px", cursor: "pointer" }}
+            style={{ background: "transparent", border: "none", padding: 0, margin: 0, color: "inherit", fontSize: 36, fontWeight: 700, lineHeight: "36px", cursor: "pointer" }}
           >
             ☰
           </button>
@@ -311,19 +312,19 @@ function ChatPageInner() {
 
         <div style={{ ...card, marginTop: 14, display: "flex", alignItems: "center", gap: 10 }}>
           {channel ? (
-            <button onClick={() => router.push("/chat")} aria-label="Back to messages" style={{ background: "transparent", border: "none", color: "white", fontSize: 26, fontWeight: 900, cursor: "pointer", padding: 0 }}>
+            <button onClick={() => router.push("/chat")} aria-label="Back to messages" style={{ background: "transparent", border: "none", color: "inherit", fontSize: 26, fontWeight: 700, cursor: "pointer", padding: 0 }}>
               ‹
             </button>
           ) : (
-            <span style={{ width: 30, height: 30, borderRadius: 999, background: "rgba(255,255,255,0.18)", display: "grid", placeItems: "center" }}>
+            <span style={{ width: 30, height: 30, borderRadius: 999, background: "#0d9488", display: "grid", placeItems: "center" }}>
               <ChatIcon size={17} color="white" />
             </span>
           )}
-          <div style={{ fontWeight: 900, fontSize: 20, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
+          <div style={{ fontWeight: 700, fontSize: 20, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
         </div>
 
         {!inLeague ? (
-          <div style={{ ...listBox, padding: 14, fontSize: 13, fontWeight: 800 }}>Join a league to chat with the other teams.</div>
+          <div style={{ ...listBox, padding: 14, fontSize: 13, fontWeight: 600 }}>Join a league to chat with the other teams.</div>
         ) : !channel ? (
           <div style={listBox}>
             {(overview?.channels ?? []).map((ch, i) => {
@@ -345,22 +346,22 @@ function ChatPageInner() {
                     </span>
                   )}
                   <span style={{ minWidth: 0, display: "grid" }}>
-                    <span style={{ fontSize: 13, fontWeight: 900 }}>{other ? other.name : "League chat"}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700 }}>{other ? other.name : "League chat"}</span>
                     <span style={{ fontSize: 11, fontWeight: n ? 800 : 600, opacity: n ? 0.9 : 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{preview(last)}</span>
                   </span>
                   <span style={{ display: "grid", justifyItems: "end", gap: 3 }}>
-                    {last ? <span style={{ fontSize: 9, fontWeight: 800, opacity: 0.5 }}>{timeText(last.created_at)}</span> : null}
-                    {n ? <span style={{ minWidth: 18, height: 18, padding: "0 5px", borderRadius: 999, background: "#EF4444", color: "white", fontSize: 10, fontWeight: 900, display: "grid", placeItems: "center" }}>{n}</span> : null}
+                    {last ? <span style={{ fontSize: 9, fontWeight: 600, opacity: 0.5 }}>{timeText(last.created_at)}</span> : null}
+                    {n ? <span style={{ minWidth: 18, height: 18, padding: "0 5px", borderRadius: 999, background: "#EF4444", color: "white", fontSize: 10, fontWeight: 700, display: "grid", placeItems: "center" }}>{n}</span> : null}
                   </span>
                 </button>
               );
             })}
-            {!overview ? <div style={{ padding: 14, fontSize: 12, fontWeight: 800, opacity: 0.7 }}>Loading…</div> : null}
+            {!overview ? <div style={{ padding: 14, fontSize: 12, fontWeight: 600, opacity: 0.7 }}>Loading…</div> : null}
           </div>
         ) : (
           <div style={{ ...listBox, padding: 10, display: "grid", gap: 8, minHeight: 200 }}>
-            {!msgs ? <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.7 }}>Loading…</div> : null}
-            {msgs && !shown.length ? <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.7 }}>No messages yet. Say hello!</div> : null}
+            {!msgs ? <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>Loading…</div> : null}
+            {msgs && !shown.length ? <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>No messages yet. Say hello!</div> : null}
             {shown.map((m) => (
               <React.Fragment key={m.id}>{bubble(m)}</React.Fragment>
             ))}
@@ -383,7 +384,7 @@ function ChatPageInner() {
           }}
         >
           <div style={{ maxWidth: 420, margin: "0 auto", display: "grid", gap: 6 }}>
-            {err ? <div style={{ fontSize: 11, fontWeight: 800, color: "#FCA5A5" }}>{err}</div> : null}
+            {err ? <div style={{ fontSize: 11, fontWeight: 600, color: "#FCA5A5" }}>{err}</div> : null}
             <div style={{ display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 8, alignItems: "end" }}>
               <label aria-label="Send a picture" style={{ width: 36, height: 36, borderRadius: 999, background: "rgba(255,255,255,0.14)", display: "grid", placeItems: "center", cursor: busy ? "default" : "pointer", fontSize: 18 }}>
                 📷
@@ -418,7 +419,7 @@ function ChatPageInner() {
               <button
                 onClick={() => send(text)}
                 disabled={busy || !text.trim()}
-                style={{ height: 36, padding: "0 14px", borderRadius: 999, border: "none", background: "#22C55E", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer", opacity: busy || !text.trim() ? 0.5 : 1 }}
+                style={{ height: 36, padding: "0 14px", borderRadius: 999, border: "none", background: "#22C55E", color: "white", fontWeight: 700, fontSize: 13, cursor: "pointer", opacity: busy || !text.trim() ? 0.5 : 1 }}
               >
                 Send
               </button>

@@ -8,6 +8,7 @@
 // (components/PlayerCompare.tsx). Looking only: adding / claiming stays on Transactions.
 
 import React, { useMemo, useState } from "react";
+import { card as themeCard } from "@/lib/ui/theme";
 
 import { AppMenu } from "@/components/AppMenu";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
@@ -133,7 +134,7 @@ export default function StatsHubPage() {
     outline: "none",
     padding: "0 8px",
     fontSize: 12,
-    fontWeight: 800,
+    fontWeight: 600,
     color: "#0f172a",
     background: "rgba(255,255,255,0.92)",
     minWidth: 0,
@@ -142,16 +143,16 @@ export default function StatsHubPage() {
     height: 28,
     padding: "0 10px",
     borderRadius: 999,
-    border: on ? "1px solid #0f172a" : "1px solid rgba(255,255,255,0.6)",
-    background: on ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.15)",
-    color: on ? "#0f172a" : "white",
+    border: on ? "1px solid #0f172a" : "1px solid #d5dce4",
+    background: on ? "#0f172a" : "#eef2f6",
+    color: on ? "white" : "#0f172a",
     fontSize: 11,
-    fontWeight: 900,
+    fontWeight: 700,
     cursor: "pointer",
     whiteSpace: "nowrap",
   });
-  const th: React.CSSProperties = { padding: "7px 6px", fontSize: 10, fontWeight: 900, textAlign: "center", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", borderBottom: "1px solid rgba(15,23,42,0.1)" };
-  const td: React.CSSProperties = { padding: "6px 6px", fontSize: 12, fontWeight: 700, textAlign: "center", whiteSpace: "nowrap", borderTop: "1px solid rgba(15,23,42,0.06)" };
+  const th: React.CSSProperties = { padding: "7px 6px", fontSize: 10, fontWeight: 700, textAlign: "center", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", borderBottom: "1px solid rgba(15,23,42,0.1)" };
+  const td: React.CSSProperties = { padding: "6px 6px", fontSize: 12, fontWeight: 500, textAlign: "center", whiteSpace: "nowrap", borderTop: "1px solid rgba(15,23,42,0.06)" };
   const sticky: React.CSSProperties = { position: "sticky", left: 0, zIndex: 1, background: "white", textAlign: "left", boxShadow: "1px 0 0 rgba(15,23,42,0.08)" };
 
   const rangeValue = range.kind === "season" ? "season" : range.kind === "last" ? `last${range.n}` : `round${range.round}`;
@@ -170,16 +171,16 @@ export default function StatsHubPage() {
           <button
             onClick={() => setMenuOpen(true)}
             aria-label="Open menu"
-            style={{ background: "transparent", border: "none", padding: 0, margin: 0, color: "white", fontSize: 36, fontWeight: 900, lineHeight: "36px", cursor: "pointer" }}
+            style={{ background: "transparent", border: "none", padding: 0, margin: 0, color: "inherit", fontSize: 36, fontWeight: 700, lineHeight: "36px", cursor: "pointer" }}
           >
             ☰
           </button>
           <div style={{ flex: 1 }} />
         </div>
 
-        <div style={{ marginTop: 14, borderRadius: 18, background: "rgba(255,255,255,0.35)", padding: 14, backdropFilter: "blur(10px)", boxShadow: "0 12px 30px rgba(0,0,0,0.18)" }}>
-          <div style={{ textAlign: "center", fontWeight: 900, fontSize: 22 }}>Stats Hub</div>
-          <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 800, opacity: 0.9 }}>
+        <div style={{ marginTop: 14, ...themeCard }}>
+          <div style={{ textAlign: "center", fontWeight: 700, fontSize: 22 }}>Stats Hub</div>
+          <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
             Every player&apos;s stats. Tap a column to sort, a name for the player card, or tick two players to compare.
           </div>
 
@@ -220,7 +221,7 @@ export default function StatsHubPage() {
               <option value="last5">Last 5 rounds</option>
               {rounds.map((r) => <option key={r} value={`round${r}`}>{weekLabel(seasonCfg, r)}</option>)}
             </select>
-            <StatViewToggle />
+            <StatViewToggle dark />
           </div>
 
           <div style={{ marginTop: 8, display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
@@ -257,10 +258,10 @@ export default function StatsHubPage() {
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={jerseySrc(p.teamCode)} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />
                             <button onClick={() => setCard(p)} style={{ border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: "pointer", color: "#0f172a", minWidth: 0 }}>
-                              <div style={{ fontSize: 12, fontWeight: 900 }}>
+                              <div style={{ fontSize: 12, fontWeight: 700 }}>
                                 {p.firstName.charAt(0)}. {p.lastName} <StatusTag player={p} />
                               </div>
-                              <div style={{ fontSize: 10, fontWeight: 800, opacity: 0.6 }}>
+                              <div style={{ fontSize: 10, fontWeight: 600, opacity: 0.6 }}>
                                 {p.teamCode} · {positionsLabel(p)}
                                 {owner ? ` · ${owner}` : ""}
                               </div>
@@ -283,11 +284,11 @@ export default function StatsHubPage() {
               </table>
             </div>
             {list.length > shown ? (
-              <button onClick={() => setShown((n) => n + PAGE)} style={{ width: "100%", height: 38, border: "none", borderTop: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.04)", fontWeight: 900, cursor: "pointer", color: "#0f172a" }}>
+              <button onClick={() => setShown((n) => n + PAGE)} style={{ width: "100%", height: 38, border: "none", borderTop: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.04)", fontWeight: 700, cursor: "pointer", color: "#0f172a" }}>
                 Show more ({list.length - shown} more)
               </button>
             ) : null}
-            {!loading && !list.length ? <div style={{ padding: 14, fontSize: 12, fontWeight: 800, opacity: 0.7 }}>No players match.</div> : null}
+            {!loading && !list.length ? <div style={{ padding: 14, fontSize: 12, fontWeight: 600, opacity: 0.7 }}>No players match.</div> : null}
           </div>
         </div>
       </div>
@@ -310,7 +311,7 @@ export default function StatsHubPage() {
             justifyContent: "center",
           }}
         >
-          <div style={{ fontSize: 12, fontWeight: 800, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <div style={{ fontSize: 12, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {tickedPlayers.map((p) => p.lastName).join(" v ")}
             {ticked.length === 1 ? " · tick one more" : ""}
           </div>
@@ -320,11 +321,11 @@ export default function StatsHubPage() {
               openCompare(ticked[0], ticked[1]);
               setTicked([]);
             }}
-            style={{ height: 34, padding: "0 16px", borderRadius: 999, border: "none", background: ticked.length < 2 ? "rgba(255,255,255,0.3)" : "#22C55E", color: "white", fontWeight: 900, cursor: ticked.length < 2 ? "default" : "pointer" }}
+            style={{ height: 34, padding: "0 16px", borderRadius: 999, border: "none", background: ticked.length < 2 ? "rgba(255,255,255,0.3)" : "#22C55E", color: "white", fontWeight: 700, cursor: ticked.length < 2 ? "default" : "pointer" }}
           >
             Compare
           </button>
-          <button onClick={() => setTicked([])} style={{ height: 34, padding: "0 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.6)", background: "transparent", color: "white", fontWeight: 900, cursor: "pointer" }}>
+          <button onClick={() => setTicked([])} style={{ height: 34, padding: "0 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.6)", background: "transparent", color: "white", fontWeight: 700, cursor: "pointer" }}>
             Clear
           </button>
         </div>

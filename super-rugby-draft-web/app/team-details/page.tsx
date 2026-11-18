@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { card as themeCard } from "@/lib/ui/theme";
 import { useRouter } from "next/navigation";
 
 import { AppMenu } from "@/components/AppMenu";
@@ -103,11 +104,11 @@ export default function TeamDetailsPage() {
     height: 30,
     padding: "0 12px",
     borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.6)",
-    background: "rgba(255,255,255,0.12)",
-    color: "white",
+    border: "1px solid #cbd5e1",
+    background: "#eef2f6",
+    color: "#0f172a",
     fontSize: 12,
-    fontWeight: 900,
+    fontWeight: 700,
     cursor: "pointer",
   };
 
@@ -193,13 +194,7 @@ export default function TeamDetailsPage() {
   }, [activeLeague?.teams, yourTeamId]);
 
   // styles (match dashboard vibe)
-  const cardStyle: React.CSSProperties = {
-    borderRadius: 18,
-    background: "rgba(255,255,255,0.35)",
-    padding: 14,
-    backdropFilter: "blur(10px)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.18)",
-  };
+  const cardStyle: React.CSSProperties = { ...themeCard };
 
   const primaryButton: React.CSSProperties = {
     height: 38,
@@ -208,7 +203,7 @@ export default function TeamDetailsPage() {
     background: "linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))",
     color: "white",
     fontSize: 13,
-    fontWeight: 900,
+    fontWeight: 700,
     border: "2px solid rgba(255,255,255,0.85)",
     boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)",
     cursor: "pointer",
@@ -223,7 +218,7 @@ export default function TeamDetailsPage() {
     outline: "none",
     padding: "0 12px",
     fontSize: 13,
-    fontWeight: 700,
+    fontWeight: 500,
     color: "#0f172a",
   };
 
@@ -297,9 +292,9 @@ export default function TeamDetailsPage() {
       border: "none",
       padding: 0,
       margin: 0,
-      color: "white",
+      color: "inherit",
       fontSize: 36,
-      fontWeight: 900,
+      fontWeight: 700,
       lineHeight: "36px",
       cursor: "pointer",
     }}
@@ -312,8 +307,8 @@ export default function TeamDetailsPage() {
 
         <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
           <div style={cardStyle}>
-            <div style={{ textAlign: "center", fontWeight: 900, fontSize: 22 }}>Team Details</div>
-            <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 800, opacity: 0.9 }}>
+            <div style={{ textAlign: "center", fontWeight: 700, fontSize: 22 }}>Team Details</div>
+            <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
               Your team&apos;s picture and name
             </div>
 
@@ -328,7 +323,7 @@ export default function TeamDetailsPage() {
                     ? "1px solid rgba(239,68,68,0.45)"
                     : "1px solid rgba(34,197,94,0.35)",
                   fontSize: 12,
-                  fontWeight: 800,
+                  fontWeight: 600,
                 }}
               >
                 {err ? err : msg}
@@ -337,7 +332,7 @@ export default function TeamDetailsPage() {
           </div>
 
           <div style={cardStyle}>
-            <div style={{ fontWeight: 900, fontSize: 12, marginBottom: 10 }}>Team Picture</div>
+            <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 10 }}>Team Picture</div>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <TeamAvatar pictureUrl={myTeam?.pictureUrl} initials={myTeam?.userInitials ?? myTeam?.initials} size={72} stars={myTeam?.stars} />
               <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 8 }}>
@@ -359,7 +354,7 @@ export default function TeamDetailsPage() {
                 <button
                   onClick={() => setIconOpen(true)}
                   disabled={picBusy || !yourTeamId}
-                  style={{ height: 30, borderRadius: 999, border: "2px solid rgba(255,255,255,0.85)", background: "transparent", color: "white", fontSize: 12, fontWeight: 900, cursor: "pointer" }}
+                  style={{ height: 30, borderRadius: 999, border: "1px solid #cbd5e1", background: "#eef2f6", color: "#0f172a", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
                 >
                   Choose an icon
                 </button>
@@ -367,7 +362,7 @@ export default function TeamDetailsPage() {
                   <button
                     onClick={removePicture}
                     disabled={picBusy}
-                    style={{ height: 30, borderRadius: 999, border: "2px solid rgba(255,255,255,0.85)", background: "transparent", color: "white", fontSize: 12, fontWeight: 900, cursor: "pointer" }}
+                    style={{ height: 30, borderRadius: 999, border: "1px solid #cbd5e1", background: "#eef2f6", color: "#0f172a", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
                   >
                     Remove picture
                   </button>
@@ -383,7 +378,7 @@ export default function TeamDetailsPage() {
                   background: picMsg.kind === "err" ? "rgba(239,68,68,0.22)" : "rgba(34,197,94,0.18)",
                   border: picMsg.kind === "err" ? "1px solid rgba(239,68,68,0.45)" : "1px solid rgba(34,197,94,0.35)",
                   fontSize: 12,
-                  fontWeight: 800,
+                  fontWeight: 600,
                 }}
               >
                 {picMsg.text}
@@ -392,16 +387,16 @@ export default function TeamDetailsPage() {
           </div>
 
           <div style={cardStyle}>
-            <div style={{ fontWeight: 900, fontSize: 12, marginBottom: 8 }}>Recaps</div>
+            <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 8 }}>Recaps</div>
             {!recaps ? (
-              <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.8 }}>Loading…</div>
+              <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.8 }}>Loading…</div>
             ) : !recaps.seasons.length && !recaps.weeks.length ? (
-              <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.8 }}>Your recaps will be here after the first round is finished.</div>
+              <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.8 }}>Your recaps will be here after the first round is finished.</div>
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
                 {recaps.seasons.length ? (
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", opacity: 0.75, marginBottom: 6 }}>Seasons</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", opacity: 0.75, marginBottom: 6 }}>Seasons</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                       {recaps.seasons.map((s) => (
                         <button key={s.leagueId} onClick={() => setOpenSeason(s.leagueId)} style={recapChip}>
@@ -413,7 +408,7 @@ export default function TeamDetailsPage() {
                 ) : null}
                 {recaps.weeks.length ? (
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", opacity: 0.75, marginBottom: 6 }}>This season</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", opacity: 0.75, marginBottom: 6 }}>This season</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                       {[...recaps.weeks].reverse().map((w) => (
                         <button key={w.week} onClick={() => setOpenWeek(w.week)} style={recapChip}>
@@ -428,7 +423,7 @@ export default function TeamDetailsPage() {
           </div>
 
           <div style={cardStyle}>
-            <div style={{ fontWeight: 900, fontSize: 12, marginBottom: 8 }}>Team Name</div>
+            <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 8 }}>Team Name</div>
             <input
               value={teamName}
               onChange={(e) => setTeamName(e.target.value)}

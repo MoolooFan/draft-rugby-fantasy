@@ -49,7 +49,7 @@ export function TeamAvatar({
           background: icon ? "#ffffff" : "linear-gradient(135deg, rgb(29,78,216), rgb(15,23,42))",
           color: "white",
           fontSize: Math.max(8, Math.round(size * 0.36)),
-          fontWeight: 900,
+          fontWeight: 700,
           lineHeight: 1,
           boxShadow: "0 0 0 2px rgba(255,255,255,0.9), 0 4px 10px rgba(0,0,0,0.18)",
         }}

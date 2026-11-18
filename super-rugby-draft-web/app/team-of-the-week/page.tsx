@@ -710,11 +710,10 @@ useEffect(() => {
   const containerMax = 420;
 
   const headerCard: React.CSSProperties = {
-    borderRadius: 18,
-    background: "rgba(255,255,255,0.12)",
-    border: "1px solid rgba(255,255,255,0.14)",
-    backdropFilter: "blur(10px)",
-    boxShadow: "0 18px 50px rgba(0,0,0,0.35)",
+    borderRadius: 16,
+    background: "#ffffff",
+    color: "#0f172a",
+    boxShadow: "0 6px 20px rgba(15,23,42,0.12)",
     padding: 12,
   };
 
@@ -722,10 +721,10 @@ useEffect(() => {
     width: 30,
     height: 30,
     borderRadius: 10,
-    border: "1px solid rgba(255,255,255,0.35)",
-    background: "rgba(0,0,0,0.18)",
-    color: "white",
-    fontWeight: 900,
+    border: "1px solid #d5dce4",
+    background: "#eef2f6",
+    color: "#0f172a",
+    fontWeight: 700,
     cursor: "pointer",
     display: "grid",
     placeItems: "center",
@@ -840,7 +839,7 @@ useEffect(() => {
                   textAlign: "center",
                   padding: "0px 0px",
                   fontSize: 10,
-                  fontWeight: 700,
+                  fontWeight: 500,
                   lineHeight: "12px",
                   borderTop: "1px solid rgba(15,23,42,0.10)",
                   whiteSpace: "nowrap",
@@ -863,7 +862,7 @@ useEffect(() => {
               justifyContent: "center",
               padding: "0 6px",
               fontSize: 10,
-              fontWeight: 900,
+              fontWeight: 700,
               opacity: 0.75,
               lineHeight: "12px",
               textAlign: "center",
@@ -947,7 +946,7 @@ useEffect(() => {
       >
         <div style={headerCard}>
           <div style={{ display: "flex", alignItems: "center" }}>
-            <div style={{ fontWeight: 900, fontSize: 26, opacity: 0.9 }}>Team of the Week</div>
+            <div style={{ fontWeight: 700, fontSize: 26, opacity: 0.9 }}>Team of the Week</div>
             <div style={{ flex: 1 }} />
             <button
               onClick={() => router.push("/dashboard")}
@@ -956,10 +955,10 @@ useEffect(() => {
                 width: 34,
                 height: 34,
                 borderRadius: 12,
-                border: "1px solid rgba(255,255,255,0.28)",
-                background: "rgba(0,0,0,0.18)",
-                color: "white",
-                fontWeight: 900,
+                border: "1px solid #d5dce4",
+                background: "#eef2f6",
+                color: "#0f172a",
+                fontWeight: 700,
                 cursor: "pointer",
               }}
             >
@@ -977,7 +976,7 @@ useEffect(() => {
               ‹
             </button>
 
-            <div style={{ fontWeight: 900, fontSize: 12 }}>{roundLabel(week)}</div>
+            <div style={{ fontWeight: 700, fontSize: 12 }}>{roundLabel(week)}</div>
 
             <button
               style={{
@@ -1002,7 +1001,7 @@ useEffect(() => {
                 borderRadius: 14,
                 background: "rgba(255,255,255,0.85)",
                 color: "#0f172a",
-                fontWeight: 900,
+                fontWeight: 700,
                 fontSize: 26,
                 boxShadow: "0 18px 40px rgba(0,0,0,0.22)",
               }}

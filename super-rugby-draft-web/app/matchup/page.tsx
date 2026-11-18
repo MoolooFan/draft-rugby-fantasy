@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { card as themeCard } from "@/lib/ui/theme";
 import { useRouter } from "next/navigation";
 
 import { getActiveUsername } from "@/lib/session";
@@ -1357,7 +1358,7 @@ const shieldDefender: string | null = (() => {
 })();
 const shieldTag = (teamId: string | null) =>
   !shieldDefender || !teamId ? null : (
-    <div style={{ marginTop: 2, fontSize: 9, fontWeight: 900, letterSpacing: 0.6, color: "#6a4426" }}>
+    <div style={{ marginTop: 2, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, color: "#6a4426" }}>
       {teamId === shieldDefender ? "SHIELD DEFENCE" : "SHIELD CHALLENGE"}
     </div>
   );
@@ -1491,12 +1492,7 @@ return (
 }
 
   // --- Styling (match your app vibe) ---
-  const card35: React.CSSProperties = {
-    borderRadius: 18,
-    background: "rgba(255,255,255,0.35)",
-    backdropFilter: "blur(10px)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.18)",
-  };
+  const card35: React.CSSProperties = { ...themeCard, padding: undefined };
 
   const listBox: React.CSSProperties = {
     marginTop: 10,
@@ -1517,9 +1513,9 @@ return (
           border: "none",
           padding: 0,
           margin: 0,
-          color: "white",
+          color: "inherit",
           fontSize: 30,
-          fontWeight: 900,
+          fontWeight: 700,
           lineHeight: "30px",
           cursor: "pointer",
         }}
@@ -1597,7 +1593,7 @@ return (
   style={{
     marginTop: 10,
     fontSize: 20,
-    fontWeight: 900,
+    fontWeight: 700,
     lineHeight: "20px",
   }}
 >
@@ -1645,7 +1641,7 @@ return (
       pointerEvents: "none",
       color: "rgb(255, 255, 255)",
       fontSize: 22,
-      fontWeight: 900,
+      fontWeight: 700,
       lineHeight: "22px",
     }}
   >
@@ -1656,7 +1652,7 @@ return (
   <div
     style={{
       fontSize: 13,
-      fontWeight: 950,
+      fontWeight: 700,
       color: "rgba(255,255,255,0.9)",
       whiteSpace: "nowrap",
     }}
@@ -1690,7 +1686,7 @@ return (
       pointerEvents: "none",
       color: "rgba(255,255,255,0.9)",
       fontSize: 22,
-      fontWeight: 900,
+      fontWeight: 700,
       lineHeight: "22px",
     }}
   >
@@ -1699,7 +1695,7 @@ return (
 </div>
 </div>
 
-<div style={{ marginTop: 10, fontSize: 16, fontWeight: 950, opacity: 0.95 }}>
+<div style={{ marginTop: 10, fontSize: 16, fontWeight: 700, opacity: 0.95 }}>
   {!mounted
     ? "Loading…"
     : (displayWeek <= 0 ? "Pre-season" : roundLabel(displayWeek))}
@@ -1714,14 +1710,14 @@ return (
               {leftTeamId ? (
                 <TeamAvatar pictureUrl={teamPicture(leftTeamId)} initials={teamInitials(leftTeamId)} size={44} stars={teamStars(leftTeamId)} style={{ marginBottom: 6, marginTop: 6 }} />
               ) : null}
-              <div style={{ fontSize: 18, fontWeight: 950, display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
                 {leftName}
                 {holdsShield(leftTeamId) ? <ShieldIcon size={20} title={`${shieldInfo?.name} holder`} /> : null}
               </div>
 
-<div style={{ fontSize: 13, fontWeight: 900, opacity: 0.75 }}>
+<div style={{ fontSize: 13, fontWeight: 700, opacity: 0.75 }}>
   {recordText(leftRecord)}{" "}
-  <span style={{ color: streakColor(leftStreak), fontWeight: 700 }}>
+  <span style={{ color: streakColor(leftStreak), fontWeight: 500 }}>
     {streakText(leftStreak)}
   </span>
 </div>
@@ -1729,20 +1725,20 @@ return (
 
             </div>
 
-            <div style={{ fontSize: 18, fontWeight: 900, opacity: 0.85 }}></div>
+            <div style={{ fontSize: 18, fontWeight: 700, opacity: 0.85 }}></div>
 
             <div style={{ textAlign: "right" }}>
               {rightTeamId ? (
                 <TeamAvatar pictureUrl={teamPicture(rightTeamId)} initials={teamInitials(rightTeamId)} size={44} stars={teamStars(rightTeamId)} style={{ marginBottom: 6, marginTop: 6 }} />
               ) : null}
-              <div style={{ fontSize: 18, fontWeight: 950, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
                 {holdsShield(rightTeamId) ? <ShieldIcon size={20} title={`${shieldInfo?.name} holder`} /> : null}
                 {rightName}
               </div>
 
-<div style={{ fontSize: 13, fontWeight: 900, opacity: 0.75 }}>
+<div style={{ fontSize: 13, fontWeight: 700, opacity: 0.75 }}>
   {recordText(rightRecord)}{" "}
-  <span style={{ color: streakColor(rightStreak), fontWeight: 700 }}>
+  <span style={{ color: streakColor(rightStreak), fontWeight: 500 }}>
     {streakText(rightStreak)}
   </span>
 </div>
@@ -1762,16 +1758,16 @@ return (
   {/* Left total pulled inward */}
   <div style={{ display: "flex", justifyContent: "flex-end", paddingRight: 20 }}>
     <div style={{ textAlign: "right" }}>
-      <div style={{ fontSize: 26, fontWeight: 900 }}>{leftScore}</div>
-      {leftOutlook ? <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.55 }}>Proj {formatProjection(leftOutlook.expected)}</div> : null}
+      <div style={{ fontSize: 26, fontWeight: 700 }}>{leftScore}</div>
+      {leftOutlook ? <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.55 }}>Proj {formatProjection(leftOutlook.expected)}</div> : null}
     </div>
   </div>
 
   <div style={{ textAlign: "center" }}>
-    <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.7 }}>vs</div>
+    <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.7 }}>vs</div>
     {/* shown once the page has loaded in the browser (the server has no league data yet) */}
     {mounted && (scoresLocked || displayLocked || (displayWeek > 0 && displayWeek === selectionWeek)) ? (
-      <div style={{ marginTop: 2, fontSize: 9, fontWeight: 900, letterSpacing: 0.6, opacity: 0.6 }}>
+      <div style={{ marginTop: 2, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, opacity: 0.6 }}>
         {scoresLocked ? "FINAL" : displayLocked ? "LIVE" : "UPCOMING"}
       </div>
     ) : null}
@@ -1781,8 +1777,8 @@ return (
   {/* Right total pulled inward */}
   <div style={{ display: "flex", justifyContent: "flex-start", paddingLeft: 20 }}>
     <div style={{ textAlign: "left" }}>
-      <div style={{ fontSize: 26, fontWeight: 900 }}>{rightScore}</div>
-      {rightOutlook ? <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.55 }}>Proj {formatProjection(rightOutlook.expected)}</div> : null}
+      <div style={{ fontSize: 26, fontWeight: 700 }}>{rightScore}</div>
+      {rightOutlook ? <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.55 }}>Proj {formatProjection(rightOutlook.expected)}</div> : null}
     </div>
   </div>
 </div>
@@ -1790,9 +1786,9 @@ return (
 {/* Win probability (from the projections; moves as real points come in) */}
 {leftWinPct != null ? (
   <div style={{ marginTop: 10 }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, fontWeight: 900 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, fontWeight: 700 }}>
       <span>{leftWinPct}%</span>
-      <span style={{ fontSize: 11, fontWeight: 800, opacity: 0.6 }}>Win probability</span>
+      <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.6 }}>Win probability</span>
       <span>{100 - leftWinPct}%</span>
     </div>
     <div style={{ marginTop: 4, height: 6, borderRadius: 999, overflow: "hidden", display: "flex", background: "rgba(15,23,42,0.12)" }}>
@@ -1858,7 +1854,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 }
   style={{
     fontSize: 12,
-    fontWeight: 900,
+    fontWeight: 700,
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -1868,7 +1864,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
   {lp ? lp.lastName : "—"}
 </div>
 
-                    <div style={{ fontSize: 10, fontWeight: 800, opacity: 0.55 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, opacity: 0.55 }}>
                       {lp ? fixtureTagForPlayer(lp) : "—"}
 
                     </div>
@@ -1903,7 +1899,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
       display: "grid",
       placeItems: "center",
       fontSize: 11,
-      fontWeight: 900,
+      fontWeight: 700,
       color: pillColor,
       cursor: lp ? "pointer" : "default",
     }}
@@ -1920,14 +1916,14 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 );
 
 })()}
-{projText(lp, leftC) ? <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(lp, leftC)}</div> : null}
+{projText(lp, leftC) ? <div style={{ fontSize: 9, fontWeight: 600, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(lp, leftC)}</div> : null}
 
 </div>
 
                 </div>
 
                 {/* Middle position */}
-                <div style={{ textAlign: "center", fontSize: 11, fontWeight: 900, opacity: 0.7 }}>
+                <div style={{ textAlign: "center", fontSize: 11, fontWeight: 700, opacity: 0.7 }}>
                   {r.label}
                 </div>
 
@@ -1961,7 +1957,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
     display: "grid",
     placeItems: "center",
     fontSize: 11,
-    fontWeight: 900,
+    fontWeight: 700,
     color: pillColor,
     cursor: rp ? "pointer" : "default",
   }}
@@ -1978,7 +1974,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
     </div>
   );
 })()}
-{projText(rp, rightC) ? <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(rp, rightC)}</div> : null}
+{projText(rp, rightC) ? <div style={{ fontSize: 9, fontWeight: 600, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(rp, rightC)}</div> : null}
 
 </div>
 
@@ -1988,7 +1984,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 }
   style={{
     fontSize: 12,
-    fontWeight: 900,
+    fontWeight: 700,
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -1998,7 +1994,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
   {rp ? rp.lastName : "—"}
 </div>
 
-                    <div style={{ fontSize: 10, fontWeight: 800, opacity: 0.55 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, opacity: 0.55 }}>
                       {rp ? fixtureTagForPlayer(rp) : "—"}
 
                     </div>
@@ -2054,7 +2050,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
               borderTop: "2px solid rgba(0,0,0,0.08)",
               background: "rgba(15,23,42,0.06)",
               fontSize: 12,
-              fontWeight: 900,
+              fontWeight: 700,
             }}
           >
             <div>Bench</div>
@@ -2128,7 +2124,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 }
   style={{
     fontSize: 12,
-    fontWeight: 900,
+    fontWeight: 700,
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -2138,7 +2134,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
   {lp ? lp.lastName : "—"}
 </div>
 
-          <div style={{ fontSize: 10, fontWeight: 800, opacity: 0.55 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, opacity: 0.55 }}>
             {lp ? fixtureTagForPlayer(lp) : "—"}
           </div>
         </div>
@@ -2160,7 +2156,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
     display: "grid",
     placeItems: "center",
     fontSize: 11,
-    fontWeight: 900,
+    fontWeight: 700,
     color: "#0f172a",
     cursor: lp ? "pointer" : "default",
   }}
@@ -2168,14 +2164,14 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 >
   {lp?.id ? (hasScoreForPlayer(lp) ? pointsWithCaptain(lp, leftEffC) : "-") : "—"}
 </div>
-{projText(lp, null) ? <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(lp, null)}</div> : null}
+{projText(lp, null) ? <div style={{ fontSize: 9, fontWeight: 600, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(lp, null)}</div> : null}
 
           
         </div>
       </div>
 
       {/* Middle bench number (1–5) */}
-      <div style={{ textAlign: "center", fontSize: 11, fontWeight: 900, opacity: 0.7 }}>
+      <div style={{ textAlign: "center", fontSize: 11, fontWeight: 700, opacity: 0.7 }}>
         {r.label}
       </div>
 
@@ -2207,7 +2203,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
     display: "grid",
     placeItems: "center",
     fontSize: 11,
-    fontWeight: 900,
+    fontWeight: 700,
     color: "#0f172a",
     cursor: rp ? "pointer" : "default",
   }}
@@ -2215,7 +2211,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 >
   {rp?.id ? (hasScoreForPlayer(rp) ? pointsWithCaptain(rp, rightEffC) : "-") : "—"}
 </div>
-{projText(rp, null) ? <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(rp, null)}</div> : null}
+{projText(rp, null) ? <div style={{ fontSize: 9, fontWeight: 600, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(rp, null)}</div> : null}
 
         </div>
 
@@ -2225,7 +2221,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 }
   style={{
     fontSize: 12,
-    fontWeight: 900,
+    fontWeight: 700,
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -2235,7 +2231,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
   {rp ? rp.lastName : "—"}
 </div>
 
-          <div style={{ fontSize: 10, fontWeight: 800, opacity: 0.55 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, opacity: 0.55 }}>
             {rp ? fixtureTagForPlayer(rp) : "—"}
           </div>
         </div>

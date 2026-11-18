@@ -68,7 +68,7 @@ export function TradeReviewModal({
 
   const side = (title: string, ps: P[], color: string) => (
     <div style={{ borderTop: "1px solid rgba(15,23,42,0.10)" }}>
-      <div style={{ padding: "8px 12px", display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 900 }}>
+      <div style={{ padding: "8px 12px", display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 700 }}>
         <span style={{ color }}>{title}</span>
         <span style={{ opacity: 0.6 }}>
           {COMPARE_STATS.find((s) => s.key === stat)?.label} · {STAT_VIEW_LABEL[view].toLowerCase()}
@@ -81,20 +81,20 @@ export function TradeReviewModal({
         >
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-              <span style={{ fontSize: 13, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {p.firstName?.[0]}. {p.lastName}
               </span>
               <StatusTag player={(livePlayer?.(p.id) ?? p) as never} />
             </div>
-            <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.65 }}>
+            <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.65 }}>
               {String(p.teamCode ?? "").toUpperCase()} · {positionsLabel(p)}
             </div>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 900, fontVariantNumeric: "tabular-nums" }}>{formatStatView(value(p), view)}</div>
+          <div style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{formatStatView(value(p), view)}</div>
         </div>
       ))}
       {ps.length > 1 ? (
-        <div style={{ padding: "6px 12px 8px", display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 900, borderTop: "1px solid rgba(15,23,42,0.06)" }}>
+        <div style={{ padding: "6px 12px 8px", display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700, borderTop: "1px solid rgba(15,23,42,0.06)" }}>
           <span style={{ opacity: 0.6 }}>Together</span>
           <span style={{ fontVariantNumeric: "tabular-nums" }}>{formatStatView(sum(ps), view)}</span>
         </div>
@@ -111,8 +111,8 @@ export function TradeReviewModal({
         style={{ width: "100%", maxWidth: 380, maxHeight: "86vh", overflowY: "auto", borderRadius: 18, background: "#ffffff", color: "#0f172a", boxShadow: "0 24px 80px rgba(0,0,0,0.45)" }}
       >
         <div style={{ padding: "10px 12px", background: "#0f172a", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 13, fontWeight: 900 }}>Trade offer from {fromTeamName}</div>
-          <button onClick={onClose} aria-label="Close" style={{ background: "transparent", border: "none", color: "white", fontSize: 20, fontWeight: 900, cursor: "pointer" }}>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>Trade offer from {fromTeamName}</div>
+          <button onClick={onClose} aria-label="Close" style={{ background: "transparent", border: "none", color: "white", fontSize: 20, fontWeight: 700, cursor: "pointer" }}>
             ×
           </button>
         </div>
@@ -123,7 +123,7 @@ export function TradeReviewModal({
             value={stat}
             onChange={(e) => setStat(e.target.value as StatKey | "points")}
             aria-label="Stat to compare"
-            style={{ height: 34, borderRadius: 10, border: "1px solid rgba(0,0,0,0.15)", padding: "0 10px", fontSize: 13, fontWeight: 800, color: "#0f172a", background: "white" }}
+            style={{ height: 34, borderRadius: 10, border: "1px solid rgba(0,0,0,0.15)", padding: "0 10px", fontSize: 13, fontWeight: 600, color: "#0f172a", background: "white" }}
           >
             {COMPARE_STATS.map((s) => (
               <option key={s.key} value={s.key}>
@@ -141,19 +141,19 @@ export function TradeReviewModal({
 
         <div style={{ padding: 12, borderTop: "1px solid rgba(15,23,42,0.10)" }}>
           {!canRespond ? (
-            <div style={{ fontSize: 12, fontWeight: 800, textAlign: "center", opacity: 0.7 }}>This offer has expired (the lineup deadline has passed).</div>
+            <div style={{ fontSize: 12, fontWeight: 600, textAlign: "center", opacity: 0.7 }}>This offer has expired (the lineup deadline has passed).</div>
           ) : confirming ? (
             <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, textAlign: "center" }}>
+              <div style={{ fontSize: 12, fontWeight: 600, textAlign: "center" }}>
                 {confirming === "accept" ? "Accept this trade? The players swap teams straight away." : "Decline this trade?"}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <button onClick={() => setConfirming(null)} style={{ height: 38, borderRadius: 12, border: "2px solid rgba(15,23,42,0.3)", background: "transparent", fontWeight: 900, cursor: "pointer", color: "#0f172a" }}>
+                <button onClick={() => setConfirming(null)} style={{ height: 38, borderRadius: 12, border: "2px solid rgba(15,23,42,0.3)", background: "transparent", fontWeight: 700, cursor: "pointer", color: "#0f172a" }}>
                   Back
                 </button>
                 <button
                   onClick={confirming === "accept" ? onAccept : onDecline}
-                  style={{ height: 38, borderRadius: 12, border: "none", background: confirming === "accept" ? "#22C55E" : "#EF4444", color: "white", fontWeight: 900, cursor: "pointer" }}
+                  style={{ height: 38, borderRadius: 12, border: "none", background: confirming === "accept" ? "#22C55E" : "#EF4444", color: "white", fontWeight: 700, cursor: "pointer" }}
                 >
                   {confirming === "accept" ? "Yes, accept" : "Yes, decline"}
                 </button>
@@ -163,13 +163,13 @@ export function TradeReviewModal({
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <button
                 onClick={() => setConfirming("decline")}
-                style={{ height: 38, borderRadius: 12, border: "2px solid rgba(239,68,68,0.9)", background: "transparent", color: "rgba(239,68,68,0.95)", fontWeight: 900, cursor: "pointer" }}
+                style={{ height: 38, borderRadius: 12, border: "2px solid rgba(239,68,68,0.9)", background: "transparent", color: "rgba(239,68,68,0.95)", fontWeight: 700, cursor: "pointer" }}
               >
                 Decline
               </button>
               <button
                 onClick={() => setConfirming("accept")}
-                style={{ height: 38, borderRadius: 12, border: "none", background: "#22C55E", color: "white", fontWeight: 900, cursor: "pointer" }}
+                style={{ height: 38, borderRadius: 12, border: "none", background: "#22C55E", color: "white", fontWeight: 700, cursor: "pointer" }}
               >
                 Accept
               </button>

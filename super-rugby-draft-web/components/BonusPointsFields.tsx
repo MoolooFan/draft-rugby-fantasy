@@ -6,7 +6,7 @@
 import React from "react";
 import { BONUS_MARGIN_MAX, type BonusRules } from "@/lib/league/bonus";
 
-const row: React.CSSProperties = { display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 800, flexWrap: "wrap" };
+const row: React.CSSProperties = { display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600, flexWrap: "wrap" };
 const num: React.CSSProperties = {
   width: 64,
   height: 28,
@@ -15,7 +15,7 @@ const num: React.CSSProperties = {
   background: "white",
   color: "#0f172a",
   fontSize: 12,
-  fontWeight: 800,
+  fontWeight: 600,
   padding: "0 6px",
 };
 

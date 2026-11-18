@@ -100,7 +100,7 @@ export function AppMenu({
       >
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <div style={{ fontWeight: 800, fontStyle: "italic", fontSize: 16, flex: 1 }}>
+          <div style={{ fontWeight: 600, fontStyle: "italic", fontSize: 16, flex: 1 }}>
             Draft Fantasy {currentSeasonYear()}
           </div>
           {hasLeague ? (
@@ -137,7 +137,7 @@ export function AppMenu({
                     background: "#EF4444",
                     color: "white",
                     fontSize: 10,
-                    fontWeight: 900,
+                    fontWeight: 700,
                     display: "grid",
                     placeItems: "center",
                     border: "2px solid rgba(255,255,255,0.9)",
@@ -156,7 +156,7 @@ export function AppMenu({
               border: "none",
               color: "white",
               fontSize: 22,
-              fontWeight: 900,
+              fontWeight: 700,
               cursor: "pointer",
             }}
           >
@@ -196,7 +196,7 @@ export function AppMenu({
         {/* Swap League (also on the Account page) */}
         {hasLeague ? (
         <div>
-          <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 8, opacity: 0.95 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, opacity: 0.95 }}>
             Swap League
           </div>
 
@@ -212,7 +212,7 @@ export function AppMenu({
                 outline: "none",
                 background: "transparent",
                 fontSize: 14,
-                fontWeight: 700,
+                fontWeight: 500,
                 color: "#0f172a",
               }}
             >

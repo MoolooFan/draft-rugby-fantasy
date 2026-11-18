@@ -687,7 +687,7 @@ const teamLabelFull =
       background: statusStyle.bg,
       color: statusStyle.text,
       padding: "6px 10px",
-      fontWeight: 900,
+      fontWeight: 700,
       fontSize: 12,
       display: "flex",
       alignItems: "center",
@@ -724,7 +724,7 @@ const teamLabelFull =
                 border: "none",
                 color: "white",
                 fontSize: 20,
-                fontWeight: 900,
+                fontWeight: 700,
                 cursor: "pointer",
               }}
             >
@@ -747,7 +747,7 @@ const teamLabelFull =
                 background: "rgba(15,23,42,0.35)",
                 color: "white",
                 fontSize: 11,
-                fontWeight: 900,
+                fontWeight: 700,
                 cursor: "pointer",
               }}
             >
@@ -760,7 +760,7 @@ const teamLabelFull =
                 <div style={{ fontSize: 22, fontWeight: 600, lineHeight: "22px", color: "#000000" }}>
   {p.firstName}
 </div>
-<div style={{ fontSize: 26, fontWeight: 900, lineHeight: "30px", marginTop: 2, color: "#000000" }}>
+<div style={{ fontSize: 26, fontWeight: 700, lineHeight: "30px", marginTop: 2, color: "#000000" }}>
   {p.lastName}
 </div>
 
@@ -775,7 +775,7 @@ const teamLabelFull =
     left: 12,
     bottom: PLAYER_CARD_BOTTOM_LABEL_BOTTOM,
     fontSize: 12,
-    fontWeight: 900,
+    fontWeight: 700,
     opacity: 0.95,
     color: "#000000",
     zIndex: 2,
@@ -854,7 +854,7 @@ const teamLabelFull =
   value={rk ? String(rk.rank) : "-"}
 />
       {statSeason !== currentSeasonYear() ? (
-        <div style={{ gridColumn: "1 / -1", textAlign: "center", fontSize: 11, fontWeight: 800, opacity: 0.92, color: "white" }}>
+        <div style={{ gridColumn: "1 / -1", textAlign: "center", fontSize: 11, fontWeight: 600, opacity: 0.92, color: "white" }}>
           {statSeason} season stats until the {currentSeasonYear()} season starts
         </div>
       ) : null}
@@ -904,7 +904,7 @@ const teamLabelFull =
                         ? "1px solid rgba(15,23,42,0.35)"
                         : "1px solid rgba(0,0,0,0.12)",
                       color: "#0f172a",
-                      fontWeight: 700,
+                      fontWeight: 500,
                       fontSize: tabs.length > 4 ? 11 : 12,
                       whiteSpace: "nowrap",
                       cursor: "pointer",
@@ -928,7 +928,7 @@ const teamLabelFull =
 
               {error ? (
   <TabCard>
-    <div style={{ color: "#b91c1c", fontWeight: 900 }}>{error}</div>
+    <div style={{ color: "#b91c1c", fontWeight: 700 }}>{error}</div>
   </TabCard>
 ) : loading ? (
   <TabCard>
@@ -1004,7 +1004,7 @@ const teamLabelFull =
         background: "#059669",
         border: "2px solid rgba(255,255,255,0.9)",
         color: "white",
-        fontWeight: 700,
+        fontWeight: 500,
         fontSize: 14,
         cursor: "pointer",
         width: "100%",
@@ -1106,7 +1106,7 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ textAlign: "center" }}>
       <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.85 }}>{label}</div>
-      <div style={{ fontSize: 14, fontWeight: 800, marginTop: 2 }}>{value}</div>
+      <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>{value}</div>
     </div>
   );
 }
