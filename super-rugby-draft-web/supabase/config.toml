@@ -114,7 +114,7 @@ port = 54324
 # sender_name = "Admin"
 
 [storage]
-enabled = false  # off locally to save memory
+enabled = true  # on: team pictures and chat pictures (was off to save memory)
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 
