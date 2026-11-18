@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { STATS } from "@/lib/scoring";
 import { fantasyWeekForRealRound, getSeason, SEASONS } from "@/lib/season";
 import { currentSeasonYear } from "@/lib/season";
+import { demo } from "@/lib/demo";
 
 function toNum(v: any): number {
   const n = Number(v);
@@ -70,7 +71,10 @@ export async function GET(req: Request) {
       from += pageSize;
     }
 
-    const rows = allRows.map(mapRawJsonToLegacyRow);
+    let rows = allRows.map(mapRawJsonToLegacyRow);
+    // demo site: nothing after the frozen moment's last round (lib/demo.ts)
+    const d = demo();
+    if (d && season === d.season) rows = rows.filter((r) => Number(r.realRound) <= d.lastRealRound);
 
     return NextResponse.json({ ok: true, rows });
   } catch (e: any) {

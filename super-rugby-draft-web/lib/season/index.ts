@@ -2,6 +2,7 @@
 // Season settings: which real Super Rugby rounds make up each fantasy week, and the
 // timing rules built on the fixtures (lineup deadline, finalise time, stats-sync windows).
 // Pure code (no server/browser dependencies) so pages, API routes and tests can all use it.
+import { demo } from "@/lib/demo";
 import fixtures2026 from "@/data/fixtures-2026.json";
 import fixtures2027 from "@/data/fixtures-2027.json";
 
@@ -146,6 +147,9 @@ export function leagueWeeksAfterDraft(s: SeasonConfig, draftMs: number): number[
  * NEXT_PUBLIC_CURRENT_SEASON in the env to override (the local test copy uses 2026 data).
  */
 export function currentSeasonYear(): number {
+  // the demo site shows the 2026 season part-way through (lib/demo.ts)
+  const d = demo();
+  if (d) return d.season;
   const fromEnv = Number(process.env.NEXT_PUBLIC_CURRENT_SEASON);
   return Number.isFinite(fromEnv) && fromEnv > 0 && SEASONS[fromEnv] ? fromEnv : 2027;
 }

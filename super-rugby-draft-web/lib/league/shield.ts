@@ -16,7 +16,11 @@
 //   keeps it whatever the results) and rename it.
 // - Started fresh in 2027 (SHIELD_FIRST_SEASON): earlier seasons don't count.
 
+import { demo } from "@/lib/demo";
+
 export const SHIELD_FIRST_SEASON = 2027;
+/** The first season that counts (2026 on the demo site, lib/demo.ts). */
+export const shieldFirstSeason = () => demo()?.season ?? SHIELD_FIRST_SEASON;
 export const DEFAULT_SHIELD_NAME = "The Shield";
 
 /** "Ranfurly" -> "Ranfurly Shield"; "" -> "The Shield". The name always ends in "Shield". */
@@ -131,7 +135,7 @@ export function computeShield(seasons: ShieldSeason[]): ShieldState {
     reigns.push(current);
   };
 
-  for (const s of [...seasons].filter((x) => x.season >= SHIELD_FIRST_SEASON).sort((a, b) => a.season - b.season)) {
+  for (const s of [...seasons].filter((x) => x.season >= shieldFirstSeason()).sort((a, b) => a.season - b.season)) {
     if (!s.enabled && !(s.toggles ?? []).some((t) => t.on)) continue; // off all season
     const teamOfOwner = (owner: string) => s.teams.find((t) => t.owner === owner) ?? null;
     const weeks = [...new Set(s.games.map((g) => g.week))].sort((a, b) => a - b);

@@ -7,6 +7,7 @@ import ScoringRulesSync from "@/components/ScoringRulesSync";
 import LeagueSync from "@/components/LeagueSync";
 import ChatNotifier from "@/components/ChatNotifier";
 import { PlayerCompareHost } from "@/components/PlayerCompare";
+import { demo, demoClockSource } from "@/lib/demo";
 
 /**
  * Viewport configuration
@@ -54,8 +55,15 @@ export default async function RootLayout({
       }
     : null;
 
+  // demo site (lib/demo.ts): freeze the browser's clock before anything else runs, and say so
+  const d = demo();
   return (
     <html lang="en">
+      {d ? (
+        <head>
+          <script dangerouslySetInnerHTML={{ __html: `window.__SR_DEMO__=true;${demoClockSource(d.now)}` }} />
+        </head>
+      ) : null}
       <body
         style={{
           margin: 0,
@@ -68,6 +76,11 @@ export default async function RootLayout({
           background: "transparent",
         }}
       >
+        {d ? (
+          <div style={{ position: "sticky", top: 0, zIndex: 9000, background: "#f59e0b", color: "#0f172a", fontSize: 11, fontWeight: 900, textAlign: "center", padding: "4px 8px" }}>
+            {d.label}
+          </div>
+        ) : null}
         <SessionProvider profile={sessionProfile}>
           <LeagueSync username={sessionProfile?.username ?? null} />
           {sessionProfile ? <ChatNotifier /> : null}
