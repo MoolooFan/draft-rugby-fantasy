@@ -46,25 +46,25 @@ export function CoachFeed({
 
   return (
     <div style={style}>
-      <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Coach News · your players</div>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Coach News · your players</div>
       <div style={{ display: "grid", gap: 6 }}>
         {shown.map((n) => (
           <button
             key={n.id}
             onClick={() => onOpen(n.player_id)}
-            style={{ textAlign: "left", border: "none", borderRadius: 12, background: "rgba(255,255,255,0.92)", color: "#0f172a", padding: "8px 10px", cursor: "pointer", display: "grid", gap: 3 }}
+            style={{ textAlign: "left", border: "1px solid #e5e9ef", borderRadius: 12, background: "#f6f8fa", color: "#0f172a", padding: "8px 10px", cursor: "pointer", display: "grid", gap: 3 }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 12, fontWeight: 900, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nameOf(n.player_id) ?? "Player"}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nameOf(n.player_id) ?? "Player"}</span>
               <VerdictChip verdict={n.verdict} />
-              <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.55, whiteSpace: "nowrap" }}>{ago(n.created_at)}</span>
+              <span style={{ fontSize: 10, fontWeight: 500, opacity: 0.55, whiteSpace: "nowrap" }}>{ago(n.created_at)}</span>
             </div>
-            <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.3 }}>{n.headline}</div>
+            <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.3 }}>{n.headline}</div>
           </button>
         ))}
       </div>
       {notes.length > 4 ? (
-        <button onClick={() => setMore((m) => !m)} style={{ marginTop: 6, border: "none", background: "transparent", color: "white", fontSize: 11, fontWeight: 900, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
+        <button onClick={() => setMore((m) => !m)} style={{ marginTop: 6, border: "none", background: "transparent", color: "#0d9488", fontSize: 11, fontWeight: 700, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
           {more ? "Show fewer" : `Show all ${notes.length}`}
         </button>
       ) : null}

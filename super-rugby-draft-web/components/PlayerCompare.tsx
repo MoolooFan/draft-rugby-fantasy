@@ -57,7 +57,7 @@ const selectStyle: React.CSSProperties = {
   border: "1px solid rgba(15,23,42,0.15)",
   padding: "0 8px",
   fontSize: 12,
-  fontWeight: 800,
+  fontWeight: 600,
   color: "#0f172a",
   background: "white",
   minWidth: 0,
@@ -87,12 +87,12 @@ function PlayerPicker({ players, onPick, exclude }: { players: PlayerFromSheet[]
         <button
           key={p.id}
           onClick={() => onPick(p.id)}
-          style={{ textAlign: "left", border: "none", borderRadius: 10, background: "rgba(15,23,42,0.05)", padding: "7px 10px", cursor: "pointer", color: "#0f172a", fontSize: 12, fontWeight: 800 }}
+          style={{ textAlign: "left", border: "none", borderRadius: 10, background: "rgba(15,23,42,0.05)", padding: "7px 10px", cursor: "pointer", color: "#0f172a", fontSize: 12, fontWeight: 600 }}
         >
           {p.firstName} {p.lastName} <span style={{ opacity: 0.6 }}>· {TEAM_NAME[p.teamCode] ?? p.teamCode} · {positionsLabel(p)}</span>
         </button>
       ))}
-      {q.trim().length >= 2 && !matches.length ? <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.6 }}>No players found.</div> : null}
+      {q.trim().length >= 2 && !matches.length ? <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.6 }}>No players found.</div> : null}
     </div>
   );
 }
@@ -105,14 +105,14 @@ function LastFive({ logs, names }: { logs: Array<Array<{ round: number; points: 
         const last = log.slice(-5);
         return (
           <div key={i} style={{ display: "grid", gridTemplateColumns: "84px 1fr", gap: 8, alignItems: "end" }}>
-            <div style={{ fontSize: 11, fontWeight: 900, color: COLOURS[i], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", alignSelf: "center" }}>{names[i]}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: COLOURS[i], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", alignSelf: "center" }}>{names[i]}</div>
             {last.length ? (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4, alignItems: "end", height: 56 }}>
                 {Array.from({ length: 5 }, (_, k) => last[k - (5 - last.length)] ?? null).map((g, k) => (
                   <div key={k} title={g ? `Round ${g.round}: ${g.points} pts` : undefined} style={{ display: "grid", alignItems: "end", height: "100%" }}>
                     {g ? (
                       <div style={{ display: "grid", gap: 1, justifyItems: "center" }}>
-                        <span style={{ fontSize: 9, fontWeight: 900 }}>{Math.round(g.points)}</span>
+                        <span style={{ fontSize: 9, fontWeight: 700 }}>{Math.round(g.points)}</span>
                         <div style={{ width: "100%", height: Math.max(3, (g.points / max) * 38), borderRadius: 4, background: COLOURS[i] }} />
                       </div>
                     ) : null}
@@ -120,7 +120,7 @@ function LastFive({ logs, names }: { logs: Array<Array<{ round: number; points: 
                 ))}
               </div>
             ) : (
-              <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.6, alignSelf: "center" }}>No games in this range.</div>
+              <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.6, alignSelf: "center" }}>No games in this range.</div>
             )}
           </div>
         );
@@ -180,14 +180,14 @@ function PlayerCompare() {
         <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={jerseySrc(p.teamCode)} alt="" style={{ width: 52, height: 52, objectFit: "contain" }} />
-          <div style={{ fontSize: 13, fontWeight: 950, lineHeight: 1.15 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.15 }}>
             {p.firstName} {p.lastName} <StatusTag player={p} />
           </div>
-          <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.65 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.65 }}>
             {TEAM_NAME[p.teamCode] ?? p.teamCode} · {positionsLabel(p)}
           </div>
-          {league ? <div style={{ fontSize: 10, fontWeight: 900, padding: "2px 8px", borderRadius: 999, background: "rgba(15,23,42,0.07)" }}>{ownerText(p)}</div> : null}
-          <button onClick={() => setSlot(i, null)} style={{ border: "none", background: "transparent", color: "#0f172a", fontSize: 11, fontWeight: 800, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
+          {league ? <div style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "rgba(15,23,42,0.07)" }}>{ownerText(p)}</div> : null}
+          <button onClick={() => setSlot(i, null)} style={{ border: "none", background: "transparent", color: "#0f172a", fontSize: 11, fontWeight: 600, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
             Change
           </button>
         </>
@@ -208,7 +208,7 @@ function PlayerCompare() {
   const tw = pair.map(thisWeek);
   const roleText = (r: string | null) => (r === "starting" ? "Starting" : r === "bench" ? "Bench" : r === "out" ? "Out" : r === "expected" ? "Team list not out" : "–");
 
-  const cell: React.CSSProperties = { padding: "6px 8px", fontSize: 12, fontWeight: 800, textAlign: "center" };
+  const cell: React.CSSProperties = { padding: "6px 8px", fontSize: 12, fontWeight: 600, textAlign: "center" };
   const best = (col: StatColumn, which: "a" | "b") => {
     const v = [statValue(aggs[0], col, view), statValue(aggs[1], col, view)];
     return better(col, v[0], v[1]) === which;
@@ -234,13 +234,13 @@ function PlayerCompare() {
         }}
       >
         <div style={{ position: "sticky", top: 0, zIndex: 2, background: "white", display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.08)" }}>
-          <div style={{ fontSize: 15, fontWeight: 950, flex: 1 }}>Compare players</div>
+          <div style={{ fontSize: 15, fontWeight: 700, flex: 1 }}>Compare players</div>
           {pair[0] && pair[1] ? (
-            <button onClick={swap} aria-label="Swap sides" title="Swap sides" style={{ border: "none", background: "rgba(15,23,42,0.06)", borderRadius: 999, height: 30, padding: "0 10px", fontWeight: 900, cursor: "pointer", color: "#0f172a" }}>
+            <button onClick={swap} aria-label="Swap sides" title="Swap sides" style={{ border: "none", background: "rgba(15,23,42,0.06)", borderRadius: 999, height: 30, padding: "0 10px", fontWeight: 700, cursor: "pointer", color: "#0f172a" }}>
               ⇄
             </button>
           ) : null}
-          <button onClick={close} aria-label="Close" style={{ border: "none", background: "rgba(15,23,42,0.06)", borderRadius: 999, width: 30, height: 30, fontWeight: 900, cursor: "pointer", color: "#0f172a" }}>
+          <button onClick={close} aria-label="Close" style={{ border: "none", background: "rgba(15,23,42,0.06)", borderRadius: 999, width: 30, height: 30, fontWeight: 700, cursor: "pointer", color: "#0f172a" }}>
             ✕
           </button>
         </div>
@@ -255,7 +255,7 @@ function PlayerCompare() {
             <>
               {/* This week */}
               <section style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.05em", textTransform: "uppercase", opacity: 0.6 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", opacity: 0.6 }}>
                   This week{week ? ` · ${weekLabel(getSeason(currentSeasonYear()), week)}` : ""}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, overflow: "hidden" }}>
@@ -292,25 +292,25 @@ function PlayerCompare() {
                   <option value="last5">Last 5 rounds</option>
                   {rounds.map((r) => <option key={r} value={`round${r}`}>{weekLabel(seasonCfg, r)}</option>)}
                 </select>
-                <StatViewToggle />
+                <StatViewToggle dark />
               </div>
 
               {/* Last 5 games */}
               <section style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.05em", textTransform: "uppercase", opacity: 0.6 }}>Last 5 games ({season})</div>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", opacity: 0.6 }}>Last 5 games ({season})</div>
                 <LastFive logs={seasonLogs} names={pair.map((p) => (p ? p.lastName : "—"))} />
               </section>
 
               {/* Every stat */}
               <section style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.05em", textTransform: "uppercase", opacity: 0.6 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", opacity: 0.6 }}>
                   Stats {loading ? "· loading…" : ""}
                 </div>
                 <div style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, overflow: "hidden" }}>
                   {rowsToShow.map((r, k) => (
                     <React.Fragment key={r.col}>
                       {r.group ? (
-                        <div style={{ padding: "5px 8px", fontSize: 10, fontWeight: 900, letterSpacing: "0.05em", textTransform: "uppercase", background: "rgba(15,23,42,0.05)" }}>{r.group}</div>
+                        <div style={{ padding: "5px 8px", fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", background: "rgba(15,23,42,0.05)" }}>{r.group}</div>
                       ) : null}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.3fr 1fr", borderTop: k && !r.group ? "1px solid rgba(15,23,42,0.06)" : undefined }}>
                         {(["a", "b"] as const).map((w, i) => {
@@ -325,7 +325,7 @@ function PlayerCompare() {
                           return i === 0 ? (
                             <React.Fragment key={w}>
                               {el}
-                              <div style={{ ...cell, fontSize: 11, fontWeight: 800, opacity: 0.7 }}>{r.label}</div>
+                              <div style={{ ...cell, fontSize: 11, fontWeight: 600, opacity: 0.7 }}>{r.label}</div>
                             </React.Fragment>
                           ) : (
                             el
@@ -335,7 +335,7 @@ function PlayerCompare() {
                     </React.Fragment>
                   ))}
                 </div>
-                <div style={{ fontSize: 10, fontWeight: 700, opacity: 0.55 }}>
+                <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.55 }}>
                   The better number is highlighted (fewer is better for missed tackles, penalties, errors, cards and missed kicks). Points use {league ? "your league's" : "Standard"} scoring.
                 </div>
               </section>

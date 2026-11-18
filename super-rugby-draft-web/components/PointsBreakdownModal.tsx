@@ -132,7 +132,7 @@ const resolvedPlayerImageSrc = playerId
     background: "rgba(255,255,255,0.18)",
     color: "white",
     fontSize: 18,
-    fontWeight: 900,
+    fontWeight: 700,
     cursor: "pointer",
     lineHeight: "32px",
     zIndex: 20,
@@ -144,13 +144,13 @@ const resolvedPlayerImageSrc = playerId
           <div style={{ position: "relative", zIndex: 2 }}>
 
             <div>
-              <div style={{ fontSize: 18, fontWeight: 950, letterSpacing: -0.2 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: -0.2 }}>
                 {playerName}
               </div>
-              <div style={{ marginTop: 10, fontSize: 14, fontWeight: 900, opacity: 0.95 }}>
+              <div style={{ marginTop: 10, fontSize: 14, fontWeight: 700, opacity: 0.95 }}>
                 {weekLabel}
               </div>
-              <div style={{ marginTop: 2, fontSize: 14, fontWeight: 900, opacity: 0.95 }}>
+              <div style={{ marginTop: 2, fontSize: 14, fontWeight: 700, opacity: 0.95 }}>
                 {fixtureLabel}
               </div>
             </div>
@@ -203,7 +203,7 @@ const resolvedPlayerImageSrc = playerId
                 display: "grid",
                 placeItems: "center",
                 fontSize: 18,
-                fontWeight: 950,
+                fontWeight: 700,
               }}
             >
               {totalPoints}
@@ -229,7 +229,7 @@ const resolvedPlayerImageSrc = playerId
         gap: 12,
         padding: "6px 14px 4px",
         fontSize: 10,
-        fontWeight: 900,
+        fontWeight: 700,
         letterSpacing: "0.04em",
         textTransform: "uppercase",
         color: "#0f172a",
@@ -254,14 +254,14 @@ const resolvedPlayerImageSrc = playerId
           fontVariantNumeric: "tabular-nums",
         }}
       >
-        <div style={{ opacity: 0.75, fontWeight: 900 }}>{r.label}</div>
-        <div style={{ opacity: 0.75, fontWeight: 800, textAlign: "right" }}>{r.count ?? ""}</div>
-        <div style={{ fontWeight: 950, textAlign: "right" }}>{r.right ?? "—"}</div>
+        <div style={{ opacity: 0.75, fontWeight: 700 }}>{r.label}</div>
+        <div style={{ opacity: 0.75, fontWeight: 600, textAlign: "right" }}>{r.count ?? ""}</div>
+        <div style={{ fontWeight: 700, textAlign: "right" }}>{r.right ?? "—"}</div>
       </div>
     ))}
     </>
   ) : (
-    <div style={{ padding: "12px 14px", fontSize: 12, opacity: 0.75, fontWeight: 900 }}>
+    <div style={{ padding: "12px 14px", fontSize: 12, opacity: 0.75, fontWeight: 700 }}>
       No scoring stats.
     </div>
   )}

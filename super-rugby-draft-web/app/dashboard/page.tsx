@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { card as themeCard, muted, num, teal } from "@/lib/ui/theme";
 import { leagueRefreshMs, usePoll } from "@/lib/hooks/usePoll";
 import { useRouter } from "next/navigation";
 
@@ -1493,13 +1494,7 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
   // -----------------------
   // Styles
   // -----------------------
-  const cardStyle: React.CSSProperties = {
-    borderRadius: 18,
-    background: "rgba(255,255,255,0.35)",
-    padding: 14,
-    backdropFilter: "blur(10px)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.18)",
-  };
+  const cardStyle: React.CSSProperties = { ...themeCard };
 
   const primaryButton: React.CSSProperties = {
     height: 36,
@@ -1508,7 +1503,7 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
     background: "linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))",
     color: "white",
     fontSize: 13,
-    fontWeight: 800,
+    fontWeight: 600,
     border: "2px solid rgba(255,255,255,0.85)",
     boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)",
     cursor: "pointer",
@@ -1521,7 +1516,7 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
     background: "linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))",
     color: "white",
     fontSize: 12,
-    fontWeight: 800,
+    fontWeight: 600,
     border: "2px solid rgba(255,255,255,0.85)",
     cursor: "pointer",
   };
@@ -1550,7 +1545,7 @@ const iconGlyphStyle: React.CSSProperties = {
   const isDown = movement === "down";
   const isSame = movement === "same";
 
-  const bg = isUp ? "#22C55E" : isDown ? "#EF4444" : "rgba(255,255,255,0.22)";
+  const bg = isUp ? "#22C55E" : isDown ? "#EF4444" : "#cbd5e1";
   const symbol = isUp ? "▲" : isDown ? "▼" : "=";
 
   return (
@@ -1564,7 +1559,7 @@ const iconGlyphStyle: React.CSSProperties = {
         justifyContent: "center",
         background: bg,
         color: "white",
-        fontWeight: 900,
+        fontWeight: 700,
         fontSize: isSame ? 12 : 11,
         lineHeight: "12px",
       }}
@@ -1675,9 +1670,9 @@ const JerseyTile = useStableComponent(JerseyTile__render);
       border: "none",
       padding: 0,
       margin: 0,
-      color: "white",
+      color: "inherit",
       fontSize: 36,
-      fontWeight: 900,
+      fontWeight: 700,
       lineHeight: "36px",
       cursor: "pointer",
     }}
@@ -1703,7 +1698,7 @@ const JerseyTile = useStableComponent(JerseyTile__render);
               color: "#0f172a",
               textAlign: "center",
               padding: "6px 12px",
-              fontWeight: 800,
+              fontWeight: 600,
               fontSize: 11,
             }}
           >
@@ -1715,7 +1710,7 @@ const JerseyTile = useStableComponent(JerseyTile__render);
               color: "#0f172a",
               textAlign: "center",
               padding: "6px 12px",
-              fontWeight: 700,
+              fontWeight: 500,
               fontSize: 11,
               borderTop: "1px solid rgba(15,23,42,0.12)",
             }}
@@ -1732,7 +1727,7 @@ const Header = useStableComponent(Header__render);
     return (
       <div style={{ marginTop: 14 }}>
         <div style={cardStyle}>
-          <div style={{ textAlign: "center", fontSize: 16, fontWeight: 900 }}>
+          <div style={{ textAlign: "center", fontSize: 16, fontWeight: 700 }}>
             No League Joined
           </div>
           <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
@@ -1755,17 +1750,17 @@ const NoLeague = useStableComponent(NoLeague__render);
       <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
         {/* League / matchup card */}
         <div style={cardStyle}>
-          <div style={{ textAlign: "center", fontWeight: 900, fontSize: 24 }}>
+          <div style={{ textAlign: "center", fontWeight: 700, fontSize: 24 }}>
             {leagueName}
           </div>
-          <div style={{ textAlign: "center", marginTop: 4, fontSize: 18, fontWeight: 800 }}>
+          <div style={{ textAlign: "center", marginTop: 4, fontSize: 18, fontWeight: 600 }}>
             {weekLabel}
           </div>
 
           <div
             style={{
               marginTop: 10,
-              borderTop: "1px solid rgba(255,255,255,0.28)",
+              borderTop: "1px solid #e5e9ef",
               paddingTop: 10,
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
@@ -1781,7 +1776,7 @@ const NoLeague = useStableComponent(NoLeague__render);
 </button>
           <button
             onClick={() => setRecapsOpen(true)}
-            style={{ marginTop: 8, display: "block", marginLeft: "auto", marginRight: "auto", border: "none", background: "transparent", color: "white", fontSize: 11, fontWeight: 900, textDecoration: "underline", cursor: "pointer", opacity: 0.9 }}
+            style={{ marginTop: 8, display: "block", marginLeft: "auto", marginRight: "auto", border: "none", background: "transparent", color: teal, fontSize: 11, fontWeight: 700, textDecoration: "underline", cursor: "pointer", opacity: 0.9 }}
           >
             Weekly recaps
           </button>
@@ -1809,7 +1804,7 @@ const NoLeague = useStableComponent(NoLeague__render);
         background: "#EF4444",
         color: "white",
         fontSize: 11,
-        fontWeight: 900,
+        fontWeight: 700,
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
@@ -1828,17 +1823,17 @@ const NoLeague = useStableComponent(NoLeague__render);
 
         {/* Upcoming fixture */}
         <div style={cardStyle}>
-          <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Upcoming Fixture</div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Upcoming Fixture</div>
 
           <div
             style={{
               borderRadius: 12,
-              background: "rgba(0,0,0,0.10)",
-              border: "1px solid rgba(255,255,255,0.14)",
+              background: "#f6f8fa",
+              border: "1px solid #e5e9ef",
               padding: 12,
             }}
           >
-            <div style={{ textAlign: "center", fontSize: 12, fontWeight: 700, opacity: 0.85 }}>
+            <div style={{ textAlign: "center", fontSize: 12, fontWeight: 500, opacity: 0.85 }}>
               {upcomingWeek}
             </div>
 
@@ -1850,7 +1845,7 @@ const NoLeague = useStableComponent(NoLeague__render);
                 alignItems: "center",
                 gap: 10,
                 fontSize: 12,
-                fontWeight: 800,
+                fontWeight: 600,
               }}
             >
               <div style={{ textAlign: "left" }}>{upcomingHome}</div>
@@ -1858,8 +1853,16 @@ const NoLeague = useStableComponent(NoLeague__render);
               <div style={{ textAlign: "right" }}>{upcomingAway}</div>
             </div>
 
+            {/* projected scores under each team (separate from the win probability bar) */}
+            {upcomingOutlook ? (
+              <div style={{ ...num, display: "grid", gridTemplateColumns: "1fr 1fr", marginTop: 2, fontSize: 13, fontWeight: 500, color: muted }}>
+                <div style={{ textAlign: "left" }}>Proj {formatProjection(upcomingOutlook.left)}</div>
+                <div style={{ textAlign: "right" }}>Proj {formatProjection(upcomingOutlook.right)}</div>
+              </div>
+            ) : null}
+
             {upcomingShield ? (
-              <div style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 11, fontWeight: 900 }}>
+              <div style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 11, fontWeight: 700 }}>
                 <ShieldIcon size={18} />
                 {upcomingShield === "defending"
                   ? `Shield defence: ${activeLeague?.shield?.name} on the line at home`
@@ -1870,19 +1873,14 @@ const NoLeague = useStableComponent(NoLeague__render);
             ) : null}
 
             {upcomingOutlook ? (
-              <div style={{ marginTop: 10 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10, fontSize: 12, fontWeight: 800 }}>
-                  <div style={{ textAlign: "left" }}>Proj {formatProjection(upcomingOutlook.left)}</div>
-                  <div style={{ fontSize: 11, opacity: 0.8 }}>Win probability</div>
-                  <div style={{ textAlign: "right" }}>Proj {formatProjection(upcomingOutlook.right)}</div>
-                </div>
-                <div style={{ marginTop: 6, display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 900 }}>
-                  <span>{upcomingOutlook.leftWin}%</span>
-                  <div style={{ height: 6, borderRadius: 999, overflow: "hidden", display: "flex", background: "rgba(255,255,255,0.25)" }}>
+              <div style={{ marginTop: 12 }}>
+                <div style={{ textAlign: "center", fontSize: 11, fontWeight: 500, color: muted }}>Win probability</div>
+                <div style={{ marginTop: 4, display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600 }}>
+                  <span style={{ color: "#15803d" }}>{upcomingOutlook.leftWin}%</span>
+                  <div style={{ height: 7, borderRadius: 999, overflow: "hidden", display: "flex", background: "#e2e8f0" }}>
                     <div style={{ width: `${upcomingOutlook.leftWin}%`, background: "#16a34a" }} />
-                    <div style={{ flex: 1, background: "rgba(15,23,42,0.45)" }} />
                   </div>
-                  <span>{100 - upcomingOutlook.leftWin}%</span>
+                  <span style={{ color: muted }}>{100 - upcomingOutlook.leftWin}%</span>
                 </div>
               </div>
             ) : null}
@@ -1893,7 +1891,7 @@ const NoLeague = useStableComponent(NoLeague__render);
 
         {/* Player of the week */}
         <div style={cardStyle}>
-          <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Player of the Week</div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Player of the Week</div>
 
           <div
             style={{
@@ -1942,7 +1940,7 @@ const NoLeague = useStableComponent(NoLeague__render);
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <JerseyTile size={44} teamCode={p.teamCode} />
             <div>
-              <div style={{ fontWeight: 900, fontSize: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 12 }}>
                 {p.firstName} {p.lastName}
               </div>
               <div style={{ fontSize: 11, opacity: 0.7 }}>
@@ -1951,7 +1949,7 @@ const NoLeague = useStableComponent(NoLeague__render);
             </div>
           </div>
 
-          <div style={{ fontWeight: 900, whiteSpace: "nowrap" }}>
+          <div style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
             {(p.points ?? 0)} pts
           </div>
         </div>
@@ -1959,7 +1957,7 @@ const NoLeague = useStableComponent(NoLeague__render);
     ))}
   </div>
 ) : (
-  <div style={{ opacity: 0.35, fontWeight: 800, fontSize: 12 }}>
+  <div style={{ opacity: 0.35, fontWeight: 600, fontSize: 12 }}>
     No scores yet this week
   </div>
 )}
@@ -1991,7 +1989,7 @@ const NoLeague = useStableComponent(NoLeague__render);
 
         {/* Best available players */}
         <div style={cardStyle}>
-          <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 8 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
             Best Available Players
           </div>
 
@@ -2062,7 +2060,7 @@ onClick={() => {
                       </div>
                     </div>
 
-                    <div style={{ textAlign: "right", fontWeight: 800, fontSize: 12 }}>
+                    <div style={{ textAlign: "right", fontWeight: 600, fontSize: 12 }}>
                       {p.form.toFixed(1)}
                     </div>
 
@@ -2081,7 +2079,7 @@ onClick={() => {
     border: "1px solid rgba(15,23,42,0.22)",
     background: isWatched(p.id) ? "#F6E7A6" : "rgba(15,23,42,0.10)",
     color: "#0f172a",
-    fontWeight: 900,
+    fontWeight: 700,
     fontSize: 16,
     display: "flex",
     alignItems: "center",
@@ -2106,7 +2104,7 @@ onClick={() => {
       border: "none",
       background: addBtnBg,
       color: "white",
-      fontWeight: 900,
+      fontWeight: 700,
       fontSize: 24,
       display: "flex",
       alignItems: "center",
@@ -2167,14 +2165,14 @@ const PostDraft = useStableComponent(PostDraft__render);
       <div style={{ textAlign: align as any }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexDirection: align === "right" ? "row-reverse" : "row" }}>
           {t ? <TeamAvatar pictureUrl={t.pictureUrl} initials={t.userInitials ?? t.initials} size={36} stars={t.stars} /> : null}
-          <div style={{ fontSize: 34, fontWeight: 900, lineHeight: "34px" }}>{score}</div>
+          <div style={{ ...num, fontSize: 38, fontWeight: 600, lineHeight: "36px" }}>{score}</div>
         </div>
-        <div style={{ marginTop: 6, fontSize: 17, fontWeight: 900, display: "flex", alignItems: "center", gap: 6, justifyContent: align === "right" ? "flex-end" : "flex-start" }}>
+        <div style={{ marginTop: 6, fontSize: 17, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, justifyContent: align === "right" ? "flex-end" : "flex-start" }}>
           {align === "right" && shieldHolder(teamId) ? <ShieldIcon size={20} title={`${activeLeague?.shield?.name} holder`} /> : null}
           {team}
           {align !== "right" && shieldHolder(teamId) ? <ShieldIcon size={20} title={`${activeLeague?.shield?.name} holder`} /> : null}
         </div>
-        <div style={{ marginTop: 2, fontSize: 11, fontWeight: 800, opacity: 0.9 }}>{record}</div>
+        <div style={{ marginTop: 2, fontSize: 11, fontWeight: 600, opacity: 0.9 }}>{record}</div>
       </div>
     );
   }
@@ -2183,7 +2181,7 @@ const ScoreBlock = useStableComponent(ScoreBlock__render);
   function StandingsCard__render() {
     return (
       <div style={cardStyle}>
-        <div style={{ fontWeight: 900, fontSize: 12, marginBottom: 8 }}>{leagueName}</div>
+        <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 8 }}>{leagueName}</div>
 
         <div
           style={{
@@ -2191,7 +2189,7 @@ const ScoreBlock = useStableComponent(ScoreBlock__render);
             gridTemplateColumns: "56px 1fr 44px",
             gap: 8,
             fontSize: 11,
-            fontWeight: 900,
+            fontWeight: 700,
             opacity: 0.9,
             padding: "0 6px 6px 6px",
           }}
@@ -2211,20 +2209,20 @@ const ScoreBlock = useStableComponent(ScoreBlock__render);
                 gap: 8,
                 alignItems: "center",
                 borderRadius: 10,
-                background: "rgba(0,0,0,0.10)",
-                border: "1px solid rgba(255,255,255,0.14)",
+                background: "#f6f8fa",
+                border: "1px solid #e5e9ef",
                 padding: "6px 6px",
                 fontSize: 12,
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ width: 16, textAlign: "right", fontWeight: 900 }}>{r.rank}</span>
+                <span style={{ width: 16, textAlign: "right", fontWeight: 700 }}>{r.rank}</span>
                 <MovementCircle movement={r.movement} />
               </div>
 
               <div style={{ fontWeight: 600 }}>{r.team}</div>
 
-              <div style={{ textAlign: "right", fontWeight: 900 }}>{r.pts}</div>
+              <div style={{ textAlign: "right", fontWeight: 700 }}>{r.pts}</div>
             </div>
           ))}
         </div>
@@ -2235,7 +2233,7 @@ const ScoreBlock = useStableComponent(ScoreBlock__render);
             style={{
               background: "transparent",
               border: "none",
-              color: "rgba(255,255,255,0.95)",
+              color: teal,
               fontSize: 11,
               fontWeight: 600,
               textDecoration: "underline",

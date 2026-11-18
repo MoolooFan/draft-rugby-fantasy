@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import localFont from "next/font/local";
 import SessionProvider from "@/components/SessionProvider";
 import { getServerProfile } from "@/lib/serverSession";
 import { currentSeasonYear } from "@/lib/season";
@@ -38,6 +39,29 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
 };
 
+// Fonts (design refresh, 18 Nov 2026): Barlow for text, Barlow Condensed for scores and points.
+// The font files are in app/fonts (Barlow is free to use and share, SIL Open Font Licence), so
+// the site doesn't depend on Google Fonts when it's built.
+const barlow = localFont({
+  src: [
+    { path: "./fonts/Barlow-Regular.woff2", weight: "400" },
+    { path: "./fonts/Barlow-Medium.woff2", weight: "500" },
+    { path: "./fonts/Barlow-SemiBold.woff2", weight: "600" },
+    { path: "./fonts/Barlow-Bold.woff2", weight: "700" },
+  ],
+  variable: "--font-barlow",
+  display: "swap",
+});
+const barlowCondensed = localFont({
+  src: [
+    { path: "./fonts/BarlowCondensed-Medium.woff2", weight: "500" },
+    { path: "./fonts/BarlowCondensed-SemiBold.woff2", weight: "600" },
+    { path: "./fonts/BarlowCondensed-Bold.woff2", weight: "700" },
+  ],
+  variable: "--font-barlow-condensed",
+  display: "swap",
+});
+
 export default async function RootLayout({
   children,
 }: {
@@ -58,7 +82,7 @@ export default async function RootLayout({
   // demo site (lib/demo.ts): freeze the browser's clock before anything else runs, and say so
   const d = demo();
   return (
-    <html lang="en">
+    <html lang="en" className={`${barlow.variable} ${barlowCondensed.variable}`}>
       {d ? (
         <head>
           <script dangerouslySetInnerHTML={{ __html: `window.__SR_DEMO__=true;${demoClockSource(d.now)}` }} />
@@ -77,7 +101,7 @@ export default async function RootLayout({
         }}
       >
         {d ? (
-          <div style={{ position: "sticky", top: 0, zIndex: 9000, background: "#f59e0b", color: "#0f172a", fontSize: 11, fontWeight: 900, textAlign: "center", padding: "4px 8px" }}>
+          <div style={{ position: "sticky", top: 0, zIndex: 9000, background: "#f59e0b", color: "#0f172a", fontSize: 11, fontWeight: 700, textAlign: "center", padding: "4px 8px" }}>
             {d.label}
           </div>
         ) : null}

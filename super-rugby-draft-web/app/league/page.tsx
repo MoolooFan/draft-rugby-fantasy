@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { card as themeCard } from "@/lib/ui/theme";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { useLeagueStore, loadMyLeagues } from "@/lib/league/store";
 import type { PlayoffFormat } from "@/lib/league/types";
@@ -649,18 +650,13 @@ const kind = r.kind ? String(r.kind).toLowerCase() : null;
 }, [league?.teams, sheetFixtures]);
 
   // ------- styles (match your vibe) -------
-  const card35: React.CSSProperties = {
-    borderRadius: 18,
-    background: "rgba(255,255,255,0.35)",
-    backdropFilter: "blur(10px)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.18)",
-  };
+  const card35: React.CSSProperties = { ...themeCard, padding: undefined };
 
   const finalsLabelStyle: React.CSSProperties = {
   padding: "2px 10px",
   borderTop: "1px solid rgba(0,0,0,0.08)",
   fontSize: 11,          // smaller
-  fontWeight: 700,
+  fontWeight: 500,
   textAlign: "center",
   background: "rgba(15,23,42,0.14)", // darker than normal label strip
   color: "#0f172a",
@@ -699,7 +695,7 @@ const finalsPlaceholderRowStyle: React.CSSProperties = {
     background: active ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.10)",
     color: "white",
     fontSize: 11,
-    fontWeight: 900,
+    fontWeight: 700,
     cursor: "pointer",
   });
 
@@ -722,9 +718,9 @@ const finalsPlaceholderRowStyle: React.CSSProperties = {
           border: "none",
           padding: 0,
           margin: 0,
-          color: "white",
+          color: "inherit",
           fontSize: 36,
-          fontWeight: 900,
+          fontWeight: 700,
           lineHeight: "36px",
           cursor: "pointer",
         }}
@@ -742,7 +738,7 @@ const Hamburger = useStableComponent(Hamburger__render);
           <Hamburger />
         </div>
 
-        <div style={{ marginTop: 8, fontSize: 18, fontWeight: 900 }}>{leagueName}</div>
+        <div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>{leagueName}</div>
       </div>
     );
   }
@@ -782,7 +778,7 @@ const Tabs = useStableComponent(Tabs__render);
         justifyContent: "center",
         background: bg,
         color: "white",
-        fontWeight: 900,
+        fontWeight: 700,
         fontSize: isSame ? 12 : 10,
         lineHeight: "12px",
       }}
@@ -814,7 +810,7 @@ const MovementCircle = useStableComponent(MovementCircle__render);
 
                   gap: 8,
                   fontSize: 10,
-                  fontWeight: 700,
+                  fontWeight: 500,
                   opacity: 0.7,
                   paddingBottom: 8,
                 }}
@@ -846,7 +842,7 @@ const MovementCircle = useStableComponent(MovementCircle__render);
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ width: 14, textAlign: "right", fontWeight: 900 }}>{r.rank}</span>
+                    <span style={{ width: 14, textAlign: "right", fontWeight: 700 }}>{r.rank}</span>
                     <MovementCircle movement={r.movement} />
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
@@ -880,39 +876,39 @@ const MovementCircle = useStableComponent(MovementCircle__render);
                   <div>{r.pf}</div>
                   <div>{r.pa}</div>
                   <div>{r.pd}</div>
-                  <div style={{ textAlign: "right", fontWeight: 900 }}>{r.pts}</div>
+                  <div style={{ textAlign: "right", fontWeight: 700 }}>{r.pts}</div>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        <div style={{ marginTop: 18, textAlign: "center", fontSize: 12, fontWeight: 800, opacity: 0.9 }}>
+        <div style={{ marginTop: 18, textAlign: "center", fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
           League Code: {leagueCode}
         </div>
 
         {/* E8: the commissioner starts last season's league again for this season (in the month before it starts) */}
         {isCreator && !league?.canRestart && league?.restartOpensAt ? (
-          <div style={{ marginTop: 12, textAlign: "center", fontSize: 12, fontWeight: 800, opacity: 0.85 }}>
+          <div style={{ marginTop: 12, textAlign: "center", fontSize: 12, fontWeight: 600, opacity: 0.85 }}>
             You can start the {currentSeasonYear()} season for this league from{" "}
             {new Date(league.restartOpensAt).toLocaleDateString(undefined, { day: "numeric", month: "long" })}.
           </div>
         ) : null}
         {isCreator && league?.canRestart ? (
           <div style={{ ...listBox, marginTop: 12, padding: 12, display: "grid", gap: 8 }}>
-            <div style={{ fontSize: 13, fontWeight: 900 }}>New season</div>
-            <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.8 }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>New season</div>
+            <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.8 }}>
               Start {leagueName} again for {currentSeasonYear()}: same name, settings and history, with a new join code and draft.
               Everyone rejoins with the new code and gets their team name and picture back.
             </div>
             <button
               disabled={restarting}
               onClick={restartLeague}
-              style={{ height: 38, borderRadius: 12, border: "none", background: "#22C55E", color: "white", fontWeight: 900, cursor: "pointer", opacity: restarting ? 0.7 : 1 }}
+              style={{ height: 38, borderRadius: 12, border: "none", background: "#22C55E", color: "white", fontWeight: 700, cursor: "pointer", opacity: restarting ? 0.7 : 1 }}
             >
               {restarting ? "Starting…" : `Start the ${currentSeasonYear()} season`}
             </button>
-            {restartMsg ? <div style={{ fontSize: 12, fontWeight: 800 }}>{restartMsg}</div> : null}
+            {restartMsg ? <div style={{ fontSize: 12, fontWeight: 600 }}>{restartMsg}</div> : null}
           </div>
         ) : null}
 
@@ -957,7 +953,7 @@ const StandingsTab = useStableComponent(StandingsTab__render);
   style={{
     padding: "6px 10px",
     fontSize: 11,
-    fontWeight: 800,
+    fontWeight: 600,
     textAlign: "center",
     background: "rgba(15,23,42,0.08)",   // darker strip
     borderTop: "1px solid rgba(0,0,0,0.08)",
@@ -985,7 +981,7 @@ if (isLabelRow) {
           padding: "9px 10px",
           borderTop: "1px solid rgba(0,0,0,0.08)",
           fontSize: 12,
-          fontWeight: 900,
+          fontWeight: 700,
           textAlign: "center",
           opacity: 0.9,
         }
@@ -1000,7 +996,7 @@ if (isLabelRow) {
           <div style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             TBC
           </div>
-          <div style={{ opacity: 0.8, fontWeight: 800 }}>v</div>
+          <div style={{ opacity: 0.8, fontWeight: 600 }}>v</div>
           <div style={{ textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             TBC
           </div>
@@ -1040,7 +1036,7 @@ if (isBye) {
           padding: "2px 10px",
           borderRadius: 999,
           background: "rgba(15,23,42,0.08)",
-          fontWeight: 700,
+          fontWeight: 500,
           fontSize: 10,
         }}
       >
@@ -1072,11 +1068,11 @@ if (isBye) {
         {isHomeBye ? realTeam : r.home}
       </div>
 
-      <div style={{ opacity: 0.8, fontWeight: 700, textAlign: "center" }}>
+      <div style={{ opacity: 0.8, fontWeight: 500, textAlign: "center" }}>
         {isBye ? "BYE" : "v"}
         {!isBye && !played && league?.shield?.enabled && league.shield.next?.week === w.weekNo &&
         league.shield.next.homeTeamId === r.homeTeamId && league.shield.next.awayTeamId === r.awayTeamId ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 3, marginTop: 2, fontSize: 8, fontWeight: 900, letterSpacing: 0.5, color: "#6a4426" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 3, marginTop: 2, fontSize: 8, fontWeight: 700, letterSpacing: 0.5, color: "#6a4426" }}>
             <ShieldIcon size={12} /> SHIELD CHALLENGE
           </div>
         ) : null}
@@ -1113,7 +1109,7 @@ const FixturesTab = useStableComponent(FixturesTab__render);
   style={{
     padding: "6px 10px",
     fontSize: 11,
-    fontWeight: 800,
+    fontWeight: 600,
     textAlign: "center",
     background: "rgba(15,23,42,0.08)",
     borderTop: "1px solid rgba(0,0,0,0.08)",
@@ -1141,7 +1137,7 @@ if (isLabelRow) {
           padding: "9px 10px",
           borderTop: "1px solid rgba(0,0,0,0.08)",
           fontSize: 12,
-          fontWeight: 900,
+          fontWeight: 700,
           textAlign: "center",
           opacity: 0.9,
         }
@@ -1155,7 +1151,7 @@ if (isLabelRow) {
           <div style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             TBC
           </div>
-          <div style={{ opacity: 0.8, fontWeight: 800 }}>v</div>
+          <div style={{ opacity: 0.8, fontWeight: 600 }}>v</div>
           <div style={{ textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             TBC
           </div>
@@ -1204,7 +1200,7 @@ if (isLabelRow) {
               padding: "2px 10px",
               borderRadius: 999,
               background: "rgba(15,23,42,0.10)",
-              fontWeight: 900,
+              fontWeight: 700,
               fontSize: 10,
             }}
             title="Your score this week"
@@ -1218,7 +1214,7 @@ if (isLabelRow) {
               padding: "2px 10px",
               borderRadius: 999,
               background: "rgba(15,23,42,0.08)",
-              fontWeight: 700,
+              fontWeight: 500,
               fontSize: 10,
             }}
           >
@@ -1257,13 +1253,13 @@ if (isLabelRow) {
           {isHomeBye ? realTeamName : r.home}
         </div>
 
-        <div style={{ fontWeight: 900, textAlign: "right", minWidth: 22 }}>
+        <div style={{ fontWeight: 700, textAlign: "right", minWidth: 22 }}>
           {isBye ? (isHomeBye ? byePoints : "—") : (r.homeScore ?? "—")}
         </div>
       </div>
 
       {/* Middle */}
-<div style={{ opacity: 0.8, fontWeight: 700 }}>
+<div style={{ opacity: 0.8, fontWeight: 500 }}>
   {isBye ? "BYE" : "v"}
 </div>
 
@@ -1277,7 +1273,7 @@ if (isLabelRow) {
           minWidth: 0,
         }}
       >
-        <div style={{ fontWeight: 900, textAlign: "left", minWidth: 22 }}>
+        <div style={{ fontWeight: 700, textAlign: "left", minWidth: 22 }}>
           {isBye ? (isAwayBye ? byePoints : "—") : (r.awayScore ?? "—")}
         </div>
 
@@ -1366,10 +1362,10 @@ function JoinLeagueModal__render() {
       <div
         style={{
           borderRadius: 14,
-          background: "linear-gradient(to bottom, #0f172a, #2563eb)",
+          background: "#ffffff",
           padding: 14,
-          color: "white",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
+          color: "#0f172a",
+          boxShadow: "0 20px 50px rgba(15,23,42,0.35)",
           position: "relative",
         }}
       >
@@ -1382,9 +1378,9 @@ function JoinLeagueModal__render() {
             top: 10,
             background: "transparent",
             border: "none",
-            color: "white",
+            color: "#64748b",
             fontSize: 20,
-            fontWeight: 900,
+            fontWeight: 700,
             cursor: "pointer",
           }}
         >
@@ -1393,7 +1389,7 @@ function JoinLeagueModal__render() {
 
         {step === "code" ? (
           <>
-            <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 12 }}>Join League</div>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Join League</div>
             <div style={{ display: "grid", gap: 10 }}>
               <input
                 id="join-code"
@@ -1404,7 +1400,7 @@ function JoinLeagueModal__render() {
                 placeholder="League Code"
                 autoCapitalize="characters"
               />
-              {error && <div style={{ marginTop: 4, color: "#FCA5A5", fontSize: 12, fontWeight: 800 }}>{error}</div>}
+              {error && <div style={{ marginTop: 4, color: "#FCA5A5", fontSize: 12, fontWeight: 600 }}>{error}</div>}
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
                 <button disabled={busy} onClick={findLeague} style={{ ...saveButton(), height: 36, padding: "0 18px", opacity: busy ? 0.7 : 1 }}>
                   {busy ? "Finding…" : "Next"}
@@ -1414,15 +1410,15 @@ function JoinLeagueModal__render() {
           </>
         ) : (
           <>
-            <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 2, paddingRight: 24 }}>Join {leagueTitle}</div>
-            <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2, paddingRight: 24 }}>Join {leagueTitle}</div>
+            <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.85, marginBottom: 12 }}>
               {rejoining ? "Welcome back! Your team from last time is filled in - change anything you like." : "Choose your team name and picture."}
             </div>
             <div style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <TeamAvatar pictureUrl={pic.kind === "none" ? null : pic.url} initials={teamName.trim().slice(0, 2) || "?"} size={56} />
                 <div style={{ display: "grid", gap: 6, flex: 1, minWidth: 0 }}>
-                  <label style={{ ...saveButton(), display: "grid", placeItems: "center", background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.6)" }}>
+                  <label style={{ ...saveButton(), display: "grid", placeItems: "center", background: "#eef2f6", color: "#0f172a", border: "1px solid #cbd5e1" }}>
                     {pic.kind === "none" ? "Add picture" : "Change picture"}
                     <input
                       id="join-picture"
@@ -1438,14 +1434,14 @@ function JoinLeagueModal__render() {
                   </label>
                   <button
                     onClick={() => setIconOpen(true)}
-                    style={{ background: "transparent", border: "none", color: "white", fontSize: 11, fontWeight: 800, textDecoration: "underline", cursor: "pointer", justifySelf: "start", padding: 0 }}
+                    style={{ background: "transparent", border: "none", color: "#0d9488", fontSize: 11, fontWeight: 600, textDecoration: "underline", cursor: "pointer", justifySelf: "start", padding: 0 }}
                   >
                     Or choose an icon
                   </button>
                   {pic.kind !== "none" ? (
                     <button
                       onClick={() => setPic({ kind: "none" })}
-                      style={{ background: "transparent", border: "none", color: "white", fontSize: 11, fontWeight: 800, textDecoration: "underline", cursor: "pointer", justifySelf: "start", padding: 0 }}
+                      style={{ background: "transparent", border: "none", color: "#0d9488", fontSize: 11, fontWeight: 600, textDecoration: "underline", cursor: "pointer", justifySelf: "start", padding: 0 }}
                     >
                       Remove picture
                     </button>
@@ -1459,12 +1455,12 @@ function JoinLeagueModal__render() {
                 style={inputStyle()}
                 placeholder="Team Name"
               />
-              {error && <div style={{ marginTop: 4, color: "#FCA5A5", fontSize: 12, fontWeight: 800 }}>{error}</div>}
+              {error && <div style={{ marginTop: 4, color: "#FCA5A5", fontSize: 12, fontWeight: 600 }}>{error}</div>}
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
                 <button
                   disabled={busy}
                   onClick={() => { setStep("code"); setError(null); }}
-                  style={{ background: "transparent", border: "none", color: "white", fontSize: 12, fontWeight: 800, cursor: "pointer" }}
+                  style={{ background: "transparent", border: "none", color: "#64748b", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
                 >
                   ‹ Back
                 </button>
@@ -1525,10 +1521,10 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
       <div
         style={{
           borderRadius: 14,
-          background: "linear-gradient(to bottom, #0f172a, #2563eb)",
+          background: "#ffffff",
           padding: 14,
-          color: "white",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
+          color: "#0f172a",
+          boxShadow: "0 20px 50px rgba(15,23,42,0.35)",
           position: "relative",
         }}
       >
@@ -1541,16 +1537,16 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
             top: 10,
             background: "transparent",
             border: "none",
-            color: "white",
+            color: "#64748b",
             fontSize: 20,
-            fontWeight: 900,
+            fontWeight: 700,
             cursor: "pointer",
           }}
         >
           ×
         </button>
 
-        <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 12 }}>Create League</div>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Create League</div>
 
         <div style={{ display: "grid", gap: 10 }}>
           <input
@@ -1590,14 +1586,14 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
           </select>
 
           {scoringSystem === "custom" ? (
-            <div style={{ background: "rgba(255,255,255,0.92)", color: "#0f172a", borderRadius: 12, padding: 10 }}>
+            <div style={{ background: "#f6f8fa", border: "1px solid #e5e9ef", color: "#0f172a", borderRadius: 12, padding: 10 }}>
               <ScoringEditor value={customRules} onChange={setCustomRules} />
             </div>
           ) : null}
 
           <BonusPointsFields value={bonusRules} onChange={setBonusRules} />
 
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 800 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600 }}>
             <input type="checkbox" checked={shieldEnabled} onChange={(e) => setShieldEnabled(e.target.checked)} />
             The Shield (won by beating the holder away; defended at home)
           </label>
@@ -1619,11 +1615,11 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
   style={inputStyle()}
 />
 
-          <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, lineHeight: "14px" }}>
+          <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.85, lineHeight: "14px" }}>
             League Commissioner can change/set draft order in league settings prior to the draft
           </div>
 
-          {error && <div style={{ color: "#FCA5A5", fontSize: 12, fontWeight: 800 }}>{error}</div>}
+          {error && <div style={{ color: "#FCA5A5", fontSize: 12, fontWeight: 600 }}>{error}</div>}
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
             <button
@@ -1667,7 +1663,7 @@ const CreateLeagueModal = useStableComponent(CreateLeagueModal__render);
       background: bg,
       color: "white",
       fontSize: 13,
-      fontWeight: 800,
+      fontWeight: 600,
       border: "2px solid rgba(255,255,255,0.85)",
       boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)",
       cursor: "pointer",
@@ -1682,7 +1678,7 @@ const CreateLeagueModal = useStableComponent(CreateLeagueModal__render);
       background: "rgba(255,255,255,0.12)",
       color: "white",
       fontSize: 12,
-      fontWeight: 800,
+      fontWeight: 600,
       border: "2px solid rgba(255,255,255,0.85)",
       cursor: "pointer",
     };
@@ -1694,8 +1690,8 @@ if (!mounted || !leagueHydrated) {
     <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
       <GradientBg />
       <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px" }}>
-        <div style={{ borderRadius: 18, background: "rgba(255,255,255,0.35)", padding: 14 }}>
-          <div style={{ fontWeight: 900 }}>Loading…</div>
+        <div style={{ ...themeCard }}>
+          <div style={{ fontWeight: 700 }}>Loading…</div>
         </div>
       </div>
     </main>
@@ -1708,8 +1704,8 @@ if (!league && (leagues?.length ?? 0) > 0) {
     <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
       <GradientBg />
       <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px" }}>
-        <div style={{ borderRadius: 18, background: "rgba(255,255,255,0.35)", padding: 14 }}>
-          <div style={{ fontWeight: 900 }}>Loading…</div>
+        <div style={{ ...themeCard }}>
+          <div style={{ fontWeight: 700 }}>Loading…</div>
         </div>
       </div>
     </main>
@@ -1726,9 +1722,9 @@ if (!league) {
         <div style={{ marginBottom: 10 }}>
           <Hamburger />
         </div>
-        <div style={{ borderRadius: 18, background: "rgba(255,255,255,0.35)", padding: 14 }}>
-          <div style={{ fontWeight: 900, fontSize: 16 }}>No active league</div>
-          <div style={{ marginTop: 6, opacity: 0.9, fontSize: 12, fontWeight: 700 }}>
+        <div style={{ ...themeCard }}>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>No active league</div>
+          <div style={{ marginTop: 6, opacity: 0.9, fontSize: 12, fontWeight: 500 }}>
             Join a league with a code, or create a new league.
           </div>
 

@@ -72,7 +72,7 @@ function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () 
         background: on ? "#0f172a" : "white",
         color: on ? "white" : "#0f172a",
         fontSize: 12,
-        fontWeight: 800,
+        fontWeight: 600,
         cursor: "pointer",
         whiteSpace: "nowrap",
       }}
@@ -122,7 +122,7 @@ export function PoolFilterBar({
 
   const section = (title: string, children: React.ReactNode) => (
     <div style={{ display: "grid", gap: 6 }}>
-      <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.6 }}>{title}</div>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.6 }}>{title}</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{children}</div>
     </div>
   );
@@ -140,7 +140,7 @@ export function PoolFilterBar({
           placeholder="Search players"
           inputMode="search"
           enterKeyHint="search"
-          style={{ border: "none", outline: "none", background: "transparent", fontSize: 13, fontWeight: 700, color: "#0f172a", minWidth: 0 }}
+          style={{ border: "none", outline: "none", background: "transparent", fontSize: 13, fontWeight: 500, color: "#0f172a", minWidth: 0 }}
         />
         <div style={{ textAlign: "right", fontSize: 16, opacity: 0.65 }}>🔍</div>
       </div>
@@ -154,7 +154,7 @@ export function PoolFilterBar({
           background: active ? "#0f172a" : "rgba(255,255,255,0.92)",
           color: active ? "white" : "#0f172a",
           fontSize: 13,
-          fontWeight: 900,
+          fontWeight: 700,
           boxShadow: "0 10px 20px rgba(0,0,0,0.12)",
           cursor: "pointer",
           whiteSpace: "nowrap",
@@ -183,13 +183,13 @@ export function PoolFilterBar({
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontSize: 16, fontWeight: 900 }}>Filters</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>Filters</div>
               <button
                 onClick={() => {
                   setFilters(EMPTY_FILTERS);
                   setOwners?.(["available"]);
                 }}
-                style={{ background: "transparent", border: "none", color: "#dc2626", fontSize: 13, fontWeight: 900, cursor: "pointer" }}
+                style={{ background: "transparent", border: "none", color: "#dc2626", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
               >
                 Clear
               </button>
@@ -237,12 +237,12 @@ export function PoolFilterBar({
 
             {sortOptions?.length && setSort ? (
               <div style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.6 }}>Sort by</div>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.6 }}>Sort by</div>
                 <select
                   id="pool-sort"
                   value={sort}
                   onChange={(e) => setSort(e.target.value)}
-                  style={{ height: 36, borderRadius: 10, border: "1px solid rgba(15,23,42,0.2)", padding: "0 10px", fontSize: 13, fontWeight: 800, color: "#0f172a", background: "white" }}
+                  style={{ height: 36, borderRadius: 10, border: "1px solid rgba(15,23,42,0.2)", padding: "0 10px", fontSize: 13, fontWeight: 600, color: "#0f172a", background: "white" }}
                 >
                   {sortOptions.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -255,7 +255,7 @@ export function PoolFilterBar({
 
             <button
               onClick={() => setOpen(false)}
-              style={{ height: 40, borderRadius: 12, border: "none", background: "#22C55E", color: "white", fontSize: 14, fontWeight: 900, cursor: "pointer" }}
+              style={{ height: 40, borderRadius: 12, border: "none", background: "#22C55E", color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
             >
               Done
             </button>

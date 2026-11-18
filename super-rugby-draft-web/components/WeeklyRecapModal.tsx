@@ -74,14 +74,14 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
   }
 
   const section: React.CSSProperties = { padding: "10px 12px", borderTop: "1px solid rgba(15,23,42,0.10)" };
-  const heading: React.CSSProperties = { fontSize: 10, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", opacity: 0.6, marginBottom: 6 };
+  const heading: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", opacity: 0.6, marginBottom: 6 };
   const m = recap.matchup;
   const resultStyle = (r: string): React.CSSProperties => ({
     display: "inline-block",
     padding: "2px 8px",
     borderRadius: 999,
     fontSize: 11,
-    fontWeight: 900,
+    fontWeight: 700,
     color: "white",
     background: r === "win" ? "#16a34a" : r === "loss" ? "#dc2626" : "#64748b",
   });
@@ -109,14 +109,14 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
       >
         <div style={{ padding: "12px 12px 10px", background: "linear-gradient(to right, rgb(15,23,42), rgb(13,148,136))", color: "white" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-            <div style={{ fontSize: 18, fontWeight: 900, fontStyle: "italic" }}>{recap.weekLabel} recap</div>
+            <div style={{ fontSize: 18, fontWeight: 700, fontStyle: "italic" }}>{recap.weekLabel} recap</div>
             {week ? (
               <div style={{ display: "flex", gap: 6 }}>
                 <button
                   aria-label="Previous round"
                   disabled={recap.week <= (recap.firstWeek ?? recap.week)}
                   onClick={() => setViewWeek(recap.week - 1)}
-                  style={{ width: 28, height: 28, borderRadius: 999, border: "1px solid rgba(255,255,255,0.5)", background: "transparent", color: "white", fontWeight: 900, cursor: "pointer", opacity: recap.week <= (recap.firstWeek ?? recap.week) ? 0.35 : 1 }}
+                  style={{ width: 28, height: 28, borderRadius: 999, border: "1px solid rgba(255,255,255,0.5)", background: "transparent", color: "white", fontWeight: 700, cursor: "pointer", opacity: recap.week <= (recap.firstWeek ?? recap.week) ? 0.35 : 1 }}
                 >
                   ‹
                 </button>
@@ -124,14 +124,14 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
                   aria-label="Next round"
                   disabled={recap.week >= (recap.latestWeek ?? recap.week)}
                   onClick={() => setViewWeek(recap.week + 1)}
-                  style={{ width: 28, height: 28, borderRadius: 999, border: "1px solid rgba(255,255,255,0.5)", background: "transparent", color: "white", fontWeight: 900, cursor: "pointer", opacity: recap.week >= (recap.latestWeek ?? recap.week) ? 0.35 : 1 }}
+                  style={{ width: 28, height: 28, borderRadius: 999, border: "1px solid rgba(255,255,255,0.5)", background: "transparent", color: "white", fontWeight: 700, cursor: "pointer", opacity: recap.week >= (recap.latestWeek ?? recap.week) ? 0.35 : 1 }}
                 >
                   ›
                 </button>
               </div>
             ) : null}
           </div>
-          {leagueName ? <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.85 }}>{leagueName}</div> : null}
+          {leagueName ? <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.85 }}>{leagueName}</div> : null}
         </div>
 
         {/* Your matchup */}
@@ -144,7 +144,7 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
             {m.kind === "bye" ? (
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <TeamAvatar pictureUrl={me.pictureUrl} initials={me.initials} size={36} />
-                <div style={{ fontSize: 13, fontWeight: 800 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>
                   Bye week{m.myScore != null ? ` · you scored ${m.myScore}` : ""}
                 </div>
               </div>
@@ -154,15 +154,15 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
                   <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                     <TeamAvatar pictureUrl={me.pictureUrl} initials={me.initials} size={36} />
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{me.name}</div>
-                      <div style={{ fontSize: 20, fontWeight: 900, fontVariantNumeric: "tabular-nums" }}>{m.myScore ?? "-"}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{me.name}</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{m.myScore ?? "-"}</div>
                     </div>
                   </div>
-                  <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.5 }}>v</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.5 }}>v</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, justifyContent: "flex-end", textAlign: "right" }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team(m.opponentId).name}</div>
-                      <div style={{ fontSize: 20, fontWeight: 900, fontVariantNumeric: "tabular-nums" }}>{m.oppScore ?? "-"}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team(m.opponentId).name}</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{m.oppScore ?? "-"}</div>
                     </div>
                     <TeamAvatar pictureUrl={team(m.opponentId).pictureUrl} initials={team(m.opponentId).initials} size={36} />
                   </div>
@@ -183,11 +183,11 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
             {recap.best ? (
               <div>
                 <div style={heading}>Best player</div>
-                <div style={{ fontSize: 13, fontWeight: 900 }}>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>
                   {recap.best.name}
                   {recap.best.captain ? " (C)" : ""}
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: "#16a34a" }}>{recap.best.points} pts</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#16a34a" }}>{recap.best.points} pts</div>
               </div>
             ) : (
               <div />
@@ -195,11 +195,11 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
             {recap.dud ? (
               <div>
                 <div style={heading}>Biggest dud</div>
-                <div style={{ fontSize: 13, fontWeight: 900 }}>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>
                   {recap.dud.name}
                   {recap.dud.captain ? " (C)" : ""}
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: "#dc2626" }}>{recap.dud.points} pts</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#dc2626" }}>{recap.dud.points} pts</div>
               </div>
             ) : null}
           </div>
@@ -212,7 +212,7 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
             {recap.crown ? (
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <CrownIcon size={22} />
-                <div style={{ fontSize: 12, fontWeight: 800 }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>
                   Top score: <b>{names(recap.crown.teamIds)}</b> ({recap.crown.score})
                 </div>
               </div>
@@ -220,7 +220,7 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
             {recap.spoon ? (
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <SpoonIcon size={22} />
-                <div style={{ fontSize: 12, fontWeight: 800 }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>
                   Lowest score: <b>{names(recap.spoon.teamIds)}</b> ({recap.spoon.score})
                 </div>
               </div>
@@ -232,7 +232,7 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
         {recap.ladder ? (
           <div style={section}>
             <div style={heading}>Ladder</div>
-            <div style={{ fontSize: 13, fontWeight: 800 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>
               You&apos;re {ordinal(recap.ladder.after)} of {recap.ladder.teams}
               {recap.ladder.before == null ? null : recap.ladder.after < recap.ladder.before ? (
                 <span style={{ color: "#16a34a" }}> · up {recap.ladder.before - recap.ladder.after}</span>
@@ -249,7 +249,7 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
         {recap.shield?.thisWeek ? (
           <div style={{ ...section, display: "flex", alignItems: "center", gap: 10 }}>
             <ShieldIcon size={36} title={recap.shield.name} />
-            <div style={{ fontSize: 13, fontWeight: 800 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>
               {(() => {
                 const t = recap.shield.thisWeek;
                 const n = recap.shield.name;
@@ -272,7 +272,7 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
         {recap.shield?.secured ? (
           <div style={{ ...section, display: "flex", alignItems: "center", gap: 10 }}>
             <ShieldIcon size={30} />
-            <div style={{ fontSize: 13, fontWeight: 800 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>
               {recap.shield.secured.mine
                 ? <>You&apos;ve secured {recap.shield.name} for the season: no home games left to lose it!</>
                 : <>{team(recap.shield.secured.teamId).name} have secured {recap.shield.name} for the season: no home games left to lose it.</>}
@@ -287,11 +287,11 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
             {recap.next.opponentId ? (
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <TeamAvatar pictureUrl={team(recap.next.opponentId).pictureUrl} initials={team(recap.next.opponentId).initials} size={28} />
-                <div style={{ fontSize: 13, fontWeight: 800 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>
                   v {team(recap.next.opponentId).name}
                   {recap.next.label ? ` · ${recap.next.label}` : ""}
                   {recap.shield?.next ? (
-                    <div style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 900, color: "#6a4426" }}>
+                    <div style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: "#6a4426" }}>
                       <ShieldIcon size={16} />
                       {recap.shield.next === "defending" ? `Shield defence: ${recap.shield.name} on the line at home` : `Shield challenge: you can take ${recap.shield.name} away`}
                     </div>
@@ -299,7 +299,7 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
                 </div>
               </div>
             ) : (
-              <div style={{ fontSize: 13, fontWeight: 800 }}>{recap.next.label ?? "Bye week"}</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{recap.next.label ?? "Bye week"}</div>
             )}
           </div>
         ) : null}
@@ -307,7 +307,7 @@ export function WeeklyRecapModal({ leagueId, leagueName, week, onClose }: { leag
         <div style={{ padding: 12, borderTop: "1px solid rgba(15,23,42,0.10)" }}>
           <button
             onClick={close}
-            style={{ width: "100%", height: 38, borderRadius: 12, border: "none", background: "#22C55E", color: "white", fontWeight: 900, fontSize: 14, cursor: "pointer" }}
+            style={{ width: "100%", height: 38, borderRadius: 12, border: "none", background: "#22C55E", color: "white", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
           >
             Done
           </button>

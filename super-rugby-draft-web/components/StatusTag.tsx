@@ -31,7 +31,7 @@ export function StatusTag({
         display: "inline-block",
         flex: "none",
         fontSize: 9,
-        fontWeight: 900,
+        fontWeight: 700,
         letterSpacing: "0.04em",
         lineHeight: 1.2,
         padding: "1px 4px",

@@ -4,6 +4,7 @@
 // and finalising a round again. Every request is checked on the server (admin only).
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { card as themeCard } from "@/lib/ui/theme";
 import { AppMenu } from "@/components/AppMenu";
 import { useLeagueStore } from "@/lib/league/store";
 import { currentSeasonYear, getSeason, SEASONS, totalFantasyWeeks, weekLabel } from "@/lib/season";
@@ -15,13 +16,7 @@ import { STATUS_PRESETS } from "@/lib/status/kind";
 // ---------------------------------------------------------------------------
 // Styles (same look as the other pages)
 
-const cardStyle: React.CSSProperties = {
-  borderRadius: 18,
-  background: "rgba(255,255,255,0.35)",
-  padding: 14,
-  backdropFilter: "blur(10px)",
-  boxShadow: "0 12px 30px rgba(0,0,0,0.18)",
-};
+const cardStyle: React.CSSProperties = { ...themeCard };
 const whiteBox: React.CSSProperties = {
   borderRadius: 14,
   background: "rgba(255,255,255,0.92)",
@@ -35,7 +30,7 @@ const primaryButton: React.CSSProperties = {
   background: "linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))",
   color: "white",
   fontSize: 13,
-  fontWeight: 900,
+  fontWeight: 700,
   border: "2px solid rgba(255,255,255,0.85)",
   cursor: "pointer",
 };
@@ -47,20 +42,20 @@ const inputStyle: React.CSSProperties = {
   background: "white",
   padding: "0 10px",
   fontSize: 13,
-  fontWeight: 700,
+  fontWeight: 500,
   color: "#0f172a",
 };
-const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 900, opacity: 0.7, marginBottom: 3 };
+const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, opacity: 0.7, marginBottom: 3 };
 const tabButton = (active: boolean): React.CSSProperties => ({
   flex: 1,
   height: 36,
   borderRadius: 999,
   border: "none",
   fontSize: 13,
-  fontWeight: 900,
+  fontWeight: 700,
   cursor: "pointer",
-  background: active ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.2)",
-  color: active ? "#0f172a" : "white",
+  background: active ? "#0f172a" : "#eef2f6",
+  color: active ? "white" : "#0f172a",
 });
 
 const POSITIONS = ["PR", "HO", "LK", "LF", "HB", "FH", "CE", "OB"];
@@ -170,7 +165,7 @@ function PlayerForm({
 
   return (
     <div style={{ ...whiteBox, display: "grid", gap: 8 }}>
-      <div style={{ fontWeight: 900, fontSize: 15 }}>{player ? `Edit ${player.firstName} ${player.lastName}` : "Add a player"}</div>
+      <div style={{ fontWeight: 700, fontSize: 15 }}>{player ? `Edit ${player.firstName} ${player.lastName}` : "Add a player"}</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         <div><div style={labelStyle}>First name</div><input style={inputStyle} value={f.firstName} onChange={set("firstName")} /></div>
         <div><div style={labelStyle}>Last name</div><input style={inputStyle} value={f.lastName} onChange={set("lastName")} /></div>
@@ -224,14 +219,14 @@ function PlayerForm({
           <input style={inputStyle} list="status-presets" placeholder="e.g. Knee - TBC" value={f.status} onChange={set("status")} />
         </div>
       </div>
-      <div style={{ fontSize: 11, opacity: 0.7, fontWeight: 700 }}>
+      <div style={{ fontSize: 11, opacity: 0.7, fontWeight: 500 }}>
         Expected points: draft rank sets how good he&apos;s expected to be. Expected role and goal kicker help early in the
         season (e.g. a player who moved team); they fade out as real team lists and kicking come in.
       </div>
-      <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
+      <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 600 }}>
         <input type="checkbox" checked={f.active} onChange={set("active")} /> In this season&apos;s player pool
       </label>
-      {err ? <div style={{ color: "#b91c1c", fontSize: 12, fontWeight: 800 }}>{err}</div> : null}
+      {err ? <div style={{ color: "#b91c1c", fontSize: 12, fontWeight: 600 }}>{err}</div> : null}
       <div style={{ display: "flex", gap: 8 }}>
         <button style={primaryButton} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save player"}</button>
         <button style={{ ...primaryButton, background: "rgba(15,23,42,0.35)" }} onClick={onCancel}>Close</button>
@@ -245,8 +240,8 @@ function PlayerForm({
 
       {player ? (
         <div style={{ borderTop: "1px solid rgba(0,0,0,0.1)", paddingTop: 8, display: "grid", gap: 6 }}>
-          <div style={{ fontWeight: 900, fontSize: 13 }}>Status for a round</div>
-          <div style={{ fontSize: 11, opacity: 0.7, fontWeight: 700 }}>
+          <div style={{ fontWeight: 700, fontSize: 13 }}>Status for a round</div>
+          <div style={{ fontSize: 11, opacity: 0.7, fontWeight: 500 }}>
             e.g. Starting, Benched, Knee - 2 weeks, Suspended - 1 week, Out - Personal reasons. Leave empty for not named.
             Injuries get INJ, &quot;Suspended…&quot; gets SUS, &quot;Out…&quot; (personal reasons, paternity leave, rested…) gets OUT.
           </div>
@@ -258,7 +253,7 @@ function PlayerForm({
             </select>
             <input aria-label="Round status" style={inputStyle} list="status-presets" value={weekStatus} onChange={(e) => setWeekStatus(e.target.value)} />
           </div>
-          {weekStatus.trim() ? <div style={{ fontSize: 11, fontWeight: 800 }}>Shows as <StatusTag text={weekStatus} /></div> : null}
+          {weekStatus.trim() ? <div style={{ fontSize: 11, fontWeight: 600 }}>Shows as <StatusTag text={weekStatus} /></div> : null}
           <button style={primaryButton} disabled={busy} onClick={saveWeekStatus}>Save round status</button>
         </div>
       ) : null}
@@ -322,10 +317,10 @@ function PlayersTab({ season, setMsg }: { season: number; setMsg: (m: string | n
         />
       ) : null}
 
-      {err ? <div style={{ ...whiteBox, color: "#b91c1c", fontWeight: 800 }}>{err}</div> : null}
+      {err ? <div style={{ ...whiteBox, color: "#b91c1c", fontWeight: 600 }}>{err}</div> : null}
       <div style={{ ...whiteBox, padding: 0, overflow: "hidden" }}>
-        {loading ? <div style={{ padding: 12, fontWeight: 800 }}>Loading…</div> : null}
-        {!loading && !shown.length ? <div style={{ padding: 12, fontWeight: 800 }}>No players found</div> : null}
+        {loading ? <div style={{ padding: 12, fontWeight: 600 }}>Loading…</div> : null}
+        {!loading && !shown.length ? <div style={{ padding: 12, fontWeight: 600 }}>No players found</div> : null}
         {shown.map((p) => (
           <button
             key={p.id}
@@ -344,20 +339,20 @@ function PlayersTab({ season, setMsg }: { season: number; setMsg: (m: string | n
             }}
           >
             <div>
-              <div style={{ fontWeight: 900, fontSize: 13 }}>
+              <div style={{ fontWeight: 700, fontSize: 13 }}>
                 {p.firstName} {p.lastName} {p.active ? "" : "(hidden)"}
               </div>
-              <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.65 }}>
+              <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.65 }}>
                 {p.teamCode} · {p.posAbbrev}{p.secondaryPosAbbrev ? `/${p.secondaryPosAbbrev}` : ""}{p.thirdPosAbbrev ? `/${p.thirdPosAbbrev}` : ""} · rank {p.draftRank < 9999 ? p.draftRank : "—"}
                 {p.status ? ` · ${p.status}` : ""}
               </div>
             </div>
-            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.5, alignSelf: "center" }}>Edit</div>
+            <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.5, alignSelf: "center" }}>Edit</div>
           </button>
         ))}
       </div>
       {players.length > shown.length && !loading ? (
-        <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.85, textAlign: "center" }}>
+        <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.85, textAlign: "center" }}>
           Showing {shown.length} of {players.length}. Search to find others.
         </div>
       ) : null}
@@ -395,14 +390,14 @@ function DifficultyRow({ season, r, setMsg }: { season: number; r: Rating; setMs
   );
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto auto", gap: 6, alignItems: "center", padding: "6px 0", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-      <div style={{ fontWeight: 900, fontSize: 13 }}>{r.team}</div>
+      <div style={{ fontWeight: 700, fontSize: 13 }}>{r.team}</div>
       {sel(home, setHome)}
       {sel(away, setAway)}
       <input type="checkbox" title="Pinned" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
       <button
         disabled={!changed || busy}
         onClick={save}
-        style={{ height: 30, borderRadius: 999, border: "none", padding: "0 10px", fontWeight: 900, fontSize: 12, cursor: changed ? "pointer" : "default", background: changed ? "rgb(29,78,216)" : "rgba(0,0,0,0.08)", color: changed ? "white" : "rgba(0,0,0,0.4)" }}
+        style={{ height: 30, borderRadius: 999, border: "none", padding: "0 10px", fontWeight: 700, fontSize: 12, cursor: changed ? "pointer" : "default", background: changed ? "rgb(29,78,216)" : "rgba(0,0,0,0.08)", color: changed ? "white" : "rgba(0,0,0,0.4)" }}
       >
         Save
       </button>
@@ -420,13 +415,13 @@ function DifficultyTab({ season, setMsg }: { season: number; setMsg: (m: string 
   }, [season]);
   return (
     <div style={whiteBox}>
-      <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75, marginBottom: 6 }}>
+      <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.75, marginBottom: 6 }}>
         How hard each team is to play (1 easy, 5 hard). First number: at their ground. Second: when they visit
         yours. Tick to pin a rating so the in-season update leaves it alone.
       </div>
-      {err ? <div style={{ color: "#b91c1c", fontWeight: 800 }}>{err}</div> : null}
-      {ratings && !ratings.length ? <div style={{ fontWeight: 800 }}>No ratings for {season}</div> : null}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto auto", gap: 6, fontSize: 10, fontWeight: 900, opacity: 0.6 }}>
+      {err ? <div style={{ color: "#b91c1c", fontWeight: 600 }}>{err}</div> : null}
+      {ratings && !ratings.length ? <div style={{ fontWeight: 600 }}>No ratings for {season}</div> : null}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto auto", gap: 6, fontSize: 10, fontWeight: 700, opacity: 0.6 }}>
         <div>TEAM</div><div style={{ width: 54 }}>THEIRS</div><div style={{ width: 54 }}>YOURS</div><div>PIN</div><div style={{ width: 52 }} />
       </div>
       {(ratings ?? []).map((r) => <DifficultyRow key={r.team} season={season} r={r} setMsg={setMsg} />)}
@@ -488,11 +483,11 @@ function RoundsTab({ setMsg }: { setMsg: (m: string | null) => void }) {
 
   return (
     <div style={{ ...whiteBox, display: "grid", gap: 8 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75 }}>
+      <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.75 }}>
         If a stat is corrected after a round was finalised: pick the round, preview the new scores, then confirm.
       </div>
-      {err ? <div style={{ color: "#b91c1c", fontWeight: 800 }}>{err}</div> : null}
-      {!leagues.length && !err ? <div style={{ fontWeight: 800 }}>No leagues this season yet.</div> : null}
+      {err ? <div style={{ color: "#b91c1c", fontWeight: 600 }}>{err}</div> : null}
+      {!leagues.length && !err ? <div style={{ fontWeight: 600 }}>No leagues this season yet.</div> : null}
       {leagues.length ? (
         <>
           <select style={inputStyle} value={leagueId} onChange={(e) => { setLeagueId(e.target.value); setPreview(null); }}>
@@ -501,8 +496,8 @@ function RoundsTab({ setMsg }: { setMsg: (m: string | null) => void }) {
           <select style={inputStyle} value={week} onChange={(e) => { setWeek(Number(e.target.value)); setPreview(null); }}>
             {(league?.weeks ?? []).map((w) => <option key={w.week} value={w.week}>{w.label}</option>)}
           </select>
-          {!league?.weeks.length ? <div style={{ fontSize: 12, fontWeight: 800 }}>No finalised rounds yet.</div> : null}
-          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
+          {!league?.weeks.length ? <div style={{ fontSize: 12, fontWeight: 600 }}>No finalised rounds yet.</div> : null}
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 600 }}>
             <input type="checkbox" checked={regather} onChange={(e) => setRegather(e.target.checked)} /> Regather stats from playfantasyrugby first
           </label>
           <button style={primaryButton} disabled={!!busy || !week} onClick={() => run(false)}>{busy && !busy.startsWith("Final") ? busy : "Preview new scores"}</button>
@@ -511,17 +506,17 @@ function RoundsTab({ setMsg }: { setMsg: (m: string | null) => void }) {
 
       {preview ? (
         <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px", fontSize: 10, fontWeight: 900, opacity: 0.6 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px", fontSize: 10, fontWeight: 700, opacity: 0.6 }}>
             <div>TEAM</div><div style={{ textAlign: "right" }}>NOW</div><div style={{ textAlign: "right" }}>NEW</div>
           </div>
           {preview.teams.map((t) => (
-            <div key={t.teamId} style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px", fontSize: 13, fontWeight: 800, color: isChange(t) ? "#b45309" : undefined }}>
+            <div key={t.teamId} style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px", fontSize: 13, fontWeight: 600, color: isChange(t) ? "#b45309" : undefined }}>
               <div>{teamName(t.teamId)}</div>
               <div style={{ textAlign: "right" }}>{t.before ?? "—"}</div>
               <div style={{ textAlign: "right" }}>{t.after}</div>
             </div>
           ))}
-          <div style={{ fontSize: 12, fontWeight: 800 }}>{changes ? `${changes} team score${changes === 1 ? "" : "s"} would change.` : "No scores would change."}</div>
+          <div style={{ fontSize: 12, fontWeight: 600 }}>{changes ? `${changes} team score${changes === 1 ? "" : "s"} would change.` : "No scores would change."}</div>
           <button style={primaryButton} disabled={!!busy} onClick={() => run(true)}>{busy?.startsWith("Final") ? busy : "Confirm: finalise this round again"}</button>
         </div>
       ) : null}
@@ -599,7 +594,7 @@ function StatusTab({ setMsg }: { setMsg: (m: string | null) => void }) {
   return (
     <div style={{ display: "grid", gap: 10 }}>
       <div style={{ ...whiteBox, display: "grid", gap: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75 }}>
+        <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.75 }}>
           Player statuses are read from the official team lists and injury list (out Wednesday 4pm NZT),
           once at 4:30pm NZT on Wednesday. Late changes: edit the player in the Players tab.
         </div>
@@ -609,17 +604,17 @@ function StatusTab({ setMsg }: { setMsg: (m: string | null) => void }) {
         <input style={inputStyle} placeholder="Team lists article link (optional)" value={teamsUrl} onChange={(e) => setTeamsUrl(e.target.value)} />
         <input style={inputStyle} placeholder="Injury list article link (optional)" value={injuriesUrl} onChange={(e) => setInjuriesUrl(e.target.value)} />
         <button style={primaryButton} disabled={!!busy} onClick={runImport}>{busy === "import" ? "Reading articles…" : "Read articles now"}</button>
-        {err ? <div style={{ color: "#b91c1c", fontWeight: 800, fontSize: 12 }}>{err}</div> : null}
+        {err ? <div style={{ color: "#b91c1c", fontWeight: 600, fontSize: 12 }}>{err}</div> : null}
       </div>
 
       <div style={{ ...whiteBox, display: "grid", gap: 6 }}>
-        <div style={{ fontWeight: 900, fontSize: 14 }}>{loaded ? `To check (${flags.length})` : "To check"}</div>
-        {!loaded ? <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.7 }}>Loading…</div> : null}
-        {loaded && !flags.length ? <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.7 }}>Nothing to check.</div> : null}
+        <div style={{ fontWeight: 700, fontSize: 14 }}>{loaded ? `To check (${flags.length})` : "To check"}</div>
+        {!loaded ? <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.7 }}>Loading…</div> : null}
+        {loaded && !flags.length ? <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.7 }}>Nothing to check.</div> : null}
         {flags.map((f) => (
           <div key={f.id} style={{ borderTop: "1px solid rgba(0,0,0,0.08)", paddingTop: 6, display: "grid", gap: 4 }}>
-            <div style={{ fontSize: 13, fontWeight: 900 }}>{f.problem}</div>
-            <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.65 }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{f.problem}</div>
+            <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.65 }}>
               {f.weekLabel} · {f.team} · {f.source === "team-list" ? "team list" : "injury list"} · {f.text}
             </div>
             <div style={{ display: "flex", gap: 6 }}>
@@ -638,9 +633,9 @@ function StatusTab({ setMsg }: { setMsg: (m: string | null) => void }) {
 
       {imports.length ? (
         <div style={{ ...whiteBox, display: "grid", gap: 4 }}>
-          <div style={{ fontWeight: 900, fontSize: 14 }}>Recently read</div>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>Recently read</div>
           {imports.map((i) => (
-            <div key={i.id} style={{ fontSize: 11, fontWeight: 700, opacity: 0.8 }}>
+            <div key={i.id} style={{ fontSize: 11, fontWeight: 500, opacity: 0.8 }}>
               Round {i.real_round} {i.kind === "team-list" ? "team lists" : "injury list"}: {i.matched} players, {i.flagged} to check ·{" "}
               {new Date(i.imported_at).toLocaleString("en-AU", { weekday: "short", hour: "numeric", minute: "2-digit" })}
             </div>
@@ -687,7 +682,7 @@ function ScoringTab({ setMsg }: { setMsg: (m: string | null) => void }) {
 
   return (
     <div style={{ ...whiteBox, display: "grid", gap: 8 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75 }}>
+      <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.75 }}>
         Point values for the Standard and Alternate systems. A league&apos;s scoring is frozen when its draft
         starts, so changes here only affect leagues that haven&apos;t drafted yet.
       </div>
@@ -698,8 +693,8 @@ function ScoringTab({ setMsg }: { setMsg: (m: string | null) => void }) {
           </button>
         ))}
       </div>
-      {err ? <div style={{ color: "#b91c1c", fontWeight: 800, fontSize: 12 }}>{err}</div> : null}
-      {draft ? <ScoringEditor value={draft} onChange={setDraft} admin /> : <div style={{ fontWeight: 800 }}>Loading…</div>}
+      {err ? <div style={{ color: "#b91c1c", fontWeight: 600, fontSize: 12 }}>{err}</div> : null}
+      {draft ? <ScoringEditor value={draft} onChange={setDraft} admin /> : <div style={{ fontWeight: 600 }}>Loading…</div>}
       <button style={primaryButton} disabled={busy || !draft} onClick={save}>{busy ? "Saving…" : `Save ${which === "standard" ? "Standard" : "Alternate"} scoring`}</button>
     </div>
   );
@@ -753,7 +748,7 @@ function CoachNoteRow({ n, name, onChange, setMsg }: { n: CoachAdmin["notes"][nu
   }
   return (
     <div style={{ borderTop: "1px solid rgba(0,0,0,0.08)", padding: "8px 0", opacity: n.hidden ? 0.5 : 1, display: "grid", gap: 4 }}>
-      <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.65 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.65 }}>
         {name} · {n.kind}
         {n.week ? ` · week ${n.week}` : ""} · {new Date(n.created_at).toLocaleString()}
         {n.edited ? " · edited" : ""}
@@ -771,7 +766,7 @@ function CoachNoteRow({ n, name, onChange, setMsg }: { n: CoachAdmin["notes"][nu
         </>
       ) : (
         <>
-          <div style={{ fontSize: 13, fontWeight: 900 }}>{n.headline}</div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>{n.headline}</div>
           <div style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.4 }}>{n.body}</div>
           {n.next_week ? <div style={{ fontSize: 12, fontWeight: 600 }}><b>Next week:</b> {n.next_week}</div> : null}
           <div style={{ display: "flex", gap: 6 }}>
@@ -827,14 +822,14 @@ function CoachTab({ season, setMsg }: { season: number; setMsg: (m: string | nul
   return (
     <div style={{ display: "grid", gap: 10 }}>
       <div style={{ ...whiteBox, display: "grid", gap: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 900 }}>AI coach</div>
-        <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75, lineHeight: 1.4 }}>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>AI coach</div>
+        <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.75, lineHeight: 1.4 }}>
           Writes player notes: a season outlook, after each game (when the stats are final), when the team and injury lists come out, and when you change a status or add news below.
         </div>
-        <div style={{ fontSize: 12, fontWeight: 800, color: data.hasKey ? "#15803d" : "#b91c1c" }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: data.hasKey ? "#15803d" : "#b91c1c" }}>
           {data.hasKey ? "Anthropic API key: set" : "Anthropic API key: not set (the coach can't write anything until it is)"}
         </div>
-        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
+        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 600 }}>
           <input type="checkbox" checked={data.settings.enabled} disabled={busy} onChange={(e) => act({ action: "settings", enabled: e.target.checked }, e.target.checked ? "Coach switched on" : "Coach switched off")} />
           Coach switched on
         </label>
@@ -849,8 +844,8 @@ function CoachTab({ season, setMsg }: { season: number; setMsg: (m: string | nul
           <button style={{ ...primaryButton, background: "rgba(15,23,42,0.35)" }} disabled={busy || !data.hasKey} onClick={() => act({ action: "run" }, "Checked")}>Check now</button>
         </div>
         {data.jobs.length ? (
-          <div style={{ fontSize: 11, fontWeight: 700, display: "grid", gap: 2 }}>
-            <div style={{ fontWeight: 900, opacity: 0.7 }}>Recent batches</div>
+          <div style={{ fontSize: 11, fontWeight: 500, display: "grid", gap: 2 }}>
+            <div style={{ fontWeight: 700, opacity: 0.7 }}>Recent batches</div>
             {data.jobs.map((j) => (
               <div key={j.job_key}>
                 {new Date(j.created_at).toLocaleString()} · {j.kind} · {j.status} · {j.written}/{j.requests} notes{j.error ? ` · ${j.error}` : ""}
@@ -861,8 +856,8 @@ function CoachTab({ season, setMsg }: { season: number; setMsg: (m: string | nul
       </div>
 
       <div style={{ ...whiteBox, display: "grid", gap: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 900 }}>Tell the coach something</div>
-        <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75 }}>Used in every note while it&apos;s on, e.g. &quot;Jacomb is now the Highlanders&apos; starting 10 and goal kicker&quot;.</div>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>Tell the coach something</div>
+        <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.75 }}>Used in every note while it&apos;s on, e.g. &quot;Jacomb is now the Highlanders&apos; starting 10 and goal kicker&quot;.</div>
         <div style={{ display: "flex", gap: 6 }}>
           {(["player", "team", "general"] as const).map((sc) => (
             <button key={sc} onClick={() => setScope(sc)} style={tabButton(scope === sc)}>{sc === "general" ? "Everyone" : sc === "player" ? "A player" : "A team"}</button>
@@ -870,15 +865,15 @@ function CoachTab({ season, setMsg }: { season: number; setMsg: (m: string | nul
         </div>
         {scope === "player" ? (
           pick ? (
-            <div style={{ fontSize: 13, fontWeight: 900 }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>
               {pick.firstName} {pick.lastName}{" "}
-              <button onClick={() => setPick(null)} style={{ border: "none", background: "transparent", textDecoration: "underline", cursor: "pointer", fontWeight: 800 }}>change</button>
+              <button onClick={() => setPick(null)} style={{ border: "none", background: "transparent", textDecoration: "underline", cursor: "pointer", fontWeight: 600 }}>change</button>
             </div>
           ) : (
             <div style={{ display: "grid", gap: 4 }}>
               <input style={inputStyle} placeholder="Search a player" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search a player" />
               {matches.map((p) => (
-                <button key={p.id} onClick={() => { setPick(p); setSearch(""); }} style={{ textAlign: "left", border: "none", background: "rgba(15,23,42,0.05)", borderRadius: 8, padding: "6px 8px", cursor: "pointer", fontWeight: 800 }}>
+                <button key={p.id} onClick={() => { setPick(p); setSearch(""); }} style={{ textAlign: "left", border: "none", background: "rgba(15,23,42,0.05)", borderRadius: 8, padding: "6px 8px", cursor: "pointer", fontWeight: 600 }}>
                   {p.firstName} {p.lastName} · {p.teamCode}
                 </button>
               ))}
@@ -891,7 +886,7 @@ function CoachTab({ season, setMsg }: { season: number; setMsg: (m: string | nul
         ) : null}
         <textarea style={{ ...inputStyle, height: 80, padding: 8 }} maxLength={600} value={text} onChange={(e) => setText(e.target.value)} placeholder="What should the coach know?" aria-label="Note for the coach" />
         {scope === "player" ? (
-          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, fontWeight: 800 }}>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, fontWeight: 600 }}>
             <input type="checkbox" checked={writeNow} onChange={(e) => setWriteNow(e.target.checked)} /> Write a coach update about him now
           </label>
         ) : null}
@@ -909,7 +904,7 @@ function CoachTab({ season, setMsg }: { season: number; setMsg: (m: string | nul
           <div style={{ display: "grid", gap: 4 }}>
             {data.context.map((c) => (
               <div key={c.id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 6, alignItems: "center", borderTop: "1px solid rgba(0,0,0,0.08)", paddingTop: 4, opacity: c.active ? 1 : 0.5 }}>
-                <div style={{ fontSize: 12, fontWeight: 700 }}>
+                <div style={{ fontSize: 12, fontWeight: 500 }}>
                   <b>{c.scope === "player" ? nameOf(c.player_id) : c.scope === "team" ? c.team_code : "Everyone"}:</b> {c.text}
                 </div>
                 <button style={{ ...primaryButton, height: 26, width: "auto", padding: "0 10px", fontSize: 11 }} onClick={() => act({ action: "context_toggle", id: c.id, active: !c.active }, c.active ? "Turned off" : "Turned on")}>
@@ -922,8 +917,8 @@ function CoachTab({ season, setMsg }: { season: number; setMsg: (m: string | nul
       </div>
 
       <div style={whiteBox}>
-        <div style={{ fontSize: 13, fontWeight: 900 }}>Latest notes</div>
-        {data.notes.length ? data.notes.map((n) => <CoachNoteRow key={n.id} n={n} name={nameOf(n.player_id)} onChange={load} setMsg={setMsg} />) : <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.7 }}>None yet.</div>}
+        <div style={{ fontSize: 13, fontWeight: 700 }}>Latest notes</div>
+        {data.notes.length ? data.notes.map((n) => <CoachNoteRow key={n.id} n={n} name={nameOf(n.player_id)} onChange={load} setMsg={setMsg} />) : <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.7 }}>None yet.</div>}
       </div>
     </div>
   );
@@ -942,7 +937,7 @@ function PlayerCoachDetails({ player }: { player: AdminPlayer }) {
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF((x) => (x ? { ...x, [k]: e.target.value } : x));
   return (
     <div style={{ borderTop: "1px solid rgba(0,0,0,0.1)", paddingTop: 8, display: "grid", gap: 6 }}>
-      <div style={{ fontWeight: 900, fontSize: 13 }}>For the AI coach</div>
+      <div style={{ fontWeight: 700, fontSize: 13 }}>For the AI coach</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         <div><div style={labelStyle}>Birth date</div><input type="date" style={inputStyle} value={f.birthDate} onChange={set("birthDate")} /></div>
         <div><div style={labelStyle}>International</div><input style={inputStyle} placeholder="e.g. All Blacks" value={f.international} onChange={set("international")} /></div>
@@ -962,7 +957,7 @@ function PlayerCoachDetails({ player }: { player: AdminPlayer }) {
       >
         Save coach details
       </button>
-      {msg ? <div style={{ fontSize: 12, fontWeight: 800 }}>{msg}</div> : null}
+      {msg ? <div style={{ fontSize: 12, fontWeight: 600 }}>{msg}</div> : null}
     </div>
   );
 }
@@ -993,17 +988,17 @@ function HistoryTab({ setMsg }: { setMsg: (m: string | null) => void }) {
   return (
     <div style={{ display: "grid", gap: 10 }}>
       <div style={whiteBox}>
-        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 4 }}>Past seasons</div>
-        <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75, marginBottom: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Past seasons</div>
+        <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.75, marginBottom: 8 }}>
           Pick which league each past season belongs to. Its champion then gets a star in that league (and in the
           league each time it&apos;s restarted for a new season).
         </div>
-        {err ? <div style={{ color: "#b91c1c", fontWeight: 800 }}>{err}</div> : null}
+        {err ? <div style={{ color: "#b91c1c", fontWeight: 600 }}>{err}</div> : null}
         {(data?.groups ?? []).map((g) => (
           <div key={`${g.season}|${g.leagueName}`} style={{ display: "grid", gap: 4, padding: "8px 0", borderTop: "1px solid rgba(0,0,0,0.08)" }}>
-            <div style={{ fontSize: 13, fontWeight: 900 }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>
               {g.season} · {g.leagueName}
-              <span style={{ fontWeight: 700, opacity: 0.7 }}>{g.champion ? ` · champion ${g.champion}` : ""}</span>
+              <span style={{ fontWeight: 500, opacity: 0.7 }}>{g.champion ? ` · champion ${g.champion}` : ""}</span>
             </div>
             <select
               id={`history-league-${g.season}`}
@@ -1023,13 +1018,13 @@ function HistoryTab({ setMsg }: { setMsg: (m: string | null) => void }) {
       </div>
 
       <div style={whiteBox}>
-        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 4 }}>People</div>
-        <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75, marginBottom: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>People</div>
+        <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.75, marginBottom: 8 }}>
           The history is stored by first name. Match each name to the person&apos;s account once they&apos;ve signed up.
         </div>
         {(data?.people ?? []).map((p) => (
           <div key={p.personName} style={{ display: "grid", gridTemplateColumns: "90px 1fr", gap: 8, alignItems: "center", padding: "6px 0", borderTop: "1px solid rgba(0,0,0,0.08)" }}>
-            <div style={{ fontSize: 13, fontWeight: 900 }}>{p.personName}</div>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{p.personName}</div>
             <select
               id={`history-person-${p.personName}`}
               style={inputStyle}
@@ -1070,7 +1065,7 @@ export default function AdminPage() {
           <button
             onClick={() => setMenuOpen(true)}
             aria-label="Open menu"
-            style={{ background: "transparent", border: "none", padding: 0, color: "white", fontSize: 36, fontWeight: 900, lineHeight: "36px", cursor: "pointer" }}
+            style={{ background: "transparent", border: "none", padding: 0, color: "inherit", fontSize: 36, fontWeight: 700, lineHeight: "36px", cursor: "pointer" }}
           >
             ☰
           </button>
@@ -1078,8 +1073,8 @@ export default function AdminPage() {
 
         <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
           <div style={cardStyle}>
-            <div style={{ textAlign: "center", fontWeight: 900, fontSize: 22 }}>Admin</div>
-            <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 800, opacity: 0.9 }}>
+            <div style={{ textAlign: "center", fontWeight: 700, fontSize: 22 }}>Admin</div>
+            <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
               Players, statuses, difficulty, rounds, scoring and history
             </div>
             {tab === "Players" || tab === "Difficulty" ? (
@@ -1099,9 +1094,9 @@ export default function AdminPage() {
           </div>
 
           {msg ? (
-            <div style={{ ...cardStyle, background: "rgba(34,197,94,0.25)", fontSize: 13, fontWeight: 800, display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <div style={{ ...cardStyle, background: "#dcfce7", fontSize: 13, fontWeight: 600, display: "flex", justifyContent: "space-between", gap: 8 }}>
               <span>{msg}</span>
-              <button onClick={() => setMsg(null)} style={{ background: "transparent", border: "none", color: "white", fontWeight: 900, cursor: "pointer" }}>×</button>
+              <button onClick={() => setMsg(null)} style={{ background: "transparent", border: "none", color: "inherit", fontWeight: 700, cursor: "pointer" }}>×</button>
             </div>
           ) : null}
 

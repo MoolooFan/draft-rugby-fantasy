@@ -69,10 +69,10 @@ export function HistoryTab({ leagueId, playerId }: { leagueId: string; playerId:
             <div style={{ display: "grid", gridTemplateColumns: "6px 1fr auto", gap: 10, alignItems: "center" }}>
               <span style={{ width: 6, alignSelf: "stretch", borderRadius: 3, background: l.color }} />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 900 }}>{l.title}</div>
-                {l.detail ? <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.65 }}>{l.detail}</div> : null}
+                <div style={{ fontSize: 12, fontWeight: 700 }}>{l.title}</div>
+                {l.detail ? <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.65 }}>{l.detail}</div> : null}
               </div>
-              <div style={{ fontSize: 10, fontWeight: 700, opacity: 0.55, whiteSpace: "nowrap" }}>{when(e.atMs)}</div>
+              <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.55, whiteSpace: "nowrap" }}>{when(e.atMs)}</div>
             </div>
           </TabCard>
         );
@@ -117,7 +117,7 @@ const VERDICT: Record<string, { label: string; bg: string }> = {
 export function VerdictChip({ verdict }: { verdict: string | null | undefined }) {
   const v = verdict ? VERDICT[verdict] : null;
   if (!v) return null;
-  return <span style={{ fontSize: 10, fontWeight: 900, color: "white", background: v.bg, borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap" }}>{v.label}</span>;
+  return <span style={{ fontSize: 10, fontWeight: 700, color: "white", background: v.bg, borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap" }}>{v.label}</span>;
 }
 
 // Player card > AI Coach tab (Ethan, 17 Nov 2026; lib/coach): the coach's notes about this
@@ -146,8 +146,8 @@ export function CoachTab({ playerId }: { playerId: string }) {
   if (!data.notes.length) {
     return (
       <TabCard>
-        <div style={{ fontSize: 13, fontWeight: 900 }}>AI Coach</div>
-        <div style={{ marginTop: 6, fontSize: 12, fontWeight: 700, opacity: 0.7, lineHeight: 1.45 }}>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>AI Coach</div>
+        <div style={{ marginTop: 6, fontSize: 12, fontWeight: 500, opacity: 0.7, lineHeight: 1.45 }}>
           No notes yet. The coach writes a season outlook, a note after each game, and an update when the team and injury lists come out.
         </div>
       </TabCard>
@@ -158,15 +158,15 @@ export function CoachTab({ playerId }: { playerId: string }) {
       {data.notes.map((n) => (
         <TabCard key={n.id}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.6 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.6 }}>
               {KIND_LABEL[n.kind] ?? n.kind}
               {n.week ? ` · ${roundLabel(n.week, n.season)}` : ""} · {when(Date.parse(n.created_at))}
             </span>
             <span style={{ flex: 1 }} />
-            {n.trend === "up" ? <span title="Trending up" style={{ color: "#16a34a", fontWeight: 900 }}>▲</span> : n.trend === "down" ? <span title="Trending down" style={{ color: "#dc2626", fontWeight: 900 }}>▼</span> : null}
+            {n.trend === "up" ? <span title="Trending up" style={{ color: "#16a34a", fontWeight: 700 }}>▲</span> : n.trend === "down" ? <span title="Trending down" style={{ color: "#dc2626", fontWeight: 700 }}>▼</span> : null}
             <VerdictChip verdict={n.verdict} />
           </div>
-          <div style={{ marginTop: 4, fontSize: 13, fontWeight: 900, lineHeight: 1.3 }}>{n.headline}</div>
+          <div style={{ marginTop: 4, fontSize: 13, fontWeight: 700, lineHeight: 1.3 }}>{n.headline}</div>
           <div style={{ marginTop: 4, fontSize: 12, fontWeight: 600, lineHeight: 1.45 }}>{n.body}</div>
           {n.next_week ? (
             <div style={{ marginTop: 6, fontSize: 12, fontWeight: 600, lineHeight: 1.45 }}>
@@ -177,7 +177,7 @@ export function CoachTab({ playerId }: { playerId: string }) {
           {n.factors?.length ? (
             <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
               {n.factors.map((f) => (
-                <span key={f} style={{ fontSize: 10, fontWeight: 800, borderRadius: 999, padding: "2px 8px", background: "rgba(15,23,42,0.07)" }}>
+                <span key={f} style={{ fontSize: 10, fontWeight: 600, borderRadius: 999, padding: "2px 8px", background: "rgba(15,23,42,0.07)" }}>
                   {f}
                 </span>
               ))}
@@ -185,7 +185,7 @@ export function CoachTab({ playerId }: { playerId: string }) {
           ) : null}
         </TabCard>
       ))}
-      <div style={{ fontSize: 10, fontWeight: 700, opacity: 0.55, textAlign: "center" }}>Written by AI from the stats and the commissioner&apos;s notes. It can make mistakes.</div>
+      <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.55, textAlign: "center" }}>Written by AI from the stats and the commissioner&apos;s notes. It can make mistakes.</div>
     </div>
   );
 }

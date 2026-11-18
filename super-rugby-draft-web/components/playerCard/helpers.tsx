@@ -114,7 +114,7 @@ export function TabCard({ children }: { children: ReactNode }) {
         border: "1px solid rgba(0,0,0,0.08)",
         padding: 12,
         fontSize: 12,
-        fontWeight: 800,
+        fontWeight: 600,
       }}
     >
       {children}
@@ -166,24 +166,24 @@ export function StatRow({
       }}
     >
       {/* label */}
-      <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>{label}</div>
+      <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 600 }}>{label}</div>
 
       {/* main value */}
-      <div style={{ textAlign: "right", fontSize: 12, fontWeight: 900, opacity: 0.9 }}>
+      <div style={{ textAlign: "right", fontSize: 12, fontWeight: 700, opacity: 0.9 }}>
         {right}
       </div>
 
       {/* third column: Starts OR Missed (inline, same row) */}
       {typeof right2 === "string" ? (
-        <div style={{ textAlign: "right", fontSize: 12, fontWeight: 900, opacity: 0.9 }}>
-          <span style={{ fontSize: 10, opacity: 0.6, fontWeight: 800, marginRight: 16 }}>
+        <div style={{ textAlign: "right", fontSize: 12, fontWeight: 700, opacity: 0.9 }}>
+          <span style={{ fontSize: 10, opacity: 0.6, fontWeight: 600, marginRight: 16 }}>
             {right2Label ?? ""}
           </span>
           {right2}
         </div>
       ) : subRight ? (
-        <div style={{ textAlign: "right", fontSize: 12, fontWeight: 900, opacity: 0.9 }}>
-          <span style={{ fontSize: 10, opacity: 0.6, fontWeight: 800, marginRight: 16 }}>
+        <div style={{ textAlign: "right", fontSize: 12, fontWeight: 700, opacity: 0.9 }}>
+          <span style={{ fontSize: 10, opacity: 0.6, fontWeight: 600, marginRight: 16 }}>
             Missed
           </span>
           {subRight}

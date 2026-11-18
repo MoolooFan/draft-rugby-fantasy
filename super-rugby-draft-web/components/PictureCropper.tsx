@@ -72,12 +72,12 @@ export function PictureCropper({
         onClick={(e) => e.stopPropagation()}
         style={{ width: "100%", maxWidth: 340, borderRadius: 18, background: "#ffffff", color: "#0f172a", overflow: "hidden", boxShadow: "0 24px 80px rgba(0,0,0,0.45)" }}
       >
-        <div style={{ padding: "10px 12px", background: "#0f172a", color: "white", fontSize: 12, fontWeight: 900 }}>
+        <div style={{ padding: "10px 12px", background: "#0f172a", color: "white", fontSize: 12, fontWeight: 700 }}>
           Drag to move, slide to zoom
         </div>
         <div style={{ padding: 16, display: "grid", justifyItems: "center", gap: 12 }}>
           {error ? (
-            <div style={{ fontSize: 12, fontWeight: 800, color: "#b91c1c" }}>{error}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#b91c1c" }}>{error}</div>
           ) : (
             <div
               onPointerDown={(e) => {
@@ -121,7 +121,7 @@ export function PictureCropper({
                   }}
                 />
               ) : (
-                <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800, opacity: 0.6 }}>Loading…</div>
+                <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 600, opacity: 0.6 }}>Loading…</div>
               )}
             </div>
           )}
@@ -146,14 +146,14 @@ export function PictureCropper({
           <button
             onClick={onCancel}
             disabled={busy}
-            style={{ height: 38, borderRadius: 12, border: "2px solid rgba(239,68,68,0.9)", background: "transparent", color: "rgba(239,68,68,0.95)", fontWeight: 900, cursor: "pointer" }}
+            style={{ height: 38, borderRadius: 12, border: "2px solid rgba(239,68,68,0.9)", background: "transparent", color: "rgba(239,68,68,0.95)", fontWeight: 700, cursor: "pointer" }}
           >
             Cancel
           </button>
           <button
             onClick={save}
             disabled={!img || busy}
-            style={{ height: 38, borderRadius: 12, border: "none", background: "#22C55E", color: "white", fontWeight: 900, cursor: "pointer", opacity: !img || busy ? 0.6 : 1 }}
+            style={{ height: 38, borderRadius: 12, border: "none", background: "#22C55E", color: "white", fontWeight: 700, cursor: "pointer", opacity: !img || busy ? 0.6 : 1 }}
           >
             {busy ? "Saving…" : "Use picture"}
           </button>

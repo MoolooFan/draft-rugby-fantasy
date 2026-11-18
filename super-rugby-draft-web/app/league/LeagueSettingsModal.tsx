@@ -88,10 +88,10 @@ setDraftOrderIds((prev) => {
       <div
         style={{
           borderRadius: 14,
-          background: "linear-gradient(to bottom, #0f172a, #2563eb)",
+          background: "#ffffff",
           padding: 14,
-          color: "white",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
+          color: "#0f172a",
+          boxShadow: "0 20px 50px rgba(15,23,42,0.35)",
           position: "relative",
         }}
       >
@@ -104,16 +104,16 @@ setDraftOrderIds((prev) => {
             top: 10,
             background: "transparent",
             border: "none",
-            color: "white",
+            color: "#64748b",
             fontSize: 20,
-            fontWeight: 900,
+            fontWeight: 700,
             cursor: "pointer",
           }}
         >
           ×
         </button>
 
-        <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 12 }}>League Settings</div>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>League Settings</div>
 
         <Field label="Change League Name">
 <input
@@ -154,7 +154,7 @@ setDraftOrderIds((prev) => {
 
 {scoringSystem === "custom" ? (
   <Field label="Custom Points">
-    <div style={{ background: "rgba(255,255,255,0.92)", color: "#0f172a", borderRadius: 12, padding: 10 }}>
+    <div style={{ background: "#f6f8fa", border: "1px solid #e5e9ef", color: "#0f172a", borderRadius: 12, padding: 10 }}>
       <ScoringEditor value={customRules} onChange={setCustomRules} readOnly={settingsLocked} />
     </div>
   </Field>
@@ -165,21 +165,21 @@ setDraftOrderIds((prev) => {
 </Field>
 
 <Field label="The Shield">
-<label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 800 }}>
+<label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600 }}>
   <input type="checkbox" disabled={readOnly} checked={shieldEnabled} onChange={(e) => setShieldEnabled(e.target.checked)} />
   On: won by beating the holder away, defended at home. Off pauses it (the holder keeps it).
 </label>
 {shieldEnabled ? (
   <input aria-label="Shield name" disabled={readOnly} value={shieldName} onChange={(e) => setShieldName(e.target.value)} placeholder="The Shield" style={{ ...inputStyle(), marginTop: 6 }} />
 ) : null}
-<div style={{ fontSize: 11, fontWeight: 700, opacity: 0.75, marginTop: 4 }}>The name always ends in &quot;Shield&quot;. Can be changed any time.</div>
+<div style={{ fontSize: 11, fontWeight: 500, opacity: 0.75, marginTop: 4 }}>The name always ends in &quot;Shield&quot;. Can be changed any time.</div>
 <div style={{ marginTop: 8 }}>
   <ShieldRewardsFields value={shieldRewards} onChange={setShieldRewards} disabled={settingsLocked} />
 </div>
 </Field>
 
 {draftStarted ? (
-  <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>
+  <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.85 }}>
     Finals, scoring, bonus points, the Shield&apos;s rewards and the draft order are locked now the draft has started.
   </div>
 ) : null}
@@ -194,7 +194,7 @@ setDraftOrderIds((prev) => {
   onChange={(e) => setStartRound(Number(e.target.value || 1))}
   style={inputStyle(readOnly)}
 />
-  <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, marginTop: 6 }}>
+  <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.85, marginTop: 6 }}>
   Fantasy regular season weeks: {computedRegularWeeks} (of {REAL_REGULAR_ROUNDS})<br/>
   Total season weeks (incl finals): {computedSeasonWeeks}
 </div>
@@ -210,7 +210,7 @@ setDraftOrderIds((prev) => {
 />
 </Field>
 
-        <div style={{ marginTop: 10, fontSize: 12, fontWeight: 900, opacity: 0.9 }}>
+        <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700, opacity: 0.9 }}>
           Draft Order
         </div>
 
@@ -219,9 +219,9 @@ setDraftOrderIds((prev) => {
             marginTop: 8,
             borderRadius: 10,
             overflow: "hidden",
-            background: "rgba(255,255,255,0.92)",
+            background: "#f6f8fa",
             color: "#0f172a",
-            border: "1px solid rgba(0,0,0,0.10)",
+            border: "1px solid #e5e9ef",
           }}
         >
           {draftOrderIds.map((teamId, idx) => {
@@ -241,7 +241,7 @@ return (
       padding: "10px 10px",
       borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)",
       fontSize: 12,
-      fontWeight: 700,
+      fontWeight: 500,
       alignItems: "center",
     }}
   >
@@ -261,7 +261,7 @@ return (
           border: "none",
           background: "#E2E8F0",
           color: "#0f172a",
-          fontWeight: 900,
+          fontWeight: 700,
           cursor: upDisabled ? "not-allowed" : "pointer",
           opacity: upDisabled ? 0.45 : 1,
         }}
@@ -280,7 +280,7 @@ return (
           border: "none",
           background: "#E2E8F0",
           color: "#0f172a",
-          fontWeight: 900,
+          fontWeight: 700,
           cursor: downDisabled ? "not-allowed" : "pointer",
           opacity: downDisabled ? 0.45 : 1,
         }}

@@ -45,12 +45,12 @@ export function ShieldSecuredModal({ leagueId }: { leagueId: string | null | und
         style={{ width: "100%", maxWidth: 360, borderRadius: 18, background: "#ffffff", color: "#0f172a", boxShadow: "0 24px 80px rgba(0,0,0,0.45)", overflow: "hidden" }}
       >
         <div style={{ padding: "12px 12px 10px", background: "linear-gradient(to right, rgb(15,23,42), rgb(13,148,136))", color: "white" }}>
-          <div style={{ fontSize: 18, fontWeight: 900, fontStyle: "italic" }}>{shield.name} secured!</div>
+          <div style={{ fontSize: 18, fontWeight: 700, fontStyle: "italic" }}>{shield.name} secured!</div>
         </div>
         <div style={{ padding: 16, display: "grid", justifyItems: "center", gap: 10, textAlign: "center" }}>
           <ShieldIcon size={96} title={shield.name} />
-          <div style={{ fontSize: 15, fontWeight: 900 }}>It&apos;s yours for the rest of the season.</div>
-          <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75, lineHeight: 1.4 }}>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>It&apos;s yours for the rest of the season.</div>
+          <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.75, lineHeight: 1.4 }}>
             You&apos;ve no home games left, so nobody can take it off you before the finals.
             {defences ? ` ${defences} defence${defences === 1 ? "" : "s"} so far.` : ""} It carries over into next season.
           </div>
@@ -58,7 +58,7 @@ export function ShieldSecuredModal({ leagueId }: { leagueId: string | null | und
         <div style={{ padding: 12, borderTop: "1px solid rgba(15,23,42,0.10)" }}>
           <button
             onClick={close}
-            style={{ width: "100%", height: 38, borderRadius: 12, border: "none", background: "#22C55E", color: "white", fontWeight: 900, fontSize: 14, cursor: "pointer" }}
+            style={{ width: "100%", height: 38, borderRadius: 12, border: "none", background: "#22C55E", color: "white", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
           >
             Brilliant
           </button>

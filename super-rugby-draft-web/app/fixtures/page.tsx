@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { card as themeCard } from "@/lib/ui/theme";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { getActiveTimezone } from "@/lib/session";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
@@ -366,12 +367,7 @@ if (!Number.isFinite(w) || w <= 0) continue;
   // -----------------------
   // Styles (match your app)
   // -----------------------
-  const card35: React.CSSProperties = {
-    borderRadius: 18,
-    background: "rgba(255,255,255,0.35)",
-    backdropFilter: "blur(10px)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.18)",
-  };
+  const card35: React.CSSProperties = { ...themeCard, padding: undefined };
 
   const tabBarStyle: React.CSSProperties = {
     marginTop: 10,
@@ -386,7 +382,7 @@ if (!Number.isFinite(w) || w <= 0) continue;
     background: active ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.10)",
     color: "white",
     fontSize: 11,
-    fontWeight: 900,
+    fontWeight: 700,
     cursor: "pointer",
   });
 
@@ -409,9 +405,9 @@ if (!Number.isFinite(w) || w <= 0) continue;
           border: "none",
           padding: 0,
           margin: 0,
-          color: "white",
+          color: "inherit",
           fontSize: 30,
-          fontWeight: 900,
+          fontWeight: 700,
           lineHeight: "30px",
           cursor: "pointer",
         }}
@@ -508,14 +504,14 @@ const sub = mode === "fixtures" ? (kickoffMs ? formatKickoffCompact(kickoffMs, u
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <TeamBadge code={home} size={32} />
 
-          <div style={{ fontSize: 12, fontWeight: 700 }}>{home}</div>
+          <div style={{ fontSize: 12, fontWeight: 500 }}>{home}</div>
         </div>
 
         {/* middle */}
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 12, fontWeight: 900 }}>{mid}</div>
+          <div style={{ fontSize: 12, fontWeight: 700 }}>{mid}</div>
           {sub ? (
-  <div style={{ marginTop: 2, fontSize: 7, fontWeight: 700, opacity: 0.55 }}>
+  <div style={{ marginTop: 2, fontSize: 7, fontWeight: 500, opacity: 0.55 }}>
     {sub}
   </div>
 ) : null}
@@ -524,7 +520,7 @@ const sub = mode === "fixtures" ? (kickoffMs ? formatKickoffCompact(kickoffMs, u
 
         {/* right */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
-          <div style={{ fontSize: 12, fontWeight: 700 }}>{away}</div>
+          <div style={{ fontSize: 12, fontWeight: 500 }}>{away}</div>
           <TeamBadge code={away} size={32} />
 
         </div>
@@ -538,7 +534,7 @@ const FixtureRow = useStableComponent(FixtureRow__render);
 
     if (!weeks.length) {
       return (
-        <div style={{ ...listBox, padding: 14, fontSize: 12, fontWeight: 700, opacity: 0.7 }}>
+        <div style={{ ...listBox, padding: 14, fontSize: 12, fontWeight: 500, opacity: 0.7 }}>
           {which === "upcoming" ? "No upcoming weeks." : "No completed weeks yet."}
         </div>
       );
@@ -602,7 +598,7 @@ const WeekList = useStableComponent(WeekList__render);
 
     if (!weeks.length) {
       return (
-        <div style={{ ...listBox, padding: 14, fontSize: 12, fontWeight: 700, opacity: 0.7 }}>
+        <div style={{ ...listBox, padding: 14, fontSize: 12, fontWeight: 500, opacity: 0.7 }}>
           No upcoming weeks to display in FDR.
         </div>
       );
@@ -621,7 +617,7 @@ const WeekList = useStableComponent(WeekList__render);
             }}
           >
             {/* header row */}
-            <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.7 }} />
+            <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.7 }} />
             {weeks.map((w) => (
               <div
                 key={w}
@@ -642,7 +638,7 @@ const WeekList = useStableComponent(WeekList__render);
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <TeamBadge code={t} size={28} />
 
-                  <div style={{ fontSize: 12, fontWeight: 700 }}>{t}</div>
+                  <div style={{ fontSize: 12, fontWeight: 500 }}>{t}</div>
                 </div>
 
                 {weeks.map((w) => {
@@ -674,7 +670,7 @@ const WeekList = useStableComponent(WeekList__render);
                         display: "grid",
                         placeItems: "center",
                         fontSize: 10,
-                        fontWeight: 700,
+                        fontWeight: 500,
                         background: fdrBg(cell.rating),
                         color: fdrText(cell.rating),
                         boxShadow: "0 6px 12px rgba(0,0,0,0.10)",
@@ -702,7 +698,7 @@ const WeekList = useStableComponent(WeekList__render);
                 display: "grid",
                 placeItems: "center",
                 fontSize: 11,
-                fontWeight: 800,
+                fontWeight: 600,
                 background: fdrBg(r),
                 color: fdrText(r),
                 boxShadow: "0 6px 12px rgba(0,0,0,0.10)",
@@ -744,7 +740,7 @@ const FdrTable = useStableComponent(FdrTable__render);
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <Hamburger />
           </div>
-          <div style={{ marginTop: 8, fontSize: 22, fontWeight: 900 }}>Fixtures</div>
+          <div style={{ marginTop: 8, fontSize: 22, fontWeight: 700 }}>Fixtures</div>
         </div>
 
         <Tabs />

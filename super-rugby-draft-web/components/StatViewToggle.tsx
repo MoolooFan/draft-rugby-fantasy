@@ -35,7 +35,7 @@ export function StatViewToggle({ dark = false, style }: { dark?: boolean; style?
               borderRadius: 999,
               border: "none",
               fontSize: 11,
-              fontWeight: 800,
+              fontWeight: 600,
               whiteSpace: "nowrap",
               cursor: "pointer",
               background: on ? (dark ? "#0f172a" : "rgba(255,255,255,0.95)") : "transparent",

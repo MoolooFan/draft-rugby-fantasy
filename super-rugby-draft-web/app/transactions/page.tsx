@@ -1,6 +1,7 @@
 "use client";
 
 import React, { Suspense, useEffect, useMemo, useState } from "react";
+import { card as themeCard } from "@/lib/ui/theme";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { AppMenu } from "@/components/AppMenu";
@@ -865,38 +866,38 @@ function ConfirmAcceptTradeModal__render() {
         }}
       >
         <div style={{ padding: 12, background: "#0f172a", color: "white" }}>
-          <div style={{ fontSize: 12, fontWeight: 900 }}>Confirm Trade</div>
-          <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.9, marginTop: 2 }}>
+          <div style={{ fontSize: 12, fontWeight: 700 }}>Confirm Trade</div>
+          <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.9, marginTop: 2 }}>
             This will swap the selected players immediately.
           </div>
         </div>
 
         <div style={{ padding: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 900 }}>You receive</div>
+          <div style={{ fontSize: 12, fontWeight: 700 }}>You receive</div>
           <div style={{ marginTop: 6, display: "grid", gap: 6 }}>
             {offerPlayers.length ? (
               offerPlayers.map((p) => (
                 <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <JerseyTile teamCode={p.teamCode} size={22} />
-                  <div style={{ fontSize: 12, fontWeight: 800 }}>{shortName(p)}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{shortName(p)}</div>
                 </div>
               ))
             ) : (
-              <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.7 }}>—</div>
+              <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>—</div>
             )}
           </div>
 
-          <div style={{ fontSize: 12, fontWeight: 900, marginTop: 12 }}>You send</div>
+          <div style={{ fontSize: 12, fontWeight: 700, marginTop: 12 }}>You send</div>
           <div style={{ marginTop: 6, display: "grid", gap: 6 }}>
             {requestPlayers.length ? (
               requestPlayers.map((p) => (
                 <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <JerseyTile teamCode={p.teamCode} size={22} />
-                  <div style={{ fontSize: 12, fontWeight: 800 }}>{shortName(p)}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{shortName(p)}</div>
                 </div>
               ))
             ) : (
-              <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.7 }}>—</div>
+              <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>—</div>
             )}
           </div>
         </div>
@@ -919,7 +920,7 @@ function ConfirmAcceptTradeModal__render() {
               border: "2px solid rgba(239,68,68,0.9)",
               background: "transparent",
               color: "rgba(239,68,68,0.95)",
-              fontWeight: 900,
+              fontWeight: 700,
               cursor: "pointer",
             }}
           >
@@ -934,7 +935,7 @@ function ConfirmAcceptTradeModal__render() {
               border: "none",
               background: "rgba(34,197,94,0.95)",
               color: "white",
-              fontWeight: 900,
+              fontWeight: 700,
               cursor: "pointer",
             }}
           >
@@ -1546,7 +1547,7 @@ async function submitProposedTransaction() {
       color: "white",
     }}
   >
-    <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.95 }}>
+    <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.95 }}>
       You have requested to sign:
     </div>
   </div>
@@ -1573,7 +1574,7 @@ async function submitProposedTransaction() {
         <div
           style={{
             fontSize: 13,
-            fontWeight: 900,
+            fontWeight: 700,
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -1582,7 +1583,7 @@ async function submitProposedTransaction() {
           {proposedAddPlayer.firstName?.[0]}. {proposedAddPlayer.lastName}
         </div>
 
-        <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.9 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.9 }}>
           {fullTeamName(proposedAddPlayer.teamCode)} — {positionsLabel(proposedAddPlayer)}
 
         </div>
@@ -1604,7 +1605,7 @@ async function submitProposedTransaction() {
     color: "white",
   }}
 >
-  <div style={{ fontSize: 12, fontWeight: 900 }}>
+  <div style={{ fontSize: 12, fontWeight: 700 }}>
     Which player would you like to replace?
   </div>
 </div>
@@ -1630,9 +1631,9 @@ async function submitProposedTransaction() {
                   background: selectedDropPlayerId === NO_DROP ? "rgba(34,197,94,0.14)" : "transparent",
                 }}
               >
-                <div style={{ fontSize: 13, fontWeight: 900 }}>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>
                   No one - use your free place
-                  <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.7 }}>You have {yourRosterPlayers.length} players (a player is in IR)</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.7 }}>You have {yourRosterPlayers.length} players (a player is in IR)</div>
                 </div>
                 <button
                   onClick={() => setSelectedDropPlayerId(NO_DROP)}
@@ -1643,7 +1644,7 @@ async function submitProposedTransaction() {
                     border: "none",
                     background: "rgba(34,197,94,0.9)",
                     color: "white",
-                    fontWeight: 900,
+                    fontWeight: 700,
                     fontSize: 11,
                     cursor: "pointer",
                   }}
@@ -1653,7 +1654,7 @@ async function submitProposedTransaction() {
               </div>
             ) : null}
             {droppableCandidates.length === 0 ? (
-              <div style={{ padding: 12, fontSize: 12, fontWeight: 800, opacity: 0.75 }}>
+              <div style={{ padding: 12, fontSize: 12, fontWeight: 600, opacity: 0.75 }}>
                 No valid drop options found (position restrictions).
               </div>
             ) : (
@@ -1676,10 +1677,10 @@ async function submitProposedTransaction() {
                     <JerseyTile teamCode={p.teamCode} size={28} />
 
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {p.firstName?.[0]}. {p.lastName}
                       </div>
-                      <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.7 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.7 }}>
                         {fullTeamName(p.teamCode)} — {positionsLabel(p)}
 
                       </div>
@@ -1696,7 +1697,7 @@ async function submitProposedTransaction() {
                         border: "none",
                         background: selected ? "rgba(239,68,68,0.92)" : "rgba(239,68,68,0.85)",
                         color: "white",
-                        fontWeight: 900,
+                        fontWeight: 700,
                         fontSize: selected ? 11 : 20, // smaller text for “Dropping”
                         cursor: "pointer",
                         lineHeight: "32px",
@@ -1735,7 +1736,7 @@ async function submitProposedTransaction() {
                 border: "2px solid rgba(239,68,68,0.9)",
                 background: "transparent",
                 color: "rgba(239,68,68,0.95)",
-                fontWeight: 900,
+                fontWeight: 700,
                 cursor: submittingProposedTransaction ? "not-allowed" : "pointer",
                 opacity: submittingProposedTransaction ? 0.55 : 1,
               }}
@@ -1752,7 +1753,7 @@ async function submitProposedTransaction() {
                 border: "none",
                 background: canConfirm ? confirmBg : "rgba(0,0,0,0.20)",
                 color: canConfirm ? confirmFg : "rgba(255,255,255,0.75)",
-                fontWeight: 900,
+                fontWeight: 700,
                 cursor: canConfirm ? "pointer" : "not-allowed",
                 opacity: submittingProposedTransaction ? 0.9 : 1,
               }}
@@ -2358,12 +2359,7 @@ return list
   // -----------------------
   // UI styles (match your vibe + Draft Room list styling)
   // -----------------------
-  const card35: React.CSSProperties = {
-    borderRadius: 18,
-    background: "rgba(255,255,255,0.35)",
-    backdropFilter: "blur(10px)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.18)",
-  };
+  const card35: React.CSSProperties = { ...themeCard, padding: undefined };
 
   const tabBarStyle: React.CSSProperties = {
     marginTop: 10,
@@ -2378,7 +2374,7 @@ return list
     background: active ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.10)",
     color: "white",
     fontSize: 11,
-    fontWeight: 900,
+    fontWeight: 700,
     cursor: "pointer",
   });
 
@@ -2401,9 +2397,9 @@ return list
           border: "none",
           padding: 0,
           margin: 0,
-          color: "white",
+          color: "inherit",
           fontSize: 30,
-          fontWeight: 900,
+          fontWeight: 700,
           lineHeight: "30px",
           cursor: "pointer",
         }}
@@ -2428,7 +2424,7 @@ const Hamburger = useStableComponent(Hamburger__render);
     background: "#EF4444",
     color: "white",
     fontSize: 10,
-    fontWeight: 900,
+    fontWeight: 700,
     display: "grid",
     placeItems: "center",
     lineHeight: "16px",
@@ -2485,7 +2481,7 @@ const Tabs = useStableComponent(Tabs__render);
             color: "#0f172a",
             textAlign: "center",
             padding: "3px 12px",
-            fontWeight: 900,
+            fontWeight: 700,
             fontSize: 11,
           }}
         >
@@ -2497,7 +2493,7 @@ const Tabs = useStableComponent(Tabs__render);
             color: "#0f172a",
             textAlign: "center",
             padding: "3px 12px",
-            fontWeight: 700,
+            fontWeight: 500,
             fontSize: 11,
             borderTop: "1px solid rgba(15,23,42,0.12)",
           }}
@@ -2545,7 +2541,7 @@ const DeadlineBanner = useStableComponent(DeadlineBanner__render);
         cursor: "pointer",
         color: "#0f172a",
         fontSize: 16,
-        fontWeight: 900,
+        fontWeight: 700,
       }}
     >
       {active ? "★" : "☆"}
@@ -2585,7 +2581,7 @@ function TxActionButton__render({
         border: "none",
         background: bg,
         color: fg,
-        fontWeight: 900,
+        fontWeight: 700,
         // ✅ Bigger +, smaller initials
         fontSize: isPlus ? 20 : 11,
         lineHeight: 1,
@@ -2701,7 +2697,7 @@ if (isOwned && !isOwnedByYou) {
 
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <div style={{ fontWeight: 500, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {p.firstName?.[0]}. {p.lastName}
               </div>
               <StatusTag player={p} />
@@ -2718,7 +2714,7 @@ if (isOwned && !isOwnedByYou) {
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 900, width: 34, textAlign: "right" }}>
+        <div style={{ fontSize: 12, fontWeight: 700, width: 34, textAlign: "right" }}>
           {metricValue(p, infoMode)}
         </div>
 
@@ -2768,7 +2764,7 @@ function shortName(p: { firstName?: string; lastName?: string } | null | undefin
 const [overId, setOverId] = useState<string | null>(null);
 
     if (!activeLeague?.id || !yourDraftTeamId) {
-      return <div style={{ ...listBox, padding: 12, fontSize: 12, fontWeight: 900, opacity: 0.8 }}>No league/team selected.</div>;
+      return <div style={{ ...listBox, padding: 12, fontSize: 12, fontWeight: 700, opacity: 0.8 }}>No league/team selected.</div>;
     }
 
   // --- Reorder support (priority) ---
@@ -2867,10 +2863,10 @@ const onDropOn = async (e: React.DragEvent, targetClaimId: string) => {
     return (
       <>
         <div style={{ ...listBox }}>
-          <div style={{ padding: "10px 10px", fontSize: 14, fontWeight: 900 }}>
+          <div style={{ padding: "10px 10px", fontSize: 14, fontWeight: 700 }}>
             Your {roundLabel(claimsWeek)} Claims
 
-            <div style={{ marginTop: 4, fontSize: 10, fontWeight: 800, opacity: 0.65 }}>
+            <div style={{ marginTop: 4, fontSize: 10, fontWeight: 600, opacity: 0.65 }}>
   Drag the handle to change claim order, wait a few seconds for the reorder to occur
 </div>
 
@@ -2881,7 +2877,7 @@ const onDropOn = async (e: React.DragEvent, targetClaimId: string) => {
     borderTop: "1px solid rgba(0,0,0,0.08)",
     borderBottom: "1px solid rgba(0,0,0,0.08)",
     fontSize: 10,
-    fontWeight: 900,
+    fontWeight: 700,
     opacity: 0.7,
     display: "grid",
     gridTemplateColumns: "44px 1fr auto",
@@ -2895,7 +2891,7 @@ const onDropOn = async (e: React.DragEvent, targetClaimId: string) => {
 </div>
 
           {yourClaims.length === 0 ? (
-            <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 800, opacity: 0.7 }}>No pending claims</div>
+            <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 600, opacity: 0.7 }}>No pending claims</div>
           ) : (
             yourClaims.map((c: any, idx: number) => {
               const addP = allPlayers.find((x) => x.id === c.addPlayerId) ?? null;
@@ -2944,7 +2940,7 @@ const dropP = allPlayers.find((x) => x.id === c.dropPlayerId) ?? null;
       placeItems: "center",
       cursor: "grab",
       userSelect: "none",
-      fontWeight: 900,
+      fontWeight: 700,
       fontSize: 20,           // bigger symbol
       lineHeight: "20px",
       opacity: 0.95,
@@ -2953,7 +2949,7 @@ const dropP = allPlayers.find((x) => x.id === c.dropPlayerId) ?? null;
     ⋮⋮
   </div>
 
-  <div style={{ fontWeight: 900, fontSize: 13, width: 18, textAlign: "center" }}>
+  <div style={{ fontWeight: 700, fontSize: 13, width: 18, textAlign: "center" }}>
     {idx + 1}
   </div>
 </div>
@@ -2962,12 +2958,12 @@ const dropP = allPlayers.find((x) => x.id === c.dropPlayerId) ?? null;
                     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
   {addP ? <JerseyTile teamCode={addP.teamCode} size={22} /> : null}
 
-  <div style={{ fontSize: 12, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+  <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
     {addP ? shortName(addP) : c.addPlayerId}
   </div>
 </div>
 
-                    <div style={{ marginTop: 2, fontSize: 10, fontWeight: 800, opacity: 0.65 }}>OUT: {dropP ? shortName(dropP) : c.dropPlayerId ?? "—"}
+                    <div style={{ marginTop: 2, fontSize: 10, fontWeight: 600, opacity: 0.65 }}>OUT: {dropP ? shortName(dropP) : c.dropPlayerId ?? "—"}
 </div>
                   </div>
 
@@ -2988,7 +2984,7 @@ const dropP = allPlayers.find((x) => x.id === c.dropPlayerId) ?? null;
                       border: "none",
                       background: "rgba(239,68,68,0.92)",
                       color: "white",
-                      fontWeight: 900,
+                      fontWeight: 700,
                       fontSize: 14,
                       cursor: "pointer",
                     }}
@@ -3082,7 +3078,7 @@ function LeagueTradeRow__render({ t }: { t: any }) {
 
   const colTitle: React.CSSProperties = {
     fontSize: 12,
-    fontWeight: 900,
+    fontWeight: 700,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
@@ -3090,7 +3086,7 @@ function LeagueTradeRow__render({ t }: { t: any }) {
 
   const item: React.CSSProperties = {
     fontSize: 10,
-    fontWeight: 800,
+    fontWeight: 600,
     opacity: 0.75,
     marginTop: 4,
     overflow: "hidden",
@@ -3345,7 +3341,7 @@ const waiverClaimsFeed = useMemo(() => {
     const miniHeader: React.CSSProperties = {
       padding: "6px 10px",
       fontSize: 10,
-      fontWeight: 900,
+      fontWeight: 700,
       opacity: 0.7,
       borderTop: "1px solid rgba(0,0,0,0.08)",
       background: "rgba(15,23,42,0.03)",
@@ -3365,7 +3361,7 @@ const waiverClaimsFeed = useMemo(() => {
       padding: "0 10px",
       borderRadius: 999,
       border: "none",
-      fontWeight: 900,
+      fontWeight: 700,
       fontSize: 12,
       cursor: "pointer",
       whiteSpace: "nowrap",
@@ -3399,16 +3395,16 @@ const waiverClaimsFeed = useMemo(() => {
 
   return (
     <div style={{ minWidth: 0 }}>
-      <div style={{ fontSize: 12, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {topLine}
       </div>
 
-      <div style={{ marginTop: 2, fontSize: 10, fontWeight: 800, opacity: 0.7 }}>
+      <div style={{ marginTop: 2, fontSize: 10, fontWeight: 600, opacity: 0.7 }}>
         Offer: {offerNames.length ? offerNames.join(", ") : "—"}
         {offerIds.length > 3 ? "…" : ""}
       </div>
 
-      <div style={{ marginTop: 2, fontSize: 10, fontWeight: 800, opacity: 0.7 }}>
+      <div style={{ marginTop: 2, fontSize: 10, fontWeight: 600, opacity: 0.7 }}>
         Request: {requestNames.length ? requestNames.join(", ") : "—"}
         {requestIds.length > 3 ? "…" : ""}
       </div>
@@ -3432,7 +3428,7 @@ const TradeSummary = useStableComponent(TradeSummary__render);
             color: "white",
             display: "grid",
             placeItems: "center",
-            fontWeight: 900,
+            fontWeight: 700,
             fontSize: 11,
           }}
         >
@@ -3475,7 +3471,7 @@ const InitialBadge = useStableComponent(InitialBadge__render);
             height: 30,
             borderRadius: 999,
             fontSize: 11,
-            fontWeight: 900,
+            fontWeight: 700,
             color,
             background: bg,
             border: "1px solid rgba(0,0,0,0.06)",
@@ -3495,7 +3491,7 @@ const StatusPill = useStableComponent(StatusPill__render);
     // (This check sits after all the hooks above: returning before them could crash the page.)
     if (!leagueId || !yourId) {
       return (
-        <div style={{ ...listBox, padding: 12, fontSize: 12, fontWeight: 900, opacity: 0.8 }}>
+        <div style={{ ...listBox, padding: 12, fontSize: 12, fontWeight: 700, opacity: 0.8 }}>
           No league/team selected.
         </div>
       );
@@ -3505,13 +3501,13 @@ const StatusPill = useStableComponent(StatusPill__render);
       <>
 {/* Which round's moves */}
 <div style={{ ...listBox, padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-  <span style={{ fontSize: 12, fontWeight: 900 }}>{txWeek == null ? "Latest moves" : `${roundLabel(txWeek)} moves`}</span>
+  <span style={{ fontSize: 12, fontWeight: 700 }}>{txWeek == null ? "Latest moves" : `${roundLabel(txWeek)} moves`}</span>
   <select
     id="tx-week"
     aria-label="Show moves from"
     value={txWeek == null ? "" : String(txWeek)}
     onChange={(e) => setTxWeek(e.target.value ? Number(e.target.value) : null)}
-    style={{ height: 30, borderRadius: 10, border: "1px solid rgba(0,0,0,0.15)", padding: "0 8px", fontSize: 12, fontWeight: 800, color: "#0f172a", background: "white" }}
+    style={{ height: 30, borderRadius: 10, border: "1px solid rgba(0,0,0,0.15)", padding: "0 8px", fontSize: 12, fontWeight: 600, color: "#0f172a", background: "white" }}
   >
     <option value="">Latest</option>
     {[...pastTxWeeks].reverse().map((w) => (
@@ -3523,7 +3519,7 @@ const StatusPill = useStableComponent(StatusPill__render);
 {/* Pending Trades FIRST (only with the latest moves) */}
 {txWeek == null ? (
 <div style={{ ...listBox, marginTop: 10 }}>
-  <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 900 }}>
+  <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 700 }}>
     Pending Trades
   </div>
 
@@ -3531,7 +3527,7 @@ const StatusPill = useStableComponent(StatusPill__render);
   <div style={miniHeader}>Trade Offers Received</div>
 
   {offersReceived.length === 0 ? (
-    <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 800, opacity: 0.7 }}>
+    <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 600, opacity: 0.7 }}>
       None.
     </div>
   ) : (
@@ -3569,7 +3565,7 @@ const StatusPill = useStableComponent(StatusPill__render);
   <div style={miniHeader}>Trade Offers Proposed</div>
 
   {offersProposed.length === 0 ? (
-    <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 800, opacity: 0.7 }}>
+    <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 600, opacity: 0.7 }}>
       None.
     </div>
   ) : (
@@ -3609,10 +3605,10 @@ const StatusPill = useStableComponent(StatusPill__render);
 
         {/* League Trades since last team selection deadline (or in the chosen round) */}
         <div style={{ ...listBox, marginTop: 10 }}>
-          <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 900 }}>League Trades</div>
+          <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 700 }}>League Trades</div>
 
           {leagueTradesSinceDeadline.length === 0 ? (
-            <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 800, opacity: 0.7 }}>None yet.</div>
+            <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 600, opacity: 0.7 }}>None yet.</div>
           ) : (
             leagueTradesSinceDeadline.map((t: any) => (
   <LeagueTradeRow key={t.id} t={t} />
@@ -3622,14 +3618,14 @@ const StatusPill = useStableComponent(StatusPill__render);
 
         {/* Waiver Claims from most recent waiver deadline */}
         <div style={{ ...listBox, marginTop: 10 }}>
-          <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 900 }}>Waiver Claims</div>
-          <div style={{ padding: "0 10px 10px", fontSize: 10, fontWeight: 900, opacity: 0.7 }}>
+          <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 700 }}>Waiver Claims</div>
+          <div style={{ padding: "0 10px 10px", fontSize: 10, fontWeight: 700, opacity: 0.7 }}>
   Your waiver priority: {waiverOrderLoaded ? yourWaiverRankText : "Loading…"}
   {waiverOrderLoaded && shieldPickText ? <div style={{ marginTop: 2 }}>{shieldPickText}</div> : null}
 </div>
 
           {waiverClaimsFeed.length === 0 ? (
-            <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 800, opacity: 0.7 }}>None.</div>
+            <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 600, opacity: 0.7 }}>None.</div>
           ) : (
             waiverClaimsFeed.map((c: any, idx: number) => {
               const addP = playerById(c.addPlayerId);
@@ -3647,15 +3643,15 @@ const StatusPill = useStableComponent(StatusPill__render);
                     alignItems: "center",
                   }}
                 >
-                  <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, textAlign: "center" }}>{idx + 1}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75, textAlign: "center" }}>{idx + 1}</div>
 
                   <InitialBadge text={userInitials(c.teamId)} teamId={c.teamId} />
 
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       IN: {addP ? shortName(addP) : c.addPlayerId}
                     </div>
-                    <div style={{ marginTop: 2, fontSize: 10, fontWeight: 800, opacity: 0.65 }}>
+                    <div style={{ marginTop: 2, fontSize: 10, fontWeight: 600, opacity: 0.65 }}>
                       OUT: {dropP ? shortName(dropP) : c.dropPlayerId ?? "—"}
                     </div>
                   </div>
@@ -3669,10 +3665,10 @@ const StatusPill = useStableComponent(StatusPill__render);
 
         {/* Free Agent Transfers from latest free agency period */}
         <div style={{ ...listBox, marginTop: 10 }}>
-          <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 900 }}>Free Agent Transfers</div>
+          <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 700 }}>Free Agent Transfers</div>
 
           {freeAgentFeed.length === 0 ? (
-            <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 800, opacity: 0.7 }}>None.</div>
+            <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 600, opacity: 0.7 }}>None.</div>
           ) : (
             freeAgentFeed.map((x: any, idx: number) => {
               const addP = playerById(x.addPlayerId);
@@ -3690,26 +3686,26 @@ const StatusPill = useStableComponent(StatusPill__render);
                     alignItems: "center",
                   }}
                 >
-                  <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, textAlign: "center" }}>{idx + 1}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75, textAlign: "center" }}>{idx + 1}</div>
 
                   <InitialBadge text={userInitials(x.teamId)} teamId={x.teamId} />
 
                   {x.addPlayerId ? (
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       IN: {addP ? shortName(addP) : x.addPlayerId}
                     </div>
-                    <div style={{ marginTop: 2, fontSize: 10, fontWeight: 800, opacity: 0.65 }}>
+                    <div style={{ marginTop: 2, fontSize: 10, fontWeight: 600, opacity: 0.65 }}>
                       OUT: {dropP ? shortName(dropP) : x.dropPlayerId ?? "—"}
                     </div>
                   </div>
                   ) : (
                   // a drop with no one added (to bring a player back from IR)
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       OUT: {dropP ? shortName(dropP) : x.dropPlayerId ?? "—"}
                     </div>
-                    <div style={{ marginTop: 2, fontSize: 10, fontWeight: 800, opacity: 0.65, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ marginTop: 2, fontSize: 10, fontWeight: 600, opacity: 0.65, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       Dropped by {teamName(x.teamId)}
                     </div>
                   </div>
@@ -3864,7 +3860,7 @@ const url =
 
           <DeadlineBanner />
 
-          <div style={{ marginTop: 10, fontSize: 18, fontWeight: 900 }}>Transactions</div>
+          <div style={{ marginTop: 10, fontSize: 18, fontWeight: 700 }}>Transactions</div>
           
         </div>
 
@@ -3892,7 +3888,7 @@ const url =
               </div>
 
               {playerPoolPlayers.length === 0 ? (
-                <div style={{ padding: 14, fontSize: 12, fontWeight: 700, opacity: 0.7 }}>No available players found.</div>
+                <div style={{ padding: 14, fontSize: 12, fontWeight: 500, opacity: 0.7 }}>No available players found.</div>
               ) : (
                 playerPoolPlayers.map((p) => <PlayerRow key={p.id} p={p} />)
               )}
@@ -3922,7 +3918,7 @@ const url =
               </div>
 
               {watchlistPlayers.length === 0 ? (
-                <div style={{ padding: 14, fontSize: 12, fontWeight: 700, opacity: 0.7 }}>No players in your watchlist yet.</div>
+                <div style={{ padding: 14, fontSize: 12, fontWeight: 500, opacity: 0.7 }}>No players in your watchlist yet.</div>
               ) : (
                 watchlistPlayers.map((p) => <PlayerRow key={p.id} p={p} />)
               )}

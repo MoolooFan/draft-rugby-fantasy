@@ -22,14 +22,14 @@ const box: React.CSSProperties = {
 const heading: React.CSSProperties = {
   padding: "6px 10px",
   fontSize: 11,
-  fontWeight: 800,
+  fontWeight: 600,
   textAlign: "center",
   background: "rgba(15,23,42,0.08)",
   borderBottom: "1px solid rgba(0,0,0,0.08)",
   letterSpacing: 0.4,
 };
 const row: React.CSSProperties = { padding: "8px 10px", borderTop: "1px solid rgba(0,0,0,0.08)", fontSize: 12 };
-const muted: React.CSSProperties = { fontSize: 11, fontWeight: 700, opacity: 0.6 };
+const muted: React.CSSProperties = { fontSize: 11, fontWeight: 500, opacity: 0.6 };
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -56,8 +56,8 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
   const name = (id: string | null | undefined) => team(id)?.name ?? "—";
   const s = data && data.leagueId === leagueId ? data.shield : null;
 
-  if (error) return <div style={{ ...box, padding: 12, fontSize: 12, fontWeight: 800 }}>{error}</div>;
-  if (!s) return <div style={{ ...box, padding: 12, fontSize: 12, fontWeight: 800, opacity: 0.7 }}>Loading…</div>;
+  if (error) return <div style={{ ...box, padding: 12, fontSize: 12, fontWeight: 600 }}>{error}</div>;
+  if (!s) return <div style={{ ...box, padding: 12, fontSize: 12, fontWeight: 600, opacity: 0.7 }}>Loading…</div>;
 
   const holder = team(s.holderTeamId);
   const shieldGames = s.events.filter((e) => e.kind !== "awarded").slice().reverse();
@@ -69,7 +69,7 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
       <div style={{ ...box, padding: 12, display: "grid", gridTemplateColumns: "auto 1fr", gap: 12, alignItems: "center" }}>
         <ShieldIcon size={64} title={s.name} />
         <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
-          <div style={{ fontSize: 16, fontWeight: 950 }}>{s.name}</div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>{s.name}</div>
           {!s.enabled ? (
             <div style={muted}>Switched off by the commissioner for now. The holder keeps it until it&apos;s back on.</div>
           ) : null}
@@ -77,7 +77,7 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                 <TeamAvatar pictureUrl={holder.pictureUrl ?? null} initials={holder.userInitials ?? holder.initials ?? ""} size={24} stars={holder.stars} />
-                <span style={{ fontSize: 13, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{holder.name}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{holder.name}</span>
               </div>
               <div style={muted}>
                 {holder.ownerName ? `${holder.ownerName} · ` : ""}
@@ -100,7 +100,7 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
           <div style={box}>
             <div style={heading}>Holder&apos;s rewards</div>
             {lines.map((l) => (
-              <div key={l} style={{ ...row, fontWeight: 800 }}>
+              <div key={l} style={{ ...row, fontWeight: 600 }}>
                 {l}
               </div>
             ))}
@@ -115,15 +115,15 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
           <div style={row}>
             {s.next ? (
               <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 8, alignItems: "center" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, fontWeight: 900, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 5, fontWeight: 700, minWidth: 0 }}>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name(s.next.homeTeamId)}</span>
                   <ShieldIcon size={16} />
                 </div>
                 <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 11, fontWeight: 900 }}>{roundLabel(s.next.week)}</div>
-                  <div style={{ fontSize: 9, fontWeight: 900, opacity: 0.6, letterSpacing: 0.5 }}>HOLDER v CHALLENGER</div>
+                  <div style={{ fontSize: 11, fontWeight: 700 }}>{roundLabel(s.next.week)}</div>
+                  <div style={{ fontSize: 9, fontWeight: 700, opacity: 0.6, letterSpacing: 0.5 }}>HOLDER v CHALLENGER</div>
                 </div>
-                <div style={{ textAlign: "right", fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name(s.next.awayTeamId)}</div>
+                <div style={{ textAlign: "right", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name(s.next.awayTeamId)}</div>
               </div>
             ) : (
               <div style={muted}>
@@ -142,12 +142,12 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
         <div style={heading}>This season</div>
         {awarded ? (
           <div style={row}>
-            <span style={{ fontWeight: 900 }}>{roundLabel(awarded.week)}:</span> {name(awarded.holderTeamId)} won it with the top score.
+            <span style={{ fontWeight: 700 }}>{roundLabel(awarded.week)}:</span> {name(awarded.holderTeamId)} won it with the top score.
           </div>
         ) : null}
         {shieldGames.map((e) => (
           <div key={`${e.week}-${e.kind}`} style={{ ...row, display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 8, alignItems: "center" }}>
-            <span style={{ fontWeight: 900, fontSize: 11 }}>{roundLabel(e.week)}</span>
+            <span style={{ fontWeight: 700, fontSize: 11 }}>{roundLabel(e.week)}</span>
             <span style={{ minWidth: 0 }}>
               {e.kind === "won" ? (
                 <>
@@ -159,7 +159,7 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
                 </>
               )}
             </span>
-            <span style={{ fontWeight: 900, fontVariantNumeric: "tabular-nums" }}>
+            <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
               {e.homeScore ?? "–"}–{e.awayScore ?? "–"}
             </span>
           </div>
@@ -170,14 +170,14 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
       {/* Every holder */}
       <div style={box}>
         <div style={heading}>Holders</div>
-        <div style={{ ...row, display: "grid", gridTemplateColumns: "1fr auto", gap: 8, fontSize: 10, fontWeight: 900, opacity: 0.6, borderTop: "none" }}>
+        <div style={{ ...row, display: "grid", gridTemplateColumns: "1fr auto", gap: 8, fontSize: 10, fontWeight: 700, opacity: 0.6, borderTop: "none" }}>
           <span>Team</span>
           <span style={{ textAlign: "right" }}>Defences</span>
         </div>
         {s.reigns.map((r, i) => (
           <div key={`${r.owner}-${r.season}-${r.fromWeek}-${i}`} style={{ ...row, display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center" }}>
             <span style={{ minWidth: 0, display: "grid", gap: 2 }}>
-              <span style={{ fontWeight: 900 }}>
+              <span style={{ fontWeight: 700 }}>
                 {r.teamName}
                 {r.endedSeason == null ? " (holder)" : ""}
               </span>
@@ -187,7 +187,7 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
                 {r.endedSeason != null ? (r.lostToTeamName ? ` · lost to ${r.lostToTeamName}, ${roundLabel(r.endedWeek ?? 1, r.endedSeason)} ${r.endedSeason}` : ` · left the league ${r.endedSeason}`) : ""}
               </span>
             </span>
-            <span style={{ fontSize: 16, fontWeight: 950, fontVariantNumeric: "tabular-nums" }}>{r.defences}</span>
+            <span style={{ fontSize: 16, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{r.defences}</span>
           </div>
         ))}
         {!s.reigns.length ? <div style={{ ...row, ...muted }}>No holders yet.</div> : null}

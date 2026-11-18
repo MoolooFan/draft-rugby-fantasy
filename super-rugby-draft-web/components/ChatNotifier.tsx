@@ -100,7 +100,7 @@ export default function ChatNotifier() {
         <ChatIcon size={18} color="white" />
       </span>
       <span style={{ minWidth: 0, display: "grid" }}>
-        <span style={{ fontSize: 12, fontWeight: 900 }}>{banner.title}</span>
+        <span style={{ fontSize: 12, fontWeight: 700 }}>{banner.title}</span>
         <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.85, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{banner.text}</span>
       </span>
     </button>

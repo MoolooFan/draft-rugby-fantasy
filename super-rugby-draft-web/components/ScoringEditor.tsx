@@ -92,8 +92,8 @@ export function ScoringEditor({
   inputStyle?: React.CSSProperties;
   labelStyle?: React.CSSProperties;
 }) {
-  const box: React.CSSProperties = { width: 72, height: 30, borderRadius: 8, border: "1px solid rgba(0,0,0,0.15)", padding: "0 6px", fontSize: 13, fontWeight: 800, textAlign: "right", ...inputStyle };
-  const label: React.CSSProperties = { fontSize: 12, fontWeight: 800, ...labelStyle };
+  const box: React.CSSProperties = { width: 72, height: 30, borderRadius: 8, border: "1px solid rgba(0,0,0,0.15)", padding: "0 6px", fontSize: 13, fontWeight: 600, textAlign: "right", ...inputStyle };
+  const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, ...labelStyle };
   const row: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 8, padding: "3px 0" };
   const field = (text: string, v: number, set: (n: number) => void, step = 0.1) => (
     <label style={row} key={text}>
