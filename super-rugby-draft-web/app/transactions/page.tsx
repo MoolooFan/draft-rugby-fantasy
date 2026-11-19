@@ -35,9 +35,9 @@ import { PoolFilterBar, matchesPoolFilters, EMPTY_FILTERS, type PoolFilters } fr
 import { positionsLabel } from "@/lib/players/positions";
 import { StatusTag } from "@/components/StatusTag";
 import { TeamAvatar } from "@/components/TeamAvatar";
-import { StatViewToggle } from "@/components/StatViewToggle";
 import { TradeReviewModal } from "@/components/TradeReviewModal";
-import { applyStatView, formatStatView, useStatView } from "@/lib/players/statView";
+import { applyStatView, formatStatView, STAT_VIEW_LABEL, useStatView } from "@/lib/players/statView";
+import { useStatSeason, useStatSeasonRows } from "@/lib/players/useStatSeason";
 import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
 
 // -----------------------
@@ -387,8 +387,9 @@ const freeAgentTransfers = useTransactionsStore(
 // -----------------------
 const livePlayersLoaded = usePlayersStore((s) => s.loaded);
 const refreshLivePlayers = usePlayersStore((s) => s.refresh);
-// season stats people browse (last season's until this season's first kickoff: lib/season statsSeasonYear)
-const roundRows = usePlayersStore((s) => s.statRows);
+// season stats people browse: the season picked in Filters (default: last season's until this
+// season's first kickoff, lib/season statsSeasonYear)
+const { rows: roundRows } = useStatSeasonRows();
 const getLivePlayerById = usePlayersStore((s) => s.getById); // keep for modal status only
 
 useEffect(() => {
@@ -1026,7 +1027,15 @@ useEffect(() => {
   | "RED_CARDS";
 
 const [infoMode, setInfoMode] = useState<InfoMode>("TOTAL_PTS");
-const [statView] = useStatView(); // C1: per game (default) / total / per 80
+const [statView] = useStatView(); // C1: per game (default) / total / per 80 (set in Filters)
+const { season: statSeasonShown, isDefault: statSeasonIsDefault } = useStatSeason();
+/** e.g. "Per game · 2026" over the list (left), when the numbers depend on the switch */
+function statViewLabelFor(mode: InfoMode): string {
+  const parts: string[] = [];
+  if (VIEW_MODES.has(mode)) parts.push(STAT_VIEW_LABEL[statView]);
+  if (!statSeasonIsDefault || VIEW_MODES.has(mode)) parts.push(String(statSeasonShown));
+  return parts.join(" · ");
+}
 // F2: this round's expected points (the league's scoring)
 const weekProj = useProjections(activeLeague?.id ?? null, "current");
 
@@ -2637,6 +2646,23 @@ function hydratePlayer(p: Player): Player & { status?: any; weeklyStatus?: any }
   };
 }
 
+// Coming from the dashboard's "+" (?addPlayerId=...): start adding that player straight away
+// (the drop / claim pop-up), as if his "+" had been tapped here. Then tidy the address.
+const addFromLink = searchParams?.get("addPlayerId") ?? null;
+const [addLinkDone, setAddLinkDone] = useState<string | null>(null);
+useEffect(() => {
+  if (!addFromLink || addLinkDone === addFromLink) return;
+  if (!activeLeague?.id || !yourDraftTeamId || !allPlayers.length) return; // wait for the page's data
+  const target = allPlayers.find((x) => x.id === addFromLink);
+  setAddLinkDone(addFromLink);
+  router.replace("/transactions");
+  if (!target) return;
+  const owner = ownerByPlayerId.get(target.id) ?? null;
+  if (owner || lockedUnownedSet.has(target.id)) return; // already taken, or locked until his game
+  guardedAdd(target.id, () => openDropModal(target));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [addFromLink, addLinkDone, activeLeague?.id, yourDraftTeamId, allPlayers, ownerByPlayerId, lockedUnownedSet]);
+
 function PlayerRow__render({ p }: { p: Player }) {
   // Ownership
   const ownerTeamId = ownerByPlayerId.get(p.id) ?? null;
@@ -3503,7 +3529,7 @@ const StatusPill = useStableComponent(StatusPill__render);
       <>
 {/* Which round's moves */}
 <div style={{ ...listBox, padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-  <span style={{ fontSize: 12, fontWeight: 700 }}>{txWeek == null ? "Latest moves" : `${roundLabel(txWeek)} moves`}</span>
+  <span style={{ fontSize: 12, fontWeight: 700 }}>Round</span>
   <select
     id="tx-week"
     aria-label="Show moves from"
@@ -3511,7 +3537,7 @@ const StatusPill = useStableComponent(StatusPill__render);
     onChange={(e) => setTxWeek(e.target.value ? Number(e.target.value) : null)}
     style={{ height: 30, borderRadius: 10, border: "1px solid rgba(0,0,0,0.15)", padding: "0 8px", fontSize: 12, fontWeight: 600, color: "#0f172a", background: "white" }}
   >
-    <option value="">Latest</option>
+    <option value="">Current</option>
     {[...pastTxWeeks].reverse().map((w) => (
       <option key={w} value={w}>{roundLabel(w)}</option>
     ))}
@@ -3881,12 +3907,18 @@ const url =
   sort={infoMode}
   setSort={(v) => setInfoMode(v as any)}
   sortOptions={SORT_OPTIONS}
+  statOptions
 />
 
             <div style={listBox}>
-              <div style={{ padding: "8px 121px 8px 10px", display: "grid", gridTemplateColumns: "auto 1fr", alignItems: "center", gap: 8 }}>
-                <StatViewToggle dark />
-                <div style={{ textAlign: "right", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>{metricLabel(infoMode)}</div>
+              {/* the column's name, right above the numbers (same layout as the rows below) */}
+              <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: "1fr 132px", gap: 10, alignItems: "center" }}>
+                <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.7 }}>{statViewLabelFor(infoMode)}</div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                  <div style={{ width: 34, display: "flex", justifyContent: "flex-end", whiteSpace: "nowrap", fontSize: 10, fontWeight: 600, opacity: 0.7 }}>{metricLabel(infoMode)}</div>
+                  <div style={{ width: 28 }} />
+                  <div style={{ width: 28 }} />
+                </div>
               </div>
 
               {playerPoolPlayers.length === 0 ? (
@@ -3911,12 +3943,18 @@ const url =
   sort={infoMode}
   setSort={(v) => setInfoMode(v as any)}
   sortOptions={SORT_OPTIONS}
+  statOptions
 />
 
             <div style={listBox}>
-              <div style={{ padding: "8px 121px 8px 10px", display: "grid", gridTemplateColumns: "auto 1fr", alignItems: "center", gap: 8 }}>
-                <StatViewToggle dark />
-                <div style={{ textAlign: "right", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>{metricLabel(infoMode)}</div>
+              {/* the column's name, right above the numbers (same layout as the rows below) */}
+              <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: "1fr 132px", gap: 10, alignItems: "center" }}>
+                <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.7 }}>{statViewLabelFor(infoMode)}</div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                  <div style={{ width: 34, display: "flex", justifyContent: "flex-end", whiteSpace: "nowrap", fontSize: 10, fontWeight: 600, opacity: 0.7 }}>{metricLabel(infoMode)}</div>
+                  <div style={{ width: 28 }} />
+                  <div style={{ width: 28 }} />
+                </div>
               </div>
 
               {watchlistPlayers.length === 0 ? (

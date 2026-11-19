@@ -9,6 +9,8 @@ import React, { useState } from "react";
 import { TEAM_OPTIONS, POSITION_OPTIONS } from "@/lib/constants";
 import { canPlayPosition } from "@/lib/players/positions";
 import { currentStatusKind } from "@/lib/status/kind";
+import { STAT_VIEWS, STAT_VIEW_LABEL, useStatView } from "@/lib/players/statView";
+import { useStatSeason } from "@/lib/players/useStatSeason";
 
 export type StatusFilter = "available" | "starting" | "sub" | "injured" | "suspended";
 
@@ -93,6 +95,7 @@ export function PoolFilterBar({
   sort,
   setSort,
   sortOptions,
+  statOptions,
 }: {
   search: string;
   setSearch: (v: string) => void;
@@ -105,8 +108,12 @@ export function PoolFilterBar({
   sort?: string;
   setSort?: (v: string) => void;
   sortOptions?: Array<{ label: string; value: string }>;
+  /** also show Per game / Total / Per 80 and the season (2026 / 2027) in the pop-up */
+  statOptions?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [statView, setStatView] = useStatView();
+  const { season, setSeason, seasons } = useStatSeason();
   const active =
     filters.teams.length +
     filters.positions.length +
@@ -194,6 +201,19 @@ export function PoolFilterBar({
                 Clear
               </button>
             </div>
+
+            {statOptions
+              ? section(
+                  "Stats shown",
+                  STAT_VIEWS.map((v) => <Chip key={v} on={statView === v} label={STAT_VIEW_LABEL[v]} onClick={() => setStatView(v)} />)
+                )
+              : null}
+            {statOptions && seasons.length > 1
+              ? section(
+                  "Season",
+                  seasons.map((y) => <Chip key={y} on={season === y} label={String(y)} onClick={() => setSeason(y)} />)
+                )
+              : null}
 
             {owners && ownerOptions?.length
               ? section(

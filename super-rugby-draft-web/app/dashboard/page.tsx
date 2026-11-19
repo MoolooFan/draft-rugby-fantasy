@@ -1770,12 +1770,6 @@ const NoLeague = useStableComponent(NoLeague__render);
           <button style={{ ...primaryButton, marginTop: 12 }} onClick={() => router.push("/matchup")}>
   View Matchup
 </button>
-          <button
-            onClick={() => setRecapsOpen(true)}
-            style={{ marginTop: 8, display: "block", marginLeft: "auto", marginRight: "auto", border: "none", background: "transparent", color: teal, fontSize: 11, fontWeight: 700, textDecoration: "underline", cursor: "pointer", opacity: 0.9 }}
-          >
-            Weekly recaps
-          </button>
 
           <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
             <button style={secondaryButton} onClick={() => router.push("/team-selection")}>

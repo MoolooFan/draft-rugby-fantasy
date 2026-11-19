@@ -8,6 +8,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { SEASONS, currentSeasonYear, fixturesByFantasyWeek, kickoffMs, roundLabel } from "@/lib/season";
+import { demo } from "@/lib/demo";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,8 @@ export async function GET(req: Request) {
     if (error) throw error;
     const rating = new Map((data as Rating[]).map((r) => [r.team, r]));
 
+    const d = demo();
+    const notYet = (f: { realRound: number }) => !!d && season === d.season && f.realRound > d.lastRealRound;
     const fixtures = fixturesByFantasyWeek(season).map((f) => {
       const home = rating.get(f.homeTeam);
       const away = rating.get(f.awayTeam);
@@ -39,9 +42,10 @@ export async function GET(req: Request) {
         kickoffMs: kickoffMs(f),
         homeTeam: f.homeTeam,
         awayTeam: f.awayTeam,
-        status: f.status === "final" ? "final" : f.status === "live" ? "live" : "scheduled",
-        homeScore: f.homeScore ?? null,
-        awayScore: f.awayScore ?? null,
+        // demo site (lib/demo.ts): games after its frozen round haven't been played yet
+        status: notYet(f) ? "scheduled" : f.status === "final" ? "final" : f.status === "live" ? "live" : "scheduled",
+        homeScore: notYet(f) ? null : f.homeScore ?? null,
+        awayScore: notYet(f) ? null : f.awayScore ?? null,
         neutralVenue: !!f.neutralVenue,
         fdrHome,
         fdrAway,

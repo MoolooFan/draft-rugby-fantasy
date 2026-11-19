@@ -1,11 +1,13 @@
 "use client";
 
+import { PER80_MIN_MINUTES } from "@/lib/players/statView";
+import { useSeasonStatRows } from "@/lib/players/useStatRows";
 import { pitchRows, rosterSize, slotAccepts, squadSlots, STANDARD_SQUAD, type SlotKind, type SquadFormat } from "@/lib/league/squad";
 import React, { useEffect, useMemo, useState } from "react";
 import { card as themeCard, muted, num } from "@/lib/ui/theme";
 import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
 import { teamOutlook } from "@/lib/projections/live";
-import { CAPTAIN_MULTIPLIER, pointsFromRow } from "@/lib/scoring";
+import { CAPTAIN_MULTIPLIER, pointsFromRow, statCountsFromRow } from "@/lib/scoring";
 
 import { AppMenu } from "@/components/AppMenu";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
@@ -14,7 +16,7 @@ import { useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
 import { useTransactionsStore } from "@/lib/transactions/store";
 
-import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/season";
+import { currentSeasonYear, fixturesByFantasyWeek, roundLabel, SEASONS } from "@/lib/season";
 
 // This season's fixtures, numbered by fantasy week (see lib/season).
 const fixturesData = fixturesByFantasyWeek();
@@ -32,7 +34,7 @@ import type { Lineup as ServerLineup } from "@/lib/scoring/week";
 import { irEligible } from "@/lib/league/ir";
 import { currentStatusText } from "@/lib/status/kind";
 
-type ViewMode = "Projected" | "Fixture" | "Latest Score" | "PPG" | "Form";
+type ViewMode = "Projected" | "Fixture" | "Latest Score" | "PPG" | "LastSeason" | "Per80" | "Form";
 
 /** Slot layout exactly as you provided */
 /** a lineup slot ("prop1", "bench2", or a custom squad's "tightfive1"...: lib/league/squad.ts) */
@@ -500,7 +502,7 @@ function calcFantasyPoints(row: any, player?: Player | null): number {
 }
 
 const statsByPlayerId = useMemo(() => {
-  const buckets = new Map<string, Array<{ r: number; pts: number }>>();
+  const buckets = new Map<string, Array<{ r: number; pts: number; mins: number }>>();
 
   for (const row of roundRows ?? []) {
     const pidRaw = rowPlayerId(row);
@@ -518,13 +520,13 @@ const statsByPlayerId = useMemo(() => {
     if (!Number.isFinite(pts)) continue;
 
     const arr = buckets.get(pid) ?? [];
-    arr.push({ r, pts });
+    arr.push({ r, pts, mins: statCountsFromRow(row).minutesPlayed ?? 0 });
     buckets.set(pid, arr);
   }
 
   const out = new Map<
     string,
-    { latest: number | null; ppg: number | null; form: number | null }
+    { latest: number | null; ppg: number | null; form: number | null; per80: number | null }
   >();
 
   for (const [pid, arr] of buckets.entries()) {
@@ -538,11 +540,39 @@ const statsByPlayerId = useMemo(() => {
     const last3 = sorted.slice(0, 3).map((x) => x.pts);
     const form = last3.length ? last3.reduce((s, x) => s + x, 0) / last3.length : null;
 
-    out.set(pid, { latest, ppg, form });
+    // points per 80 minutes (once he has 20+ minutes: lib/players/statView)
+    const mins = arr.reduce((s, x) => s + x.mins, 0);
+    const per80 = mins >= PER80_MIN_MINUTES ? (all.reduce((s, x) => s + x, 0) / mins) * 80 : null;
+
+    out.set(pid, { latest, ppg, form, per80 });
   }
 
   return out;
 }, [roundRows, sheetPlayerByPlayerId, sheetPlayerByDraftId]);
+
+// last season's match average (e.g. "2026 Average" during 2027), from that season's stat rows
+const lastSeasonYear = currentSeasonYear() - 1;
+const hasLastSeason = !!SEASONS[lastSeasonYear];
+const { rows: lastSeasonRows } = useSeasonStatRows(hasLastSeason ? lastSeasonYear : currentSeasonYear());
+const lastSeasonAvgById = useMemo(() => {
+  const out = new Map<string, number>();
+  if (!hasLastSeason) return out;
+  const sum = new Map<string, { pts: number; n: number }>();
+  for (const row of lastSeasonRows ?? []) {
+    const pidRaw = rowPlayerId(row);
+    if (!pidRaw) continue;
+    const pid = normaliseId(pidRaw);
+    const counts = statCountsFromRow(row);
+    if (!((counts.minutesPlayed ?? 0) > 0)) continue;
+    const meta = sheetPlayerByPlayerId.get(pid) ?? sheetPlayerByDraftId.get(pid) ?? null;
+    const pts = calcFantasyPoints(row, meta);
+    if (!Number.isFinite(pts)) continue;
+    const cur = sum.get(pid) ?? { pts: 0, n: 0 };
+    sum.set(pid, { pts: cur.pts + pts, n: cur.n + 1 });
+  }
+  for (const [pid, v] of sum) out.set(pid, v.pts / v.n);
+  return out;
+}, [hasLastSeason, lastSeasonRows, sheetPlayerByPlayerId, sheetPlayerByDraftId]);
 
 useEffect(() => {
   if (!roundRows?.length) return;
@@ -1158,6 +1188,17 @@ function tileSubtext(p: Player | null) {
   if (viewMode === "Latest Score") {
     const v = stats?.latest;
     return v == null ? "-" : String(v);
+  }
+
+  if (viewMode === "LastSeason") {
+    const pid = getPlayerSheetId(p);
+    const v = pid ? lastSeasonAvgById.get(pid) : undefined;
+    return v == null ? "-" : v.toFixed(1);
+  }
+
+  if (viewMode === "Per80") {
+    const v = stats?.per80;
+    return v == null ? "-" : v.toFixed(1);
   }
 
   if (viewMode === "PPG") {
@@ -1810,6 +1851,8 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     <option value="Fixture">Next Fixture</option>
     <option value="Latest Score">Latest Score</option>
     <option value="PPG">Match Average</option>
+    {hasLastSeason ? <option value="LastSeason">{lastSeasonYear} Average</option> : null}
+    <option value="Per80">Per 80</option>
     <option value="Form">Form</option>
   </select>
 

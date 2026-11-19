@@ -1,5 +1,6 @@
 "use client";
 
+import { useStatSeason } from "@/lib/players/useStatSeason";
 import { useCoachName } from "@/lib/coach/name";
 import { useEffect, useMemo, useState } from "react";
 import { getPlayerPool } from "@/lib/players/pool";
@@ -446,6 +447,7 @@ const [lastCompletedWeek, setLastCompletedWeek] = useState<number>(0);
 // Results/Stats use the stats season (last season's until this season's first kickoff); the
 // Fixtures tab always shows this season's draw.
 const [statSeason, setStatSeason] = useState<number>(() => statsSeasonYear());
+const { season: chosenStatSeason } = useStatSeason();
 const [upcomingFixtures, setUpcomingFixtures] = useState<FixtureRow[]>([]);
 const [upcomingWeeks, setUpcomingWeeks] = useState<number[]>([]);
 const [upcomingLastCompleted, setUpcomingLastCompleted] = useState<number>(0);
@@ -458,7 +460,7 @@ const [selectedRound, setSelectedRound] = useState<PlayerRound | null>(null);
   const leagueId = useLeagueStore((s) => s.activeLeagueId);
   const coachName = useCoachName();
   const tabs: PlayerCardTab[] = useMemo(
-  () => (leagueId ? ["Results", "Stats", "Fixtures", "Transactions", "AI Coach"] : ["Results", "Stats", "Fixtures", "AI Coach"]),
+  () => (leagueId ? ["Stats", "Results", "Fixtures", "Transactions", "AI Coach"] : ["Stats", "Results", "Fixtures", "AI Coach"]),
   [leagueId]
 );
 
@@ -523,7 +525,7 @@ useEffect(() => {
       setError(null);
 
       // shared with the rest of the site (lib/cachedJson): opening a card doesn't re-download them
-      const statsYear = statsSeasonYear();
+      const statsYear = chosenStatSeason; // the 2026 / 2027 switch (default: lib/season statsSeasonYear)
       const thisYear = currentSeasonYear();
       const [roundJson, fixJson, upcomingJson] = await Promise.all([
         cachedJson<any>(`/api/players/round-stats?season=${statsYear}`),
@@ -585,7 +587,7 @@ if (!cancelled) {
   return () => {
     cancelled = true;
   };
-}, [open, p.id, p.teamCode]);
+}, [open, p.id, p.teamCode, chosenStatSeason]);
 
 // Status strip: the tag, then the details (e.g. "Knee - 2 weeks", "Out - Personal reasons").
 const statusStyle = !statusK
@@ -733,28 +735,6 @@ const teamLabelFull =
               ×
             </button>
 
-            {/* Compare with another player (components/PlayerCompare.tsx, opens over this card) */}
-            <button
-              onClick={() => openCompare(p.id)}
-              aria-label={`Compare ${p.firstName} ${p.lastName} with another player`}
-              style={{
-                position: "absolute",
-                top: 12,
-                right: 40,
-                zIndex: 3,
-                height: 24,
-                padding: "0 10px",
-                borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.85)",
-                background: "rgba(15,23,42,0.35)",
-                color: "white",
-                fontSize: 11,
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              ⇄ Compare
-            </button>
 
             <div>
 
@@ -855,11 +835,6 @@ const teamLabelFull =
   label="Position Rk"
   value={rk ? String(rk.rank) : "-"}
 />
-      {statSeason !== currentSeasonYear() ? (
-        <div style={{ gridColumn: "1 / -1", textAlign: "center", fontSize: 11, fontWeight: 600, opacity: 0.92, color: "white" }}>
-          {statSeason} season stats until the {currentSeasonYear()} season starts
-        </div>
-      ) : null}
 
     </div>
   );
@@ -955,6 +930,7 @@ const teamLabelFull =
     rounds={rounds}
     gamesPlayed={computed.gamesPlayed}
     starts={computed.starts}
+    onCompare={() => openCompare(p.id)}
   />
 
 ) : tab === "Fixtures" ? (
