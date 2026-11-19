@@ -8,6 +8,7 @@
 // Run (from super-rugby-draft-web, local database running):
 //   SR_DEMO=1 npx tsx scripts/demo-league.ts --confirm=dbmzgofmjbeeskhwohuv            (copy / refresh)
 //   npx tsx scripts/demo-league.ts --confirm=dbmzgofmjbeeskhwohuv --remove             (remove it)
+//   SR_DEMO=1 npx tsx scripts/demo-league.ts --local                                   (copy into the local database)
 import fs from "node:fs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { DEMO_SETTINGS } from "../lib/demo";
@@ -38,12 +39,14 @@ async function q<T>(p: PromiseLike<{ data: T | null; error: unknown }>, what: st
 const localVars = env(".env.development.local");
 const remoteVars = env(".env.local");
 if (!/127\.0\.0\.1|localhost/.test(localVars.NEXT_PUBLIC_SUPABASE_URL)) throw new Error(".env.development.local should be the local test database");
+// --local: copy into the local database instead (to try the demo on this computer with SR_DEMO=1)
+const LOCAL = process.argv.includes("--local");
 const remoteHost = new URL(remoteVars.NEXT_PUBLIC_SUPABASE_URL).host;
 const confirm = process.argv.find((a) => a.startsWith("--confirm="))?.slice(10) ?? "";
-if (!remoteHost.startsWith(confirm) || !confirm) throw new Error(`This changes the online project ${remoteHost}. Run again with --confirm=${remoteHost.split(".")[0]}`);
-if (remoteHost.startsWith("lwgoikbsonppjafkbscz")) throw new Error("That's the OLD live database: never touch it");
+if (!LOCAL && (!remoteHost.startsWith(confirm) || !confirm)) throw new Error(`This changes the online project ${remoteHost}. Run again with --confirm=${remoteHost.split(".")[0]}`);
+if (!LOCAL && remoteHost.startsWith("lwgoikbsonppjafkbscz")) throw new Error("That's the OLD live database: never touch it");
 const src = client(localVars);
-const dst = client(remoteVars);
+const dst = LOCAL ? client(localVars) : client(remoteVars);
 
 /** Tables the demo league fills, in the order they're added (removed in reverse). */
 const TABLES = [
@@ -172,7 +175,11 @@ async function main() {
   await q(dst.from("leagues").insert(demoLeague), "leagues");
   await q(dst.from("teams").insert(demoTeams), "teams");
   const put = async (table: string, list: Array<Record<string, unknown>>) => {
-    for (let i = 0; i < list.length; i += 500) await q(dst.from(table).insert(list.slice(i, i + 500).map(remap)), table);
+    // in the same database the original rows' own ids are taken, so let it give new ones
+    // (draft_picks has text ids with no default, so those get a demo_ prefix)
+    const fresh = (r: Record<string, unknown>) =>
+      !LOCAL || !("id" in r) ? r : table === "draft_picks" ? { ...r, id: `demo_${r.id}` } : Object.fromEntries(Object.entries(r).filter(([k]) => k !== "id"));
+    for (let i = 0; i < list.length; i += 500) await q(dst.from(table).insert(list.slice(i, i + 500).map(remap).map(fresh)), table);
   };
   await put("draft_state", await rows("draft_state").catch(() => []));
   await put("draft_picks", await rows("draft_picks"));
@@ -201,7 +208,7 @@ async function main() {
     if (at) await q(dst.from("chat_messages").update({ created_at: new Date(at).toISOString() }).eq("league_id", DEMO_LEAGUE).gt("created_at", DEMO_SETTINGS.now), "chat dates");
   }
 
-  console.log(`Demo league copied to ${remoteHost}: "${demoLeague.name}" (${DEMO_LEAGUE})`);
+  console.log(`Demo league copied to ${LOCAL ? "the local database" : remoteHost}: "${demoLeague.name}" (${DEMO_LEAGUE})`);
   console.log(`  ${demoTeams.length} teams (yours: ${me.username}), ${matchups.length} games (weeks up to ${LAST_WEEK_PLAYED} played), ${selections.length} lineups`);
   console.log(`  ${faBefore.length} free agent moves, ${claimsBefore.length} waiver claims, ${tradesBefore.length} trade offers before the demo moment; ${undone} later moves undone on the rosters`);
 }
