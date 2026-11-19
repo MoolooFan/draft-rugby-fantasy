@@ -1,7 +1,10 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { card as themeCard } from "@/lib/ui/theme";
+import { card as themeCard, muted, num } from "@/lib/ui/theme";
+import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
+import { teamOutlook } from "@/lib/projections/live";
+import { CAPTAIN_MULTIPLIER, pointsFromRow } from "@/lib/scoring";
 
 import { AppMenu } from "@/components/AppMenu";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
@@ -20,7 +23,6 @@ import { getActiveUsername, getActiveTimezone } from "@/lib/session";
 import { usePlayersStore } from "@/lib/players/store";
 import { usePlayerPool } from "@/lib/players/pool";
 import { fantasyWeekToRealRound } from "@/lib/league/week";
-import { pointsFromRow } from "@/lib/scoring";
 import { playerPositions } from "@/lib/players/positions";
 import { toMs, getWeekDeadlineMs, type SheetFixtureRow, currentWeekFromSheet, pickValue } from "@/lib/league/weekHelpers";
 import { JERSEYS } from "@/lib/teams/images";
@@ -31,7 +33,7 @@ import { irEligible, IR_SPOTS } from "@/lib/league/ir";
 import { currentStatusText } from "@/lib/status/kind";
 import { ROSTER_SIZE } from "@/lib/draft/rules";
 
-type ViewMode = "Fixture" | "Latest Score" | "PPG" | "Form";
+type ViewMode = "Projected" | "Fixture" | "Latest Score" | "PPG" | "Form";
 
 /** Slot layout exactly as you provided */
 type SlotId =
@@ -697,7 +699,7 @@ const deadlineText = useMemo(() => {
 }, [mounted, selectionDeadlineMs, userTz]);
 
   // View dropdown (DEV — you said remove later)
-  const [viewMode, setViewMode] = useState<ViewMode>("Fixture");
+  const [viewMode, setViewMode] = useState<ViewMode>("Projected");
 
   // Build roster pool from draft rosters (temporary)
   const rosterPool: Player[] = useMemo(() => {
@@ -958,6 +960,31 @@ useEffect(() => {
   if (caps.viceId !== viceId) setViceId(caps.viceId);
 }, [lineup, captainId, viceId, hasLoadedSaved, pickRank]);
 
+// Expected points for the week being picked (like the matchup page): each player's, and the
+// team's total for this lineup (captain x2, auto-subs for anyone ruled out). Updates as you
+// change the team.
+const weekProj = useProjections(mounted && activeLeague?.id ? activeLeague.id : null, mounted && selectionWeek > 0 ? selectionWeek : null);
+const projReady = !!weekProj && weekProj.week === selectionWeek;
+function playerProj(p: Player | null): number | null {
+  if (!projReady || !p?.id) return null;
+  const pr = projectionFor(weekProj, p.id);
+  if (!pr) return null;
+  return p.id === captainId ? pr.pts * CAPTAIN_MULTIPLIER : pr.pts;
+}
+const teamProj = useMemo(() => {
+  if (!projReady || !Object.values(lineup).some((p) => p?.id)) return null;
+  return teamOutlook({
+    lineup: lineup as unknown as ServerLineup,
+    captainId,
+    viceId,
+    state: (id) => {
+      const pr = projectionFor(weekProj, id);
+      return pr ? { projected: pr.pts, spread: pr.spread, actual: null, minutes: 0, kickoffMs: pr.kickoffMs, ruledOut: pr.role === "out" } : null;
+    },
+    nowMs,
+  }).expected;
+}, [projReady, weekProj, lineup, captainId, viceId, nowMs]);
+
 function hydratePlayer(p: Player): Player & { status?: any; weeklyStatus?: any } {
   const live = getLivePlayerById(p.id);
   if (!live) return p as any;
@@ -1200,6 +1227,11 @@ function getUpcomingFixtureTag(teamCodeOrName: string) {
 function tileSubtext(p: Player | null) {
   
   if (!p) return "";
+
+  if (viewMode === "Projected") {
+    const v = playerProj(p);
+    return v == null ? "-" : `Proj ${formatProjection(v)}`;
+  }
 
   if (viewMode === "Fixture") return getUpcomingFixtureTag(p.teamCode);
 
@@ -1837,8 +1869,14 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     {deadlineText}
   </div>
 </div>
-<div style={{ marginTop: 10, fontSize: 18, fontWeight: 700 }}>
-  Team Selection
+<div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10 }}>
+  <div style={{ fontSize: 18, fontWeight: 700 }}>Team Selection</div>
+  {teamProj != null ? (
+    <div style={{ textAlign: "right", lineHeight: 1 }} title="Expected points for this lineup">
+      <div style={{ ...num, fontSize: 22, fontWeight: 600 }}>{formatProjection(teamProj)}</div>
+      <div style={{ fontSize: 10, fontWeight: 500, color: muted, marginTop: 2 }}>Projected</div>
+    </div>
+  ) : null}
 </div>
 
         </div>
@@ -1871,6 +1909,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     }}
     title="DEV: view mode"
   >
+    <option value="Projected">Projected</option>
     <option value="Fixture">Next Fixture</option>
     <option value="Latest Score">Latest Score</option>
     <option value="PPG">Match Average</option>

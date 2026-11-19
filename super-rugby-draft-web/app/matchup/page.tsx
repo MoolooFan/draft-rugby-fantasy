@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { card as themeCard } from "@/lib/ui/theme";
+import { card as themeCard, muted, num } from "@/lib/ui/theme";
 import { useRouter } from "next/navigation";
 
 import { getActiveUsername } from "@/lib/session";
@@ -1758,8 +1758,8 @@ return (
   {/* Left total pulled inward */}
   <div style={{ display: "flex", justifyContent: "flex-end", paddingRight: 20 }}>
     <div style={{ textAlign: "right" }}>
-      <div style={{ fontSize: 26, fontWeight: 700 }}>{leftScore}</div>
-      {leftOutlook ? <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.55 }}>Proj {formatProjection(leftOutlook.expected)}</div> : null}
+      <div style={{ ...num, fontSize: 34, fontWeight: 600, lineHeight: 1 }}>{leftScore}</div>
+      {leftOutlook ? <div style={{ ...num, fontSize: 14, fontWeight: 500, color: muted, marginTop: 3 }} title="Expected points">Proj {formatProjection(leftOutlook.expected)}</div> : null}
     </div>
   </div>
 
@@ -1777,8 +1777,8 @@ return (
   {/* Right total pulled inward */}
   <div style={{ display: "flex", justifyContent: "flex-start", paddingLeft: 20 }}>
     <div style={{ textAlign: "left" }}>
-      <div style={{ fontSize: 26, fontWeight: 700 }}>{rightScore}</div>
-      {rightOutlook ? <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.55 }}>Proj {formatProjection(rightOutlook.expected)}</div> : null}
+      <div style={{ ...num, fontSize: 34, fontWeight: 600, lineHeight: 1 }}>{rightScore}</div>
+      {rightOutlook ? <div style={{ ...num, fontSize: 14, fontWeight: 500, color: muted, marginTop: 3 }} title="Expected points">Proj {formatProjection(rightOutlook.expected)}</div> : null}
     </div>
   </div>
 </div>
@@ -1890,16 +1890,17 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
     onClick={() => lp && openPointsBreakdown(lp, leftTeamId === yourLeagueTeamId, "left")
 }
     style={{
-      minWidth: 30,
-      height: 18,
+      minWidth: 32,
+      height: 20,
       padding: "0 6px",
       borderRadius: 999,
       background: pillBg,
       border: pillBorder,
       display: "grid",
       placeItems: "center",
-      fontSize: 11,
-      fontWeight: 700,
+      ...num,
+      fontSize: 13,
+      fontWeight: 600,
       color: pillColor,
       cursor: lp ? "pointer" : "default",
     }}
@@ -1916,7 +1917,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 );
 
 })()}
-{projText(lp, leftC) ? <div style={{ fontSize: 9, fontWeight: 600, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(lp, leftC)}</div> : null}
+{projText(lp, leftC) ? <div style={{ ...num, fontSize: 12, fontWeight: 500, color: muted, lineHeight: "14px" }} title="Expected points">{projText(lp, leftC)}</div> : null}
 
 </div>
 
@@ -1948,16 +1949,17 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
   onClick={() => rp && openPointsBreakdown(rp, rightTeamId === yourLeagueTeamId, "right")
 }
   style={{
-    minWidth: 30,
-    height: 18,
+    minWidth: 32,
+    height: 20,
     padding: "0 6px",
     borderRadius: 999,
     background: pillBg,
     border: pillBorder,
     display: "grid",
     placeItems: "center",
-    fontSize: 11,
-    fontWeight: 700,
+    ...num,
+    fontSize: 13,
+    fontWeight: 600,
     color: pillColor,
     cursor: rp ? "pointer" : "default",
   }}
@@ -1974,7 +1976,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
     </div>
   );
 })()}
-{projText(rp, rightC) ? <div style={{ fontSize: 9, fontWeight: 600, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(rp, rightC)}</div> : null}
+{projText(rp, rightC) ? <div style={{ ...num, fontSize: 12, fontWeight: 500, color: muted, lineHeight: "14px" }} title="Expected points">{projText(rp, rightC)}</div> : null}
 
 </div>
 
@@ -2148,15 +2150,16 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
   onClick={() => lp && openPointsBreakdown(lp, leftTeamId === yourLeagueTeamId, "left")
 }
   style={{
-    minWidth: 30,
-    height: 18,
+    minWidth: 32,
+    height: 20,
     padding: "0 6px",
     borderRadius: 999,
     background: "rgba(15,23,42,0.08)",
     display: "grid",
     placeItems: "center",
-    fontSize: 11,
-    fontWeight: 700,
+    ...num,
+    fontSize: 13,
+    fontWeight: 600,
     color: "#0f172a",
     cursor: lp ? "pointer" : "default",
   }}
@@ -2164,7 +2167,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 >
   {lp?.id ? (hasScoreForPlayer(lp) ? pointsWithCaptain(lp, leftEffC) : "-") : "—"}
 </div>
-{projText(lp, null) ? <div style={{ fontSize: 9, fontWeight: 600, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(lp, null)}</div> : null}
+{projText(lp, null) ? <div style={{ ...num, fontSize: 12, fontWeight: 500, color: muted, lineHeight: "14px" }} title="Expected points">{projText(lp, null)}</div> : null}
 
           
         </div>
@@ -2195,15 +2198,16 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
   onClick={() => rp && openPointsBreakdown(rp, rightTeamId === yourLeagueTeamId, "right")
 }
   style={{
-    minWidth: 30,
-    height: 18,
+    minWidth: 32,
+    height: 20,
     padding: "0 6px",
     borderRadius: 999,
     background: "rgba(15,23,42,0.08)",
     display: "grid",
     placeItems: "center",
-    fontSize: 11,
-    fontWeight: 700,
+    ...num,
+    fontSize: 13,
+    fontWeight: 600,
     color: "#0f172a",
     cursor: rp ? "pointer" : "default",
   }}
@@ -2211,7 +2215,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 >
   {rp?.id ? (hasScoreForPlayer(rp) ? pointsWithCaptain(rp, rightEffC) : "-") : "—"}
 </div>
-{projText(rp, null) ? <div style={{ fontSize: 9, fontWeight: 600, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(rp, null)}</div> : null}
+{projText(rp, null) ? <div style={{ ...num, fontSize: 12, fontWeight: 500, color: muted, lineHeight: "14px" }} title="Expected points">{projText(rp, null)}</div> : null}
 
         </div>
 
