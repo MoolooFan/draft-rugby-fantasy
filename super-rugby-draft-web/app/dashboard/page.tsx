@@ -38,6 +38,8 @@ import { formatProjection, useProjections } from "@/lib/projections/useProjectio
 import { teamOutlook, winProbability } from "@/lib/projections/live";
 import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
 import { ladderOrder, tieBreakHolder } from "@/lib/league/ladder";
+import { MovementCircle } from "@/components/MovementCircle";
+import type { PowerTable } from "@/lib/league/powerServer";
 
 type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null } | null;
 
@@ -1226,6 +1228,24 @@ const myLineupCheck = useMemo(() => {
   );
 }, [seasonOver, yourLeagueTeamId, upcomingProj, upcomingSel, upcomingWeekNo, activeLeague?.squadFormat]);
 
+  // Before the league's first round kicks off, the dashboard shows the power rankings instead of
+  // the standings (Ethan, 20 Nov 2026: the standings are all 0 until then)
+  const [power, setPower] = useState<{ leagueId: string; table: PowerTable } | null>(null);
+  useEffect(() => {
+    if (!activeLeagueId) return;
+    let cancelled = false;
+    fetch(`/api/leagues/power?leagueId=${encodeURIComponent(activeLeagueId)}`, { cache: "no-store", credentials: "include" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (!cancelled && j?.ok) setPower({ leagueId: activeLeagueId, table: j.power as PowerTable });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLeagueId]);
+  const preseasonPower = power && power.leagueId === activeLeagueId && power.table.simulated && !power.table.started ? power.table : null;
+
   // -----------------------
 // Standings (LIVE from sheetFixtures + activeLeague teams)
 // -----------------------
@@ -1548,42 +1568,6 @@ const iconGlyphStyle: React.CSSProperties = {
   display: "block",
 };
 
-  function MovementCircle__render({ movement }: { movement: Movement }) {
-  const isUp = movement === "up";
-  const isDown = movement === "down";
-  const isSame = movement === "same";
-
-  const bg = isUp ? "#22C55E" : isDown ? "#EF4444" : "#cbd5e1";
-  const symbol = isUp ? "▲" : isDown ? "▼" : "=";
-
-  return (
-    <span
-      style={{
-        width: 20,
-        height: 20,
-        borderRadius: 999,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: bg,
-        color: "white",
-        fontWeight: 700,
-        fontSize: isSame ? 12 : 11,
-        lineHeight: "12px",
-      }}
-    >
-      <span
-        style={{
-          display: "block",
-          transform: isDown ? "translateY(1px)" : "translateY(0)",
-        }}
-      >
-        {symbol}
-      </span>
-    </span>
-  );
-}
-const MovementCircle = useStableComponent(MovementCircle__render);
 
 const JERSEYS: Record<string, { angle?: string; front?: string; single?: string }> = {
   BLU: { angle: "/images/jerseys/BLUJerseyAngle.webp", front: "/images/jerseys/BLUJerseyFront.webp" },
@@ -1915,7 +1899,7 @@ const NoLeague = useStableComponent(NoLeague__render);
           ) : null}
         </div>
 
-        <StandingsCard />
+        {preseasonPower ? <PowerCard /> : <StandingsCard />}
 
         {/* Player of the week */}
         <div style={cardStyle}>
@@ -2245,7 +2229,7 @@ const ScoreBlock = useStableComponent(ScoreBlock__render);
             >
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ width: 16, textAlign: "right", fontWeight: 700 }}>{r.rank}</span>
-                <MovementCircle movement={r.movement} />
+                <MovementCircle movement={r.movement} size={20} />
               </div>
 
               <div style={{ fontWeight: 600 }}>{r.team}</div>
@@ -2276,6 +2260,47 @@ const ScoreBlock = useStableComponent(ScoreBlock__render);
     );
   }
 const StandingsCard = useStableComponent(StandingsCard__render);
+
+  // The power rankings, in the standings' place until round 1 kicks off
+  function PowerCard__render() {
+    const rows = preseasonPower?.rows ?? [];
+    return (
+      <div style={cardStyle}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
+          <div style={{ fontWeight: 700, fontSize: 12, minWidth: 0 }}>{leagueName}</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: teal, whiteSpace: "nowrap", flexShrink: 0 }}>Power Rankings</div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "56px 1fr", gap: 8, fontSize: 11, fontWeight: 700, opacity: 0.9, padding: "0 6px 6px 6px" }}>
+          <div>Rank</div>
+          <div>Team</div>
+        </div>
+        <div style={{ display: "grid", gap: 6 }}>
+          {rows.map((r) => {
+            const t = (activeLeague?.teams ?? []).find((x) => x.id === r.teamId);
+            return (
+              <div
+                key={r.teamId}
+                style={{ display: "grid", gridTemplateColumns: "56px 1fr", gap: 8, alignItems: "center", borderRadius: 10, background: "#f6f8fa", border: "1px solid #e5e9ef", padding: "6px 6px", fontSize: 12 }}
+              >
+                <span style={{ width: 16, textAlign: "right", fontWeight: 700 }}>{r.rank}</span>
+                <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{t?.name ?? "—"}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 500, color: "#64748b" }}>The standings start after the first round.</span>
+          <button
+            onClick={() => router.push("/league?tab=Power")}
+            style={{ background: "transparent", border: "none", color: teal, fontSize: 11, fontWeight: 600, textDecoration: "underline", cursor: "pointer", padding: 0, whiteSpace: "nowrap" }}
+          >
+            View Power Rankings
+          </button>
+        </div>
+      </div>
+    );
+  }
+const PowerCard = useStableComponent(PowerCard__render);
 
   // -----------------------
   // Render

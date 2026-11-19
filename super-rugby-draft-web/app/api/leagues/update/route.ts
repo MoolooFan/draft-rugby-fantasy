@@ -4,7 +4,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
 import { cleanScoringRules } from "@/lib/scoring/validate";
 import { getSystemRules } from "@/lib/scoring/leagueRules";
-import { cleanShieldName, cleanShieldRewards } from "@/lib/league/shield";
+import { cleanShieldName, cleanShieldRewards, cleanShieldStart } from "@/lib/league/shield";
+import { getSeason, SEASONS, weekFirstKickoffMs } from "@/lib/season";
 import { anyBonus, cleanBonusRules } from "@/lib/league/bonus";
 import { syncShieldRewards } from "@/lib/league/shieldServer";
 
@@ -108,6 +109,29 @@ export async function POST(req: Request) {
   }
   if ("shieldName" in patch) dbPatch.shield_name = cleanShieldName(patch.shieldName);
   if ("shieldRewards" in patch) dbPatch.shield_rewards = cleanShieldRewards(patch.shieldRewards);
+  // How the Shield is first given out (top score / drawn at random / picked): until the league's
+  // first round kicks off. The settings send it on every save, so an unchanged one is ignored.
+  if ("shieldStart" in patch) {
+    const want = cleanShieldStart(patch.shieldStart);
+    const { data: cur, error: cErr } = await supabaseAdmin.from("leagues").select("shield_start, season, first_week").eq("id", leagueId).maybeSingle();
+    if (cErr) return NextResponse.json({ ok: false, error: cErr.message }, { status: 500 });
+    const now = cleanShieldStart(cur?.shield_start);
+    const unchanged = want.method === now.method && (want.method !== "chosen" || want.teamId === now.teamId);
+    if (!unchanged) {
+      const season = SEASONS[Number(cur?.season)] ? getSeason(Number(cur?.season)) : null;
+      const firstWeek = Number(cur?.first_week);
+      if (season && firstWeek > 0 && Date.now() >= weekFirstKickoffMs(season, firstWeek)) {
+        return NextResponse.json({ ok: false, error: "The Shield's first holder can't change once the first round has kicked off" }, { status: 403 });
+      }
+      if (want.method === "chosen") {
+        if (!want.teamId) return NextResponse.json({ ok: false, error: "Pick the team that starts with the Shield" }, { status: 400 });
+        const { data: t } = await supabaseAdmin.from("teams").select("id").eq("league_id", leagueId).eq("id", want.teamId).maybeSingle();
+        if (!t) return NextResponse.json({ ok: false, error: "That team isn't in this league" }, { status: 400 });
+      }
+      // random: drawn once the draft finishes (lib/league/shieldServer.ts)
+      dbPatch.shield_start = want.method === "top_score" ? {} : { method: want.method, teamId: want.method === "chosen" ? want.teamId : null };
+    }
+  }
   if ("squadFormat" in patch) {
     const squad = cleanSquadFormat(patch.squadFormat ?? null);
     if (squad.error) return NextResponse.json({ ok: false, error: squad.error }, { status: 400 });
@@ -129,8 +153,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 });
   }
 
-  // switching the Shield off / on changes who held it when: refresh its ladder rewards
-  if ("shieldEnabled" in dbPatch || "shield_rewards" in dbPatch) {
+  // switching the Shield off / on (or who starts with it) changes who held it when: refresh its
+  // ladder rewards (and draw it, if it's drawn at random and the draft has finished)
+  if ("shieldEnabled" in dbPatch || "shield_rewards" in dbPatch || "shield_start" in dbPatch) {
     try {
       await syncShieldRewards(supabaseAdmin, leagueId);
     } catch (e) {

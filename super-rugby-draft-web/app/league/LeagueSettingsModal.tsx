@@ -5,9 +5,10 @@ import { SquadFormatFields } from "@/components/SquadFormatFields";
 import { STANDARD_SQUAD, starterCount, type SquadFormat } from "@/lib/league/squad";
 import { LeagueStakesSection } from "@/components/LeagueStakes";
 import { ShieldRewardsFields } from "@/components/ShieldRewardsFields";
+import { ShieldStartFields } from "@/components/ShieldStartFields";
 import { BonusPointsFields } from "@/components/BonusPointsFields";
 import { cleanBonusRules, type BonusRules } from "@/lib/league/bonus";
-import { NO_SHIELD_REWARDS, type ShieldRewards } from "@/lib/league/shield";
+import { DEFAULT_SHIELD_START, NO_SHIELD_REWARDS, type ShieldRewards, type ShieldStart } from "@/lib/league/shield";
 import React, { useEffect, useState } from "react";
 
 import type { League, PlayoffFormat } from "@/lib/league/types";
@@ -62,6 +63,8 @@ const computedSeasonWeeks = computedRegularWeeks + selectedPlayoffWeeks;
   const [shieldEnabled, setShieldEnabled] = useState<boolean>(league.shieldEnabled !== false);
   const [shieldName, setShieldName] = useState<string>(league.shieldName ?? "The Shield");
   const [shieldRewards, setShieldRewards] = useState<ShieldRewards>(league.shieldRewards ?? NO_SHIELD_REWARDS);
+  const [shieldStart, setShieldStart] = useState<ShieldStart>(league.shield?.start ?? DEFAULT_SHIELD_START);
+  const shieldStartLocked = !!league.shield?.startLocked;
   const [customRules, setCustomRules] = useState<ScoringRules>(() =>
     // Custom starts from the league's current values (e.g. Alternate), so switching keeps them
     completeRules((league.scoringCustom as Partial<ScoringRules> | null) ?? (league.scoringRules as Partial<ScoringRules> | undefined) ?? STANDARD_SCORING)
@@ -181,6 +184,18 @@ setDraftOrderIds((prev) => {
   <input aria-label="Shield name" disabled={readOnly} value={shieldName} onChange={(e) => setShieldName(e.target.value)} placeholder="The Shield" style={{ ...inputStyle(), marginTop: 6 }} />
 ) : null}
 <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.75, marginTop: 4 }}>The name always ends in &quot;Shield&quot;. Can be changed any time.</div>
+{shieldEnabled ? (
+  <div style={{ marginTop: 8 }}>
+    <ShieldStartFields
+      value={shieldStart}
+      onChange={setShieldStart}
+      teams={league.teams.map((t) => ({ id: t.id, name: t.name }))}
+      disabled={readOnly}
+      locked={shieldStartLocked}
+      carriedOver={!!league.shield?.carriedOver}
+    />
+  </div>
+) : null}
 <div style={{ marginTop: 8 }}>
   <ShieldRewardsFields value={shieldRewards} onChange={setShieldRewards} disabled={settingsLocked} />
 </div>
@@ -327,6 +342,7 @@ scoringSystem,
 shieldEnabled,
 shieldName,
 ...(!draftStarted ? { shieldRewards } : {}),
+...(!shieldStartLocked ? { shieldStart } : {}),
 ...(scoringSystem === "custom" ? { scoringCustom: customRules } : {}),
 });
 

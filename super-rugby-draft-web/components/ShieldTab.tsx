@@ -62,6 +62,9 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
   const holder = team(s.holderTeamId);
   const shieldGames = s.events.filter((e) => e.kind !== "awarded").slice().reverse();
   const awarded = s.events.find((e) => e.kind === "awarded");
+  // drawn at random / picked by the commissioner before the season (no "awarded" game)
+  const started = s.reigns.find((r) => r.leagueId === leagueId && (r.how === "drawn" || r.how === "chosen")) ?? null;
+  const drawPending = s.start?.method === "random" && !s.start.teamId && !s.carriedOver;
 
   return (
     <div>
@@ -88,7 +91,11 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
           ) : s.holder ? (
             <div style={muted}>Held by {s.holder.teamName}, who isn&apos;t in this league.</div>
           ) : (
-            <div style={muted}>Not won yet: it goes to the highest score in the first round (most tries if level).</div>
+            <div style={muted}>
+              {drawPending
+                ? "Not drawn yet: it's drawn at random once the draft finishes, and the team holds it from round 1."
+                : "Not won yet: it goes to the highest score in the first round (most tries if level)."}
+            </div>
           )}
         </div>
       </div>
@@ -127,7 +134,7 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
               </div>
             ) : (
               <div style={muted}>
-                {holder ? "The holder has no home games left in the regular season. It's not on the line in the finals." : "Decided after the first round."}
+                {holder ? "The holder has no home games left in the regular season. It's not on the line in the finals." : drawPending ? "Drawn once the draft finishes." : "Decided after the first round."}
               </div>
             )}
           </div>
@@ -140,6 +147,12 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
       {/* This season */}
       <div style={box}>
         <div style={heading}>This season</div>
+        {started ? (
+          <div style={row}>
+            <span style={{ fontWeight: 700 }}>Before {roundLabel(started.fromWeek)}:</span> {started.teamName}{" "}
+            {started.how === "drawn" ? "was drawn at random to start the season with it." : "was picked by the commissioner to start the season with it."}
+          </div>
+        ) : null}
         {awarded ? (
           <div style={row}>
             <span style={{ fontWeight: 700 }}>{roundLabel(awarded.week)}:</span> {name(awarded.holderTeamId)} won it with the top score.
@@ -182,7 +195,7 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
                 {r.endedSeason == null ? " (holder)" : ""}
               </span>
               <span style={muted}>
-                {r.how === "won" ? `Won off ${r.wonFromTeamName ?? "the holder"}` : r.how === "handed_back" ? "Handed back (the holder left)" : r.how === "reawarded" ? "Awarded again (top score)" : "First holder (top score)"}
+                {r.how === "won" ? `Won off ${r.wonFromTeamName ?? "the holder"}` : r.how === "handed_back" ? "Handed back (the holder left)" : r.how === "reawarded" ? "Awarded again (top score)" : r.how === "drawn" ? "Drawn at random to start the season" : r.how === "chosen" ? "Picked by the commissioner to start the season" : "First holder (top score)"}
                 {` · ${roundLabel(r.fromWeek, r.season)} ${r.season}`}
                 {r.endedSeason != null ? (r.lostToTeamName ? ` · lost to ${r.lostToTeamName}, ${roundLabel(r.endedWeek ?? 1, r.endedSeason)} ${r.endedSeason}` : ` · left the league ${r.endedSeason}`) : ""}
               </span>

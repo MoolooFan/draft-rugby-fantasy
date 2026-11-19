@@ -628,7 +628,8 @@ const WeekList = useStableComponent(WeekList__render);
                   textAlign: "center",
                 }}
               >
-                Wk {w}
+                {/* the Super Rugby round(s), as everywhere else: "R10/11" for 2027's combined week */}
+                {roundLabel(w).replace(/^Round /, "R")}
               </div>
             ))}
 
