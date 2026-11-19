@@ -29,6 +29,7 @@ import { TeamAvatar } from "@/components/TeamAvatar";
 import { ShieldIcon } from "@/components/AwardIcons";
 import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
 import { teamOutlook, winProbability, type PlayerWeekState } from "@/lib/projections/live";
+import { irIdsOf } from "@/lib/league/ir";
 import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
 
 
@@ -1553,13 +1554,20 @@ return (
 
   
 
-  const BENCH_ROWS: Array<{ slot: SlotId; label: string }> = [
+  const BENCH_ROWS: Array<{ slot: SlotId; label: string; ir?: boolean }> = [
   { slot: "bench1", label: "1" },
   { slot: "bench2", label: "2" },
   { slot: "bench3", label: "3" },
   { slot: "bench4", label: "4" },
   { slot: "bench5", label: "5" },
+  // the team's injury reserve player (as the roster is now; IR players don't score)
+  { slot: "bench5", label: "IR", ir: true },
 ];
+  const irPlayerOf = (teamId: string | null): Player | null => {
+    const id = teamId ? irIdsOf(rosterByTeamId.get(teamId))[0] : undefined;
+    if (!id) return null;
+    return (sheetPlayers.find((x) => String(x.id) === id) as unknown as Player | undefined) ?? null;
+  };
 
   const canGo = matchupsThisWeek.length > 1;
 
@@ -2063,8 +2071,8 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
           </div>
 
           {BENCH_ROWS.map((r) => {
-  const lp = effectiveLeftLineup ? effectiveLeftLineup[r.slot] : null;
-const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
+  const lp = r.ir ? irPlayerOf(leftTeamId) : effectiveLeftLineup ? effectiveLeftLineup[r.slot] : null;
+const rp = r.ir ? irPlayerOf(rightTeamId) : effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 
   // (captain/vice badges technically don’t apply on bench, but leaving the logic harmless)
   const lIsC = !!lp?.id && leftC === lp.id;
@@ -2074,7 +2082,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 
   return (
     <div
-      key={r.slot}
+      key={r.ir ? "ir" : r.slot}
       style={{
         display: "grid",
         gridTemplateColumns: "1fr 34px 1fr",
@@ -2166,16 +2174,16 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
   }}
   title={lIsC ? `Captain x${CAP_MULT}` : "Player points"}
 >
-  {lp?.id ? (hasScoreForPlayer(lp) ? pointsWithCaptain(lp, leftEffC) : "-") : "—"}
+  {r.ir ? (lp?.id ? "-" : "—") : lp?.id ? (hasScoreForPlayer(lp) ? pointsWithCaptain(lp, leftEffC) : "-") : "—"}
 </div>
-{projText(lp, null) ? <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(lp, null)}</div> : null}
+{!r.ir && projText(lp, null) ? <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(lp, null)}</div> : null}
 
           
         </div>
       </div>
 
-      {/* Middle bench number (1–5) */}
-      <div style={{ textAlign: "center", fontSize: 11, fontWeight: 900, opacity: 0.7 }}>
+      {/* Middle bench number (1–5), or IR */}
+      <div style={{ textAlign: "center", fontSize: 11, fontWeight: 900, opacity: r.ir ? 1 : 0.7, color: r.ir ? "#dc2626" : undefined }}>
         {r.label}
       </div>
 
@@ -2213,9 +2221,9 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
   }}
   title={rIsC ? `Captain x${CAP_MULT}` : "Player points"}
 >
-  {rp?.id ? (hasScoreForPlayer(rp) ? pointsWithCaptain(rp, rightEffC) : "-") : "—"}
+  {r.ir ? (rp?.id ? "-" : "—") : rp?.id ? (hasScoreForPlayer(rp) ? pointsWithCaptain(rp, rightEffC) : "-") : "—"}
 </div>
-{projText(rp, null) ? <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(rp, null)}</div> : null}
+{!r.ir && projText(rp, null) ? <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.5, lineHeight: "10px" }} title="Expected points">{projText(rp, null)}</div> : null}
 
         </div>
 

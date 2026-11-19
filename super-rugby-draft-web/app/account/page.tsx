@@ -2,6 +2,8 @@
 
 // Account page (plan item E1): switch team, change password, notification settings, log out.
 
+import { useCoachName, useCoachNameStore } from "@/lib/coach/name";
+import { COACH_NAME_MAX, DEFAULT_COACH_NAME } from "@/lib/coach/nameRules";
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -109,6 +111,34 @@ export default function AccountPage() {
       setPwMsg({ kind: "err", text: "Couldn't change your password. Please try again." });
     } finally {
       setPwBusy(false);
+    }
+  }
+
+  // ---- the AI coach's name ----
+  const coachName = useCoachName();
+  const setCoachNameInStore = useCoachNameStore((s) => s.set);
+  const [coachDraft, setCoachDraft] = useState<string | null>(null);
+  const [coachBusy, setCoachBusy] = useState(false);
+  const [coachMsg, setCoachMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  async function saveCoachName() {
+    setCoachBusy(true);
+    setCoachMsg(null);
+    try {
+      const res = await fetch("/api/account/coach-name", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name: coachDraft ?? coachName }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!j?.ok) throw new Error(j?.error);
+      setCoachNameInStore(j.name);
+      setCoachDraft(null);
+      setCoachMsg({ kind: "ok", text: j.name ? `Your coach is now ${j.name}.` : `Back to ${DEFAULT_COACH_NAME}.` });
+    } catch {
+      setCoachMsg({ kind: "err", text: "Couldn't save that. Please try again." });
+    } finally {
+      setCoachBusy(false);
     }
   }
 
@@ -238,6 +268,27 @@ export default function AccountPage() {
               {pwBusy ? "Changing…" : "Change password"}
             </button>
             {pwMsg ? <div style={note(pwMsg.kind)}>{pwMsg.text}</div> : null}
+          </div>
+
+          {/* AI assistant coach's name */}
+          <div style={cardStyle}>
+            <div style={sectionTitle}>Your AI assistant coach</div>
+            <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.9, marginBottom: 8 }}>
+              Give your coach a name. It shows on player cards and in Coach News (only you see it).
+            </div>
+            <input
+              id="coach-name"
+              value={coachDraft ?? (coachName === DEFAULT_COACH_NAME ? "" : coachName)}
+              onChange={(e) => setCoachDraft(e.target.value)}
+              placeholder={DEFAULT_COACH_NAME}
+              maxLength={COACH_NAME_MAX}
+              style={inputStyle}
+              aria-label="Coach name"
+            />
+            <button onClick={saveCoachName} disabled={coachBusy || coachDraft == null} style={{ ...primaryButton, marginTop: 10, opacity: coachBusy || coachDraft == null ? 0.6 : 1 }}>
+              {coachBusy ? "Saving…" : "Save name"}
+            </button>
+            {coachMsg ? <div style={note(coachMsg.kind)}>{coachMsg.text}</div> : null}
           </div>
 
           {/* Notifications */}

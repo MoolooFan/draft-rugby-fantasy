@@ -4,6 +4,8 @@
 // (lib/coach). Tap one to open the player's card on the AI Coach tab.
 import React, { useEffect, useState } from "react";
 import { VerdictChip } from "@/components/playerCard/HistoryTab";
+import { useCoachName } from "@/lib/coach/name";
+import { DEFAULT_COACH_NAME } from "@/lib/coach/nameRules";
 
 type FeedNote = { id: string; player_id: string; kind: string; headline: string; verdict: string | null; created_at: string };
 
@@ -26,6 +28,7 @@ export function CoachFeed({
   onOpen: (playerId: string) => void;
   style?: React.CSSProperties;
 }) {
+  const coachName = useCoachName();
   const [data, setData] = useState<{ leagueId: string; notes: FeedNote[] } | null>(null);
   const [more, setMore] = useState(false);
 
@@ -46,7 +49,7 @@ export function CoachFeed({
 
   return (
     <div style={style}>
-      <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Coach News · your players</div>
+      <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 8 }}>{coachName === DEFAULT_COACH_NAME ? "Coach News" : `${coachName}\u2019s News`} · your players</div>
       <div style={{ display: "grid", gap: 6 }}>
         {shown.map((n) => (
           <button

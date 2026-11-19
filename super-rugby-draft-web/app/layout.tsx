@@ -16,6 +16,8 @@ import { demo, demoClockSource } from "@/lib/demo";
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // stops iPhones zooming in when a text box is tapped (Ethan, 19 Nov 2026)
+  maximumScale: 1,
   viewportFit: "cover", // ensures full-screen on iOS (no black bars)
   themeColor: "#0f172a",
 };

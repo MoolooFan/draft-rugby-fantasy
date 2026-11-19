@@ -1,5 +1,6 @@
 "use client";
 
+import { WatchEyeIcon } from "@/components/WatchEyeIcon";
 import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -2548,7 +2549,7 @@ const DeadlineBanner = useStableComponent(DeadlineBanner__render);
         fontWeight: 900,
       }}
     >
-      {active ? "★" : "☆"}
+      <WatchEyeIcon active={active} />
     </button>
   );
 }

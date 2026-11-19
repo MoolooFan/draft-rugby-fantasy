@@ -1,5 +1,6 @@
 "use client";
 
+import { WatchEyeIcon } from "@/components/WatchEyeIcon";
 import React, { useEffect, useMemo, useState } from "react";
 import { leagueRefreshMs, usePoll } from "@/lib/hooks/usePoll";
 import { useRouter } from "next/navigation";
@@ -2089,7 +2090,7 @@ onClick={() => {
     cursor: "pointer",
   }}
 >
-  {isWatched(p.id) ? "★" : "☆"}
+  <WatchEyeIcon active={isWatched(p.id)} />
 </button>
 
   {/* Add -> Transactions prefill */}
