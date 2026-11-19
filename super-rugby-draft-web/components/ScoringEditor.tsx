@@ -115,6 +115,8 @@ export function ScoringEditor({
           (n) => onChange({ ...value, perEvent: { ...value.perEvent, [k]: n } })
         )
       )}
+      {field("Team win (each player who played)", value.teamWin ?? 0, (n) => onChange({ ...value, teamWin: n }))}
+      {field("Team draw (each player who played)", value.teamDraw ?? 0, (n) => onChange({ ...value, teamDraw: n }))}
       {admin ? (
         <div style={row}>
           <span style={label}>Scrum points go to</span>

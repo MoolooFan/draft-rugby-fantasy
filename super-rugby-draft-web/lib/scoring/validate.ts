@@ -9,7 +9,7 @@ export function cleanScoringRules(input: unknown, opts: { allowStructure: boolea
   if (!input || typeof input !== "object") return { error: "Missing scoring values" };
   const raw = input as Partial<ScoringRules>;
   const rules = completeRules({ ...opts.base, ...raw, perEvent: { ...opts.base.perEvent, ...(raw.perEvent ?? {}) } });
-  const values = [rules.minutesUpTo60, rules.minutes61Plus, ...Object.values(rules.perEvent)];
+  const values = [rules.minutesUpTo60, rules.minutes61Plus, rules.teamWin, rules.teamDraw, ...Object.values(rules.perEvent)];
   if (values.some((v) => !Number.isFinite(v) || Math.abs(v) > LIMIT)) return { error: `Points must be numbers between -${LIMIT} and ${LIMIT}` };
   if (!opts.allowStructure) {
     // commissioners change points only; the rest follows the base system

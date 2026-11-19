@@ -11,7 +11,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { postFreeAgentReport, postRoundPosts } from "@/lib/chat/server";
 import { loadSeasonPlayers } from "@/lib/players/db";
-import { statCountsFromRaw, isFrontRow, roundPoints, STATS, type StatCounts } from "@/lib/scoring";
+import { statCountsFromRaw, isFrontRow, roundPoints, RESULT_STATS, STATS, type StatCounts } from "@/lib/scoring";
+import { addMatchResults } from "@/lib/results/matchResults";
 import { getLeagueScoringRules } from "@/lib/scoring/leagueRules";
 import { scoreTeamWeek, type Lineup, type LineupPlayer } from "@/lib/scoring/week";
 import { fixCaptains, reconcileLineup } from "@/lib/league/lineup";
@@ -223,15 +224,17 @@ async function weekStats(db: Db, season: SeasonConfig, week: number): Promise<Ma
   const out = new Map<string, StatCounts>();
   let from = 0;
   for (;;) {
-    const rows = await q<Array<{ internal_player_id: string; raw_json: { stats?: unknown } }>>(
-      db.from("player_round_stats").select("internal_player_id, raw_json").eq("season", season.season).in("round", rounds).range(from, from + 999)
+    const rows = await q<Array<{ internal_player_id: string; round: number; raw_json: { stats?: Record<string, unknown> } }>>(
+      db.from("player_round_stats").select("internal_player_id, round, raw_json").eq("season", season.season).in("round", rounds).range(from, from + 999)
     );
+    // team win / draw in games played (for leagues that give points for them)
+    await addMatchResults(db, season.season, rows);
     for (const r of rows) {
       const counts = statCountsFromRaw(r.raw_json?.stats);
       const key = normId(r.internal_player_id);
       const prev = out.get(key);
       if (!prev) out.set(key, counts);
-      else for (const s of STATS) prev[s.key] = Number(prev[s.key] ?? 0) + Number(counts[s.key] ?? 0);
+      else for (const s of [...STATS, ...RESULT_STATS]) prev[s.key] = Number(prev[s.key] ?? 0) + Number(counts[s.key] ?? 0);
     }
     if (rows.length < 1000) break;
     from += 1000;
