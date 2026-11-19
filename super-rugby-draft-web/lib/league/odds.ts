@@ -43,6 +43,8 @@ export type TeamOdds = {
 /** Rounds of real scores that count as much as the roster projection. */
 export const ROSTER_WEIGHT_ROUNDS = 4;
 export const DEFAULT_SIMS = 10000;
+/** Rounds the power rankings' Trending up / down boxes look back over. */
+export const TREND_ROUNDS = 5;
 
 /** Small, fast random numbers that repeat for the same seed (so the odds don't jump on every reload). */
 export function seededRandom(seed: number): () => number {
@@ -269,6 +271,20 @@ export function simulateOdds(input: {
 }
 
 /** "64%", or "<1%" / ">99%" when it's very likely but not certain. */
+/**
+ * The schedule as it stood after round `week` (for past power rankings): games finishing later
+ * go back to not yet played, and later finals games lose their teams (they come from the
+ * bracket again in the simulation).
+ */
+export function matchupsAsOf<T extends OddsMatchup>(matchups: T[], week: number): T[] {
+  return matchups.map((m) => {
+    const last = Math.max(0, ...((m.weeks ?? []).map(Number)));
+    if (last <= week) return m;
+    const out = { ...m, status: "scheduled", home_score: null, away_score: null, winner_team_id: null };
+    return m.kind === "regular" ? out : { ...out, home_team_id: null, away_team_id: null };
+  });
+}
+
 export function formatOdds(pct: number, certain: { yes?: boolean; no?: boolean } = {}): string {
   if (certain.yes) return "100%";
   if (certain.no) return "0%";

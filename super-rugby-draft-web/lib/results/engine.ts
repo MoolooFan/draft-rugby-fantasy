@@ -383,6 +383,14 @@ export async function finaliseWeek(
   } catch (e) {
     console.error("[results] season honours not recorded:", e);
   }
+  // Save this round's power ranking now (with the squads as they are), so the movement and
+  // 5-round trend compare against what it really was (lib/league/powerServer.ts)
+  try {
+    const { loadPower } = await import("@/lib/league/powerServer");
+    await loadPower(db as never, leagueId);
+  } catch (e) {
+    console.error("[results] power ranking not saved:", e);
+  }
   return { finalised: true, teams: results.length };
 }
 
