@@ -612,10 +612,19 @@ const upcomingShown = deadlineLocked || (listsOutMs != null && nowMs >= listsOut
 // 2) The week the Matchup page should DISPLAY
 // - until the team lists come out (Wednesday 4:30pm NZ): the previous week's result
 // - from then: the selection week (before the deadline: "UPCOMING", lineups can still change)
+// - the arrows beside the round name go back to earlier rounds (Ethan, 19 Nov 2026), or ?week=N
+const latestWeek = upcomingShown ? selectionWeek : selectionWeek - 1; // can be 0 (pre-season)
+const [weekPick, setWeekPick] = useState<number | null>(null);
+useEffect(() => {
+  const w = Number(new URLSearchParams(window.location.search).get("week"));
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  if (Number.isInteger(w) && w > 0) setWeekPick(w);
+}, []);
 const displayWeek = useMemo(() => {
-  const w = upcomingShown ? selectionWeek : selectionWeek - 1;
-  return w; // can be 0 (pre-season state) – we handle that below
-}, [upcomingShown, selectionWeek]);
+  if (weekPick == null || latestWeek <= 0) return latestWeek;
+  return Math.min(Math.max(1, weekPick), latestWeek);
+}, [weekPick, latestWeek]);
+const goWeek = (w: number) => setWeekPick(w >= latestWeek ? null : Math.max(1, w));
 
 // The round used for POINTS + fixture tags should match the DISPLAY week
 const displayRealRound = useMemo(() => {
@@ -1710,11 +1719,39 @@ return (
 </div>
 </div>
 
-<div style={{ marginTop: 10, fontSize: 16, fontWeight: 700, opacity: 0.95 }}>
-  {!mounted
-    ? "Loading…"
-    : (displayWeek <= 0 ? "Pre-season" : roundLabel(displayWeek))}
+<div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6, minHeight: 24 }}>
+  {mounted && displayWeek > 0 ? (
+    <button
+      onClick={() => goWeek(displayWeek - 1)}
+      disabled={displayWeek <= 1}
+      aria-label="Previous round"
+      style={{ border: "none", background: "transparent", padding: "0 4px", fontSize: 22, fontWeight: 700, lineHeight: "22px", color: displayWeek <= 1 ? "rgba(15,23,42,0.25)" : "#0f172a", cursor: displayWeek <= 1 ? "default" : "pointer" }}
+    >
+      ‹
+    </button>
+  ) : null}
+  <span style={{ fontSize: 16, fontWeight: 700, opacity: 0.95 }}>{!mounted ? "Loading…" : displayWeek <= 0 ? "Pre-season" : roundLabel(displayWeek)}</span>
+  {mounted && displayWeek > 0 ? (
+    <button
+      onClick={() => goWeek(displayWeek + 1)}
+      disabled={displayWeek >= latestWeek}
+      aria-label="Next round"
+      style={{ border: "none", background: "transparent", padding: "0 4px", fontSize: 22, fontWeight: 700, lineHeight: "22px", color: displayWeek >= latestWeek ? "rgba(15,23,42,0.25)" : "#0f172a", cursor: displayWeek >= latestWeek ? "default" : "pointer" }}
+    >
+      ›
+    </button>
+  ) : null}
 </div>
+
+{/* looking at an earlier round: a way straight back (top right of the card) */}
+{mounted && displayWeek > 0 && displayWeek < latestWeek ? (
+  <button
+    onClick={() => goWeek(latestWeek)}
+    style={{ position: "absolute", top: 18, right: 14, border: "1px solid #99f6e4", background: "#f0fdfa", borderRadius: 999, padding: "4px 10px", fontSize: 11, fontWeight: 700, color: "#0f766e", cursor: "pointer" }}
+  >
+    Back to {roundLabel(latestWeek)} ›
+  </button>
+) : null}
 
         </div>
 

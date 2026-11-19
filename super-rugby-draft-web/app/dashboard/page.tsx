@@ -1,5 +1,6 @@
 "use client";
 
+import { lineupWarnings, warningSummary } from "@/lib/league/lineupWarnings";
 import { WatchEyeIcon } from "@/components/WatchEyeIcon";
 import React, { useEffect, useMemo, useState } from "react";
 import { card as themeCard, muted, num, teal } from "@/lib/ui/theme";
@@ -1214,6 +1215,17 @@ const upcomingOutlook = useMemo(() => {
   return { left: a.expected, right: b.expected, leftWin: Math.round(winProbability(a, b) * 100) };
 }, [upcomingProj, upcomingSel, upcomingMatch, upcomingWeekNo, activeLeague?.squadFormat]);
 
+// Lineup check for your next lineup (Ethan, 19 Nov 2026): starters who won't play or might not
+// (lib/league/lineupWarnings.ts); the details are on Team Selection
+const myLineupCheck = useMemo(() => {
+  if (seasonOver || !yourLeagueTeamId || !upcomingProj || upcomingProj.week !== upcomingWeekNo || !upcomingSel || upcomingSel.week !== upcomingWeekNo) return null;
+  const row = upcomingSel.rows.find((r) => r.team_id === yourLeagueTeamId);
+  if (!row?.lineup) return null;
+  return warningSummary(
+    lineupWarnings(row.lineup as never, (id) => upcomingProj.players[id] ?? upcomingProj.players[id.toLowerCase()] ?? null, activeLeague?.squadFormat)
+  );
+}, [seasonOver, yourLeagueTeamId, upcomingProj, upcomingSel, upcomingWeekNo, activeLeague?.squadFormat]);
+
   // -----------------------
 // Standings (LIVE from sheetFixtures + activeLeague teams)
 // -----------------------
@@ -1875,6 +1887,32 @@ const NoLeague = useStableComponent(NoLeague__render);
               </div>
             ) : null}
           </div>
+
+          {myLineupCheck ? (
+            <button
+              onClick={() => router.push("/team-selection")}
+              style={{
+                marginTop: 8,
+                width: "100%",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 8,
+                padding: "8px 10px",
+                borderRadius: 12,
+                border: "1px solid #fca5a5",
+                background: "#fef2f2",
+                color: "#991b1b",
+                fontSize: 12,
+                fontWeight: 600,
+                textAlign: "left",
+                cursor: "pointer",
+              }}
+            >
+              <span>{myLineupCheck}</span>
+              <span style={{ whiteSpace: "nowrap" }}>Fix lineup ›</span>
+            </button>
+          ) : null}
         </div>
 
         <StandingsCard />

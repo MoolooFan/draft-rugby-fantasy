@@ -6,6 +6,7 @@
 //   (retrying every call until they're out); clears Starting/Benched once a game has finished.
 // - Locks lineups at each deadline and finalises each round when it's due (lib/results/engine).
 // - Keeps live drafts moving (auto-picks) even with nobody in the draft room.
+// - Nightly backup of the database at about 3am NZ time (lib/backup/run.ts).
 // Outside game weekends it does almost nothing, so it's cheap to call often.
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -16,6 +17,7 @@ import { applyQuestionable, clearFinishedGameStatuses, importRoundStatus, type I
 import { runDueWaivers } from "@/lib/waivers/process";
 import { advanceDraft } from "@/lib/draft/engine";
 import { coachTick } from "@/lib/coach/run";
+import { backupIfDue } from "@/lib/backup/run";
 
 export const maxDuration = 60; // seconds (Vercel)
 
@@ -88,7 +90,10 @@ async function tick() {
     beforeFinalise: (realRounds) => sync(realRounds),
   });
 
-  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, statusImports, statusesCleared, questionable, waivers, drafts, coach, ...results };
+  // Nightly backup (3am NZ time, once a day)
+  const backup = await backupIfDue(supabaseAdmin, now).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
+
+  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, statusImports, statusesCleared, questionable, waivers, drafts, coach, backup, ...results };
 }
 
 async function handle(req: Request) {

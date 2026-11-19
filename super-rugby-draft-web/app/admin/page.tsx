@@ -4,7 +4,9 @@
 // and finalising a round again. Every request is checked on the server (admin only).
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { card as themeCard } from "@/lib/ui/theme";
+import { api, cardStyle, inputStyle, labelStyle, primaryButton, tabButton, whiteBox } from "@/components/admin/shared";
+import { BackupsTab } from "@/components/admin/BackupsTab";
+import { SeasonCheckTab } from "@/components/admin/SeasonCheckTab";
 import { AppMenu } from "@/components/AppMenu";
 import { useLeagueStore } from "@/lib/league/store";
 import { currentSeasonYear, getSeason, SEASONS, totalFantasyWeeks, weekLabel } from "@/lib/season";
@@ -15,48 +17,6 @@ import { STATUS_PRESETS } from "@/lib/status/kind";
 
 // ---------------------------------------------------------------------------
 // Styles (same look as the other pages)
-
-const cardStyle: React.CSSProperties = { ...themeCard };
-const whiteBox: React.CSSProperties = {
-  borderRadius: 14,
-  background: "rgba(255,255,255,0.92)",
-  color: "#0f172a",
-  padding: 10,
-};
-const primaryButton: React.CSSProperties = {
-  height: 38,
-  width: "100%",
-  borderRadius: 999,
-  background: "linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))",
-  color: "white",
-  fontSize: 13,
-  fontWeight: 700,
-  border: "2px solid rgba(255,255,255,0.85)",
-  cursor: "pointer",
-};
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  height: 36,
-  borderRadius: 10,
-  border: "1px solid rgba(0,0,0,0.12)",
-  background: "white",
-  padding: "0 10px",
-  fontSize: 13,
-  fontWeight: 500,
-  color: "#0f172a",
-};
-const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, opacity: 0.7, marginBottom: 3 };
-const tabButton = (active: boolean): React.CSSProperties => ({
-  flex: 1,
-  height: 36,
-  borderRadius: 999,
-  border: "none",
-  fontSize: 13,
-  fontWeight: 700,
-  cursor: "pointer",
-  background: active ? "#0f172a" : "#eef2f6",
-  color: active ? "white" : "#0f172a",
-});
 
 const POSITIONS = ["PR", "HO", "LK", "LF", "HB", "FH", "CE", "OB"];
 const TEAMS: Array<[string, string]> = [
@@ -83,18 +43,6 @@ type AdminPlayer = {
 type Rating = { team: string; home_rating: number; away_rating: number; pinned: boolean };
 type RoundsLeague = { id: string; name: string; teams: Array<{ id: string; name: string }>; weeks: Array<{ week: number; label: string }> };
 type Preview = { week: number; teams: Array<{ teamId: string; before: number | null; after: number }> };
-
-async function api<T>(url: string, body?: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: body ? "POST" : "GET",
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-    cache: "no-store",
-  });
-  const j = await res.json().catch(() => null);
-  if (!res.ok || !j?.ok) throw new Error(j?.error === "FORBIDDEN" ? "This page is for the site admin only." : j?.error ?? "Something went wrong");
-  return j as T;
-}
 
 // ---------------------------------------------------------------------------
 // Players
@@ -702,7 +650,7 @@ function ScoringTab({ setMsg }: { setMsg: (m: string | null) => void }) {
 
 // ---------------------------------------------------------------------------
 
-type Tab = "Players" | "Status" | "Difficulty" | "Rounds" | "Scoring" | "History" | "Coach";
+type Tab = "Players" | "Status" | "Difficulty" | "Rounds" | "Scoring" | "History" | "Coach" | "Season check" | "Backups";
 
 // ---------------------------------------------------------------------------
 // History (E8): link past seasons to a league and history names to accounts, for the stars
@@ -1075,9 +1023,9 @@ export default function AdminPage() {
           <div style={cardStyle}>
             <div style={{ textAlign: "center", fontWeight: 700, fontSize: 22 }}>Admin</div>
             <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
-              Players, statuses, difficulty, rounds, scoring and history
+              Players, statuses, difficulty, rounds, scoring, history, the season check and backups
             </div>
-            {tab === "Players" || tab === "Difficulty" ? (
+            {tab === "Players" || tab === "Difficulty" || tab === "Season check" ? (
               <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 10 }}>
                 {Object.keys(SEASONS).map(Number).sort().map((y) => (
                   <button key={y} style={{ ...tabButton(y === season), flex: "0 0 auto", padding: "0 16px" }} onClick={() => setSeason(y)}>
@@ -1086,9 +1034,9 @@ export default function AdminPage() {
                 ))}
               </div>
             ) : null}
-            <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-              {(["Players", "Status", "Difficulty", "Rounds", "Scoring", "History", "Coach"] as Tab[]).map((t) => (
-                <button key={t} style={tabButton(t === tab)} onClick={() => { setTab(t); setMsg(null); }}>{t}</button>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+              {(["Players", "Status", "Difficulty", "Rounds", "Scoring", "History", "Coach", "Season check", "Backups"] as Tab[]).map((t) => (
+                <button key={t} style={{ ...tabButton(t === tab), flex: "1 1 auto", padding: "0 12px" }} onClick={() => { setTab(t); setMsg(null); }}>{t}</button>
               ))}
             </div>
           </div>
@@ -1108,6 +1056,8 @@ export default function AdminPage() {
             {tab === "Scoring" ? <ScoringTab setMsg={setMsg} /> : null}
             {tab === "History" ? <HistoryTab setMsg={setMsg} /> : null}
             {tab === "Coach" ? <CoachTab season={season} setMsg={setMsg} /> : null}
+            {tab === "Season check" ? <SeasonCheckTab key={season} season={season} /> : null}
+            {tab === "Backups" ? <BackupsTab setMsg={setMsg} /> : null}
           </div>
         </div>
       </div>

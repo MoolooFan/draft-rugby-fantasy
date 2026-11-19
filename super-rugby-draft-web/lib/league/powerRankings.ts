@@ -1,26 +1,10 @@
 // lib/league/powerRankings.ts
-// Weekly power rankings (plan item F2, a League tab updated each finalised round). Each team's
-// power score mixes three things, each against the league average (100 = average team):
-//   35%  season average score (regular-season rounds so far)
-//   25%  recent form: average of the last 3 rounds
-//   40%  roster strength: projected score of its best possible XV for the next round
-//        (expected points, captain x2 on the best projection)
-// Before any round is played it's roster strength only. Pure code (scripts/tests/power.test.ts).
+// A team's roster strength: the projected score of its best possible team (each starting spot
+// filled by someone who can play it, captain x2). Used by the power rankings and finals / title
+// chances (lib/league/powerServer.ts, lib/league/odds.ts). Pure code (scripts/tests/power.test.ts).
 import { startersOf } from "@/lib/scoring/week";
 import { slotAccepts, type SquadFormat } from "@/lib/league/squad";
 import type { HasPositions } from "@/lib/players/positions";
-
-export const POWER_WEIGHTS = { season: 0.35, recent: 0.25, roster: 0.4 };
-export const RECENT_ROUNDS = 3;
-
-export type PowerRow = {
-  teamId: string;
-  rank: number;
-  score: number;
-  seasonAvg: number | null;
-  recentAvg: number | null;
-  rosterProjection: number;
-};
 
 type Player = HasPositions & { id: string };
 
@@ -61,39 +45,4 @@ export function bestXvProjection(players: Player[], projection: (id: string) => 
   }
   const total = picked.reduce((a, b) => a + b, 0);
   return Math.round((total + Math.max(0, ...picked)) * 10) / 10; // + captain's second helping
-}
-
-export function powerRankings(input: {
-  teamIds: string[];
-  /** finalised regular-season scores so far */
-  scores: Array<{ teamId: string; week: number; score: number }>;
-  /** each team's best-XV projection for the next round */
-  rosterProjection: Record<string, number>;
-}): PowerRow[] {
-  const weeks = [...new Set(input.scores.map((s) => s.week))].sort((a, b) => a - b);
-  const recentWeeks = weeks.slice(-RECENT_ROUNDS);
-  const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
-  const rows = input.teamIds.map((teamId) => {
-    const mine = input.scores.filter((s) => s.teamId === teamId);
-    return {
-      teamId,
-      seasonAvg: avg(mine.map((s) => s.score)),
-      recentAvg: avg(mine.filter((s) => recentWeeks.includes(s.week)).map((s) => s.score)),
-      rosterProjection: input.rosterProjection[teamId] ?? 0,
-    };
-  });
-  const leagueAvg = (k: "seasonAvg" | "recentAvg" | "rosterProjection") => avg(rows.map((r) => r[k]).filter((x): x is number => x != null && x > 0));
-  const la = { season: leagueAvg("seasonAvg"), recent: leagueAvg("recentAvg"), roster: leagueAvg("rosterProjection") };
-  const parts = (r: (typeof rows)[number]) => {
-    const out: Array<[number, number]> = [];
-    if (la.season && r.seasonAvg != null) out.push([POWER_WEIGHTS.season, r.seasonAvg / la.season]);
-    if (la.recent && r.recentAvg != null) out.push([POWER_WEIGHTS.recent, r.recentAvg / la.recent]);
-    if (la.roster) out.push([POWER_WEIGHTS.roster, r.rosterProjection / la.roster]);
-    const w = out.reduce((a, [x]) => a + x, 0);
-    return w ? (out.reduce((a, [x, v]) => a + x * v, 0) / w) * 100 : 100;
-  };
-  return rows
-    .map((r) => ({ ...r, score: Math.round(parts(r) * 10) / 10 }))
-    .sort((a, b) => b.score - a.score || a.teamId.localeCompare(b.teamId))
-    .map((r, i) => ({ ...r, rank: i + 1, seasonAvg: r.seasonAvg == null ? null : Math.round(r.seasonAvg), recentAvg: r.recentAvg == null ? null : Math.round(r.recentAvg) }));
 }

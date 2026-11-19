@@ -1,7 +1,6 @@
 "use client";
 
 import { rosterSize, STANDARD_SQUAD } from "@/lib/league/squad";
-import { WatchEyeIcon } from "@/components/WatchEyeIcon";
 import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { card as themeCard } from "@/lib/ui/theme";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -23,6 +22,10 @@ import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { usePlayerPool } from "@/lib/players/pool";
 import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/season";
 
+import { JerseyTile, toNum, formatDeadline, useNowTick, getInitials, normUser, extractRosterIdsClient, SORT_OPTIONS, NO_DROP } from "@/components/transactions/helpers";
+import type { Player, AnyFixture, TabKey } from "@/components/transactions/helpers";
+import { StarButton, StatusPill } from "@/components/transactions/bits";
+
 // This season's fixtures, numbered by fantasy week (see lib/season).
 const fixturesData = fixturesByFantasyWeek();
 import { isFrontRow, playedInRound, playerPoints, statCountsFromRow, roundPoints } from "@/lib/scoring";
@@ -30,7 +33,6 @@ import { canPlayPosition } from "@/lib/players/positions";
 import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { playerRoundRows } from "@/lib/players/roundIndex";
 import { toMs, getWeekDeadlineMs, getWeeksSorted, type SheetFixtureRow, currentWeekFromSheet } from "@/lib/league/weekHelpers";
-import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
 import { PoolFilterBar, matchesPoolFilters, EMPTY_FILTERS, type PoolFilters } from "@/components/PoolFilters";
 import { positionsLabel } from "@/lib/players/positions";
 import { StatusTag } from "@/components/StatusTag";
@@ -39,206 +41,6 @@ import { TradeReviewModal } from "@/components/TradeReviewModal";
 import { applyStatView, formatStatView, STAT_VIEW_LABEL, useStatView } from "@/lib/players/statView";
 import { useStatSeason, useStatSeasonRows } from "@/lib/players/useStatSeason";
 import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
-
-// -----------------------
-// Types (match your player shape)
-// -----------------------
-type Player = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  teamCode: string;
-  posAbbrev: string;
-  secondaryPosAbbrev?: string | null;
-  posName: string;
-  secondaryPosName?: string | null;
-  draftRank?: number;
-  status?: any;
-
-  // ✅ add these (so TS stops erroring on live hydration fields)
-  totalPoints?: number | null;
-  matchesPlayed?: number | null;
-  avgPointsPerMatch?: number | null;
-
-  stats?: any;
-};
-
-type AnyFixture = {
-  id: string;
-  week: number;
-  kickoffAt: string | number;
-  kickoffMs?: number;
-  status?: string;
-  homeScore?: number | null;
-  awayScore?: number | null;
-};
-
-type TabKey = "Player Pool" | "Watchlist" | "Pending Claims" | "Transactions";
-
-const EMPTY_ARR: any[] = [];
-const EMPTY_OBJ: any = {};
-const NOOP = () => {};
-
-function jerseySrcForTeamCode(teamCode: string | null | undefined, prefer: "angle" | "front" = "angle") {
-  const code = normalizeTeamCode(teamCode);
-  const j = JERSEYS[code];
-  if (!j) return JERSEY_PLACEHOLDER;
-
-  if (prefer === "angle") return j.angle ?? j.single ?? j.front ?? JERSEY_PLACEHOLDER;
-  return j.front ?? j.single ?? j.angle ?? JERSEY_PLACEHOLDER;
-}
-
-function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }) {
-  return (
-    <img
-      src={jerseySrcForTeamCode(teamCode, "angle")}
-      alt=""
-      style={{
-        width: size,
-        height: size,
-        borderRadius: 10,
-        objectFit: "contain",
-        display: "block",
-      }}
-      draggable={false}
-    />
-  );
-}
-
-function toNum(v: any): number {
-  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
-  if (typeof v === "string") {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  }
-  return 0;
-}
-
-function formatDeadline(dtMs: number, timeZone?: string) {
-  const d = new Date(dtMs);
-  return d.toLocaleString(undefined, {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone,
-  });
-}
-
-function useNowTick(ms = 30_000) {
-  const [now, setNow] = useState<number>(0);
-
-  useEffect(() => {
-    // set immediately after mount so server/client match on first HTML
-    setNow(Date.now());
-    const t = window.setInterval(() => setNow(Date.now()), ms);
-    return () => window.clearInterval(t);
-  }, [ms]);
-
-  return now;
-}
-
-function getInitials(name: string | null | undefined) {
-  const s = String(name ?? "").trim();
-  if (!s) return "??";
-
-  const parts = s
-    .replace(/[_-]+/g, " ")
-    .split(/\s+/)
-    .filter(Boolean);
-
-  const first = parts[0]?.[0] ?? "?";
-  const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : (parts[0]?.[1] ?? "");
-  return (first + last).toUpperCase();
-}
-
-function normUser(x: any) {
-  return String(x ?? "").trim().toLowerCase();
-}
-
-function extractRosterIdsClient(data: any): string[] {
-  // Accept a bunch of possible shapes:
-  // - { playerIds: ["p1","p2"] }
-  // - { slots: { HO: ["p1"], PR: [{id:"p2"}], ... }, wildcards: [...] }
-  // - ["p1","p2"] (rare but possible)
-
-  const ids: string[] = [];
-
-  const pushItem = (x: any) => {
-    if (!x) return;
-    if (typeof x === "string" || typeof x === "number") {
-      ids.push(String(x));
-      return;
-    }
-    if (typeof x === "object") {
-      // common shapes
-      if (x.id != null) ids.push(String(x.id));
-      else if (x.playerId != null) ids.push(String(x.playerId));
-    }
-  };
-
-  // If roster is literally an array of ids
-  if (Array.isArray(data)) {
-    data.forEach(pushItem);
-    return ids;
-  }
-
-  if (Array.isArray(data?.playerIds)) {
-    data.playerIds.forEach(pushItem);
-    return ids;
-  }
-
-  // slots
-  const slots = data?.slots ?? {};
-  for (const arr of Object.values(slots)) {
-    if (!Array.isArray(arr)) continue;
-    arr.forEach(pushItem);
-  }
-
-  // wildcards
-  const wildcards = data?.wildcards ?? [];
-  if (Array.isArray(wildcards)) wildcards.forEach(pushItem);
-
-  return ids;
-}
-
-/** Sort options for the player pool (the metric shown on each row). */
-const SORT_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "DRAFT_RANK", label: "Draft Rank" },
-  { value: "PROJECTED", label: "Projected (this round)" },
-  { value: "MATCH_AVG", label: "Match Average" },
-  { value: "TOTAL_PTS", label: "Points" },
-  { value: "FORM_3", label: "Form" },
-  { value: "LAST_SCORE", label: "Last Fixture" },
-  { value: "GAMES_PLAYED", label: "Games Played" },
-  { value: "TRIES", label: "Tries Scored" },
-  { value: "TRY_ASSISTS", label: "Try Assists" },
-  { value: "LINEBREAKS", label: "Line Breaks" },
-  { value: "LINEBREAK_ASSISTS", label: "Line Break Assists" },
-  { value: "DEFENDERS_BEATEN", label: "Defenders Beaten" },
-  { value: "METRES_GAINED", label: "Metres Gained" },
-  { value: "OFFLOADS", label: "Offloads" },
-  { value: "TACKLES", label: "Tackles" },
-  { value: "MISSED_TACKLES", label: "Missed Tackles" },
-  { value: "TURNOVERS_FORCED", label: "Turnovers Forced" },
-  { value: "INTERCEPTIONS", label: "Interceptions" },
-  { value: "KICKS_50_22", label: "50:22 Kicks" },
-  { value: "PENALTIES_CONCEDED", label: "Penalties Conceded" },
-  { value: "ERRORS", label: "Errors" },
-  { value: "LINEOUTS_WON", label: "Lineouts Won" },
-  { value: "LINEOUT_STEALS", label: "Lineout Steals" },
-  { value: "LINEOUT_ERRORS", label: "Lineout Errors" },
-  { value: "SCRUMS_WON", label: "Scrums Won" },
-  { value: "CONVERSIONS", label: "Conversions" },
-  { value: "PENALTY_GOALS", label: "Penalty Goals" },
-  { value: "DROP_GOALS", label: "Drop Goals" },
-  { value: "YELLOW_CARDS", label: "Yellow Cards" },
-  { value: "RED_CARDS", label: "Red Cards" }
-];
-
-/** Drop-list choice meaning "don't drop anyone" (the team has a free place). */
-const NO_DROP = "__no_drop__";
 
 function TransactionsPageInner() {
   const router = useRouter();
@@ -2516,50 +2318,6 @@ const Tabs = useStableComponent(Tabs__render);
   }
 const DeadlineBanner = useStableComponent(DeadlineBanner__render);
 
-  function StarButton__render({ active, onClick }: { active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onMouseDown={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      }}
-      onTouchStart={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      }}
-      onKeyDown={(e) => {
-        // prevent spacebar from scrolling the page
-        if (e.key === " " || e.key === "Spacebar") {
-          e.preventDefault();
-        }
-        e.stopPropagation();
-      }}
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onClick();
-      }}
-      aria-label={active ? "Remove from watchlist" : "Add to watchlist"}
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: 10,
-        border: "1px solid rgba(0,0,0,0.10)",
-        background: active ? "rgba(250,204,21,0.25)" : "rgba(0,0,0,0.05)",
-        display: "grid",
-        placeItems: "center",
-        cursor: "pointer",
-        color: "#0f172a",
-        fontSize: 16,
-        fontWeight: 700,
-      }}
-    >
-      <WatchEyeIcon active={active} />
-    </button>
-  );
-}
-const StarButton = useStableComponent(StarButton__render);
 
 function TxActionButton__render({
   enabled,
@@ -3466,54 +3224,6 @@ const TradeSummary = useStableComponent(TradeSummary__render);
     }
 const InitialBadge = useStableComponent(InitialBadge__render);
 
-        function StatusPill__render({ status }: { status: string }) {
-      const s = String(status ?? "").toUpperCase();
-
-      const isProcessed = s === "PROCESSED" || s === "SUCCESS" || s === "APPROVED";
-      const isFailed = s === "FAILED";
-      const isDeclined = s === "DECLINED" || s === "REJECTED";
-
-      const text =
-        isProcessed ? "Processed" :
-        isFailed ? "Failed" :
-        isDeclined ? "Declined" :
-        s ? s[0] + s.slice(1).toLowerCase() : "—";
-
-      const color =
-        isProcessed ? "rgba(34,197,94,0.95)" :
-        isFailed ? "rgba(239,68,68,0.95)" :
-        isDeclined ? "rgba(239,68,68,0.95)" :
-        "rgba(15,23,42,0.70)";
-
-      const bg =
-        isProcessed ? "rgba(34,197,94,0.10)" :
-        isFailed ? "rgba(239,68,68,0.10)" :
-        isDeclined ? "rgba(239,68,68,0.10)" :
-        "rgba(15,23,42,0.06)";
-
-      return (
-        <div
-          style={{
-            justifySelf: "end",
-            width: 88,
-            height: 30,
-            borderRadius: 999,
-            fontSize: 11,
-            fontWeight: 700,
-            color,
-            background: bg,
-            border: "1px solid rgba(0,0,0,0.06)",
-            display: "grid",
-            placeItems: "center",
-            textAlign: "center",
-            boxSizing: "border-box",
-          }}
-        >
-          {text}
-        </div>
-      );
-    }
-const StatusPill = useStableComponent(StatusPill__render);
 
     // ---------- Render ----------
     // (This check sits after all the hooks above: returning before them could crash the page.)
