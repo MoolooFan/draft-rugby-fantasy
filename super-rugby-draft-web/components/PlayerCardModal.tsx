@@ -16,7 +16,8 @@ import { FixtureRow, normalizeTeamCodeLocal, TabCard } from "./playerCard/helper
 import { HistoryTab, CoachTab } from "./playerCard/HistoryTab";
 import { useLeagueStore } from "@/lib/league/store";
 import { ResultsTab, StatsTab, FixturesTab } from "./playerCard/tabs";
-import { positionsLabel } from "@/lib/players/positions";
+import { playerPositions, positionsLabel } from "@/lib/players/positions";
+import { POS_NAME } from "@/lib/draft/constants";
 import { formatStatCount } from "@/lib/scoring";
 import { currentStatusText, jerseyLabel, statusKind, STATUS_TAG } from "@/lib/status/kind";
 import { StatusTag } from "@/components/StatusTag";
@@ -628,8 +629,10 @@ const teamTheme = TEAM_THEME[p.teamCode] ?? {
     borderWidth: TEAM_CHIP_BORDER_WIDTH,
   };
 
-  // e.g. "CE/OB/FH" (the full player record has all three positions)
-  const positionLabel = positionsLabel(sheetP ?? p);
+  // e.g. "CE, OB, FH" (the full player record has all three positions); a player with only one
+  // position has it written out, e.g. "Outside Back" (Ethan, 20 Nov 2026)
+  const cardPositions = playerPositions(sheetP ?? p);
+  const positionLabel = cardPositions.length === 1 ? POS_NAME[cardPositions[0]] ?? cardPositions[0] : positionsLabel(sheetP ?? p);
 
 const TEAM_NAME_BY_CODE: Record<string, string> = {
   BLU: "Blues",

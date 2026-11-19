@@ -335,9 +335,6 @@ function PlayerCompare() {
                     </React.Fragment>
                   ))}
                 </div>
-                <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.55 }}>
-                  The better number is highlighted (fewer is better for missed tackles, penalties, errors, cards and missed kicks). Points use {league ? "your league's" : "Standard"} scoring.
-                </div>
               </section>
             </>
           ) : null}

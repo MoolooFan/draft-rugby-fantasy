@@ -2288,8 +2288,7 @@ const StandingsCard = useStableComponent(StandingsCard__render);
             );
           })}
         </div>
-        <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 500, color: "#64748b" }}>The standings start after the first round.</span>
+        <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 }}>
           <button
             onClick={() => router.push("/league?tab=Power")}
             style={{ background: "transparent", border: "none", color: teal, fontSize: 11, fontWeight: 600, textDecoration: "underline", cursor: "pointer", padding: 0, whiteSpace: "nowrap" }}
