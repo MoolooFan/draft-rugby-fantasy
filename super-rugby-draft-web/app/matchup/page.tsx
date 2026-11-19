@@ -1723,12 +1723,13 @@ return (
           <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10 }}>
             <div style={{ textAlign: "left" }}>
               {leftTeamId ? (
-                <TeamAvatar pictureUrl={teamPicture(leftTeamId)} initials={teamInitials(leftTeamId)} size={44} stars={teamStars(leftTeamId)} style={{ marginBottom: 6, marginTop: 6 }} />
+                // the Shield sits beside the holder's team picture (Ethan, 19 Nov 2026)
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, marginTop: 6 }}>
+                  <TeamAvatar pictureUrl={teamPicture(leftTeamId)} initials={teamInitials(leftTeamId)} size={44} stars={teamStars(leftTeamId)} />
+                  {holdsShield(leftTeamId) ? <ShieldIcon size={28} title={`${shieldInfo?.name} holder`} /> : null}
+                </div>
               ) : null}
-              <div style={{ fontSize: 18, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
-                {leftName}
-                {holdsShield(leftTeamId) ? <ShieldIcon size={20} title={`${shieldInfo?.name} holder`} /> : null}
-              </div>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>{leftName}</div>
 
 <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.75 }}>
   {recordText(leftRecord)}{" "}
@@ -1744,12 +1745,12 @@ return (
 
             <div style={{ textAlign: "right" }}>
               {rightTeamId ? (
-                <TeamAvatar pictureUrl={teamPicture(rightTeamId)} initials={teamInitials(rightTeamId)} size={44} stars={teamStars(rightTeamId)} style={{ marginBottom: 6, marginTop: 6 }} />
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, marginBottom: 6, marginTop: 6 }}>
+                  {holdsShield(rightTeamId) ? <ShieldIcon size={28} title={`${shieldInfo?.name} holder`} /> : null}
+                  <TeamAvatar pictureUrl={teamPicture(rightTeamId)} initials={teamInitials(rightTeamId)} size={44} stars={teamStars(rightTeamId)} />
+                </div>
               ) : null}
-              <div style={{ fontSize: 18, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
-                {holdsShield(rightTeamId) ? <ShieldIcon size={20} title={`${shieldInfo?.name} holder`} /> : null}
-                {rightName}
-              </div>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>{rightName}</div>
 
 <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.75 }}>
   {recordText(rightRecord)}{" "}

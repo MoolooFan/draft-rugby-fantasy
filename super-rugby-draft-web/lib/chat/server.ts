@@ -1,13 +1,10 @@
 // lib/chat/server.ts (server only)
-// Writing chat messages, including the automated posts (weekly league recap, trades, waiver and
-// free agent reports, the shield). Automated posts never stop the thing that triggered them: a
+// Writing chat messages, including the automated posts (the round recap message, trades, waiver
+// and free agent reports). Automated posts never stop the thing that triggered them: a
 // failure is logged and ignored. Rules and text: lib/chat/common.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { LEAGUE_CHANNEL, dmChannel, freeAgentReportText, leagueRecapText, shieldReportText, tradeText, waiverReportText, type ChatKind } from "@/lib/chat/common";
+import { LEAGUE_CHANNEL, dmChannel, freeAgentReportText, tradeText, waiverReportText, type ChatKind } from "@/lib/chat/common";
 import { getSeason, SEASONS, weekLabel } from "@/lib/season";
-import { weeklyAwards } from "@/lib/league/weeklyAwards";
-import { buildLadder, type LadderMatchup } from "@/lib/league/ladder";
-import { loadShield } from "@/lib/league/shieldServer";
 
 export async function postMessage(
   db: SupabaseClient,
@@ -145,45 +142,18 @@ export async function postFreeAgentReport(db: SupabaseClient, leagueId: string, 
 // ---- after a round is finalised: the league's recap, and the shield
 
 export async function postRoundPosts(db: SupabaseClient, leagueId: string, week: number) {
+  // One message per round (Ethan, 19 Nov 2026): tapping it opens the round's recap pop-up
+  // (results, the Shield, player of the week, best and worst pickups: lib/league/roundRecap.ts).
   await safely("league recap", async () => {
-    const { season, teamName, roundName } = await leagueBasics(db, leagueId);
-    const [{ data: matchups }, { data: results }] = await Promise.all([
-      db.from("league_matchups").select("kind, status, label, weeks, home_team_id, away_team_id, home_score, away_score, home_bonus, away_bonus, home_shield_pts, away_shield_pts, shield_holder_after").eq("league_id", leagueId),
-      db.from("team_week_results").select("team_id, week, score, player_points").eq("league_id", leagueId),
-    ]);
-    const thisWeek = (matchups ?? []).filter((m) => (m.weeks ?? []).map(Number).includes(week));
-    const wk = (results ?? []).filter((r) => Number(r.week) === week);
-    const awards = weeklyAwards(wk.map((r) => ({ week, teamId: r.team_id, score: Number(r.score) }))).latest;
-    let top: { id: string; points: number; teamId: string } | null = null;
-    for (const r of wk) for (const [id, p] of Object.entries((r.player_points as Record<string, number>) ?? {})) {
-      if (!top || Number(p) > top.points) top = { id, points: Number(p), teamId: r.team_id };
-    }
-    const n = top ? await names(db, season, [top.id]) : new Map<string, string>();
-    const regular = (matchups ?? []).filter((m) => m.kind === "regular") as LadderMatchup[];
-    const ladder = thisWeek.every((m) => m.kind === "regular") ? buildLadder([...new Set((results ?? []).map((r) => r.team_id))], regular).slice(0, 3).map((r) => teamName(r.teamId)) : [];
-    const text = leagueRecapText({
-      roundName: roundName(week),
-      games: thisWeek.map((m) => ({ home: teamName(m.home_team_id), away: m.away_team_id ? teamName(m.away_team_id) : null, homeScore: m.home_score, awayScore: m.away_score, label: m.kind === "regular" ? null : m.label })),
-      crown: awards ? { teams: awards.crown.map(teamName), score: awards.top } : null,
-      spoon: awards ? { teams: awards.spoon.map(teamName), score: awards.bottom } : null,
-      topPlayer: top ? { name: n.get(top.id) ?? top.id, points: Math.round(top.points), teamName: teamName(top.teamId) } : null,
-      ladderTop: ladder,
-    });
-    await postMessage(db, { leagueId, channel: LEAGUE_CHANNEL, senderTeamId: null, kind: "system", body: text, meta: { recapWeek: week }, dedupeKey: `recap:${week}` });
-  });
-  await safely("shield report", async () => {
-    const s = await loadShield(db, leagueId);
-    const e = s.events.find((x) => x.week === week);
-    if (!s.enabled || !e) return;
-    const { teamName } = await leagueBasics(db, leagueId);
-    const reign = s.reigns.find((r) => r.teamId === e.holderTeamId || r.teamName === teamName(e.holderTeamId));
+    const { roundName } = await leagueBasics(db, leagueId);
     await postMessage(db, {
       leagueId,
       channel: LEAGUE_CHANNEL,
       senderTeamId: null,
       kind: "system",
-      body: shieldReportText(s.name, { kind: e.kind, holder: teamName(e.holderTeamId), other: e.otherTeamId ? teamName(e.otherTeamId) : null, homeScore: e.homeScore, awayScore: e.awayScore, defences: reign?.defences ?? 0 }),
-      dedupeKey: `shield:${week}`,
+      body: `${roundName(week)} recap is in: results, the Shield, player of the week and the best and worst pickups.`,
+      meta: { recapWeek: week },
+      dedupeKey: `recap:${week}`,
     });
   });
 }
