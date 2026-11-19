@@ -1654,7 +1654,7 @@ return (
       display: "grid",
       placeItems: "center",
       pointerEvents: "none",
-      color: "rgb(255, 255, 255)",
+      color: canGo ? "#0f172a" : "rgba(15,23,42,0.25)",
       fontSize: 22,
       fontWeight: 700,
       lineHeight: "22px",
@@ -1668,11 +1668,11 @@ return (
     style={{
       fontSize: 13,
       fontWeight: 700,
-      color: "rgba(255,255,255,0.9)",
+      color: "#0f172a",
       whiteSpace: "nowrap",
     }}
   >
-    Match Up
+    {canGo ? `Matchup ${matchupIdx + 1} of ${matchupsThisWeek.length}` : "Matchup"}
   </div>
 
   <div style={{ position: "relative", width: 22, height: 22 }}>
@@ -1699,7 +1699,7 @@ return (
       display: "grid",
       placeItems: "center",
       pointerEvents: "none",
-      color: "rgba(255,255,255,0.9)",
+      color: canGo ? "#0f172a" : "rgba(15,23,42,0.25)",
       fontSize: 22,
       fontWeight: 700,
       lineHeight: "22px",
@@ -1932,7 +1932,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 );
 
 })()}
-{projText(lp, leftC) ? <div style={{ ...num, fontSize: 12, fontWeight: 500, color: muted, lineHeight: "14px" }} title="Expected points">{projText(lp, leftC)}</div> : null}
+{projText(lp, leftC) ? <div style={{ ...num, fontSize: 10.5, fontWeight: 500, color: muted, lineHeight: "12px" }} title="Expected points">{projText(lp, leftC)}</div> : null}
 
 </div>
 
@@ -1991,7 +1991,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
     </div>
   );
 })()}
-{projText(rp, rightC) ? <div style={{ ...num, fontSize: 12, fontWeight: 500, color: muted, lineHeight: "14px" }} title="Expected points">{projText(rp, rightC)}</div> : null}
+{projText(rp, rightC) ? <div style={{ ...num, fontSize: 10.5, fontWeight: 500, color: muted, lineHeight: "12px" }} title="Expected points">{projText(rp, rightC)}</div> : null}
 
 </div>
 
@@ -2159,7 +2159,7 @@ const rp = r.ir ? irPlayerOf(rightTeamId, r.irIndex) : effectiveRightLineup ? ef
         {/* MOVE pill closer to centre:
             keep this column, but align it to the right edge of the left side,
             which is closest to the middle */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
           {/* Bench score pill */}
           <div
   onClick={() => lp && openPointsBreakdown(lp, leftTeamId === yourLeagueTeamId, "left")
@@ -2182,7 +2182,7 @@ const rp = r.ir ? irPlayerOf(rightTeamId, r.irIndex) : effectiveRightLineup ? ef
 >
   {r.ir ? (lp?.id ? "-" : "—") : lp?.id ? (hasScoreForPlayer(lp) ? pointsWithCaptain(lp, leftEffC) : "-") : "—"}
 </div>
-{!r.ir && projText(lp, null) ? <div style={{ ...num, fontSize: 12, fontWeight: 500, color: muted, lineHeight: "14px" }} title="Expected points">{projText(lp, null)}</div> : null}
+{!r.ir && projText(lp, null) ? <div style={{ ...num, fontSize: 10.5, fontWeight: 500, color: muted, lineHeight: "12px" }} title="Expected points">{projText(lp, null)}</div> : null}
 
           
         </div>
@@ -2205,7 +2205,7 @@ const rp = r.ir ? irPlayerOf(rightTeamId, r.irIndex) : effectiveRightLineup ? ef
       >
         {/* MOVE pill closer to centre:
             this column sits on the left of the right side, which is closest to middle */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
           
 
           {/* Bench score pill */}
@@ -2230,7 +2230,7 @@ const rp = r.ir ? irPlayerOf(rightTeamId, r.irIndex) : effectiveRightLineup ? ef
 >
   {r.ir ? (rp?.id ? "-" : "—") : rp?.id ? (hasScoreForPlayer(rp) ? pointsWithCaptain(rp, rightEffC) : "-") : "—"}
 </div>
-{!r.ir && projText(rp, null) ? <div style={{ ...num, fontSize: 12, fontWeight: 500, color: muted, lineHeight: "14px" }} title="Expected points">{projText(rp, null)}</div> : null}
+{!r.ir && projText(rp, null) ? <div style={{ ...num, fontSize: 10.5, fontWeight: 500, color: muted, lineHeight: "12px" }} title="Expected points">{projText(rp, null)}</div> : null}
 
         </div>
 

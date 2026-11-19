@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { demo } from "@/lib/demo";
 import { squadFormatOf } from "@/lib/league/squad";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
@@ -115,6 +116,11 @@ const ownerNames = new Map<string, string>();
 let stars: Record<string, number> = {};
 try {
   stars = await championshipStars(supabaseAdmin, leagueId, (teamRows ?? []) as any);
+  // demo site only: a sample star to show where stars appear (lib/demo.ts)
+  const d = demo();
+  if (d && leagueId === d.leagueId && (teamRows ?? []).some((t: any) => t.id === d.sampleStarTeamId)) {
+    stars[d.sampleStarTeamId] = Math.max(1, stars[d.sampleStarTeamId] ?? 0);
+  }
 } catch (e) {
   console.error("[leagues/get] stars:", e);
 }

@@ -48,6 +48,21 @@ export const STANDARD_SQUAD: SquadFormat = {
   ir: 1,
 };
 
+/**
+ * The set 10-starter squad (Ethan, 19 Nov 2026): 5 forwards (3 of them tight five) and 5 backs
+ * (2 of them halves), 5 bench, 1 IR.
+ */
+export const TEN_SQUAD: SquadFormat = {
+  starters: { TF: 3, FW: 2, HV: 2, BK: 3 },
+  bench: 5,
+  ir: 1,
+};
+
+/** Are these the same squad? */
+export function sameSquad(a: SquadFormat | null | undefined, b: SquadFormat | null | undefined): boolean {
+  return squadKey(a ?? STANDARD_SQUAD) === squadKey(b ?? STANDARD_SQUAD);
+}
+
 export const SQUAD_LIMITS = { startersMin: 5, startersMax: 23, benchMax: 10, irMax: 3, rosterMax: 30 } as const;
 /** Most teams a league can have (Ethan, 19 Nov 2026). */
 export const MAX_LEAGUE_TEAMS = 16;

@@ -109,6 +109,9 @@ async function main() {
     schedule_plan: null,
     shield_enabled: true,
     shield_toggles: [],
+    // sample Shield rewards so the Shield tab's rewards box shows (no ladder points, so the
+    // ladder is as it really was)
+    shield_rewards: { firstWaiverPick: true, defencePoints: 0, winPoints: 0, tieBreak: true },
   });
   const demoTeams = teams.map((t) =>
     remap({
