@@ -1,5 +1,5 @@
 // Run: npx tsx scripts/tests/scoring.test.ts — Standard and Alternate scoring, worked by hand.
-import { ALTERNATE_SCORING, STANDARD_SCORING, completeRules, isFrontRow, playerPoints, pointsBreakdown, type StatCounts } from "../../lib/scoring";
+import { ALTERNATE_SCORING, STANDARD_SCORING, completeRules, isFrontRow, playerPoints, pointsBreakdown, statCountsFromRaw, statCountsFromRow, type StatCounts } from "../../lib/scoring";
 
 let failures = 0;
 const check = (name: string, ok: boolean, extra = "") => {
@@ -38,6 +38,20 @@ check("breakdown adds up to the total", Math.round(sum * 10) / 10 === altProp);
 // custom / saved rules missing newer fields are filled from Standard
 const partial = completeRules({ perEvent: { tries: 20 } } as never);
 check("custom rules: changed values kept, missing ones from Standard", partial.perEvent.tries === 20 && partial.perEvent.tackles === 1 && partial.metresPer === 10);
+
+// team win / draw points (custom scoring, Ethan 19 Nov 2026)
+const winRules = completeRules({ ...STANDARD_SCORING, teamWin: 5, teamDraw: 2 });
+check("old rules: no win / draw points", completeRules({ perEvent: {} } as never).teamWin === 0 && completeRules({ perEvent: {} } as never).teamDraw === 0);
+check("team win adds its points", playerPoints({ minutesPlayed: 80, teamWins: 1 }, false, winRules) === 7);
+check("team draw adds its points", playerPoints({ minutesPlayed: 80, teamDraws: 1 }, false, winRules) === 4);
+check("two wins in a double-round week count twice", playerPoints({ minutesPlayed: 160, teamWins: 2 }, false, winRules) === 12);
+check("didn't play: no win points", playerPoints({ minutesPlayed: 0, teamWins: 1 }, false, winRules) === 0);
+check("Standard gives nothing for a win", playerPoints({ minutesPlayed: 80, teamWins: 1 }, false, STANDARD_SCORING) === 2);
+const winBreak = pointsBreakdown({ minutesPlayed: 80, teamWins: 1 }, false, winRules);
+check("breakdown lists the team win", winBreak.some((b) => b.stat.header === "Team win" && b.points === 5));
+check("breakdown leaves it out when the league doesn't score it", !pointsBreakdown({ minutesPlayed: 80, teamWins: 1 }, false, STANDARD_SCORING).some((b) => b.stat.header === "Team win"));
+check("read from the stats feed (WIN)", statCountsFromRaw({ MP: 80, WIN: 1 }).teamWins === 1);
+check("read from a page row (Team win)", statCountsFromRow({ "Minutes played": 80, "Team win": 1 }).teamWins === 1);
 
 console.log(failures ? `\n${failures} FAILED` : "\nALL CHECKS PASSED");
 process.exit(failures ? 1 : 0);

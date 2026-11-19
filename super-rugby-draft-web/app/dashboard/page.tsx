@@ -1,5 +1,6 @@
 "use client";
 
+import { WatchEyeIcon } from "@/components/WatchEyeIcon";
 import React, { useEffect, useMemo, useState } from "react";
 import { card as themeCard, muted, num, teal } from "@/lib/ui/theme";
 import { leagueRefreshMs, usePoll } from "@/lib/hooks/usePoll";
@@ -2087,7 +2088,7 @@ onClick={() => {
     cursor: "pointer",
   }}
 >
-  {isWatched(p.id) ? "★" : "☆"}
+  <WatchEyeIcon active={isWatched(p.id)} />
 </button>
 
   {/* Add -> Transactions prefill */}

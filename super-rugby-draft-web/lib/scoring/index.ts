@@ -89,6 +89,9 @@ export type ScoringRules = {
   metresPer: number;
   /** Positions that get scrum points (Standard props and hookers, Alternate props only). */
   scrumPositions: string[];
+  /** Points for each game a player plays in that his team wins / draws (custom scoring; 0 = off). */
+  teamWin: number;
+  teamDraw: number;
 };
 
 export const STANDARD_SCORING: ScoringRules = {
@@ -97,6 +100,8 @@ export const STANDARD_SCORING: ScoringRules = {
   minutesFullAt: 61,
   metresPer: 10,
   scrumPositions: ["PR", "HO"],
+  teamWin: 0,
+  teamDraw: 0,
   perEvent: {
     tries: 15,
     tryAssists: 9,
@@ -137,6 +142,8 @@ export const ALTERNATE_SCORING: ScoringRules = {
   minutesFullAt: 60,
   metresPer: 5,
   scrumPositions: ["PR"],
+  teamWin: 0,
+  teamDraw: 0,
   perEvent: {
     tries: 7,
     tryAssists: 4,
@@ -176,6 +183,8 @@ export function completeRules(r: Partial<ScoringRules> | null | undefined): Scor
     minutesFullAt: num(r?.minutesFullAt ?? base.minutesFullAt) || base.minutesFullAt,
     metresPer: num(r?.metresPer ?? base.metresPer) || base.metresPer,
     scrumPositions: Array.isArray(r?.scrumPositions) ? r!.scrumPositions.map((p) => String(p).toUpperCase()) : base.scrumPositions,
+    teamWin: num(r?.teamWin ?? base.teamWin),
+    teamDraw: num(r?.teamDraw ?? base.teamDraw),
     perEvent: Object.fromEntries(
       (Object.keys(base.perEvent) as EventStatKey[]).map((k) => [k, num(r?.perEvent?.[k] ?? base.perEvent[k])])
     ) as Record<EventStatKey, number>,
@@ -200,7 +209,22 @@ export function roundPoints(n: number): number {
 /** Captain scores double. Fixed for every league. */
 export const CAPTAIN_MULTIPLIER = 2;
 
-export type StatCounts = Partial<Record<StatKey, number>>;
+/**
+ * A player's counts for a round (or a week: rounds added together). teamWins / teamDraws = games
+ * he played in that his team won / drew (lib/results/matchResults.ts adds them; they aren't in
+ * the stats feed).
+ */
+export type StatCounts = Partial<Record<StatKey | ResultKey, number>>;
+
+/** Match results, scored like stats but only when a league gives points for them. */
+export type ResultKey = "teamWins" | "teamDraws";
+export type ResultDef = { key: ResultKey; code: "WIN" | "DRW"; header: string };
+export const RESULT_STATS: readonly ResultDef[] = [
+  { key: "teamWins", code: "WIN", header: "Team win" },
+  { key: "teamDraws", code: "DRW", header: "Team draw" },
+];
+const resultPoints = (key: ResultKey, count: number, rules: ScoringRules) =>
+  Math.round(count * (key === "teamWins" ? rules.teamWin : rules.teamDraw) * 100) / 100;
 
 type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null; thirdPosAbbrev?: string | null } | null | undefined;
 
@@ -226,6 +250,10 @@ export function statCountsFromRow(row: unknown): StatCounts {
     if (v !== undefined && v !== null && v !== "") byNorm.set(normHeader(k), v);
   }
   for (const s of STATS) out[s.key] = num(byNorm.get(normHeader(s.header)));
+  for (const s of RESULT_STATS) {
+    const v = num(byNorm.get(normHeader(s.header)));
+    if (v) out[s.key] = v;
+  }
   return out;
 }
 
@@ -234,6 +262,10 @@ export function statCountsFromRaw(stats: unknown): StatCounts {
   const out: StatCounts = {};
   const src = (stats ?? {}) as Record<string, unknown>;
   for (const s of STATS) out[s.key] = num(src[s.code]);
+  for (const s of RESULT_STATS) {
+    const v = num(src[s.code]);
+    if (v) out[s.key] = v;
+  }
   return out;
 }
 
@@ -271,6 +303,7 @@ export function playerPoints(
   if (!playedInRound(counts)) return 0;
   let total = 0;
   for (const s of STATS) total += statPoints(s.key, num(counts[s.key]), frontRow, rules);
+  for (const s of RESULT_STATS) total += resultPoints(s.key, num(counts[s.key]), rules);
   return roundPoints(total);
 }
 
@@ -284,11 +317,18 @@ export function pointsBreakdown(
   counts: StatCounts,
   frontRow: boolean,
   rules: ScoringRules = activeScoringRules()
-): Array<{ stat: StatDef; count: number; points: number }> {
-  return STATS.map((stat) => {
+): Array<{ stat: StatDef | ResultDef; count: number; points: number }> {
+  const out: Array<{ stat: StatDef | ResultDef; count: number; points: number }> = STATS.map((stat) => {
     const count = num(counts[stat.key]);
     return { stat, count, points: statPoints(stat.key, count, frontRow, rules) };
   });
+  // team win / draw: listed only when the league scores them and he got them
+  for (const stat of RESULT_STATS) {
+    const count = num(counts[stat.key]);
+    const points = playedInRound(counts) ? resultPoints(stat.key, count, rules) : 0;
+    if (count && points) out.push({ stat, count, points });
+  }
+  return out;
 }
 
 /** How many of a stat, for points breakdowns: just the number (no "min" / "m" - Ethan, Nov 2026). */

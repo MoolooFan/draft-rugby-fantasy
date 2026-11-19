@@ -8,6 +8,7 @@ import ScoringRulesSync from "@/components/ScoringRulesSync";
 import LeagueSync from "@/components/LeagueSync";
 import ChatNotifier from "@/components/ChatNotifier";
 import { PlayerCompareHost } from "@/components/PlayerCompare";
+import { LeagueStakesPrompt } from "@/components/LeagueStakes";
 import { demo, demoClockSource } from "@/lib/demo";
 
 /**
@@ -17,6 +18,8 @@ import { demo, demoClockSource } from "@/lib/demo";
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // stops iPhones zooming in when a text box is tapped (Ethan, 19 Nov 2026)
+  maximumScale: 1,
   viewportFit: "cover", // ensures full-screen on iOS (no black bars)
   themeColor: "#0f172a",
 };
@@ -112,6 +115,8 @@ export default async function RootLayout({
             {children}
             {/* compare two players, from any page (player card Compare button, Stats Hub) */}
             {sessionProfile ? <PlayerCompareHost /> : null}
+            {/* league rewards / punishments: "I agree" until each league mate has */}
+            {sessionProfile ? <LeagueStakesPrompt /> : null}
           </ScoringRulesSync>
         </SessionProvider>
 
