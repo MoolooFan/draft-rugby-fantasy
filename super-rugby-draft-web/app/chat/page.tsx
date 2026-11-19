@@ -245,7 +245,6 @@ function ChatPageInner() {
             <span style={{ fontSize: 14, fontWeight: 700 }}>{roundLabel(recapFor)} recap</span>
             <span style={{ fontSize: 12, fontWeight: 700, color: "#0d9488", whiteSpace: "nowrap" }}>Open ›</span>
           </div>
-          <div style={{ fontSize: 11, fontWeight: 500, color: "#64748b" }}>Results, the Shield, player of the week, best and worst pickups</div>
           <div style={{ fontSize: 9, fontWeight: 600, opacity: 0.5 }}>{timeText(m.created_at)}</div>
         </button>
       );

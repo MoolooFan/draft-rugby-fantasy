@@ -135,7 +135,7 @@ export function RoundRecapModal({ leagueId, week, onClose }: { leagueId: string;
             {/* Pickups */}
             {r.bestPickup ? <Pickup label="Best pickup" colour="#16a34a" p={r.bestPickup} /> : null}
             {r.worstPickup ? <Pickup label="Worst pickup" colour="#dc2626" p={r.worstPickup} /> : null}
-            {!r.bestPickup ? <div style={{ fontSize: 12, color: muted, textAlign: "center" }}>No pickups for this round.</div> : null}
+            {!r.bestPickup ? <div style={{ fontSize: 12, color: muted, textAlign: "center" }}>No pickups who played this round.</div> : null}
           </>
         )}
       </div>

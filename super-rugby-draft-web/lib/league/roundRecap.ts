@@ -5,7 +5,7 @@
 //  - the Shield: taken, defended or first awarded that round
 //  - player of the week: the round's top scorer (all players, this league's scoring), and who had him
 //  - the best and worst pickups for the round: players added that week (free agents and waiver
-//    claims) by the points they scored in it, with the player they replaced
+//    claims) who played in it, by the points they scored, with the player they replaced
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSeason, realRoundsForWeek, SEASONS, weekLabel } from "@/lib/season";
 import { isFrontRow, playerPoints, RESULT_STATS, roundPoints, STATS, statCountsFromRaw, type StatCounts } from "@/lib/scoring";
@@ -129,8 +129,11 @@ export async function loadRoundRecap(db: SupabaseClient, leagueId: string, week:
       : [];
 
   // --- pickups for the round, by the points the new player scored in it
+  // only players who got on the field that round: injured players are often picked up weeks
+  // before they're back, and shouldn't count as a bad pickup (Ethan, 19 Nov 2026)
+  const played = (id: string) => Number(counts.get(id)?.minutesPlayed ?? 0) > 0;
   const rated: RecapPickup[] = pickups
-    .filter((p) => p.add_player_id && team(p.team_id))
+    .filter((p) => p.add_player_id && team(p.team_id) && played(String(p.add_player_id)))
     .map((p) => ({
       playerId: String(p.add_player_id),
       name: nameOf(String(p.add_player_id)),
