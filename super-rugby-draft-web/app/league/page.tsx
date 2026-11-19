@@ -893,12 +893,6 @@ const MovementCircle = useStableComponent(MovementCircle__render);
         </div>
 
         {/* E8: the commissioner starts last season's league again for this season (in the month before it starts) */}
-        {isCreator && !league?.canRestart && league?.restartOpensAt ? (
-          <div style={{ marginTop: 12, textAlign: "center", fontSize: 12, fontWeight: 600, opacity: 0.85 }}>
-            You can start the {currentSeasonYear()} season for this league from{" "}
-            {new Date(league.restartOpensAt).toLocaleDateString(undefined, { day: "numeric", month: "long" })}.
-          </div>
-        ) : null}
         {isCreator && league?.canRestart ? (
           <div style={{ ...listBox, marginTop: 12, padding: 12, display: "grid", gap: 8 }}>
             <div style={{ fontSize: 13, fontWeight: 700 }}>New season</div>
@@ -1617,8 +1611,10 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
           ) : null}
           {shieldEnabled ? <ShieldRewardsFields value={shieldRewards} onChange={setShieldRewards} /> : null}
 
+          <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.9 }}>Draft date &amp; time</div>
           <input
   type="datetime-local"
+  aria-label="Draft date and time"
   value={draftLocal}
   onChange={(e) => setDraftLocal(e.target.value)}
   style={inputStyle()}

@@ -10,8 +10,10 @@ import {
   rosterSize,
   SLOT_KINDS,
   SQUAD_LIMITS,
+  sameSquad,
   STANDARD_SQUAD,
   starterCount,
+  TEN_SQUAD,
   type SlotKind,
   type SquadFormat,
 } from "@/lib/league/squad";
@@ -58,8 +60,8 @@ export function SquadFormatFields({
   teamCount?: number;
 }) {
   const pool = usePlayerPool();
-  // "Custom" stays open even while its numbers match Standard
-  const [mode, setMode] = useState<"standard" | "custom">(isStandardSquad(value) ? "standard" : "custom");
+  // "Custom" stays open even while its numbers match Standard or the 10-starter squad
+  const [mode, setMode] = useState<"standard" | "ten" | "custom">(isStandardSquad(value) ? "standard" : sameSquad(value, TEN_SQUAD) ? "ten" : "custom");
   const custom = mode === "custom";
   const starters = starterCount(value);
   const roster = rosterSize(value);
@@ -75,17 +77,25 @@ export function SquadFormatFields({
       <select
         aria-label="Squad"
         disabled={disabled}
-        value={custom ? "custom" : "standard"}
+        value={mode}
         onChange={(e) => {
-          const next = e.target.value === "custom" ? "custom" : "standard";
+          const next = e.target.value === "custom" ? "custom" : e.target.value === "ten" ? "ten" : "standard";
           setMode(next);
           if (next === "standard") onChange(STANDARD_SQUAD);
+          if (next === "ten") onChange(TEN_SQUAD);
         }}
         style={{ height: 34, borderRadius: 10, border: "1px solid rgba(0,0,0,0.18)", padding: "0 8px", fontSize: 13, fontWeight: 600, color: "#0f172a", background: disabled ? "#f1f5f9" : "#ffffff" }}
       >
         <option value="standard">Standard: 15 starters, 5 bench, 1 IR</option>
+        <option value="ten">10 starters: 5 forwards, 5 backs</option>
         <option value="custom">Custom squad</option>
       </select>
+
+      {mode === "ten" ? (
+        <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.85, lineHeight: 1.4 }}>
+          Starters: 3 Tight five (PR, HO, LK), 2 Forward (any forward), 2 Halves (HB, FH), 3 Back (any back). Then 5 bench and 1 IR.
+        </div>
+      ) : null}
 
       {custom ? (
         <div style={{ display: "grid", gap: 6, background: "#ffffff", color: "#0f172a", borderRadius: 12, padding: 10, border: "1px solid #e5e9ef" }}>

@@ -22,6 +22,13 @@ export const DEMO_SETTINGS = {
   /** the last real round with stats */
   lastRealRound: 8,
   label: "Demo · 2026 season after round 8 · time is frozen",
+  /** the demo league (scripts/demo-league.ts) */
+  leagueId: "demo_league_2026",
+  /**
+   * A sample championship star on one team (Samuel's), only so its placement around the site
+   * can be seen (Ethan, 19 Nov 2026). Display only: no honours are added.
+   */
+  sampleStarTeamId: "demo_team_fe3c0674-d685-4a91-b0aa-6456d6dba4dd",
 } as const;
 
 declare global {

@@ -1178,7 +1178,7 @@ function tileSubtext(p: Player | null) {
 
   if (viewMode === "Projected") {
     const v = playerProj(p);
-    return v == null ? "-" : `Proj ${formatProjection(v)}`;
+    return v == null ? "-" : formatProjection(v);
   }
 
   if (viewMode === "Fixture") return getUpcomingFixtureTag(p.teamCode);
@@ -1518,7 +1518,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
             </div>
           </>
         ) : (
-          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, opacity: 0.75, lineHeight: "12px", textAlign: "center" }}>
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#dc2626", lineHeight: "12px", textAlign: "center" }}>
             <span>IR</span>
           </div>
         )}
