@@ -1,6 +1,7 @@
 "use client";
 // app/league/LeagueSettingsModal.tsx
 // (moved out of page.tsx unchanged)
+import { LeagueStakesSection } from "@/components/LeagueStakes";
 import { ShieldRewardsFields } from "@/components/ShieldRewardsFields";
 import { BonusPointsFields } from "@/components/BonusPointsFields";
 import { cleanBonusRules, type BonusRules } from "@/lib/league/bonus";
@@ -176,6 +177,10 @@ setDraftOrderIds((prev) => {
 <div style={{ marginTop: 8 }}>
   <ShieldRewardsFields value={shieldRewards} onChange={setShieldRewards} disabled={settingsLocked} />
 </div>
+</Field>
+
+<Field label="Rewards & Punishments">
+  <LeagueStakesSection leagueId={league.id} />
 </Field>
 
 {draftStarted ? (
