@@ -1429,6 +1429,10 @@ const leftWinPct = (() => {
   return leftOutlook && rightOutlook ? Math.round(winProbability(leftOutlook, rightOutlook) * 100) : null;
 })();
 
+// The captain's projection is in purple (like his points pill) to show it has been doubled
+// (Ethan, 20 Nov 2026).
+const CAPTAIN_PROJ_STYLE = { fontWeight: 700, color: "#9333ea" } as const;
+
 /** A player's projection for the row (x2 for the captain, like his points): live while his game is on. */
 function projText(p: Player | null, captainId: string | null): string | null {
   if (!showProj || !p?.id) return null;
@@ -1970,7 +1974,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 );
 
 })()}
-{projText(lp, leftC) ? <div style={{ ...num, fontSize: 10.5, fontWeight: 500, color: muted, lineHeight: "12px" }} title="Expected points">{projText(lp, leftC)}</div> : null}
+{projText(lp, leftC) ? <div style={{ ...num, fontSize: 10.5, ...(lp?.id && lp.id === leftC ? CAPTAIN_PROJ_STYLE : { fontWeight: 500, color: muted }), lineHeight: "12px" }} title={lp?.id && lp.id === leftC ? "Expected points (doubled for the captain)" : "Expected points"}>{projText(lp, leftC)}</div> : null}
 
 </div>
 
@@ -2029,7 +2033,7 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
     </div>
   );
 })()}
-{projText(rp, rightC) ? <div style={{ ...num, fontSize: 10.5, fontWeight: 500, color: muted, lineHeight: "12px" }} title="Expected points">{projText(rp, rightC)}</div> : null}
+{projText(rp, rightC) ? <div style={{ ...num, fontSize: 10.5, ...(rp?.id && rp.id === rightC ? CAPTAIN_PROJ_STYLE : { fontWeight: 500, color: muted }), lineHeight: "12px" }} title={rp?.id && rp.id === rightC ? "Expected points (doubled for the captain)" : "Expected points"}>{projText(rp, rightC)}</div> : null}
 
 </div>
 

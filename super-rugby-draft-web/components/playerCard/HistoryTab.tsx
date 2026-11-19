@@ -7,7 +7,6 @@ import React, { useEffect, useState } from "react";
 import { TabCard } from "./helpers";
 import type { HistoryEvent } from "@/lib/league/playerHistory";
 import { roundLabel } from "@/lib/season";
-import { useCoachName } from "@/lib/coach/name";
 
 type Loaded = { events: HistoryEvent[]; teamNames: Record<string, string>; playerNames: Record<string, string> };
 
@@ -124,7 +123,6 @@ export function VerdictChip({ verdict }: { verdict: string | null | undefined })
 // Player card > AI Coach tab (Ethan, 17 Nov 2026; lib/coach): the coach's notes about this
 // player, newest first: season outlook, after each game, team lists, status changes and news.
 export function CoachTab({ playerId }: { playerId: string }) {
-  const coachName = useCoachName();
   const [data, setData] = useState<{ key: string; notes: CoachNote[] } | null>(null);
   const [error, setError] = useState<{ key: string; text: string } | null>(null);
 
@@ -145,16 +143,7 @@ export function CoachTab({ playerId }: { playerId: string }) {
 
   if (error?.key === playerId) return <TabCard><div style={{ color: "#b91c1c" }}>{error.text}</div></TabCard>;
   if (data?.key !== playerId) return <TabCard><div style={{ opacity: 0.7 }}>Loading…</div></TabCard>;
-  if (!data.notes.length) {
-    return (
-      <TabCard>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>{coachName}</div>
-        <div style={{ marginTop: 6, fontSize: 12, fontWeight: 500, opacity: 0.7, lineHeight: 1.45 }}>
-          No notes yet. The coach writes a season outlook, a note after each game, and an update when the team and injury lists come out.
-        </div>
-      </TabCard>
-    );
-  }
+  if (!data.notes.length) return <TabCard><div style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>No scouting completed</div></TabCard>;
   return (
     <div style={{ display: "grid", gap: 8 }}>
       {data.notes.map((n) => (

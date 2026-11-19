@@ -128,7 +128,7 @@ export function StatsTab({
         <StatRow
           label="Games Played"
           right={gp ? String(gp) : "-"}
-          right2={typeof st === "number" ? String(st) : "-"}
+          right2={st ? String(st) : "-"}
           right2Label="Starts"
         />
 

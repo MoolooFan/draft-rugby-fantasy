@@ -1,11 +1,10 @@
 "use client";
 
-import { lineupWarnings, WARNING_TEXT } from "@/lib/league/lineupWarnings";
 import { PER80_MIN_MINUTES } from "@/lib/players/statView";
 import { useSeasonStatRows } from "@/lib/players/useStatRows";
 import { pitchRows, rosterSize, slotAccepts, squadSlots, STANDARD_SQUAD, type SlotKind, type SquadFormat } from "@/lib/league/squad";
 import React, { useEffect, useMemo, useState } from "react";
-import { card as themeCard, ink, muted, num } from "@/lib/ui/theme";
+import { card as themeCard, muted, num } from "@/lib/ui/theme";
 import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
 import { teamOutlook } from "@/lib/projections/live";
 import { CAPTAIN_MULTIPLIER, pointsFromRow, statCountsFromRow } from "@/lib/scoring";
@@ -945,14 +944,6 @@ const teamProj = useMemo(() => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [projReady, weekProj, lineup, captainId, viceId, nowMs, squadSig]);
 
-// Lineup check (Ethan, 19 Nov 2026): starters who won't play this round or might not, and
-// empty starting spots (lib/league/lineupWarnings.ts)
-const lineupCheck = useMemo(
-  () => (projReady ? lineupWarnings(lineup as never, (id) => projectionFor(weekProj, id), squad) : null),
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  [projReady, weekProj, lineup, squadSig]
-);
-
 function hydratePlayer(p: Player): Player & { status?: any; weeklyStatus?: any } {
   const live = getLivePlayerById(p.id);
   if (!live) return p as any;
@@ -1444,11 +1435,12 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
             <div
               style={{
                 background: "#133454",
-                color: "white",
+                // the captain's projection is purple, to show it has been doubled (Ethan, 20 Nov 2026)
+                color: viewMode === "Projected" && p.id === captainId ? "#c084fc" : "white",
                 textAlign: "center",
                 padding: "0px 0px",
                 fontSize: 10,
-                fontWeight: 500,
+                fontWeight: viewMode === "Projected" && p.id === captainId ? 700 : 500,
                 lineHeight: "12px",
                 borderTop: "1px solid rgba(15,23,42,0.10)",
                 whiteSpace: "nowrap",
@@ -1838,39 +1830,6 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     </div>
   ) : null}
 </div>
-{lineupCheck && (lineupCheck.warnings.length || lineupCheck.emptySpots) ? (
-  <div
-    style={{
-      marginTop: 10,
-      padding: "8px 10px",
-      borderRadius: 12,
-      border: `1px solid ${lineupCheck.warnings.some((w) => w.level === "out") || lineupCheck.emptySpots ? "#fca5a5" : "#fcd34d"}`,
-      background: lineupCheck.warnings.some((w) => w.level === "out") || lineupCheck.emptySpots ? "#fef2f2" : "#fffbeb",
-      display: "grid",
-      gap: 4,
-    }}
-  >
-    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "#991b1b" }}>Lineup check</div>
-    {lineupCheck.warnings.map((w) => {
-      const pl = Object.values(lineup).find((x) => x?.id === w.playerId) ?? null;
-      return (
-        <button
-          key={w.playerId}
-          onClick={() => pl && setModalPlayer(hydratePlayer(pl))}
-          style={{ all: "unset", cursor: pl ? "pointer" : "default", display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12 }}
-        >
-          <span style={{ fontWeight: 600, color: ink }}>{pl ? nameOf(pl) : "A starter"}</span>
-          <span style={{ fontWeight: 600, color: w.level === "out" ? "#dc2626" : "#b45309", textAlign: "right" }}>{WARNING_TEXT[w.reason]}</span>
-        </button>
-      );
-    })}
-    {lineupCheck.emptySpots ? (
-      <div style={{ fontSize: 12, fontWeight: 600, color: "#dc2626" }}>
-        {lineupCheck.emptySpots} empty starting spot{lineupCheck.emptySpots === 1 ? "" : "s"}
-      </div>
-    ) : null}
-  </div>
-) : null}
 
         </div>
 
