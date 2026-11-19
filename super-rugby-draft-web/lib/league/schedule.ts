@@ -172,6 +172,11 @@ export function pickRoundForWeek(toDecide: WeeksToDecide, week: number, ladder: 
 
 type Draft = Omit<PlayoffGame, "weeks"> & { weeks: number[] };
 
+/** The finals games for a finals size (weeks counted from the first finals week). */
+export function finalsGames(size: FinalsSize): Array<Omit<PlayoffGame, "weeks"> & { weeks: number[] }> {
+  return finalsLayout(size);
+}
+
 function finalsLayout(size: FinalsSize): Draft[] {
   const s = (n: number): Source => ({ seed: n });
   switch (size) {

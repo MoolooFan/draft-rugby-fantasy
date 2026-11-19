@@ -35,6 +35,8 @@ import { PictureCropper } from "@/components/PictureCropper";
 import { CrownIcon, ShieldIcon, SpoonIcon } from "@/components/AwardIcons";
 import { ShieldTab } from "@/components/ShieldTab";
 import { PowerTab } from "@/components/PowerTab";
+import type { PowerTable } from "@/lib/league/powerServer";
+import { formatOdds } from "@/lib/league/odds";
 
 type LeagueTab = "Standings" | "Fixtures" | "Results" | "Power" | "Shield";
 type Modal =
@@ -598,6 +600,28 @@ const standings = useMemo<StandingRow[]>(() => {
   });
 }, [sheetFixtures, league?.teams]);
 
+// Each team's chance of making the playoffs, at the end of the standings (Ethan, 19 Nov 2026): the
+// rest of the season simulated (lib/league/powerServer.ts, the same numbers as Power Rankings)
+const [odds, setOdds] = useState<{ leagueId: string; table: PowerTable } | null>(null);
+const oddsLeagueId = league?.id ?? null;
+useEffect(() => {
+  if (!oddsLeagueId) return;
+  let live = true;
+  fetch(`/api/leagues/power?leagueId=${encodeURIComponent(oddsLeagueId)}`, { cache: "no-store", credentials: "include" })
+    .then((r) => r.json())
+    .then((j) => live && j?.ok && setOdds({ leagueId: oddsLeagueId, table: j.power as PowerTable }))
+    .catch(() => {});
+  return () => {
+    live = false;
+  };
+}, [oddsLeagueId]);
+const oddsTable = odds && odds.leagueId === oddsLeagueId ? odds.table : null;
+const showOdds = !!oddsTable && oddsTable.simulated && oddsTable.finalsSize > 0;
+const playoffOdds = (teamId: string) => {
+  const o = oddsTable?.rows.find((x) => x.teamId === teamId);
+  return o ? formatOdds(o.playoffPct, { yes: o.clinched, no: o.eliminated }) : "–";
+};
+
   // ------- fixtures/results (generated placeholder) -------
 
     const teamNameById = (id: string | null | undefined, opts?: { tbcIfMissing?: boolean }) => {
@@ -802,7 +826,7 @@ const MovementCircle = useStableComponent(MovementCircle__render);
     // horizontally scrollable table; the team column fits the longest team name (no cutting off)
     const longest = Math.max(8, ...standings.map((r) => String(r.teamName ?? "").length));
     const teamCol = Math.round(32 + longest * 7.4 + 40); // avatar + name + room for the shield / crown / spoon
-    const cols = `44px ${teamCol}px 24px 24px 24px 24px 38px 38px 40px 30px`;
+    const cols = `44px ${teamCol}px 24px 24px 24px 24px 38px 38px 40px 30px${showOdds ? " 56px" : ""}`;
     return (
       <>
         <div style={listBox}>
@@ -830,6 +854,11 @@ const MovementCircle = useStableComponent(MovementCircle__render);
                 <div>PA</div>
                 <div>PD</div>
                 <div style={{ textAlign: "right" }}>Pts</div>
+                {showOdds ? (
+                  <div style={{ textAlign: "right", whiteSpace: "nowrap" }} title="Chance of making the playoffs">
+                    Playoff %
+                  </div>
+                ) : null}
               </div>
 
               {standings.map((r) => (
@@ -882,6 +911,7 @@ const MovementCircle = useStableComponent(MovementCircle__render);
                   <div>{r.pa}</div>
                   <div>{r.pd}</div>
                   <div style={{ textAlign: "right", fontWeight: 700 }}>{r.pts}</div>
+                  {showOdds ? <div style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{playoffOdds(r.teamId)}</div> : null}
                 </div>
               ))}
             </div>

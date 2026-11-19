@@ -1,7 +1,7 @@
 "use client";
 // components/PowerTab.tsx
-// The League page's Power Rankings tab: weekly power rankings (lib/league/powerRankings.ts) with who
-// moved up or down since last round.
+// The League page's Power Rankings tab: the teams in order of their chance of winning the title
+// (lib/league/powerServer.ts, lib/league/odds.ts), with who moved up or down since last round.
 import React, { useEffect, useState } from "react";
 import { TeamAvatar } from "@/components/TeamAvatar";
 import { roundLabel } from "@/lib/season";
@@ -85,7 +85,9 @@ export function PowerTab({ leagueId, teams }: { leagueId: string; teams: TeamLit
         })}
       </div>
       <div style={{ ...box, padding: "8px 10px", ...muted, fontWeight: 600, lineHeight: 1.4, textAlign: "center" }}>
-        Updated after each round. Arrows show the move since the round before.
+        {p.simulated
+          ? "In order of each team's chance of winning the title: the rest of the season and the finals played out 10,000 times, from results so far and how strong each roster is. Updated after each round; arrows show the move since the round before."
+          : "In order of roster strength until the season's draw is made. Updated after each round; arrows show the move since the round before."}
       </div>
     </div>
   );

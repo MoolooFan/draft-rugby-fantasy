@@ -34,6 +34,10 @@ export type PlayerProjection = {
   kicker: boolean;
   /** his game's kickoff this week (null = bye) */
   kickoffMs: number | null;
+  /** why he's projected 0 (role "out"): a bye, his status, or left out of his team's list */
+  outReason?: "bye" | "injured" | "suspended" | "out" | "notNamed";
+  /** due back from injury this round but not confirmed yet (QUES) */
+  questionable?: boolean;
 };
 
 export type WeekProjections = {
@@ -268,7 +272,9 @@ export async function weekProjections(
     const fx = fixtureOf.get(t);
     const kickoff = fx ? kickoffMs(fx.f) : null;
     if (!fx || ruledOut(p)) {
-      out[p.id] = { pts: 0, low: 0, high: 0, spread: 0, role: "out", kicker: false, kickoffMs: kickoff };
+      const k = statusKind(statusNow(p));
+      const outReason = !fx ? "bye" : k === "injured" || k === "suspended" || k === "out" ? k : "notNamed";
+      out[p.id] = { pts: 0, low: 0, high: 0, spread: 0, role: "out", kicker: false, kickoffMs: kickoff, outReason };
       continue;
     }
     const own = games.get(p.id) ?? [];
@@ -296,7 +302,7 @@ export async function weekProjections(
         { chance: c.bench, projected: projectPoints({ ...base, role: "bench" }) },
       ]);
     }
-    out[p.id] = { pts, ...projectionRange(pts), spread: Math.round(spread * 10) / 10, role, kicker: isKicker, kickoffMs: kickoff };
+    out[p.id] = { pts, ...projectionRange(pts), spread: Math.round(spread * 10) / 10, role, kicker: isKicker, kickoffMs: kickoff, ...(statusKind(statusNow(p)) === "questionable" ? { questionable: true } : {}) };
   }
 
   const data: WeekProjections = { season, week, listsOut: [...listsOut], players: out };
