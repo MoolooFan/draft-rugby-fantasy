@@ -11,8 +11,8 @@ export async function GET(req: Request) {
   try {
     const leagueId = String(new URL(req.url).searchParams.get("leagueId") ?? "").trim();
     if (!leagueId) return NextResponse.json({ ok: false, error: "Missing leagueId" }, { status: 400 });
-    await requireLeagueTeam(leagueId);
-    return NextResponse.json({ ok: true, power: await loadPower(supabaseAdmin, leagueId) });
+    const { teamId } = await requireLeagueTeam(leagueId);
+    return NextResponse.json({ ok: true, myTeamId: teamId, power: await loadPower(supabaseAdmin, leagueId) });
   } catch (e) {
     const { msg, status } = toHttpError(e);
     return NextResponse.json({ ok: false, error: msg }, { status });

@@ -1,5 +1,5 @@
 // Run: npx tsx scripts/tests/odds.test.ts — finals / title chances (lib/league/odds.ts).
-import { formatOdds, seededRandom, simulateOdds, teamStrengths, type OddsMatchup } from "../../lib/league/odds";
+import { formatOdds, matchupsAsOf, seededRandom, simulateOdds, teamStrengths, type OddsMatchup } from "../../lib/league/odds";
 import { buildLeagueSchedule } from "../../lib/league/schedule";
 import { cleanBonusRules } from "../../lib/league/bonus";
 
@@ -65,6 +65,14 @@ check("after the Grand Final: the winner is 100% for the title", o5.a.titlePct =
 // no finals: the title is the top of the ladder
 const noFinals = simulateOdds({ teamIds: teams, matchups: toRows().filter((m) => m.kind === "regular"), rosterProjection: strong, finalsSize: 0, bonusRules: bonus, sims: 2000, rng: seededRandom(1) });
 check("no finals: title chances still add up to 100%", Math.abs(noFinals.reduce((s, o) => s + o.titlePct, 0) - 100) < 0.01);
+
+// past rankings: the schedule as it stood after round 4
+const back = matchupsAsOf(gf, 4);
+check("rewound: games after round 4 aren't played", back.filter((m) => m.kind === "regular" && m.status === "final").every((m) => Math.max(...(m.weeks ?? [0])) <= 4) && back.some((m) => m.kind === "regular" && m.status === "final"));
+check("rewound: finals games lose their teams and winner", back.filter((m) => m.kind !== "regular").every((m) => m.home_team_id == null && m.away_team_id == null && m.status !== "final" && m.winner_team_id == null));
+const oBack = byId(run(back, strong));
+check("rewound to round 4: no one is certain of the title any more", Object.values(oBack).every((o) => o.titlePct < 100), oBack.a.titlePct.toFixed(1));
+check("rewinding to the last round changes nothing", JSON.stringify(matchupsAsOf(gf, 99)) === JSON.stringify(gf));
 
 check("formatting", formatOdds(99.8) === ">99%" && formatOdds(0.2) === "<1%" && formatOdds(42.4) === "42%" && formatOdds(99.8, { yes: true }) === "100%" && formatOdds(0, { no: true }) === "0%");
 
