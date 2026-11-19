@@ -151,7 +151,7 @@ export async function postRoundPosts(db: SupabaseClient, leagueId: string, week:
       channel: LEAGUE_CHANNEL,
       senderTeamId: null,
       kind: "system",
-      body: `${roundName(week)} recap is in: results, the Shield, player of the week and the best and worst pickups.`,
+      body: `${roundName(week)} recap`,
       meta: { recapWeek: week },
       dedupeKey: `recap:${week}`,
     });
