@@ -23,11 +23,12 @@ import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { toMs, pickValue } from "@/lib/league/weekHelpers";
 import { ladderOrder, tieBreakHolder } from "@/lib/league/ladder";
 import { ShieldRewardsFields } from "@/components/ShieldRewardsFields";
+import { ShieldStartFields } from "@/components/ShieldStartFields";
 import { BonusPointsFields } from "@/components/BonusPointsFields";
 import { DEFAULT_BONUS_RULES, type BonusRules } from "@/lib/league/bonus";
 import { TeamIconPicker } from "@/components/TeamIconPicker";
 import { parseTeamIcon } from "@/lib/teams/icons";
-import { NO_SHIELD_REWARDS, type ShieldRewards } from "@/lib/league/shield";
+import { DEFAULT_SHIELD_START, NO_SHIELD_REWARDS, type ShieldRewards, type ShieldStart } from "@/lib/league/shield";
 import { toDatetimeLocal, ModalOverlay, inputStyle, selectStyle, parseDatetimeLocal, saveButton } from "./ui";
 import { LeagueSettingsModal } from "./LeagueSettingsModal";
 import { TeamAvatar } from "@/components/TeamAvatar";
@@ -35,6 +36,7 @@ import { PictureCropper } from "@/components/PictureCropper";
 import { CrownIcon, ShieldIcon, SpoonIcon } from "@/components/AwardIcons";
 import { ShieldTab } from "@/components/ShieldTab";
 import { PowerTab } from "@/components/PowerTab";
+import { MovementCircle } from "@/components/MovementCircle";
 import type { PowerTable } from "@/lib/league/powerServer";
 import { formatOdds } from "@/lib/league/odds";
 
@@ -420,6 +422,11 @@ useEffect(() => {
   const createLeague = useLeagueStore((s) => s.createLeague);
 
   const [tab, setTab] = useState<LeagueTab>("Standings");
+  // ?tab=Power (the dashboard's "View Power Rankings" link) opens that tab
+  useEffect(() => {
+    const want = new URLSearchParams(window.location.search).get("tab");
+    if (want === "Power" || want === "Fixtures" || want === "Results" || want === "Shield") setTab(want);
+  }, []);
   const [menuOpen, setMenuOpen] = useState(false);
   const [modal, setModal] = useState<Modal>(null);
 
@@ -788,29 +795,6 @@ const Header = useStableComponent(Header__render);
   }
 const Tabs = useStableComponent(Tabs__render);
 
-  // Up / down / no change since the round before (Ethan, 20 Nov 2026: drawn chevrons on a soft
-  // tinted circle instead of text symbols, which sat off-centre and looked different on each phone)
-  function MovementCircle__render({ movement, moved = 0 }: { movement: "same" | "up" | "down"; moved?: number }) {
-  const look = {
-    up: { bg: "#bbf7d0", fg: "#15803d", path: "M4.5 10 L8 6.5 L11.5 10", label: `Up ${Math.abs(moved) || 1} since last round` },
-    down: { bg: "#fecaca", fg: "#b91c1c", path: "M4.5 6.5 L8 10 L11.5 6.5", label: `Down ${Math.abs(moved) || 1} since last round` },
-    same: { bg: "#e2e8f0", fg: "#64748b", path: "M5 8.25 H11", label: "No change since last round" },
-  }[movement];
-
-  return (
-    <span
-      title={look.label}
-      aria-label={look.label}
-      role="img"
-      style={{ width: 18, height: 18, borderRadius: 999, background: look.bg, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
-    >
-      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" style={{ display: "block" }}>
-        <path d={look.path} fill="none" stroke={look.fg} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </span>
-  );
-}
-const MovementCircle = useStableComponent(MovementCircle__render);
 
   function StandingsTab__render() {
     // horizontally scrollable table; the team column fits the longest team name (no cutting off)
@@ -1532,6 +1516,7 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
   const [shieldEnabled, setShieldEnabled] = useState(true);
   const [shieldName, setShieldName] = useState("The Shield");
   const [shieldRewards, setShieldRewards] = useState<ShieldRewards>(NO_SHIELD_REWARDS);
+  const [shieldStart, setShieldStart] = useState<ShieldStart>(DEFAULT_SHIELD_START);
   const [squadFormat, setSquadFormat] = useState<SquadFormat>(STANDARD_SQUAD);
   const [customRules, setCustomRules] = useState<ScoringRules>(STANDARD_SCORING);
   const [error, setError] = useState<string | null>(null);
@@ -1629,6 +1614,7 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
               style={inputStyle()}
             />
           ) : null}
+          {shieldEnabled ? <ShieldStartFields value={shieldStart} onChange={setShieldStart} /> : null}
           {shieldEnabled ? <ShieldRewardsFields value={shieldRewards} onChange={setShieldRewards} /> : null}
 
           <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.9 }}>Draft date &amp; time</div>
@@ -1662,6 +1648,7 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
     shieldEnabled,
     shieldName,
     shieldRewards,
+    shieldStart,
     squadFormat,
     ...(scoringSystem === "custom" ? { scoringCustom: customRules } : {}),
   });

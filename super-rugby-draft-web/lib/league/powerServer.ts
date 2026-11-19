@@ -23,7 +23,7 @@ import { finalsSizeFromFormat } from "@/lib/results/engine";
 import { loadSeasonPlayers } from "@/lib/players/db";
 import { weekProjections } from "@/lib/projections/server";
 import { getLeagueScoringRules } from "@/lib/scoring/leagueRules";
-import { getSeason, SEASONS, totalFantasyWeeks } from "@/lib/season";
+import { getSeason, SEASONS, totalFantasyWeeks, weekFirstKickoffMs } from "@/lib/season";
 
 export type PowerRow = TeamOdds & {
   rank: number;
@@ -44,6 +44,8 @@ export type PowerTable = {
   finalsSize: number;
   /** false before the season's schedule is made (no draft yet): then it's roster strength only */
   simulated: boolean;
+  /** the league's first round has kicked off (until then the dashboard shows these instead of the standings) */
+  started: boolean;
   rows: PowerRow[];
 };
 
@@ -86,6 +88,10 @@ export async function loadPower(db: SupabaseClient, leagueId: string): Promise<P
   const finalsSize = finalsSizeFromFormat(league?.playoff_format);
   const rewards = cleanShieldRewards(league?.shield_rewards);
   const simulated = games.length > 0;
+  // has the league's first round kicked off? (its first game's kickoff, or any result in)
+  const firstWeek = Math.min(...games.filter((m) => m.kind === "regular").flatMap((m) => (m.weeks ?? []).map(Number)));
+  const firstKickoff = season && Number.isFinite(firstWeek) ? weekFirstKickoffMs(getSeason(season), firstWeek) : Infinity;
+  const started = asOfWeek > 0 || Date.now() >= firstKickoff;
 
   // projections of each team's best possible team for the round after `week`
   const rules = season ? await getLeagueScoringRules(db, leagueId) : null;
@@ -189,6 +195,7 @@ export async function loadPower(db: SupabaseClient, leagueId: string): Promise<P
     trendFromWeek,
     finalsSize,
     simulated,
+    started,
     rows: current.map((r) => {
       const before = rankAt(asOfWeek - 1, r.teamId);
       const from = rankAt(trendFromWeek, r.teamId);

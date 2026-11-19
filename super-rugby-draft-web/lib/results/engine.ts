@@ -159,6 +159,13 @@ export async function buildScheduleForLeague(db: Db, leagueId: string, nowMs: nu
       draft_status: "complete",
     }).eq("id", leagueId)
   );
+  // the Shield drawn at random (if the league does that): now the teams are set (lib/league/shieldServer.ts)
+  try {
+    const { loadShield } = await import("@/lib/league/shieldServer");
+    await loadShield(db as never, leagueId);
+  } catch (e) {
+    console.error("[results] shield draw failed:", e);
+  }
   return { ok: true, weeks: weeks.length, regularWeeks: sch.regularWeeks.length, playoffWeeks: sch.playoffWeeks.length };
 }
 

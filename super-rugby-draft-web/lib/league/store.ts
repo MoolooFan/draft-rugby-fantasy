@@ -1,6 +1,6 @@
 // lib/league/store.ts
 import type { SquadFormat } from "@/lib/league/squad";
-import type { ShieldRewards } from "@/lib/league/shield";
+import type { ShieldRewards, ShieldStart } from "@/lib/league/shield";
 import type { BonusRules } from "@/lib/league/bonus";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -42,6 +42,7 @@ createLeague: (params: {
   shieldEnabled?: boolean;
   shieldName?: string;
   shieldRewards?: ShieldRewards;
+  shieldStart?: ShieldStart;
   squadFormat?: SquadFormat;
 }) => Promise<{ ok: true } | { ok: false; error: string }>;
 
@@ -75,6 +76,7 @@ joinLeagueByCode: (params: {
         | "shieldEnabled"
         | "shieldName"
         | "shieldRewards"
+        | "shieldStart"
         | "squadFormat"
       >
     >
@@ -175,7 +177,7 @@ refreshLeague: async (leagueId) => {
         }));
       },
 
-      createLeague: async ({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints, bonusRules, shieldEnabled, shieldName, shieldRewards, squadFormat }) => {
+      createLeague: async ({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints, bonusRules, shieldEnabled, shieldName, shieldRewards, shieldStart, squadFormat }) => {
   const userId = getActiveUserId();
   if (!userId) return { ok: false, error: "Not signed in." };
 
@@ -183,7 +185,7 @@ refreshLeague: async (leagueId) => {
     const res = await fetch("/api/leagues/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints, bonusRules, shieldEnabled, shieldName, shieldRewards, squadFormat }),
+      body: JSON.stringify({ name, teamName, playoffFormat, draftDateTimeText, draftAt, scoringSystem, scoringCustom, bonusPoints, bonusRules, shieldEnabled, shieldName, shieldRewards, shieldStart, squadFormat }),
     });
 
     const json = await res.json().catch(() => null);

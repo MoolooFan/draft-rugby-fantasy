@@ -4,6 +4,7 @@
 // same name, settings and history (lineage), a new join code and a new draft. Only the
 // commissioner joins automatically (with their old team name and picture); everyone else
 // rejoins with the new code and gets their old team name and picture back.
+import { cleanShieldStart } from "@/lib/league/shield";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -94,6 +95,8 @@ export async function POST(req: Request) {
     shield_enabled: old.shield_enabled !== false,
     shield_name: old.shield_name ?? "The Shield",
     shield_rewards: old.shield_rewards ?? {},
+    // drawn at random again (a picked team was last season's team: pick again)
+    shield_start: cleanShieldStart(old.shield_start).method === "random" ? { method: "random", teamId: null } : {},
     real_regular_season_rounds: seasonWeeks,
     start_round: 1,
     total_weeks: seasonWeeks,

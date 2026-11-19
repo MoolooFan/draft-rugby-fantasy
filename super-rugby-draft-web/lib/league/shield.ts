@@ -15,6 +15,10 @@
 // - A league can switch it off and on any time (from that round on; while it's off the holder
 //   keeps it whatever the results) and rename it.
 // - Started fresh in 2027 (SHIELD_FIRST_SEASON): earlier seasons don't count.
+// - How it's first given out (Ethan, 20 Nov 2026), set by the commissioner until round 1 kicks
+//   off: the top score in the first round (above), drawn at random once the draft finishes, or a
+//   team the commissioner picks. Either of the last two holds it from round 1, so its first home
+//   game is already a defence. Only when no one carries it over from last season.
 
 import { demo } from "@/lib/demo";
 
@@ -28,6 +32,27 @@ export function cleanShieldName(raw: unknown): string {
   const s = String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
   if (!s) return DEFAULT_SHIELD_NAME;
   return /\bshield$/i.test(s) ? s.replace(/shield$/i, "Shield") : `${s} Shield`;
+}
+
+export type ShieldStartMethod = "top_score" | "random" | "chosen";
+export type ShieldStart = {
+  method: ShieldStartMethod;
+  /** the team drawn (random) or picked (chosen); null = not drawn / picked yet */
+  teamId: string | null;
+};
+export const DEFAULT_SHIELD_START: ShieldStart = { method: "top_score", teamId: null };
+
+export function cleanShieldStart(raw: unknown): ShieldStart {
+  const r = (raw && typeof raw === "object" ? raw : {}) as { method?: unknown; teamId?: unknown };
+  const method: ShieldStartMethod = r.method === "random" || r.method === "chosen" ? r.method : "top_score";
+  const teamId = method !== "top_score" && typeof r.teamId === "string" && r.teamId ? r.teamId : null;
+  return { method, teamId };
+}
+
+/** The team that starts the season with it, if the league draws / picks one (and it's in the league). */
+export function shieldStartTeam(start: ShieldStart | undefined, teamIds: string[]): string | null {
+  if (!start || start.method === "top_score" || !start.teamId) return null;
+  return teamIds.includes(start.teamId) ? start.teamId : null;
 }
 
 export type ShieldGame = {
@@ -53,6 +78,8 @@ export type ShieldSeason = {
   teams: Array<{ id: string; owner: string; name: string }>;
   /** regular-season games only */
   games: ShieldGame[];
+  /** how it's first given out this season if no one carries it over (default: top score) */
+  start?: ShieldStart;
 };
 
 export type ShieldReign = {
@@ -62,8 +89,9 @@ export type ShieldReign = {
   leagueId: string;
   season: number;
   fromWeek: number;
-  /** how it started: first award / won off the holder / handed back (holder didn't return) / awarded again */
-  how: "awarded" | "won" | "handed_back" | "reawarded";
+  /** how it started: first award / won off the holder / handed back (holder didn't return) / awarded
+   *  again / drawn at random / picked by the commissioner (the last two: before the season) */
+  how: "awarded" | "won" | "handed_back" | "reawarded" | "drawn" | "chosen";
   /** the team it was won from (how = "won") */
   wonFromTeamName: string | null;
   defences: number;
@@ -167,6 +195,12 @@ export function computeShield(seasons: ShieldSeason[]): ShieldState {
       }
     }
     const reawardHow: ShieldReign["how"] = reigns.length ? "reawarded" : "awarded";
+    // no one carried over: drawn at random / picked by the commissioner, if the league does that
+    const startTeam = holderTeam ? null : shieldStartTeam(s.start, s.teams.map((t) => t.id));
+    if (startTeam) {
+      startReign(s, startTeam, weeks[0] ?? 1, s.start!.method === "random" ? "drawn" : "chosen", null);
+      holderTeam = startTeam;
+    }
     seasonStart[s.leagueId] = holderTeam;
 
     for (const w of weeks) {

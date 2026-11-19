@@ -1,5 +1,5 @@
 // lib/league/types.ts
-import type { ShieldRewards } from "@/lib/league/shield";
+import type { ShieldRewards, ShieldStart } from "@/lib/league/shield";
 import type { BonusRules } from "@/lib/league/bonus";
 import type { SquadFormat } from "@/lib/league/squad";
 export type PlayoffFormat = "none" | "final2" | "final3" | "final4" | "final6";
@@ -45,6 +45,8 @@ export type League = {
   shieldName?: string;
   /** rewards for holding the Shield (lib/league/shield.ts); locked once the draft starts */
   shieldRewards?: ShieldRewards;
+  /** how the Shield is first given out (sent when saving League Settings; read from shield.start) */
+  shieldStart?: ShieldStart;
   /** starting slots, bench and IR (lib/league/squad.ts); missing = Standard */
   squadFormat?: SquadFormat;
   /** E8: the commissioner can restart this (earlier-season) league for the current season */
@@ -68,4 +70,10 @@ export type LeagueShieldSummary = {
   defences: number;
   next: { week: number; homeTeamId: string; awayTeamId: string } | null;
   games: Array<{ week: number; kind: "defended" | "won"; holderTeamId: string; otherTeamId: string | null }>;
+  /** how it's first given out this season (top score / drawn at random / picked by the commissioner) */
+  start?: ShieldStart;
+  /** a holder carried over from last season (the start setting isn't used) */
+  carriedOver?: boolean;
+  /** the league's first round has kicked off: the first holder can't change */
+  startLocked?: boolean;
 };

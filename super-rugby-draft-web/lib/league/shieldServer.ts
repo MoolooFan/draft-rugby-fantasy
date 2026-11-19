@@ -3,9 +3,11 @@
 // in lib/league/shield.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { leagueLineage } from "@/lib/league/honours";
+import { postMessage } from "@/lib/chat/server";
+import { LEAGUE_CHANNEL } from "@/lib/chat/common";
 import {
-  cleanShieldName, cleanShieldRewards, computeShield, holderAfterWeek, nextShieldGame, shieldLadderPoints, shieldSecuredWeek,
-  type ShieldEvent, type ShieldGame, type ShieldReign, type ShieldRewards, type ShieldSeason,
+  cleanShieldName, cleanShieldRewards, cleanShieldStart, computeShield, holderAfterWeek, nextShieldGame, shieldLadderPoints, shieldSecuredWeek,
+  type ShieldEvent, type ShieldGame, type ShieldReign, type ShieldRewards, type ShieldSeason, type ShieldStart,
 } from "@/lib/league/shield";
 
 export type LeagueShield = {
@@ -27,13 +29,20 @@ export type LeagueShield = {
   startHolderTeamId: string | null;
   /** the commissioner's rewards for holding it */
   rewards: ShieldRewards;
+  /** how it's first given out this season (top score / drawn at random / picked) */
+  start: ShieldStart;
+  /** this season's holder carried over from last season (then the start setting isn't used) */
+  carriedOver: boolean;
 };
+
+/** "The Shield" stays as it is; "Ranfurly Shield" -> "the Ranfurly Shield". */
+const theShield = (name: string) => (/^the /i.test(name) ? name : `the ${name}`);
 
 export async function loadShield(db: SupabaseClient, leagueId: string): Promise<LeagueShield> {
   const lineage = await leagueLineage(db, leagueId);
   const { data: leagues, error } = await db
     .from("leagues")
-    .select("id, season, shield_enabled, shield_name, shield_toggles, shield_rewards")
+    .select("id, season, shield_enabled, shield_name, shield_toggles, shield_rewards, shield_start, draft_status")
     .or(`lineage_id.eq.${lineage},id.eq.${lineage}`);
   if (error) throw error;
   const ids = (leagues ?? []).map((l) => l.id);
@@ -66,10 +75,44 @@ export async function loadShield(db: SupabaseClient, leagueId: string): Promise<
         awayTries: m.away_tries,
         final: m.status === "final",
       })),
+    start: cleanShieldStart(l.shield_start),
   }));
   const here = seasons.find((s) => s.leagueId === leagueId);
   const row = (leagues ?? []).find((l) => l.id === leagueId);
-  const state = computeShield(seasons);
+  let state = computeShield(seasons);
+  const carriedOver = !!state.seasonStart[leagueId] && !(here?.start && here.start.method !== "top_score" && here.start.teamId === state.seasonStart[leagueId]);
+
+  // Drawn at random: once the draft has finished (the teams are set), if no one carried it over
+  if (here && row && here.start?.method === "random" && !here.start.teamId && row.draft_status === "complete" && !carriedOver && here.teams.length >= 2 && (row.shield_enabled !== false)) {
+    const pick = here.teams[Math.floor(Math.random() * here.teams.length)];
+    // only if it's still undrawn (two page loads at once draw once)
+    const { data: saved, error: dErr } = await db
+      .from("leagues")
+      .update({ shield_start: { method: "random", teamId: pick.id, drawnAt: new Date().toISOString() } })
+      .eq("id", leagueId)
+      .filter("shield_start->>teamId", "is", null)
+      .select("shield_start");
+    if (dErr) throw dErr;
+    if (saved?.length) {
+      here.start = { method: "random", teamId: pick.id };
+      try {
+        await postMessage(db, {
+          leagueId,
+          channel: LEAGUE_CHANNEL,
+          senderTeamId: null,
+          kind: "system",
+          body: `🎲 ${pick.name} has been drawn at random to start the season holding ${theShield(cleanShieldName(row.shield_name))}. Their first home game is their first defence.`,
+          dedupeKey: `shield-draw:${leagueId}`,
+        });
+      } catch (e) {
+        console.error("[shield] draw message not posted:", e);
+      }
+    } else {
+      const { data: again } = await db.from("leagues").select("shield_start").eq("id", leagueId).maybeSingle();
+      here.start = cleanShieldStart(again?.shield_start);
+    }
+    state = computeShield(seasons);
+  }
   const holderTeamId = state.holder && here ? here.teams.find((t) => t.owner === state.holder!.owner)?.id ?? null : null;
   const next = here && holderTeamId ? nextShieldGame(here, holderTeamId) : null;
   const securedWeek = here && holderTeamId ? shieldSecuredWeek(here, holderTeamId, state.holder?.reign ?? null) : null;
@@ -85,6 +128,8 @@ export async function loadShield(db: SupabaseClient, leagueId: string): Promise<
     season: here?.season ?? null,
     startHolderTeamId: state.seasonStart[leagueId] ?? null,
     rewards: cleanShieldRewards(row?.shield_rewards),
+    start: here?.start ?? cleanShieldStart(null),
+    carriedOver,
   };
 }
 

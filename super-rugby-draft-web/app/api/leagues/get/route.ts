@@ -7,9 +7,9 @@ import { refreshDraftOrder } from "@/lib/draft/engine";
 import { rulesForLeagueRow } from "@/lib/scoring/leagueRules";
 import { championshipStars } from "@/lib/league/honours";
 import { loadShield } from "@/lib/league/shieldServer";
-import { cleanShieldName, cleanShieldRewards } from "@/lib/league/shield";
+import { cleanShieldName, cleanShieldRewards, cleanShieldStart } from "@/lib/league/shield";
 import { bonusRulesFromRow } from "@/lib/league/bonus";
-import { currentSeasonYear, restartWindow } from "@/lib/season";
+import { currentSeasonYear, getSeason, restartWindow, SEASONS, weekFirstKickoffMs } from "@/lib/season";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -209,10 +209,20 @@ draftOrder: computedOrder,
         defences: s.holder?.defences ?? 0,
         next: s.next,
         games: s.events.filter((e) => e.kind !== "awarded").map((e) => ({ week: e.week, kind: e.kind, holderTeamId: e.holderTeamId, otherTeamId: e.otherTeamId })),
+        start: s.start,
+        carriedOver: s.carriedOver,
+        startLocked: shieldStartLocked(),
       };
     } catch {
-      return { enabled: leagueRow.shield_enabled !== false, name: "The Shield", holderTeamId: null, defences: 0, next: null, games: [] };
+      return { enabled: leagueRow.shield_enabled !== false, name: "The Shield", holderTeamId: null, defences: 0, next: null, games: [], start: cleanShieldStart(leagueRow.shield_start), carriedOver: false, startLocked: shieldStartLocked() };
     }
+  }
+
+  /** the first holder can't change once the league's first round has kicked off */
+  function shieldStartLocked(): boolean {
+    const firstWeek = Number(leagueRow.first_week);
+    if (!SEASONS[Number(leagueRow.season)] || !(firstWeek > 0)) return false;
+    return Date.now() >= weekFirstKickoffMs(getSeason(Number(leagueRow.season)), firstWeek);
   }
 
   async function restartInfo(row: { id: string; season: number; lineage_id?: string | null }) {

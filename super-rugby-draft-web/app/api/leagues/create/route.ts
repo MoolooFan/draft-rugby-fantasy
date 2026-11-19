@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cleanSquadFormat, isStandardSquad } from "@/lib/league/squad";
-import { cleanShieldName, cleanShieldRewards } from "@/lib/league/shield";
+import { cleanShieldName, cleanShieldRewards, cleanShieldStart } from "@/lib/league/shield";
 import { anyBonus, cleanBonusRules } from "@/lib/league/bonus";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -47,6 +47,8 @@ export async function POST(req: Request) {
   const shieldEnabled = body?.shieldEnabled !== false;
   const shieldName = cleanShieldName(body?.shieldName);
   const shieldRewards = cleanShieldRewards(body?.shieldRewards);
+  // top score or drawn at random (a team can only be picked once teams have joined: League Settings)
+  const shieldStartMethod = cleanShieldStart(body?.shieldStart).method;
   // the squad (lib/league/squad.ts): Standard unless the commissioner set their own
   const squad = cleanSquadFormat(body?.squadFormat ?? null);
   if (squad.error) return NextResponse.json({ ok: false, error: squad.error }, { status: 400 });
@@ -120,6 +122,7 @@ if (draftAtRaw !== null && draftAtRaw !== undefined && draftAtRaw !== "") {
     shield_enabled: shieldEnabled,
     shield_name: shieldName,
     shield_rewards: shieldRewards,
+    shield_start: shieldStartMethod === "random" ? { method: "random", teamId: null } : {},
     real_regular_season_rounds: seasonWeeks,
     start_round: 1,
     total_weeks: seasonWeeks,

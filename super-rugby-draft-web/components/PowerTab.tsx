@@ -180,13 +180,8 @@ export function PowerTab({ leagueId, teams }: { leagueId: string; teams: TeamLit
   const started = p.asOfWeek > 0 && p.simulated;
   const hasPre = started && p.rows.some((r) => r.preseasonRank != null);
   const mine = p.rows.find((r) => r.teamId === data?.myTeamId) ?? null;
-  const since =
-    p.trendFromWeek > 0
-      ? `Last ${TREND_ROUNDS} rounds (since ${roundLabel(p.trendFromWeek)})`
-      : p.asOfWeek === 1
-        ? "Since preseason (1 round)"
-        : `Since preseason (${p.asOfWeek} rounds)`;
-  const cols = hasPre ? "18px 30px 1fr 34px" : "18px 30px 1fr";
+  const since = p.trendFromWeek > 0 ? `Last ${TREND_ROUNDS} rounds` : "Since preseason";
+  const cols = hasPre ? "18px 30px 1fr 62px" : "18px 30px 1fr";
 
   return (
     <div>
@@ -226,7 +221,7 @@ export function PowerTab({ leagueId, teams }: { leagueId: string; teams: TeamLit
           <span>#</span>
           <span />
           <span>Team</span>
-          {hasPre ? <span style={{ textAlign: "center" }} title="Rank before round 1">Pre</span> : null}
+          {hasPre ? <span style={{ textAlign: "center" }} title="Rank straight after the draft, before round 1">Preseason</span> : null}
         </div>
         {p.rows.map((r) => {
           const t = team(r.teamId);
@@ -248,12 +243,6 @@ export function PowerTab({ leagueId, teams }: { leagueId: string; teams: TeamLit
       </div>
 
       {hasPre ? <PreseasonChart rows={p.rows} name={name} myTeamId={data?.myTeamId ?? null} /> : null}
-
-      <div style={{ ...box, padding: "8px 10px", ...muted, fontWeight: 600, lineHeight: 1.4, textAlign: "center" }}>
-        {p.simulated
-          ? `In order of each team's chance of winning the title: the rest of the season and the finals played out 10,000 times, from results so far and how strong each roster is. Updated after each round; arrows show the move since the round before, Pre is the ranking straight after the draft, and Trending is the move over the last ${TREND_ROUNDS} rounds.`
-          : "In order of roster strength until the season's draw is made. Updated after each round; arrows show the move since the round before."}
-      </div>
     </div>
   );
 }

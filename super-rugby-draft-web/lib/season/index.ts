@@ -123,6 +123,13 @@ export function weekFinaliseAtMs(s: SeasonConfig, fantasyWeek: number): number |
  * What users see a fantasy week called. Weeks are named after their real round(s) so they
  * line up with Super Rugby, e.g. "Round 9", "Round 10/11", "Round 12".
  */
+/** When a fantasy week's first game kicks off (ms; Infinity if it has no games). */
+export function weekFirstKickoffMs(s: SeasonConfig, fantasyWeek: number): number {
+  const rounds = realRoundsForWeek(s, fantasyWeek);
+  const times = s.fixtures.filter((f) => rounds.includes(f.week)).map((f) => Date.parse(f.kickoffAt)).filter(Number.isFinite);
+  return times.length ? Math.min(...times) : Infinity;
+}
+
 export function weekLabel(s: SeasonConfig, fantasyWeek: number): string {
   const rounds = realRoundsForWeek(s, fantasyWeek);
   if (!rounds.length) return `Week ${fantasyWeek}`;

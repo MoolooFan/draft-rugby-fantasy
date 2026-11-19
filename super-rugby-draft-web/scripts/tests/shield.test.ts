@@ -1,5 +1,5 @@
 // Run: npx tsx scripts/tests/shield.test.ts — the Shield (lib/league/shield.ts).
-import { cleanShieldName, computeShield, nextShieldGame, shieldRecap, shieldSecuredWeek, type ShieldGame, type ShieldSeason } from "../../lib/league/shield";
+import { cleanShieldName, cleanShieldStart, computeShield, nextShieldGame, shieldRecap, shieldSecuredWeek, type ShieldGame, type ShieldSeason } from "../../lib/league/shield";
 
 let failures = 0;
 const check = (name: string, ok: boolean, extra = "") => {
@@ -111,6 +111,18 @@ check("recap: DT defended v Josh in round 11; Josh challenged and fell short", r
 check("recap: next game is a shield defence / challenge", rc(9, "dt2027", { week: 10, homeTeamId: "dt2027", awayTeamId: "noah2027" }, 10)?.next === "defending" && rc(9, "noah2027", { week: 10, homeTeamId: "dt2027", awayTeamId: "noah2027" }, 10)?.next === "challenging");
 check("recap: nothing to say = no shield section", rc(9, "hh2027") === null);
 check("recap: shield switched off = nothing", shieldRecap({ name: "x", enabled: false, events: ev, week: 6, myTeamId: "noah2027", next: null, myNextWeek: null }) === null);
+
+// how it's first given out (Ethan, 20 Nov 2026): drawn at random / picked by the commissioner
+const drawn = computeShield([{ ...s1, start: { method: "random", teamId: "hh2027" } }]);
+check("drawn: HH holds it from round 1 (no top-score award)", drawn.seasonStart.L1 === "hh2027" && !drawn.events.some((e) => e.kind === "awarded") && drawn.reigns[0]?.how === "drawn" && drawn.reigns[0]?.fromWeek === 1);
+check("drawn: round 2 at home is HH's first game on the line (Noah wins it 623-405)", drawn.events[0]?.week === 2 && drawn.events[0]?.kind === "won" && drawn.events[0]?.holderTeamId === "noah2027", JSON.stringify(drawn.events[0]));
+const picked = computeShield([{ ...s1, start: { method: "chosen", teamId: "josh2027" } }]);
+check("picked: Josh's round 1 home game is a defence", picked.reigns[0]?.how === "chosen" && picked.events[0]?.week === 1 && picked.events[0]?.kind === "defended");
+check("not drawn yet: falls back to the top score", computeShield([{ ...s1, start: { method: "random", teamId: null } }]).events[0]?.kind === "awarded");
+check("a picked team that left the league: top score", computeShield([{ ...s1, start: { method: "chosen", teamId: "gone" } }]).events[0]?.kind === "awarded");
+const nextYear: ShieldSeason = { leagueId: "L2", season: 2028, enabled: true, teams: ["noah", "dt", "josh", "hh"].map((t) => team(t, 2028)), games: games(2028), start: { method: "chosen", teamId: "hh2028" } };
+check("a holder carried over from last season wins over the pick", computeShield([s1, nextYear]).seasonStart.L2 === "dt2028");
+check("cleaning the setting", cleanShieldStart(null).method === "top_score" && cleanShieldStart({ method: "chosen", teamId: "x" }).teamId === "x" && cleanShieldStart({ method: "top_score", teamId: "x" }).teamId === null && cleanShieldStart({ method: "nonsense" }).method === "top_score");
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll passed");
 process.exit(failures ? 1 : 0);
