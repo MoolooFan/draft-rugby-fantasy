@@ -16,6 +16,8 @@ import { usePlayersStore } from "@/lib/players/store";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { useChatUnread } from "@/lib/chat/store";
 import { dmTeams, LEAGUE_CHANNEL } from "@/lib/chat/common";
+import { RoundRecapModal } from "@/components/RoundRecapModal";
+import { roundLabel } from "@/lib/season";
 
 type Team = { id: string; name: string; pictureUrl: string | null; initials: string | null; ownerName: string | null };
 type Msg = {
@@ -194,6 +196,8 @@ function ChatPageInner() {
       .catch(() => {});
   }, [hasTrades, activeLeagueId, playersLoaded, refreshPlayers, shown.length]);
   const [review, setReview] = useState<Msg | null>(null);
+  // the round recap pop-up (from a "Round N recap" message)
+  const [recapWeek, setRecapWeek] = useState<number | null>(null);
   const playerObj = (id: string, name: string) => (players ?? []).find((p) => p.id === id) ?? ({ id, firstName: "", lastName: name } as never);
   async function answerTrade(tradeId: string, accept: boolean) {
     setReview(null);
@@ -228,6 +232,24 @@ function ChatPageInner() {
   // (a plain function, not a component, so bubbles aren't rebuilt on every refresh)
   function bubble(m: Msg) {
     const mine = m.sender_team_id === myTeamId;
+    // the round recap: a card that opens the recap pop-up (results, the Shield, player of the
+    // week, best and worst pickups: components/RoundRecapModal)
+    const recapFor = m.kind === "system" ? Number((m.meta as { recapWeek?: unknown } | null)?.recapWeek) : NaN;
+    if (Number.isInteger(recapFor) && recapFor > 0) {
+      return (
+        <button
+          onClick={() => setRecapWeek(recapFor)}
+          style={{ justifySelf: "center", width: "92%", maxWidth: 360, border: "1px solid #e5e9ef", borderRadius: 14, background: "#ffffff", color: "#0f172a", padding: "10px 12px", textAlign: "left", cursor: "pointer", boxShadow: "0 4px 12px rgba(15,23,42,0.08)", display: "grid", gap: 4 }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 700 }}>{roundLabel(recapFor)} recap</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#0d9488", whiteSpace: "nowrap" }}>Open ›</span>
+          </div>
+          <div style={{ fontSize: 11, fontWeight: 500, color: "#64748b" }}>Results, the Shield, player of the week, best and worst pickups</div>
+          <div style={{ fontSize: 9, fontWeight: 600, opacity: 0.5 }}>{timeText(m.created_at)}</div>
+        </button>
+      );
+    }
     if (m.kind === "system") {
       return (
         <div style={{ justifySelf: "center", maxWidth: "92%", borderRadius: 12, background: "rgba(15,23,42,0.06)", padding: "8px 10px", fontSize: 12, fontWeight: 500, whiteSpace: "pre-line", lineHeight: 1.4 }}>
@@ -428,6 +450,7 @@ function ChatPageInner() {
         </div>
       ) : null}
 
+      {recapWeek != null && activeLeagueId ? <RoundRecapModal leagueId={activeLeagueId} week={recapWeek} onClose={() => setRecapWeek(null)} /> : null}
       {review
         ? (() => {
             const meta = review.meta as { tradeId: string; fromTeamId: string; offer?: Array<{ id: string; name: string }>; request?: Array<{ id: string; name: string }> };

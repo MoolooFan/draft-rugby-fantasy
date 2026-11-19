@@ -138,14 +138,26 @@ function formatDeadline(dtMs: number, timeZone?: string) {
 /** --- Field placement (percent coords): a row per line of the team (lib/league/squad.ts pitchRows) --- */
 const ROW_LEFTS: Record<number, string[]> = { 1: ["50%"], 2: ["38%", "62%"], 3: ["24%", "50%", "76%"], 4: ["14%", "38%", "62%", "86%"] };
 const STANDARD_ROW_TOPS = [14, 29, 44.5, 60, 75.5, 90.5];
-/** Pitch height: 520px for up to 6 rows, taller for bigger squads. */
-const pitchHeight = (rows: number) => Math.max(520, rows * 87);
+/**
+ * Pitch height: 520px for 6 rows (Standard), taller for bigger squads. Smaller squads (e.g. 10
+ * starters, 4 rows) get a shorter pitch with the rows the same distance apart as Standard's,
+ * so the tiles sit close together and the subs box comes up under them (Ethan, 19 Nov 2026).
+ */
+const COMPACT_FIRST_TOP = 66; // px, like Standard's first row
+const COMPACT_ROW_GAP = 80; // px, like Standard's rows
+const pitchHeight = (rows: number) =>
+  rows < 6 ? COMPACT_FIRST_TOP + (rows - 1) * COMPACT_ROW_GAP + 54 : Math.max(520, rows * 87);
 function fieldPositionsFor(format: SquadFormat): Record<SlotId, { top: string; left: string }> {
   const rows = pitchRows(format);
   const n = rows.length;
-  const tops = n === 6 ? STANDARD_ROW_TOPS : rows.map((_, i) => (n === 1 ? 50 : 10 + (i * 80) / (n - 1)));
+  const tops =
+    n === 6
+      ? STANDARD_ROW_TOPS.map((t) => `${t}%`)
+      : n < 6
+        ? rows.map((_, i) => `${COMPACT_FIRST_TOP + i * COMPACT_ROW_GAP}px`)
+        : rows.map((_, i) => `${10 + (i * 80) / (n - 1)}%`);
   const out: Record<SlotId, { top: string; left: string }> = {};
-  rows.forEach((row, i) => row.forEach((id, j) => (out[id] = { top: `${tops[i]}%`, left: (ROW_LEFTS[row.length] ?? ROW_LEFTS[3])[j] })));
+  rows.forEach((row, i) => row.forEach((id, j) => (out[id] = { top: tops[i], left: (ROW_LEFTS[row.length] ?? ROW_LEFTS[3])[j] })));
   return out;
 }
 
@@ -1540,7 +1552,8 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
             `linear-gradient(to bottom, rgba(5,150,105,0.92), rgba(16,185,129,0.92))`,
           backgroundImage: `url("/images/field.webp")`,
           backgroundSize: "cover",
-          backgroundPosition: "center",
+          // shorter pitches (small squads) keep the top of the picture: the posts end
+          backgroundPosition: PITCH_ROWS < 6 ? "center top" : "center",
           
           boxShadow: "0 18px 50px rgba(0,0,0,0.30)",
         }}
