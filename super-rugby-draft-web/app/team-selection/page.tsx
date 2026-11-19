@@ -1,5 +1,6 @@
 "use client";
 
+import { pitchRows, rosterSize, slotAccepts, squadSlots, STANDARD_SQUAD, type SlotKind, type SquadFormat } from "@/lib/league/squad";
 import React, { useEffect, useMemo, useState } from "react";
 
 import { AppMenu } from "@/components/AppMenu";
@@ -20,51 +21,20 @@ import { usePlayersStore } from "@/lib/players/store";
 import { usePlayerPool } from "@/lib/players/pool";
 import { fantasyWeekToRealRound } from "@/lib/league/week";
 import { pointsFromRow } from "@/lib/scoring";
-import { playerPositions } from "@/lib/players/positions";
 import { toMs, getWeekDeadlineMs, type SheetFixtureRow, currentWeekFromSheet, pickValue } from "@/lib/league/weekHelpers";
 import { JERSEYS } from "@/lib/teams/images";
 import { StatusTag } from "@/components/StatusTag";
 import { fixCaptains } from "@/lib/league/lineup";
 import type { Lineup as ServerLineup } from "@/lib/scoring/week";
-import { irEligible, IR_SPOTS } from "@/lib/league/ir";
+import { irEligible } from "@/lib/league/ir";
 import { currentStatusText } from "@/lib/status/kind";
-import { ROSTER_SIZE } from "@/lib/draft/rules";
 
 type ViewMode = "Fixture" | "Latest Score" | "PPG" | "Form";
 
 /** Slot layout exactly as you provided */
-type SlotId =
-  | "prop1"
-  | "hooker1"
-  | "prop2"
-  | "lock1"
-  | "lock2"
-  | "looseforward1"
-  | "looseforward2"
-  | "looseforward3"
-  | "halfback1"
-  | "flyhalf1"
-  | "centre1"
-  | "centre2"
-  | "outsideback1"
-  | "outsideback2"
-  | "outsideback3"
-  | "bench1"
-  | "bench2"
-  | "bench3"
-  | "bench4"
-  | "bench5";
+/** a lineup slot ("prop1", "bench2", or a custom squad's "tightfive1"...: lib/league/squad.ts) */
+type SlotId = string;
 
-type PosGroup =
-  | "PROP"
-  | "HOOKER"
-  | "LOCK"
-  | "LOOSE"
-  | "HB"
-  | "FH"
-  | "CENTRE"
-  | "OB"
-  | "WC";
 
 /** Match your player shape from draft/player JSON */
 type Player = {
@@ -92,8 +62,7 @@ type AnyFixture = Fixture & {
 
 type SlotDef = {
   id: SlotId;
-  label: string; // for empty state
-  group: PosGroup;
+  label: string; // for empty state ("Loose Forward" shows on two lines)
   starter: boolean; // starters shown on field
 };
 
@@ -127,36 +96,20 @@ function jerseySrcForTeam(teamCodeOrName: string) {
   );
 }
 
-/** --- Slot defs in EXACT order you gave --- */
-const SLOT_DEFS: SlotDef[] = [
-  { id: "prop1", label: "Prop", group: "PROP", starter: true },
-  { id: "hooker1", label: "Hooker", group: "HOOKER", starter: true },
-  { id: "prop2", label: "Prop", group: "PROP", starter: true },
-  { id: "lock1", label: "Lock", group: "LOCK", starter: true },
-  { id: "lock2", label: "Lock", group: "LOCK", starter: true },
-  { id: "looseforward1", label: "Loose", group: "LOOSE", starter: true },
-  { id: "looseforward2", label: "Loose", group: "LOOSE", starter: true },
-  { id: "looseforward3", label: "Loose", group: "LOOSE", starter: true },
-  { id: "halfback1", label: "Halfback", group: "HB", starter: true },
-  { id: "flyhalf1", label: "Flyhalf", group: "FH", starter: true },
-  { id: "centre1", label: "Centre", group: "CENTRE", starter: true },
-  { id: "centre2", label: "Centre", group: "CENTRE", starter: true },
-  { id: "outsideback1", label: "Outside", group: "OB", starter: true },
-  { id: "outsideback2", label: "Outside", group: "OB", starter: true },
-  { id: "outsideback3", label: "Outside", group: "OB", starter: true },
+/** Empty-tile names for each kind of starting slot. */
+const KIND_TILE_LABEL: Record<SlotKind, string> = {
+  PR: "Prop", HO: "Hooker", LK: "Lock", LF: "Loose Forward", HB: "Halfback", FH: "Flyhalf", CE: "Centre", OB: "Outside Back",
+  TF: "Tight Five", HV: "Halves", FW: "Forward", BK: "Back", ANY: "Any",
+};
 
-  
-    // Bench (5 wildcards, no position restrictions)
-  { id: "bench1", label: "Sub", group: "WC", starter: false },
-  { id: "bench2", label: "Sub", group: "WC", starter: false },
-  { id: "bench3", label: "Sub", group: "WC", starter: false },
-  { id: "bench4", label: "Sub", group: "WC", starter: false },
-  { id: "bench5", label: "Sub", group: "WC", starter: false },
-
-];
-
-const STARTER_IDS: SlotId[] = SLOT_DEFS.filter((s) => s.starter).map((s) => s.id);
-const BENCH_IDS: SlotId[] = SLOT_DEFS.filter((s) => !s.starter).map((s) => s.id);
+/** The league's slots in order (Standard: prop1, hooker1, prop2, ... outsideback3, bench1-5). */
+function slotDefsFor(format: SquadFormat): SlotDef[] {
+  const { starters, bench } = squadSlots(format);
+  return [
+    ...starters.map((s) => ({ id: s.id, label: KIND_TILE_LABEL[s.kind], starter: true })),
+    ...bench.map((id) => ({ id, label: "Sub", starter: false })),
+  ];
+}
 
 function isFixtureComplete(f: AnyFixture) {
   if ((f.status ?? "").toLowerCase() === "complete") return true;
@@ -177,46 +130,29 @@ function formatDeadline(dtMs: number, timeZone?: string) {
   }).format(d);
 }
 
-/** --- Figma-ish field placement (percent coords) --- */
-const FIELD_POS: Record<SlotId, { top: string; left: string }> = {
-  prop1: { top: "14%", left: "24%" },
-  hooker1: { top: "14%", left: "50%" },
-  prop2: { top: "14%", left: "76%" },
-
-  lock1: { top: "29%", left: "38%" },
-  lock2: { top: "29%", left: "62%" },
-
-  looseforward1: { top: "44.5%", left: "24%" },
-  looseforward2: { top: "44.5%", left: "50%" },
-  looseforward3: { top: "44.5%", left: "76%" },
-
-  halfback1: { top: "60%", left: "38%" },
-  flyhalf1: { top: "60%", left: "62%" },
-
-  centre1: { top: "75.5%", left: "38%" },
-  centre2: { top: "75.5%", left: "62%" },
-
-  outsideback1: { top: "90.5%", left: "24%" },
-  outsideback2: { top: "90.5%", left: "50%" },
-  outsideback3: { top: "90.5%", left: "76%" },
-
-  // Bench positions are not on field:
-    // Bench positions are not on field:
-  bench1: { top: "0%", left: "0%" },
-  bench2: { top: "0%", left: "0%" },
-  bench3: { top: "0%", left: "0%" },
-  bench4: { top: "0%", left: "0%" },
-  bench5: { top: "0%", left: "0%" },
-
-};
+/** --- Field placement (percent coords): a row per line of the team (lib/league/squad.ts pitchRows) --- */
+const ROW_LEFTS: Record<number, string[]> = { 1: ["50%"], 2: ["38%", "62%"], 3: ["24%", "50%", "76%"], 4: ["14%", "38%", "62%", "86%"] };
+const STANDARD_ROW_TOPS = [14, 29, 44.5, 60, 75.5, 90.5];
+/** Pitch height: 520px for up to 6 rows, taller for bigger squads. */
+const pitchHeight = (rows: number) => Math.max(520, rows * 87);
+function fieldPositionsFor(format: SquadFormat): Record<SlotId, { top: string; left: string }> {
+  const rows = pitchRows(format);
+  const n = rows.length;
+  const tops = n === 6 ? STANDARD_ROW_TOPS : rows.map((_, i) => (n === 1 ? 50 : 10 + (i * 80) / (n - 1)));
+  const out: Record<SlotId, { top: string; left: string }> = {};
+  rows.forEach((row, i) => row.forEach((id, j) => (out[id] = { top: `${tops[i]}%`, left: (ROW_LEFTS[row.length] ?? ROW_LEFTS[3])[j] })));
+  return out;
+}
 
 type Lineup = Record<SlotId, Player | null>;
 
-function reconcileLineupWithRoster(prev: Lineup, rosterPool: Player[]): Lineup {
+function reconcileLineupWithRoster(prev: Lineup, rosterPool: Player[], SLOT_DEFS: SlotDef[]): Lineup {
+  const BENCH_IDS = SLOT_DEFS.filter((s) => !s.starter).map((s) => s.id);
   const owned = new Map(rosterPool.map((p) => [p.id, p]));
 
-  // 1) Remove players no longer owned, and refresh objects from rosterPool (so updated fields come through)
-  const cleaned: Lineup = { ...prev };
+  // 1) Remove players no longer owned, and refresh objects from rosterPool (so updated fields come through).
+  //    Only this league's slots are kept (a lineup saved under other slot names starts again).
+  const cleaned: Lineup = Object.fromEntries(SLOT_DEFS.map((s) => [s.id, prev?.[s.id] ?? null]));
   for (const s of SLOT_DEFS) {
     const p = cleaned[s.id];
     if (!p?.id) continue;
@@ -254,23 +190,8 @@ function reconcileLineupWithRoster(prev: Lineup, rosterPool: Player[]): Lineup {
   return cleaned;
 }
 function canPlayerFitSlot(player: Player, slot: SlotDef) {
-  if (slot.group === "WC") return true;
-
-  // any of the player's positions (up to three)
-  const either = (fn: (p: string) => boolean) => playerPositions(player).some(fn);
-
-  if (slot.group === "PROP") return either((p) => p.includes("PROP") || p === "PR");
-  if (slot.group === "HOOKER") return either((p) => p.includes("HOOK") || p === "HO");
-  if (slot.group === "LOCK") return either((p) => p.includes("LOCK") || p === "LK");
-  if (slot.group === "LOOSE") return either((p) => p.includes("LOOSE") || p === "LF");
-
-  if (slot.group === "HB") return either((p) => p.includes("HALF") || p === "HB");
-  if (slot.group === "FH") return either((p) => p.includes("FLY") || p === "FH");
-
-  if (slot.group === "CENTRE") return either((p) => p.includes("CENTRE") || p === "CE");
-  if (slot.group === "OB") return either((p) => p.includes("OUT") || p.includes("BACK") || p === "OB");
-
-  return false;
+  // bench: anyone; starting slots: the league's squad rules (positions or groups)
+  return slotAccepts(slot.id, player);
 }
 
 function abbrevTeam(name: string) {
@@ -341,6 +262,18 @@ useEffect(() => {
   const leagues = useLeagueStore((s) => s.leagues);
   const activeLeague = useLeagueStore((s) => s.activeLeague());
   const setActiveLeague = useLeagueStore((s) => s.setActiveLeague);
+
+  // the league's squad (lib/league/squad.ts): its starting slots, bench and IR spots
+  const squad = activeLeague?.squadFormat ?? STANDARD_SQUAD;
+  const squadSig = JSON.stringify(squad);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const SLOT_DEFS = useMemo(() => slotDefsFor(squad), [squadSig]);
+  const STARTER_IDS = useMemo(() => SLOT_DEFS.filter((s) => s.starter).map((s) => s.id), [SLOT_DEFS]);
+  const BENCH_IDS = useMemo(() => SLOT_DEFS.filter((s) => !s.starter).map((s) => s.id), [SLOT_DEFS]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const FIELD_POS = useMemo(() => fieldPositionsFor(squad), [squadSig]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const PITCH_ROWS = useMemo(() => pitchRows(squad).length, [squadSig]);
 
   const userId = useMemo(() => getActiveUsername(), []);
   const userTz = useMemo(() => getActiveTimezone(), []);
@@ -721,12 +654,16 @@ const deadlineText = useMemo(() => {
   });
 }, [yourDraftTeamId, serverRosters, playersById]);
 
-  // The player in the IR spot (not in the lineup, doesn't score). Rules in lib/league/ir.ts.
-  const irPlayer: Player | null = useMemo(() => {
-    if (!yourDraftTeamId) return null;
-    const id = serverRosters.get(yourDraftTeamId)?.irIds?.[0];
-    return id ? playersById.get(id) ?? null : null;
+  // The players in IR (not in the lineup, don't score). Rules in lib/league/ir.ts. A league can
+  // have 0-3 IR spots; the actions below work on the IR player last tapped (irFocus).
+  const irPlayers: Player[] = useMemo(() => {
+    if (!yourDraftTeamId) return [];
+    const ids = serverRosters.get(yourDraftTeamId)?.irIds ?? [];
+    return ids.map((id) => playersById.get(id)).filter((x): x is Player => !!x);
   }, [yourDraftTeamId, serverRosters, playersById]);
+  const [irFocus, setIrFocus] = useState(0);
+  const irPlayer: Player | null = irPlayers[irFocus] ?? irPlayers[0] ?? null;
+  const irFull = irPlayers.length >= squad.ir;
 
   // Initial lineup:
   // - If no roster: all empty tiles
@@ -751,14 +688,13 @@ const deadlineText = useMemo(() => {
       filled[s.id] = take(s);
     }
 
-    // Bench is 5 wildcards (any position)
-    const benchIds: SlotId[] = ["bench1", "bench2", "bench3", "bench4", "bench5"];
-    for (const id of benchIds) {
+    // Bench: anyone
+    for (const id of BENCH_IDS) {
       filled[id] = remaining.shift() ?? null;
     }
 
     return filled;
-  }, [rosterPool]);
+  }, [rosterPool, SLOT_DEFS, BENCH_IDS]);
 
   const [lineup, setLineup] = useState<Lineup>(() => initialLineup);
 
@@ -781,7 +717,7 @@ useEffect(() => {
   if (!hasLoadedSaved) return; // ✅ don't touch lineup until after server load attempt
 
   setLineup((prev) => {
-    const next = reconcileLineupWithRoster(prev, rosterPool);
+    const next = reconcileLineupWithRoster(prev, rosterPool, SLOT_DEFS);
 
     const prevIds = Object.values(prev).map((p) => p?.id ?? null);
     const nextIds = Object.values(next).map((p) => p?.id ?? null);
@@ -798,35 +734,14 @@ useEffect(() => {
 
     return next;
   });
-}, [yourDraftTeamId, rosterPool, hasLoadedSaved]);
+}, [yourDraftTeamId, rosterPool, hasLoadedSaved, SLOT_DEFS]);
 
 async function saveSelection(weekOverride?: number) {
   if (!activeLeague?.id || !yourDraftTeamId) return;
 
   const weekToSave = weekOverride ?? selectionWeek;
 
-  const requiredSlots: SlotId[] = [
-    "prop1",
-    "hooker1",
-    "prop2",
-    "lock1",
-    "lock2",
-    "looseforward1",
-    "looseforward2",
-    "looseforward3",
-    "halfback1",
-    "flyhalf1",
-    "centre1",
-    "centre2",
-    "outsideback1",
-    "outsideback2",
-    "outsideback3",
-    "bench1",
-    "bench2",
-    "bench3",
-    "bench4",
-    "bench5",
-  ];
+  const requiredSlots: SlotId[] = SLOT_DEFS.map((s) => s.id);
 
   const hasAnyPlayer = requiredSlots.some((slotId) => !!lineup[slotId]?.id);
   if (!hasAnyPlayer) {
@@ -855,7 +770,7 @@ async function saveSelection(weekOverride?: number) {
       return;
     }
 
-    if (json.lineup) setLineup(reconcileLineupWithRoster(json.lineup as Lineup, rosterPool));
+    if (json.lineup) setLineup(reconcileLineupWithRoster(json.lineup as Lineup, rosterPool, SLOT_DEFS));
     if ("captainId" in json) setCaptainId(json.captainId ?? null);
     if ("viceId" in json) setViceId(json.viceId ?? null);
     setIsDirty(false);
@@ -906,7 +821,7 @@ useEffect(() => {
 
       // ✅ Use server lineup as truth, then reconcile ONLY for ownership changes
             const weekLoaded = selectionWeek;
-      const reconciled = reconcileLineupWithRoster(row.lineup as Lineup, rosterPool);
+      const reconciled = reconcileLineupWithRoster(row.lineup as Lineup, rosterPool, SLOT_DEFS);
 
       setLineup(reconciled);
       setCaptainId(row.captain_id ?? row.captainId ?? null);
@@ -928,7 +843,7 @@ useEffect(() => {
   return () => {
     cancelled = true;
   };
-}, [activeLeague?.id, yourDraftTeamId, selectionWeek, rosterPool]);
+}, [activeLeague?.id, yourDraftTeamId, selectionWeek, rosterPool, SLOT_DEFS]);
 
 useEffect(() => {
   if (!hasLoadedSaved) return;
@@ -986,7 +901,8 @@ function hydratePlayer(p: Player): Player & { status?: any; weeklyStatus?: any }
   const nameOf = (p: { firstName?: string; lastName?: string } | null | undefined) =>
     p ? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() : "";
   const canGoInIr = (id: string) => irEligible(currentStatusText(getLivePlayerById(id)));
-  const irPlayerFit = !!irPlayer && !canGoInIr(irPlayer.id);
+  // any IR player who is fit again (must be activated before adds / claims / trades)
+  const fitIrPlayer = irPlayers.find((p) => !canGoInIr(p.id)) ?? null;
 
   async function irRequest(body: Record<string, unknown>, doneText: string) {
     if (!activeLeague?.id || !yourDraftTeamId || irBusy) return;
@@ -1036,7 +952,7 @@ He won't be in your lineup or score while he's in IR.`)) return;
 
   function startActivate() {
     if (!irPlayer) return;
-    if (rosterPool.length < ROSTER_SIZE) {
+    if (rosterPool.length < rosterSize(squad)) {
       if (!window.confirm(`Bring ${nameOf(irPlayer)} back from IR into your team?`)) return;
       irRequest({ action: "activate", playerId: irPlayer.id }, `${nameOf(irPlayer)} is back in your team`);
       return;
@@ -1061,7 +977,7 @@ He won't be in your lineup or score while he's in IR.`)) return;
       if (p?.id) map.set(p.id, s.id);
     }
     return map;
-  }, [lineup]);
+  }, [lineup, SLOT_DEFS]);
 
   type SwapPlan =
   | { kind: "direct" }
@@ -1469,19 +1385,9 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     textAlign: "center",
   }}
 >
-  {slot.label === "Loose" ? (
-    <>
-      <span>Loose</span>
-      <span>Forward</span>
-    </>
-  ) : slot.label === "Outside" ? (
-    <>
-      <span>Outside</span>
-      <span>Back</span>
-    </>
-  ) : (
-    <span>{slot.label}</span>
-  )}
+  {slot.label.split(" ").map((w) => (
+    <span key={w}>{w}</span>
+  ))}
 </div>
 
       )}
@@ -1490,22 +1396,23 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
 }
 
   // The IR spot: looks like a player tile, with a red "IR" corner badge.
-  function IrTile() {
-    const p = irPlayer;
+  function IrTile({ index }: { index: number }) {
+    const p = irPlayers[index] ?? null;
+    const thisFit = !!p && !canGoInIr(p.id);
     const swapping = !!swapFromSlot;
     return (
       <button
         onClick={() => {
           if (swapping) { setSwapFromSlot(null); return; } // IR isn't part of lineup swaps
           if (irDropMode) { setIrDropMode(false); setIrNotice(null); return; }
-          if (p) openPlayer(p);
+          if (p) { setIrFocus(index); openPlayer(p); }
           else setIrNotice({ kind: "info", text: "To use your IR spot, tap an injured player (or one who is out) and choose Move to IR" });
         }}
         style={{
           width: 70,
           height: 70,
           borderRadius: 14,
-          border: irPlayerFit ? "2px solid rgba(250,204,21,0.95)" : "3px dashed rgba(239,68,68,0.95)",
+          border: thisFit ? "2px solid rgba(250,204,21,0.95)" : "3px dashed rgba(239,68,68,0.95)",
           background: p ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.10)",
           backdropFilter: "blur(8px)",
           boxShadow: "0 10px 22px rgba(0,0,0,0.16)",
@@ -1535,7 +1442,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
                 {p.lastName}
               </div>
               <div style={{ background: "#7f1d1d", color: "white", textAlign: "center", fontSize: 10, fontWeight: 700, lineHeight: "12px", borderTop: "1px solid rgba(15,23,42,0.10)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {irPlayerFit ? "Fit - activate" : "IR"}
+                {thisFit ? "Fit - activate" : "IR"}
               </div>
             </div>
           </>
@@ -1556,7 +1463,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
           borderRadius: 18,
           overflow: "hidden",
           position: "relative",
-          height: 520,
+          height: pitchHeight(PITCH_ROWS),
           background:
             // Use your field PNG later (drop it into /public/images/field.webp)
             `linear-gradient(to bottom, rgba(5,150,105,0.92), rgba(16,185,129,0.92))`,
@@ -1604,45 +1511,34 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
           Substitutes &amp; IR
         </div>
 
-        {/* Bench layout: match field spacing (OB row + Centre row) */}
+        {/* Bench layout: rows of three at 24/50/76 (like outside backs): the subs, then the IR spots */}
 <div
   style={{
     position: "relative",
-    height: 145, // enough for 2 rows of 70px tiles
+    height: Math.max(1, Math.ceil((BENCH_IDS.length + squad.ir) / 3)) * 80 - 14,
   }}
 >
-  {BENCH_IDS.map((id, idx) => {
-    // Two rows of three at 24/50/76 (like outside backs): subs 1-3, then subs 4-5 and the IR spot
+  {[...BENCH_IDS.map((id) => ({ id, ir: -1 })), ...Array.from({ length: squad.ir }, (_, i) => ({ id: `ir${i + 1}`, ir: i }))].map((t, idx) => {
     const lefts = ["24%", "50%", "76%"];
-
-    const isTopRow = idx < 3;
-    const left = lefts[idx % 3];
-    const top = isTopRow ? "20%" : "75%";
-
     return (
       <div
-        key={id}
+        key={t.id}
         style={{
           position: "absolute",
-          top,
-          left,
+          top: 29 + Math.floor(idx / 3) * 80,
+          left: lefts[idx % 3],
           transform: "translate(-50%, -50%)",
         }}
       >
-        {PlayerTile({ slotId: id })}
+        {t.ir >= 0 ? IrTile({ index: t.ir }) : PlayerTile({ slotId: t.id })}
       </div>
     );
   })}
-  {IR_SPOTS > 0 ? (
-    <div style={{ position: "absolute", top: "75%", left: "76%", transform: "translate(-50%, -50%)" }}>
-      {IrTile()}
-    </div>
-  ) : null}
 </div>
 
-        {irPlayerFit && !irNotice ? (
+        {fitIrPlayer && !irNotice ? (
           <div style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: "#FACC15", textAlign: "center" }}>
-            {nameOf(irPlayer)} is fit again - activate him before making adds, claims or trades
+            {nameOf(fitIrPlayer)} is fit again - activate him before making adds, claims or trades
           </div>
         ) : null}
         {irNotice ? (
@@ -1686,7 +1582,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     const actions: Array<{ label: string; onClick: () => void; variant: "primary" | "secondary" }> = [];
 
     // The IR player: only activating (he isn't in the lineup)
-    if (irPlayer && modalPlayer.id === irPlayer.id) {
+    if (irPlayers.some((x) => x.id === modalPlayer.id)) {
       actions.push({
         label: "Activate",
         onClick: () => {
@@ -1739,14 +1635,14 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     });
 
     // Injured (or out) players can go in IR, or swap with the IR player
-    if (slotId && canGoInIr(modalPlayer.id)) {
+    if (slotId && squad.ir > 0 && canGoInIr(modalPlayer.id)) {
       const p = lineup[slotId];
       if (p) {
         actions.push({
-          label: irPlayer ? "Swap with IR" : "Move to IR",
+          label: irFull && irPlayer ? `Swap with ${irPlayers.length > 1 ? nameOf(irPlayer) : "IR"}` : "Move to IR",
           onClick: () => {
             setModalPlayer(null);
-            if (irPlayer) swapWithIr(p);
+            if (irFull && irPlayer) swapWithIr(p);
             else moveToIr(p);
           },
           variant: "secondary",
@@ -1757,7 +1653,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     // If not starter, disable intent by no-op; you can later add UI disable inside PlayerCardModal if desired.
     return actions;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modalPlayer, slotOfPlayer, swapFromSlot, captainId, viceId, irPlayer, lineup, rosterPool.length, isDirty, irBusy]);
+  }, [modalPlayer, slotOfPlayer, swapFromSlot, captainId, viceId, irPlayer, irPlayers, irFull, lineup, rosterPool.length, isDirty, irBusy]);
 
   return (
     <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>

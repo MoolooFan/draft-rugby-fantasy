@@ -2,6 +2,7 @@
 // The draft room's view of the draft. The draft itself runs on the server (lib/draft/engine):
 // this store asks the server for the state, sends picks, and keeps the draft watchlist in step.
 // It never decides a pick or saves a roster itself.
+import { isStandardSquad, squadFits, type SquadFormat } from "@/lib/league/squad";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { DraftPhase, Player, Team, TeamRosterState } from "./types";
@@ -82,7 +83,7 @@ type DraftState = {
   ownerForPickSnake: (pickNumber: number) => Team | null;
 
   // Roster rules
-  canTeamDraftPlayer: (teamId: string, player: Player) => boolean;
+  canTeamDraftPlayer: (teamId: string, player: Player, format?: SquadFormat | null) => boolean;
   addPlayerToRoster: (teamId: string, player: Player, leagueId?: string) => void;
 
   // ✅ Free agent / waiver roster mutation
@@ -488,7 +489,7 @@ setHasHydrated: (v) => set({ hasHydrated: v }),
   });
 },
 
-      canTeamDraftPlayer: (teamId, player) => {
+      canTeamDraftPlayer: (teamId, player, format) => {
   const slotCaps = getSlotCaps();
   const wcCap = getWcCap();
 
@@ -503,8 +504,9 @@ setHasHydrated: (v) => set({ hasHydrated: v }),
   // already drafted by this team? (optional safeguard)
   if (currentPlayers.some((p) => p?.id === player?.id)) return false;
 
-  // simulate adding and see if a balanced roster exists
+  // simulate adding and see if a balanced roster exists (a league's own squad: lib/league/squad.ts)
   const candidate = [...currentPlayers, player];
+  if (format && !isStandardSquad(format)) return squadFits(candidate, format);
   return rebalanceRoster(candidate, slotCaps, wcCap) != null;
 },
 

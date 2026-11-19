@@ -1,5 +1,7 @@
 "use client";
 
+import { benchOf, startersOf } from "@/lib/scoring/week";
+import { slotShortLabel, STANDARD_SQUAD } from "@/lib/league/squad";
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -158,14 +160,8 @@ type TeamRecord = { w: number; l: number; d: number };
 type Streak = { type: "W" | "L"; n: number } | null;
 
 // --- Types (match your Team Selection page) ---
-type SlotId =
-  | "prop1" | "hooker1" | "prop2"
-  | "lock1" | "lock2"
-  | "looseforward1" | "looseforward2" | "looseforward3"
-  | "halfback1" | "flyhalf1"
-  | "centre1" | "centre2"
-  | "outsideback1" | "outsideback2" | "outsideback3"
-  | "bench1" | "bench2" | "bench3" | "bench4" | "bench5";
+/** a lineup slot ("prop1", "bench2", or a custom squad's "tightfive1"...: lib/league/squad.ts) */
+type SlotId = string;
 
 type Player = {
   id: string;
@@ -240,8 +236,8 @@ function readTeamSelectionLineup(leagueId: string | null, teamId: string | null)
     const ok =
       parsed &&
       typeof parsed === "object" &&
-      "prop1" in parsed &&
-      "bench5" in parsed;
+      !Array.isArray(parsed) &&
+      Object.keys(parsed).some((k) => /^[a-z]+\d+$/.test(k)); // slot keys (any league's squad)
 
     return ok ? (parsed as Lineup) : null;
   } catch {
@@ -801,16 +797,10 @@ if (yourLeagueTeamId && (leftTeamId === yourLeagueTeamId || rightTeamId === your
   }
 }
 
-const STARTER_SLOTS: SlotId[] = [
-  "prop1","hooker1","prop2",
-  "lock1","lock2",
-  "looseforward1","looseforward2","looseforward3",
-  "halfback1","flyhalf1",
-  "centre1","centre2",
-  "outsideback1","outsideback2","outsideback3",
-];
-
-const BENCH_SLOTS: SlotId[] = ["bench1","bench2","bench3","bench4","bench5"];
+// the league's squad (lib/league/squad.ts): its starting slots, bench and IR spots
+const squad = activeLeague?.squadFormat ?? STANDARD_SQUAD;
+const STARTER_SLOTS: SlotId[] = startersOf(squad);
+const BENCH_SLOTS: SlotId[] = benchOf(squad);
 
 const leftName = nameByTeamId(leftTeamId);
 const rightName = nameByTeamId(rightTeamId);
@@ -1389,7 +1379,7 @@ function weekStateFor(id: string): PlayerWeekState | null {
 
 function outlookFor(lineup: Lineup | null, captainId: string | null, viceId: string | null) {
   if (!showProj || !lineup) return null;
-  return teamOutlook({ lineup: lineup as unknown as ScoringLineup, captainId, viceId, state: weekStateFor, nowMs });
+  return teamOutlook({ lineup: lineup as unknown as ScoringLineup, captainId, viceId, state: weekStateFor, nowMs, format: squad });
 }
 const leftOutlook = outlookFor(effectiveLeftLineup, leftC, leftV);
 const rightOutlook = outlookFor(effectiveRightLineup, rightC, rightV);
@@ -1534,37 +1524,17 @@ return (
 
   
   // Row order (matches your design)
-  const ROWS: Array<{ slot: SlotId; label: string }> = [
-    { slot: "prop1", label: "PR" },
-    { slot: "hooker1", label: "HO" },
-    { slot: "prop2", label: "PR" },
-    { slot: "lock1", label: "LK" },
-    { slot: "lock2", label: "LK" },
-    { slot: "looseforward1", label: "LF" },
-    { slot: "looseforward2", label: "LF" },
-    { slot: "looseforward3", label: "LF" },
-    { slot: "halfback1", label: "HB" },
-    { slot: "flyhalf1", label: "FH" },
-    { slot: "centre1", label: "CE" },
-    { slot: "centre2", label: "CE" },
-    { slot: "outsideback1", label: "OB" },
-    { slot: "outsideback2", label: "OB" },
-    { slot: "outsideback3", label: "OB" },
-  ];
+  const ROWS: Array<{ slot: SlotId; label: string }> = STARTER_SLOTS.map((slot) => ({ slot, label: slotShortLabel(slot) }));
 
   
 
-  const BENCH_ROWS: Array<{ slot: SlotId; label: string; ir?: boolean }> = [
-  { slot: "bench1", label: "1" },
-  { slot: "bench2", label: "2" },
-  { slot: "bench3", label: "3" },
-  { slot: "bench4", label: "4" },
-  { slot: "bench5", label: "5" },
-  // the team's injury reserve player (as the roster is now; IR players don't score)
-  { slot: "bench5", label: "IR", ir: true },
-];
-  const irPlayerOf = (teamId: string | null): Player | null => {
-    const id = teamId ? irIdsOf(rosterByTeamId.get(teamId))[0] : undefined;
+  const BENCH_ROWS: Array<{ slot: SlotId; label: string; ir?: boolean; irIndex?: number }> = [
+    ...BENCH_SLOTS.map((slot) => ({ slot, label: slotShortLabel(slot) })),
+    // the team's injury reserve players (as the roster is now; IR players don't score)
+    ...Array.from({ length: squad.ir }, (_, i) => ({ slot: `ir${i + 1}`, label: "IR", ir: true, irIndex: i })),
+  ];
+  const irPlayerOf = (teamId: string | null, index = 0): Player | null => {
+    const id = teamId ? irIdsOf(rosterByTeamId.get(teamId))[index] : undefined;
     if (!id) return null;
     return (sheetPlayers.find((x) => String(x.id) === id) as unknown as Player | undefined) ?? null;
   };
@@ -2071,8 +2041,8 @@ const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
           </div>
 
           {BENCH_ROWS.map((r) => {
-  const lp = r.ir ? irPlayerOf(leftTeamId) : effectiveLeftLineup ? effectiveLeftLineup[r.slot] : null;
-const rp = r.ir ? irPlayerOf(rightTeamId) : effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
+  const lp = r.ir ? irPlayerOf(leftTeamId, r.irIndex) : effectiveLeftLineup ? effectiveLeftLineup[r.slot] : null;
+const rp = r.ir ? irPlayerOf(rightTeamId, r.irIndex) : effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
 
   // (captain/vice badges technically don’t apply on bench, but leaving the logic harmless)
   const lIsC = !!lp?.id && leftC === lp.id;
@@ -2082,7 +2052,7 @@ const rp = r.ir ? irPlayerOf(rightTeamId) : effectiveRightLineup ? effectiveRigh
 
   return (
     <div
-      key={r.ir ? "ir" : r.slot}
+      key={r.slot}
       style={{
         display: "grid",
         gridTemplateColumns: "1fr 34px 1fr",

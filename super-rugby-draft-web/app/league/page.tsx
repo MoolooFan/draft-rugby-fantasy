@@ -1,5 +1,7 @@
 "use client";
 
+import { SquadFormatFields } from "@/components/SquadFormatFields";
+import { STANDARD_SQUAD, type SquadFormat } from "@/lib/league/squad";
 import React, { useEffect, useMemo, useState } from "react";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { useLeagueStore, loadMyLeagues } from "@/lib/league/store";
@@ -1517,6 +1519,7 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
   const [shieldEnabled, setShieldEnabled] = useState(true);
   const [shieldName, setShieldName] = useState("The Shield");
   const [shieldRewards, setShieldRewards] = useState<ShieldRewards>(NO_SHIELD_REWARDS);
+  const [squadFormat, setSquadFormat] = useState<SquadFormat>(STANDARD_SQUAD);
   const [customRules, setCustomRules] = useState<ScoringRules>(STANDARD_SCORING);
   const [error, setError] = useState<string | null>(null);
 
@@ -1595,6 +1598,9 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
             </div>
           ) : null}
 
+          <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.9 }}>Squad</div>
+          <SquadFormatFields value={squadFormat} onChange={setSquadFormat} />
+
           <BonusPointsFields value={bonusRules} onChange={setBonusRules} />
 
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 800 }}>
@@ -1641,6 +1647,7 @@ const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
     shieldEnabled,
     shieldName,
     shieldRewards,
+    squadFormat,
     ...(scoringSystem === "custom" ? { scoringCustom: customRules } : {}),
   });
 

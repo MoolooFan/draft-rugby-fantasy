@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cleanSquadFormat, isStandardSquad } from "@/lib/league/squad";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
 import { cleanScoringRules } from "@/lib/scoring/validate";
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
   }
 
   // Finals, scoring, bonus points and the Shield's rewards lock once the draft starts.
-  const lockedKeys = ["playoffFormat", "bonusPoints", "bonusRules", "scoringSystem", "scoringCustom", "shieldRewards"];
+  const lockedKeys = ["playoffFormat", "bonusPoints", "bonusRules", "scoringSystem", "scoringCustom", "shieldRewards", "squadFormat"];
   const locked = !!leagueRow.settings_locked_at || (leagueRow.draft_status ?? "scheduled") !== "scheduled";
   if (locked && lockedKeys.some((k) => k in patch)) {
     return NextResponse.json(
@@ -107,6 +108,11 @@ export async function POST(req: Request) {
   }
   if ("shieldName" in patch) dbPatch.shield_name = cleanShieldName(patch.shieldName);
   if ("shieldRewards" in patch) dbPatch.shield_rewards = cleanShieldRewards(patch.shieldRewards);
+  if ("squadFormat" in patch) {
+    const squad = cleanSquadFormat(patch.squadFormat ?? null);
+    if (squad.error) return NextResponse.json({ ok: false, error: squad.error }, { status: 400 });
+    dbPatch.squad_format = isStandardSquad(squad.format) ? null : squad.format;
+  }
 
   if ("startRound" in patch) dbPatch.start_round = patch.startRound ?? null;
   if ("totalWeeks" in patch) dbPatch.total_weeks = patch.totalWeeks ?? null;

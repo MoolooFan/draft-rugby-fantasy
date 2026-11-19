@@ -24,7 +24,7 @@ import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { CAPTAIN_MULTIPLIER, pointsFromRow, roundPoints } from "@/lib/scoring";
 import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { toMs, getWeekFirstKickoffMs, getSelectionDeadlineMs, getWeeksSorted, type SheetFixtureRow, isSheetLabelRow, isSheetPlayableRow, currentWeekFromSheet, latestCompletedWeekFromSheet } from "@/lib/league/weekHelpers";
-import { STARTER_SLOTS } from "@/lib/scoring/week";
+import { startersOf } from "@/lib/scoring/week";
 import { positionsLabel } from "@/lib/players/positions";
 import { TeamAvatar } from "@/components/TeamAvatar";
 import { WeeklyRecapModal } from "@/components/WeeklyRecapModal";
@@ -175,14 +175,8 @@ function buildRecordsUpToWeek(rows: SheetFixtureRow[], upToWeek: number) {
   return map;
 }
 
-type SlotId =
-  | "prop1" | "hooker1" | "prop2"
-  | "lock1" | "lock2"
-  | "looseforward1" | "looseforward2" | "looseforward3"
-  | "halfback1" | "flyhalf1"
-  | "centre1" | "centre2"
-  | "outsideback1" | "outsideback2" | "outsideback3"
-  | "bench1" | "bench2" | "bench3" | "bench4" | "bench5";
+/** a lineup slot ("prop1", "bench2", or a custom squad's "tightfive1"...: lib/league/squad.ts) */
+type SlotId = string;
 
 type Lineup = Record<SlotId, any | null>;
 
@@ -944,12 +938,12 @@ const rightEffC = useMemo(
 );
 
 const userScoreLive = useMemo(
-  () => totalForSlots(leftSel.lineup, leftEffC, STARTER_SLOTS),
-  [leftSel.lineup, leftEffC, weekPointsByPlayerId]
+  () => totalForSlots(leftSel.lineup, leftEffC, startersOf(activeLeague?.squadFormat)),
+  [leftSel.lineup, leftEffC, weekPointsByPlayerId, activeLeague?.squadFormat]
 );
 const oppScoreLive = useMemo(
-  () => totalForSlots(rightSel.lineup, rightEffC, STARTER_SLOTS),
-  [rightSel.lineup, rightEffC, weekPointsByPlayerId]
+  () => totalForSlots(rightSel.lineup, rightEffC, startersOf(activeLeague?.squadFormat)),
+  [rightSel.lineup, rightEffC, weekPointsByPlayerId, activeLeague?.squadFormat]
 );
 
 const lastCompletedWeek = useMemo(() => {
@@ -1207,6 +1201,7 @@ const upcomingOutlook = useMemo(() => {
       captainId: row.captain_id,
       viceId: row.vice_id,
       nowMs: 0, // before any games: the full projections
+      format: activeLeague?.squadFormat,
       state: (id) => {
         const pr = upcomingProj.players[id] ?? upcomingProj.players[id.toLowerCase()];
         return pr ? { projected: pr.pts, spread: pr.spread, actual: null, minutes: 0, kickoffMs: pr.kickoffMs, ruledOut: pr.role === "out" } : null;
@@ -1216,7 +1211,7 @@ const upcomingOutlook = useMemo(() => {
   const a = forTeam(upcomingMatch.leftId ?? null), b = forTeam(upcomingMatch.rightId ?? null);
   if (!a || !b) return null;
   return { left: a.expected, right: b.expected, leftWin: Math.round(winProbability(a, b) * 100) };
-}, [upcomingProj, upcomingSel, upcomingMatch, upcomingWeekNo]);
+}, [upcomingProj, upcomingSel, upcomingMatch, upcomingWeekNo, activeLeague?.squadFormat]);
 
   // -----------------------
 // Standings (LIVE from sheetFixtures + activeLeague teams)

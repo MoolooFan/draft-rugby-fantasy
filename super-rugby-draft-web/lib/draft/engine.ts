@@ -13,7 +13,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadSeasonPlayers, type SitePlayer } from "@/lib/players/db";
 import { buildScheduleForLeague } from "@/lib/results/engine";
-import { ROSTER_SIZE, rosterFits, roundForPick, secondsForTeam, shuffled, teamForPick } from "@/lib/draft/rules";
+import { rosterFits, roundForPick, secondsForTeam, shuffled, teamForPick } from "@/lib/draft/rules";
+import { rosterSize, squadFormatOf, type SquadFormat } from "@/lib/league/squad";
 import { lockLeagueScoring } from "@/lib/scoring/leagueRules";
 
 type Db = SupabaseClient;
@@ -93,11 +94,14 @@ type Ctx = {
   players: Map<string, SitePlayer>;
   drafted: Set<string>;
   rosters: Map<string, string[]>; // team -> player ids
+  /** the league's squad (lib/league/squad.ts) */
+  format: SquadFormat;
 };
 
 async function loadContext(db: Db, leagueId: string): Promise<Ctx> {
   const state = await getDraftState(db, leagueId);
-  const league = await q<{ season: number }>(db.from("leagues").select("season").eq("id", leagueId).single());
+  const league = await q<{ season: number; squad_format: unknown }>(db.from("leagues").select("season, squad_format").eq("id", leagueId).single());
+  const format = squadFormatOf(league.squad_format);
   const order = state.draft_order_team_ids ?? [];
   const pool = await loadSeasonPlayers(db, Number(league.season));
   const picks = await q<Array<{ team_id: string; player_id: string }>>(
@@ -108,11 +112,12 @@ async function loadContext(db: Db, leagueId: string): Promise<Ctx> {
   return {
     state,
     order,
-    totalPicks: order.length * ROSTER_SIZE,
+    totalPicks: order.length * rosterSize(format),
     season: Number(league.season),
     players: new Map(pool.map((p) => [p.id, p])),
     drafted: new Set(picks.map((p) => p.player_id)),
     rosters,
+    format,
   };
 }
 
@@ -122,7 +127,7 @@ function pickProblem(ctx: Ctx, teamId: string, playerId: string): string | null 
   if (!player) return "That player isn't in this season's pool";
   if (ctx.drafted.has(playerId)) return "That player has already been picked";
   const roster = (ctx.rosters.get(teamId) ?? []).map((id) => ctx.players.get(id)).filter((p): p is SitePlayer => !!p);
-  if (!rosterFits([...roster, player])) return "That player doesn't fit your roster's positions";
+  if (!rosterFits([...roster, player], ctx.format)) return "That player doesn't fit your roster's positions";
   return null;
 }
 

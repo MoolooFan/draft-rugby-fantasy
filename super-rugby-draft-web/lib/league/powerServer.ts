@@ -1,6 +1,7 @@
 // lib/league/powerServer.ts (server only)
 // A league's power rankings as of its latest finalised round (lib/league/powerRankings.ts), with
 // each team's movement since the previous round's ranking (saved in power_rankings).
+import { loadSquadFormat } from "@/lib/league/squadServer";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { bestXvProjection, powerRankings, type PowerRow } from "@/lib/league/powerRankings";
 import { activeIdsOf } from "@/lib/league/ir";
@@ -51,9 +52,10 @@ export async function loadPower(db: SupabaseClient, leagueId: string): Promise<P
       weekProjections(db, season, projectedWeek, await getLeagueScoringRules(db, leagueId)),
     ]);
     const byId = new Map(players.map((p) => [p.id, p]));
+    const format = await loadSquadFormat(db, leagueId);
     for (const r of rosters.data ?? []) {
       const squad = activeIdsOf(r.data ?? {}).map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
-      rosterProjection[r.team_id] = bestXvProjection(squad, (id) => proj.players[id]?.pts ?? 0);
+      rosterProjection[r.team_id] = bestXvProjection(squad, (id) => proj.players[id]?.pts ?? 0, format);
     }
   }
 

@@ -1,6 +1,7 @@
 // lib/league/types.ts
 import type { ShieldRewards } from "@/lib/league/shield";
 import type { BonusRules } from "@/lib/league/bonus";
+import type { SquadFormat } from "@/lib/league/squad";
 export type PlayoffFormat = "none" | "final2" | "final3" | "final4" | "final6";
 
 export type LeagueTeam = {
@@ -44,6 +45,8 @@ export type League = {
   shieldName?: string;
   /** rewards for holding the Shield (lib/league/shield.ts); locked once the draft starts */
   shieldRewards?: ShieldRewards;
+  /** starting slots, bench and IR (lib/league/squad.ts); missing = Standard */
+  squadFormat?: SquadFormat;
   /** E8: the commissioner can restart this (earlier-season) league for the current season */
   canRestart?: boolean;
   /** E8: when restarting opens (a month before the season starts); null if it can't be restarted */

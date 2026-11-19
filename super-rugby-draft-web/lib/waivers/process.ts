@@ -2,6 +2,7 @@
 // Runs one league's waiver claims for a week, once (guarded by waiver_runs). Moved out of
 // app/api/waivers/process so the 5-minute job can run waivers at the deadline even when nobody
 // opens the Transactions page (13 Nov 2026). The order comes from lib/waivers/order.ts (16 Nov).
+import { loadSquadFormat } from "@/lib/league/squadServer";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cancelPendingTradesTouchingPlayers, cancelInvalidPendingTradesForTeams } from "@/lib/trades/cancelPendingTrades";
 import { loadRosterPlayers, rosterProblem, updateLineupsAfterRosterChange } from "@/lib/league/rosterChange";
@@ -29,6 +30,7 @@ export type WaiverRunResult =
 
 /** Process a league's waivers for a week (safe to call again: it only runs once). */
 export async function processWaivers(db: SupabaseClient, leagueId: string, week: number, nowMs: number = Date.now()): Promise<WaiverRunResult> {
+  const squadFormat = await loadSquadFormat(db, leagueId);
   try {
     const processedAtMs = nowMs;
 
@@ -290,7 +292,7 @@ const nextRoster = { playerIds: Array.from(ids) as string[], irIds: teamIr };
 
       // Size and position rules (so the team can always field a full XV; no drop needed if
       // the team has a free place because a player is in IR)
-      const problem = rosterProblem(nextRoster.playerIds, rosterPlayers, baseIds);
+      const problem = rosterProblem(nextRoster.playerIds, rosterPlayers, baseIds, squadFormat);
       if (problem) {
         const { error: claimFailErr } = await db
           .from("waiver_claims")

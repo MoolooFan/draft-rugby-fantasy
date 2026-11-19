@@ -6,8 +6,9 @@
 //   40%  roster strength: projected score of its best possible XV for the next round
 //        (expected points, captain x2 on the best projection)
 // Before any round is played it's roster strength only. Pure code (scripts/tests/power.test.ts).
-import { STARTER_SLOTS, SLOT_POSITION } from "@/lib/scoring/week";
-import { canPlayPosition, type HasPositions } from "@/lib/players/positions";
+import { startersOf } from "@/lib/scoring/week";
+import { slotAccepts, type SquadFormat } from "@/lib/league/squad";
+import type { HasPositions } from "@/lib/players/positions";
 
 export const POWER_WEIGHTS = { season: 0.35, recent: 0.25, roster: 0.4 };
 export const RECENT_ROUNDS = 3;
@@ -23,15 +24,15 @@ export type PowerRow = {
 
 type Player = HasPositions & { id: string };
 
-/** Best possible XV by projection (each starting spot filled by someone who can play it), captain x2. */
-export function bestXvProjection(players: Player[], projection: (id: string) => number): number {
-  const slots = STARTER_SLOTS.map((s) => SLOT_POSITION[s]);
+/** Best possible team by projection (each starting spot filled by someone who can play it), captain x2. */
+export function bestXvProjection(players: Player[], projection: (id: string) => number, format?: SquadFormat | null): number {
+  const slots = startersOf(format);
   const n = slots.length, m = players.length;
   if (!m) return 0;
   // Hungarian method (rows = slots, columns = players; m >= n via dummy players worth 0)
   const cols = Math.max(m, n);
   const BIG = 1e6;
-  const cost = (i: number, j: number) => (j >= m || !canPlayPosition(players[j], slots[i]) ? BIG : -Math.max(0, projection(players[j].id)));
+  const cost = (i: number, j: number) => (j >= m || !slotAccepts(slots[i], players[j]) ? BIG : -Math.max(0, projection(players[j].id)));
   const u = new Array(n + 1).fill(0), v = new Array(cols + 1).fill(0), p = new Array(cols + 1).fill(0), way = new Array(cols + 1).fill(0);
   for (let i = 1; i <= n; i++) {
     p[0] = i;

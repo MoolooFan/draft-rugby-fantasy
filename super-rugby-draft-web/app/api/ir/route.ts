@@ -4,6 +4,7 @@
 // Moving a player into or out of IR isn't listed in the Transactions tab, but a player dropped to
 // activate someone is ("dropped by <team>"), and is locked
 // until the next lineup deadline, the same as a free-agency drop.
+import { loadSquadFormat } from "@/lib/league/squadServer";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
@@ -57,7 +58,8 @@ export async function POST(req: Request) {
       loadCurrentStatuses(supabaseAdmin, season, involved, now),
     ]);
 
-    const res = applyIrAction({ active, ir }, action, players, (id) => statuses.get(id) ?? null);
+    const format = await loadSquadFormat(supabaseAdmin, leagueId);
+    const res = applyIrAction({ active, ir }, action, players, (id) => statuses.get(id) ?? null, format);
     if (!res.ok) return NextResponse.json({ ok: false, error: res.error }, { status: 400 });
 
     const { error: upErr } = await supabaseAdmin.from("rosters").upsert(

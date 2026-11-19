@@ -13,9 +13,10 @@
 // How: every possible spot for every player gets a cost (staying put = 0, each player moved =
 // one "move", plus small tie-breaks that follow the order above), and the cheapest full
 // arrangement is chosen (the Hungarian method; 20 players x 20 spots is instant).
-import { BENCH_SLOTS, SLOT_POSITION, STARTER_SLOTS, type Lineup, type LineupPlayer, type SlotId } from "@/lib/scoring/week";
-import { canPlayPosition } from "@/lib/players/positions";
+import { BENCH_SLOTS, STARTER_SLOTS, startersOf, type Lineup, type LineupPlayer, type SlotId } from "@/lib/scoring/week";
+import { isBenchSlot, slotAccepts, squadSlots, STANDARD_SQUAD, type SquadFormat } from "@/lib/league/squad";
 
+/** Standard's slots (a league's own: squadSlots(format).all). */
 export const ALL_SLOTS: SlotId[] = [...STARTER_SLOTS, ...BENCH_SLOTS];
 
 const INF = 1e12;
@@ -76,22 +77,24 @@ function hungarian(cost: number[][]): number[] {
  * roster: the players who should be in the lineup now (not IR), best first (e.g. by draft pick)
  *   - with no previous lineup, the best players start.
  */
-export function updateLineup(prev: Lineup | null, roster: LineupPlayer[]): LineupUpdate {
+export function updateLineup(prev: Lineup | null, roster: LineupPlayer[], format?: SquadFormat | null): LineupUpdate {
+  const allSlots = squadSlots(format ?? STANDARD_SQUAD).all;
+  const starterCount = squadSlots(format ?? STANDARD_SQUAD).starters.length;
   const slotOf = new Map<string, SlotId>();
-  for (const s of ALL_SLOTS) {
+  for (const s of allSlots) {
     const id = prev?.[s]?.id;
     if (id && !slotOf.has(id)) slotOf.set(id, s);
   }
-  const players = roster.slice(0, ALL_SLOTS.length);
-  const n = ALL_SLOTS.length;
+  const players = roster.slice(0, allSlots.length);
+  const n = allSlots.length;
   const cost: number[][] = [];
   for (let r = 0; r < n; r++) {
     const p = players[r];
     const row: number[] = [];
-    for (const slot of ALL_SLOTS) {
-      const starter = !slot.startsWith("bench");
+    for (const slot of allSlots) {
+      const starter = !isBenchSlot(slot);
       if (!p) { row.push(starter ? EMPTY : 0); continue; } // an empty roster place: bench, or a starting spot nobody can fill
-      if (starter && !canPlayPosition(p, SLOT_POSITION[slot])) { row.push(INF); continue; }
+      if (starter && !slotAccepts(slot, p)) { row.push(INF); continue; }
       const was = slotOf.get(p.id);
       if (!was) {
         // new to the lineup: anywhere is free, but better players (earlier in roster) start
@@ -109,12 +112,12 @@ export function updateLineup(prev: Lineup | null, roster: LineupPlayer[]): Lineu
   }
   const assign = hungarian(cost);
   const lineup: Lineup = {};
-  for (const s of ALL_SLOTS) lineup[s] = null;
+  for (const s of allSlots) lineup[s] = null;
   const moved: string[] = [];
   let full = true;
   for (let r = 0; r < n; r++) {
     const p = players[r];
-    const slot = ALL_SLOTS[assign[r]];
+    const slot = allSlots[assign[r]];
     if (cost[r][assign[r]] >= EMPTY) full = false;
     if (!p) continue;
     const before = prev && slotOf.has(p.id) ? prev[slotOf.get(p.id)!] : null;
@@ -122,7 +125,7 @@ export function updateLineup(prev: Lineup | null, roster: LineupPlayer[]): Lineu
     const was = slotOf.get(p.id);
     if (was && was !== slot) moved.push(p.id);
   }
-  if (!full || players.length < STARTER_SLOTS.length) {
+  if (!full || players.length < starterCount) {
     return { ok: false, error: "This would leave a starting spot your team can't fill", lineup };
   }
   return { ok: true, lineup, moved };
@@ -132,8 +135,8 @@ export function updateLineup(prev: Lineup | null, roster: LineupPlayer[]): Lineu
  * Used when a week locks: the lineup matched to the roster. If no full XV is possible (shouldn't
  * happen with the roster rules) the players are still placed and auto-subs do what they can.
  */
-export function reconcileLineup(lineup: Lineup | null, roster: LineupPlayer[]): Lineup {
-  return updateLineup(lineup, roster).lineup;
+export function reconcileLineup(lineup: Lineup | null, roster: LineupPlayer[], format?: SquadFormat | null): Lineup {
+  return updateLineup(lineup, roster, format).lineup;
 }
 
 // ---------------------------------------------------------------------------
@@ -145,8 +148,8 @@ export function reconcileLineup(lineup: Lineup | null, roster: LineupPlayer[]): 
 //   captain and the new vice-captain is the starter taken earliest in the draft.
 // - Neither can be on the bench.
 
-export function lineupStarterIds(lineup: Lineup | null | undefined): string[] {
-  return STARTER_SLOTS.map((s) => lineup?.[s]?.id).filter((x): x is string => !!x);
+export function lineupStarterIds(lineup: Lineup | null | undefined, format?: SquadFormat | null): string[] {
+  return startersOf(format).map((s) => lineup?.[s]?.id).filter((x): x is string => !!x);
 }
 
 /**
@@ -157,9 +160,10 @@ export function fixCaptains(
   lineup: Lineup | null | undefined,
   captainId: string | null | undefined,
   viceId: string | null | undefined,
-  pickRank: (playerId: string) => number
+  pickRank: (playerId: string) => number,
+  format?: SquadFormat | null
 ): { captainId: string | null; viceId: string | null } {
-  const starters = lineupStarterIds(lineup);
+  const starters = lineupStarterIds(lineup, format);
   const isStarter = (id: string | null | undefined): id is string => !!id && starters.includes(id);
   const byPick = [...starters].sort((a, b) => pickRank(a) - pickRank(b) || a.localeCompare(b));
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { squadFormatOf } from "@/lib/league/squad";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
 import { refreshDraftOrder } from "@/lib/draft/engine";
@@ -176,6 +177,8 @@ if (computedOrder.length) {
     shieldEnabled: leagueRow.shield_enabled !== false,
     shieldName: cleanShieldName(leagueRow.shield_name),
     shieldRewards: cleanShieldRewards(leagueRow.shield_rewards),
+    // the squad: starting slots, bench, IR (lib/league/squad.ts)
+    squadFormat: squadFormatOf(leagueRow.squad_format),
     // E8: a league from an earlier season can be restarted for this season by its commissioner,
     // in the month before the season starts (restartOpensAt: when that month begins)
     ...(await restartInfo(leagueRow)),

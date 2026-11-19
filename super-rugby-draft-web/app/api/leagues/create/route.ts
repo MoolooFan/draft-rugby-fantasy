@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cleanSquadFormat, isStandardSquad } from "@/lib/league/squad";
 import { cleanShieldName, cleanShieldRewards } from "@/lib/league/shield";
 import { anyBonus, cleanBonusRules } from "@/lib/league/bonus";
 import crypto from "crypto";
@@ -46,6 +47,10 @@ export async function POST(req: Request) {
   const shieldEnabled = body?.shieldEnabled !== false;
   const shieldName = cleanShieldName(body?.shieldName);
   const shieldRewards = cleanShieldRewards(body?.shieldRewards);
+  // the squad (lib/league/squad.ts): Standard unless the commissioner set their own
+  const squad = cleanSquadFormat(body?.squadFormat ?? null);
+  if (squad.error) return NextResponse.json({ ok: false, error: squad.error }, { status: 400 });
+  const squadFormat = isStandardSquad(squad.format) ? null : squad.format;
   const seasonWeeks = totalFantasyWeeks(getSeason(season));
   const draftDateTimeText = String(body?.draftDateTimeText ?? "");
   const draftAtRaw = body?.draftAt ?? null;
@@ -111,6 +116,7 @@ if (draftAtRaw !== null && draftAtRaw !== undefined && draftAtRaw !== "") {
     scoring_custom: scoringCustom,
     bonus_points: bonusPoints,
     bonus_rules: bonusRules,
+    squad_format: squadFormat,
     shield_enabled: shieldEnabled,
     shield_name: shieldName,
     shield_rewards: shieldRewards,
