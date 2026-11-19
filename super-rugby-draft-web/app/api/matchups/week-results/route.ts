@@ -21,7 +21,7 @@ export async function GET(req: Request) {
       supabaseAdmin.from("league_week_finalisations").select("finalised_at").eq("league_id", leagueId).eq("week", week).maybeSingle(),
       supabaseAdmin
         .from("team_week_results")
-        .select("team_id, final_lineup, picked_captain_id, picked_vice_id, captain_used_id, score, tries")
+        .select("team_id, final_lineup, picked_lineup, picked_captain_id, picked_vice_id, captain_used_id, score, tries")
         .eq("league_id", leagueId)
         .eq("week", week),
     ]);

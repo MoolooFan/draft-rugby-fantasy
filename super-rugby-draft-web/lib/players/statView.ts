@@ -38,3 +38,12 @@ export function formatStatView(v: number | null, view: StatView): string {
   if (view === "total") return Number.isInteger(Math.round(v * 10) / 10) ? String(Math.round(v)) : v.toFixed(1);
   return v.toFixed(1);
 }
+
+// Which season's stats people are looking at (Ethan, 19 Nov 2026: a 2026 / 2027 switch in the
+// player pool filters and on player cards). null = the default: last season's until this
+// season's first kickoff, then this season's (lib/season statsSeasonYear). Shared by every page
+// for this visit (not remembered: a new visit starts on the default again).
+export const useStatSeasonStore = create<{ season: number | null; setSeason: (s: number | null) => void }>()((set) => ({
+  season: null,
+  setSeason: (season) => set({ season }),
+}));

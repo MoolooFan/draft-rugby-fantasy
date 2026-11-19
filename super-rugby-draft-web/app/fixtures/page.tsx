@@ -708,6 +708,12 @@ const WeekList = useStableComponent(WeekList__render);
             </div>
           ))}
         </div>
+        {/* Easy ... Hard, under the key (same width as the five boxes) */}
+        <div style={{ width: 174, margin: "4px auto 0", display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 600, opacity: 0.85 }}>
+          <span>Easy</span>
+          <span aria-hidden="true" style={{ flex: 1, height: 1, background: "currentColor", opacity: 0.4 }} />
+          <span>Hard</span>
+        </div>
       </div>
     );
   }

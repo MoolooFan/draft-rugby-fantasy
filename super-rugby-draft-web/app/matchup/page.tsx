@@ -31,7 +31,7 @@ import { formatStatCount } from "@/lib/scoring";
 import { TeamAvatar } from "@/components/TeamAvatar";
 import { ShieldIcon } from "@/components/AwardIcons";
 import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
-import { teamOutlook, winProbability, type PlayerWeekState } from "@/lib/projections/live";
+import { remainingShare, teamOutlook, winProbability, type PlayerWeekState } from "@/lib/projections/live";
 import { irIdsOf } from "@/lib/league/ir";
 import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
 
@@ -964,7 +964,7 @@ useEffect(() => {
 }, [leagueId, displayWeek]);
 
 // Finalised results for the week (saved by the server when the round is finalised).
-type WeekResultRow = { team_id: string; final_lineup: Lineup | null; captain_used_id: string | null; score: number; tries: number };
+type WeekResultRow = { team_id: string; final_lineup: Lineup | null; picked_lineup?: Lineup | null; captain_used_id: string | null; score: number; tries: number };
 const [weekResults, setWeekResults] = useState<{ week: number; finalised: boolean; byTeam: Map<string, WeekResultRow> }>({
   week: 0,
   finalised: false,
@@ -1355,12 +1355,18 @@ const shieldTag = (teamId: string | null) =>
   );
 const holdsShield = (teamId: string | null) => !!shieldInfo && !!teamId && shieldInfo.holderTeamId === teamId;
 
-// ---- Expected points + win probability (F2, ESPN-style): while the week isn't final.
-// Real points for games that are over, real points so far + the rest of the projection for
-// games being played, the projection for games still to come; auto-subs for starters who are
-// ruled out or didn't get on.
-const weekProj = useProjections(hasLeagueId ? leagueId : null, mounted && displayWeek > 0 && !scoresLocked ? displayWeek : null);
-const showProj = !!weekProj && weekProj.week === displayWeek && !scoresLocked;
+// ---- Expected points + win probability (F2, ESPN-style; Ethan 19 Nov 2026):
+// - Every week shows them, finished ones too (so you can see who beat their projection).
+// - A player's projection is his pre-game one, except while his game is being played: then his
+//   points so far + the rest of his projection. Once his game is over it's the pre-game one again.
+// - The team totals: during the week, real points for games that are over, points so far + the
+//   rest for games being played, projections for games to come (auto-subs for players ruled out
+//   or who didn't get on). Once the week is final: the pre-game totals again.
+// - Win probability from those; once the scores are final, 100% for the winner (50/50 a draw).
+// Projections for a week only use stats from before it (lib/projections/server), so a finished
+// week's are what they were before its games.
+const weekProj = useProjections(hasLeagueId ? leagueId : null, mounted && displayWeek > 0 ? displayWeek : null);
+const showProj = !!weekProj && weekProj.week === displayWeek;
 
 function weekStateFor(id: string): PlayerWeekState | null {
   const pr = projectionFor(weekProj, id);
@@ -1377,21 +1383,52 @@ function weekStateFor(id: string): PlayerWeekState | null {
     ruledOut: pr.role === "out",
   };
 }
-
-function outlookFor(lineup: Lineup | null, captainId: string | null, viceId: string | null) {
-  if (!showProj || !lineup) return null;
-  return teamOutlook({ lineup: lineup as unknown as ScoringLineup, captainId, viceId, state: weekStateFor, nowMs, format: squad });
+/** The same, as it was before any games: no points yet. */
+function preGameStateFor(id: string): PlayerWeekState | null {
+  const st = weekStateFor(id);
+  return st ? { ...st, actual: null, minutes: 0 } : null;
 }
-const leftOutlook = outlookFor(effectiveLeftLineup, leftC, leftV);
-const rightOutlook = outlookFor(effectiveRightLineup, rightC, rightV);
-const leftWinPct = leftOutlook && rightOutlook ? Math.round(winProbability(leftOutlook, rightOutlook) * 100) : null;
 
-/** A player's projection for the row (x2 for the captain, like his points). */
+function outlookFor(lineup: Lineup | null, captainId: string | null, viceId: string | null, preGame = false) {
+  if (!showProj || !lineup) return null;
+  return teamOutlook({
+    lineup: lineup as unknown as ScoringLineup,
+    captainId,
+    viceId,
+    state: preGame ? preGameStateFor : weekStateFor,
+    nowMs: preGame ? 0 : nowMs,
+    format: squad,
+  });
+}
+// the lineups as picked (before auto-subs) for a finished week's pre-game totals
+const pickedLineupOf = (teamId: string | null): Lineup | null =>
+  (teamId ? (weekResults.byTeam.get(teamId) as { picked_lineup?: Lineup | null } | undefined)?.picked_lineup : null) ?? null;
+const leftOutlook = scoresLocked
+  ? outlookFor(pickedLineupOf(leftTeamId) ?? effectiveLeftLineup, leftC, leftV, true)
+  : outlookFor(effectiveLeftLineup, leftC, leftV);
+const rightOutlook = scoresLocked
+  ? outlookFor(pickedLineupOf(rightTeamId) ?? effectiveRightLineup, rightC, rightV, true)
+  : outlookFor(effectiveRightLineup, rightC, rightV);
+const leftWinPct = (() => {
+  if (scoresLocked) {
+    // final: all or nothing
+    const l = Number(leftRes?.score ?? leftScore) || 0;
+    const r = Number(rightRes?.score ?? rightScore) || 0;
+    if (!leftTeamId || !rightTeamId) return null;
+    return l > r ? 100 : l < r ? 0 : 50;
+  }
+  return leftOutlook && rightOutlook ? Math.round(winProbability(leftOutlook, rightOutlook) * 100) : null;
+})();
+
+/** A player's projection for the row (x2 for the captain, like his points): live while his game is on. */
 function projText(p: Player | null, captainId: string | null): string | null {
   if (!showProj || !p?.id) return null;
-  const pr = projectionFor(weekProj, p.id);
-  if (!pr) return null;
-  return formatProjection(p.id === captainId ? pr.pts * CAP_MULT : pr.pts);
+  const st = weekStateFor(p.id);
+  if (!st) return null;
+  const share = st.ruledOut ? 0 : remainingShare(st, nowMs);
+  const live = !scoresLocked && share > 0 && share < 1; // his game is being played
+  const pts = live ? (st.actual ?? 0) + st.projected * share : st.projected;
+  return formatProjection(p.id === captainId ? pts * CAP_MULT : pts);
 }
 
 // -----------------------

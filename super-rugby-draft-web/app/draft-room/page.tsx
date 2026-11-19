@@ -1,5 +1,9 @@
 "use client";
 
+import { applyStatView, formatStatView, STAT_VIEW_LABEL, useStatView } from "@/lib/players/statView";
+import { useStatSeasonRows } from "@/lib/players/useStatSeason";
+import { COMPARE_STATS, seasonTotals, type SeasonTotals } from "@/lib/players/seasonTotals";
+import type { StatKey } from "@/lib/scoring";
 import { assignToSlots, isStandardSquad, SLOT_KINDS, squadSlots, STANDARD_SQUAD } from "@/lib/league/squad";
 import { WatchEyeIcon } from "@/components/WatchEyeIcon";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -52,6 +56,13 @@ function useNowTick(ms = 250) {
 
   return Date.now();
 }
+
+
+/** Draft room pool: what the number column shows (draft rank, or the season's points / a stat). */
+const DRAFT_SORT_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "DRAFT_RANK", label: "Draft Rank" },
+  ...COMPARE_STATS.map((c) => ({ value: c.key, label: c.label })),
+];
 
 export default function DraftRoomPage() {
   useRequireSession();
@@ -350,14 +361,37 @@ function resolvePlayer(x: any): Player | null {
     return new Set(picks.filter(Boolean).map((p) => (p as Player).id));
   }, [picks]);
 
+  // What the number column shows / sorts by (Filters): draft rank, or the chosen season's points
+  // or a stat, per game / total / per 80 (lib/players/statView)
+  const [sortMode, setSortMode] = useState<string>("DRAFT_RANK");
+  const [statView] = useStatView();
+  const { rows: statRows, season: statSeasonShown } = useStatSeasonRows();
+  const totalsById = useMemo(() => {
+    const m = new Map<string, SeasonTotals>();
+    if (sortMode === "DRAFT_RANK") return m;
+    for (const p of allPlayers) m.set(p.id, seasonTotals(statRows, p));
+    return m;
+  }, [allPlayers, statRows, sortMode]);
+  const metricOf = (p: Player): number | null => {
+    if (sortMode === "DRAFT_RANK") return p.draftRank;
+    const t = totalsById.get(p.id);
+    if (!t) return null;
+    const total = sortMode === "points" ? t.points : t.counts[sortMode as StatKey];
+    return applyStatView(total, t.games, t.minutes, statView);
+  };
+  const metricText = (p: Player) => (sortMode === "DRAFT_RANK" ? String(p.draftRank) : formatStatView(metricOf(p), statView));
+  const sortLabel = DRAFT_SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? "Draft Rank";
+
   const filteredPlayers = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const val = (p: Player) => metricOf(p) ?? -Infinity;
     return allPlayers
       .filter((p) => (draftedIds.has(p.id) ? false : true))
       .filter((p) => (q ? `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) : true))
       .filter((p) => matchesPoolFilters(p as any, poolFilters, getLivePlayerById?.(p.id) as any))
-      .sort((a, b) => a.draftRank - b.draftRank);
-  }, [allPlayers, draftedIds, search, poolFilters, getLivePlayerById]);
+      .sort((a, b) => (sortMode === "DRAFT_RANK" ? a.draftRank - b.draftRank : val(b) - val(a) || a.draftRank - b.draftRank));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allPlayers, draftedIds, search, poolFilters, getLivePlayerById, sortMode, totalsById, statView]);
 
   const playerPoolPlayers = useMemo(() => {
     return filteredPlayers.filter((p) => canTeamDraftPlayer(yourTeamId, p, activeLeague?.squadFormat));
@@ -684,7 +718,18 @@ const LiveHeader = useStableComponent(LiveHeader__render);
 const Tabs = useStableComponent(Tabs__render);
 
   function Filters__render() {
-    return <PoolFilterBar search={search} setSearch={setSearch} filters={poolFilters} setFilters={setPoolFilters} />;
+    return (
+      <PoolFilterBar
+        search={search}
+        setSearch={setSearch}
+        filters={poolFilters}
+        setFilters={setPoolFilters}
+        sort={sortMode}
+        setSort={setSortMode}
+        sortOptions={DRAFT_SORT_OPTIONS}
+        statOptions
+      />
+    );
   }
 const Filters = useStableComponent(Filters__render);
 
@@ -728,7 +773,7 @@ const Filters = useStableComponent(Filters__render);
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, width: 34, textAlign: "right" }}>{p.draftRank}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, width: 34, textAlign: "right" }}>{metricText(p)}</div>
           <StarButton active={isStar} onClick={() => toggleWatchlist(p.id)} />
           <DraftButton enabled={draftEnabled} onClick={() => onDraftClick(p)} />
         </div>
@@ -745,10 +790,13 @@ const PlayerRow = useStableComponent(PlayerRow__render);
       <>
         <Filters />
         <div style={listBox}>
-          <div style={{ padding: "8px 100px", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 180px" }}>
-              <div />
-              <div style={{ textAlign: "right" }}>Draft Rank</div>
+          {/* the column's name, right above the numbers (same layout as the rows) */}
+          <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: "1fr 132px", gap: 10, alignItems: "center", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
+            <div>{sortMode === "DRAFT_RANK" ? "" : `${STAT_VIEW_LABEL[statView]} · ${statSeasonShown}`}</div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <div style={{ width: 34, display: "flex", justifyContent: "flex-end", whiteSpace: "nowrap", fontWeight: 600 }}>{sortLabel}</div>
+              <div style={{ width: 28 }} />
+              <div style={{ width: 28 }} />
             </div>
           </div>
 
@@ -773,10 +821,13 @@ const PlayerPoolTab = useStableComponent(PlayerPoolTab__render);
       <>
         <Filters />
         <div style={listBox}>
-          <div style={{ padding: "8px 100px", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 180px" }}>
-              <div />
-              <div style={{ textAlign: "right" }}>Draft Rank</div>
+          {/* the column's name, right above the numbers (same layout as the rows) */}
+          <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: "1fr 132px", gap: 10, alignItems: "center", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
+            <div>{sortMode === "DRAFT_RANK" ? "" : `${STAT_VIEW_LABEL[statView]} · ${statSeasonShown}`}</div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <div style={{ width: 34, display: "flex", justifyContent: "flex-end", whiteSpace: "nowrap", fontWeight: 600 }}>{sortLabel}</div>
+              <div style={{ width: 28 }} />
+              <div style={{ width: 28 }} />
             </div>
           </div>
 

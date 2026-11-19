@@ -750,10 +750,10 @@ const Header = useStableComponent(Header__render);
     const tabs: LeagueTab[] = ["Standings", "Fixtures", "Results", "Power", ...(league?.shield?.enabled || league?.shield?.holderTeamId ? (["Shield"] as LeagueTab[]) : [])];
     return (
       <div style={tabBarStyle}>
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
+        <div style={{ display: "grid", gridTemplateColumns: tabs.map((t) => (t === "Power" ? "1.6fr" : "1fr")).join(" ") }}>
           {tabs.map((t) => (
-            <button key={t} onClick={() => setTab(t)} style={tabBtn(t === tab)}>
-              {t}
+            <button key={t} onClick={() => setTab(t)} style={{ ...tabBtn(t === tab), padding: "0 4px", whiteSpace: "nowrap" }}>
+              {t === "Power" ? "Power Rankings" : t}
             </button>
           ))}
         </div>
@@ -799,16 +799,19 @@ const Tabs = useStableComponent(Tabs__render);
 const MovementCircle = useStableComponent(MovementCircle__render);
 
   function StandingsTab__render() {
-    // horizontally scrollable table
+    // horizontally scrollable table; the team column fits the longest team name (no cutting off)
+    const longest = Math.max(8, ...standings.map((r) => String(r.teamName ?? "").length));
+    const teamCol = Math.round(32 + longest * 7.4 + 40); // avatar + name + room for the shield / crown / spoon
+    const cols = `44px ${teamCol}px 24px 24px 24px 24px 38px 38px 40px 30px`;
     return (
       <>
         <div style={listBox}>
           <div style={{ padding: "10px 10px", overflowX: "auto" }}>
-            <div style={{ minWidth: 560 }}>
+            <div style={{ width: "max-content", minWidth: "100%" }}>
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "44px 1fr 40px 40px 40px 40px 50px 50px 50px 10px",
+                  gridTemplateColumns: cols,
 
                   gap: 8,
                   fontSize: 10,
@@ -834,7 +837,7 @@ const MovementCircle = useStableComponent(MovementCircle__render);
                   key={r.rank}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "44px 1fr 40px 40px 40px 40px 50px 50px 50px 10px",
+                    gridTemplateColumns: cols,
 
                     gap: 8,
                     alignItems: "center",

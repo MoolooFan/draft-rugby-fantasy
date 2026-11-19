@@ -249,7 +249,7 @@ export default function StatsHubPage() {
                 <tbody>
                   {list.slice(0, shown).map((p) => {
                     const on = ticked.includes(p.id);
-                    const owner = ownerName(p.id);
+
                     return (
                       <tr key={p.id}>
                         <td style={{ ...td, ...sticky, background: on ? "rgb(230,247,245)" : "white" }}>
@@ -263,7 +263,6 @@ export default function StatsHubPage() {
                               </div>
                               <div style={{ fontSize: 10, fontWeight: 600, opacity: 0.6 }}>
                                 {p.teamCode} · {positionsLabel(p)}
-                                {owner ? ` · ${owner}` : ""}
                               </div>
                             </button>
                           </div>

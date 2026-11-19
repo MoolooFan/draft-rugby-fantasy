@@ -5,14 +5,17 @@ import { useMemo } from "react";
 
 import { FixtureRow, TabCard, computeGames, totalDerived, playerGetsScrumPointsForCard, StatRow, teamLogoSrc, formatKickoffLocal, fdrTheme } from "./helpers";
 import { applyStatView, formatStatView, STAT_VIEW_LABEL, useStatView } from "@/lib/players/statView";
-import { StatViewToggle } from "@/components/StatViewToggle";
+import { SeasonToggle, StatViewToggle } from "@/components/StatViewToggle";
 
 export function StatsTab({
   player,
   rounds,
   gamesPlayed,
   starts,
+  onCompare,
 }: {
+  /** the Compare button under the stats (left out: no button) */
+  onCompare?: () => void;
   player: {
     posAbbrev?: string;
     secondaryPosAbbrev?: string;
@@ -129,8 +132,9 @@ export function StatsTab({
           right2Label="Starts"
         />
 
-        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 2px" }}>
+        <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 6, padding: "10px 0 2px" }}>
           <StatViewToggle dark />
+          <SeasonToggle dark />
         </div>
 
         {/* Per Game header row */}
@@ -191,6 +195,16 @@ export function StatsTab({
           />
         ))}
       </div>
+      {onCompare ? (
+        <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 4px" }}>
+          <button
+            onClick={onCompare}
+            style={{ height: 32, padding: "0 16px", borderRadius: 999, border: "1px solid #cbd5e1", background: "#eef2f6", color: "#0f172a", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+          >
+            ⇄ Compare with another player
+          </button>
+        </div>
+      ) : null}
     </TabCard>
   );
 }
