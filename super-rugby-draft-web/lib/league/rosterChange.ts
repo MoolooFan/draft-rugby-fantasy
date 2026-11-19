@@ -5,7 +5,8 @@
 //    (lib/league/lineup.ts), with the captain / vice-captain rules applied.
 // Locked weeks are never changed.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { rosterFits, ROSTER_SIZE, startingGaps } from "@/lib/draft/rules";
+import { rosterFits, startingGaps } from "@/lib/draft/rules";
+import { isStandardSquad, kindLabel, rosterSize, SLOT_KINDS, squadFormatOf, STANDARD_SQUAD, type SquadFormat } from "@/lib/league/squad";
 import { fixCaptains, updateLineup } from "@/lib/league/lineup";
 import { selectionDeadlineMs } from "@/lib/league/deadlines";
 import { getSeason, SEASONS, totalFantasyWeeks } from "@/lib/season";
@@ -45,22 +46,35 @@ export async function loadRosterPlayers(db: Db, season: number, ids: string[]): 
 export const POSITION_RULES_ERROR =
   "This would break the position rules (your team needs 2 PR, 1 HO, 2 LK, 3 LF, 1 HB, 1 FH, 2 CE and 3 OB)";
 
+/** The position-rules message for a league's squad. */
+export function positionRulesError(format?: SquadFormat | null): string {
+  if (!format || isStandardSquad(format)) return POSITION_RULES_ERROR;
+  const parts = SLOT_KINDS.filter((k) => (format.starters[k.kind] ?? 0) > 0).map((k) => {
+    const n = format.starters[k.kind]!;
+    const group = ["TF", "HV", "FW", "BK", "ANY"].includes(k.kind);
+    return `${n} ${group ? kindLabel(k.kind) : k.short}`;
+  });
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0];
+  return `This would break the position rules (your team needs ${list})`;
+}
+
 /**
  * Why this roster (not counting IR) breaks the rules, or null if it's fine.
  * prevIds: the roster before the change. A team below 20 (a player in IR) may already be short
  * of a position; a change is fine as long as it doesn't leave more starting spots unfillable
  * than before. A full team of 20 must always be able to field a full XV.
  */
-export function rosterProblem(ids: string[], players: Map<string, RosterPlayer>, prevIds?: string[]): string | null {
-  if (ids.length > ROSTER_SIZE) return `A team can have at most ${ROSTER_SIZE} players (not counting IR)`;
+export function rosterProblem(ids: string[], players: Map<string, RosterPlayer>, prevIds?: string[], format?: SquadFormat | null): string | null {
+  const max = rosterSize(format ?? STANDARD_SQUAD);
+  if (ids.length > max) return `A team can have at most ${max} players (not counting IR)`;
   const missing = ids.filter((id) => !players.has(id));
   if (missing.length) return `Unknown player: ${missing[0]}`;
   const next = ids.map((id) => players.get(id)!);
-  if (!rosterFits(next)) return POSITION_RULES_ERROR;
-  const gaps = startingGaps(next);
+  if (!rosterFits(next, format)) return positionRulesError(format);
+  const gaps = startingGaps(next, format);
   if (gaps > 0) {
-    const before = prevIds ? startingGaps(prevIds.map((id) => players.get(id)).filter((p): p is RosterPlayer => !!p)) : 0;
-    if (gaps > before) return POSITION_RULES_ERROR;
+    const before = prevIds ? startingGaps(prevIds.map((id) => players.get(id)).filter((p): p is RosterPlayer => !!p), format) : 0;
+    if (gaps > before) return positionRulesError(format);
   }
   return null;
 }
@@ -105,10 +119,11 @@ export async function updateLineupsAfterRosterChange(
   nowMs: number = Date.now()
 ): Promise<{ updated: number }> {
   if (!rosters.size) return { updated: 0 };
-  const { data: league, error: lErr } = await db.from("leagues").select("season, first_week").eq("id", leagueId).maybeSingle();
+  const { data: league, error: lErr } = await db.from("leagues").select("season, first_week, squad_format").eq("id", leagueId).maybeSingle();
   if (lErr) throw lErr;
   if (!league) return { updated: 0 };
   const season = Number(league.season);
+  const format = squadFormatOf(league.squad_format);
   const open = firstOpenWeek(season, league.first_week, nowMs);
   if (open == null) return { updated: 0 };
 
@@ -135,8 +150,8 @@ export async function updateLineupsAfterRosterChange(
     for (const week of [...weeks].sort((a, b) => a - b)) {
       const sel = effectiveSelection(selections, teamId, week);
       if (sel?.week === week && sel.locked_at) continue; // locked: never changed
-      const res = updateLineup(sel?.lineup ?? null, roster);
-      const caps = fixCaptains(res.lineup, sel?.captain_id, sel?.vice_id, pickRank);
+      const res = updateLineup(sel?.lineup ?? null, roster, format);
+      const caps = fixCaptains(res.lineup, sel?.captain_id, sel?.vice_id, pickRank, format);
       upserts.push({
         league_id: leagueId,
         week,

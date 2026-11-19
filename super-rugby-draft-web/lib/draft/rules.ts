@@ -2,9 +2,10 @@
 // Draft rules (pure code, no database):
 // - snake order: round 1 goes 1..n, round 2 goes n..1, and so on
 // - 90 seconds a pick; a team that has missed 3 picks in a row is auto-picked after 10 seconds
-// - roster: 2 PR, 1 HO, 2 LK, 3 LF, 1 HB, 1 FH, 2 CE, 3 OB + 5 wildcards (20). A player can fill
-//   a spot for any of his positions (up to three), or a wildcard.
-import { playerPositions } from "@/lib/players/positions";
+// - roster (Standard): 2 PR, 1 HO, 2 LK, 3 LF, 1 HB, 1 FH, 2 CE, 3 OB + 5 wildcards (20). A player
+//   can fill a spot for any of his positions (up to three), or a wildcard. A league can set its
+//   own squad (lib/league/squad.ts): its starting spots + its bench.
+import { STANDARD_SQUAD, squadFits, squadStartingGaps, type SquadFormat } from "@/lib/league/squad";
 
 export const ROSTER_SPOTS: Record<string, number> = { PR: 2, HO: 1, LK: 2, LF: 3, HB: 1, FH: 1, CE: 2, OB: 3 };
 export const WILDCARD_SPOTS = 5;
@@ -34,59 +35,20 @@ export function secondsForTeam(missedInRow: number): number {
 type HasPositions = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null; thirdPosAbbrev?: string | null };
 
 /**
- * True if these players can all be given a roster spot (position spots by any of their
- * positions, or a wildcard). Used to make sure a pick never breaks the position rules.
+ * True if these players can all be given a roster spot (starting spots by any of their
+ * positions, or the bench). Used to make sure a pick never breaks the position rules.
+ * format = the league's squad (lib/league/squad.ts); Standard if not given.
  */
-export function rosterFits(players: HasPositions[]): boolean {
-  if (players.length > ROSTER_SIZE) return false;
-  const spots: string[] = [];
-  for (const [pos, n] of Object.entries(ROSTER_SPOTS)) for (let i = 0; i < n; i++) spots.push(pos);
-  for (let i = 0; i < WILDCARD_SPOTS; i++) spots.push("WC");
-  const fits = players.map((p) => {
-    const pos = playerPositions(p);
-    return spots.map((s, i) => (s === "WC" || pos.includes(s) ? i : -1)).filter((i) => i >= 0);
-  });
-  const spotOwner = new Array(spots.length).fill(-1);
-  const tryPlace = (p: number, seen: boolean[]): boolean => {
-    for (const s of fits[p]) {
-      if (seen[s]) continue;
-      seen[s] = true;
-      if (spotOwner[s] < 0 || tryPlace(spotOwner[s], seen)) {
-        spotOwner[s] = p;
-        return true;
-      }
-    }
-    return false;
-  };
-  return players.every((_, p) => tryPlace(p, new Array(spots.length).fill(false)));
+export function rosterFits(players: HasPositions[], format?: SquadFormat | null): boolean {
+  return squadFits(players, format ?? STANDARD_SQUAD);
 }
 
 /**
- * How many of the 15 starting spots (2 PR, 1 HO, 2 LK, 3 LF, 1 HB, 1 FH, 2 CE, 3 OB) these
- * players can't fill between them. 0 = a full XV is possible.
+ * How many of the starting spots (Standard: 2 PR, 1 HO, 2 LK, 3 LF, 1 HB, 1 FH, 2 CE, 3 OB)
+ * these players can't fill between them. 0 = a full team is possible.
  */
-export function startingGaps(players: HasPositions[]): number {
-  const spots: string[] = [];
-  for (const [pos, n] of Object.entries(ROSTER_SPOTS)) for (let i = 0; i < n; i++) spots.push(pos);
-  const fits = players.map((p) => {
-    const pos = playerPositions(p);
-    return spots.map((s, i) => (pos.includes(s) ? i : -1)).filter((i) => i >= 0);
-  });
-  const spotOwner = new Array(spots.length).fill(-1);
-  const tryPlace = (p: number, seen: boolean[]): boolean => {
-    for (const s of fits[p]) {
-      if (seen[s]) continue;
-      seen[s] = true;
-      if (spotOwner[s] < 0 || tryPlace(spotOwner[s], seen)) {
-        spotOwner[s] = p;
-        return true;
-      }
-    }
-    return false;
-  };
-  let filled = 0;
-  for (let p = 0; p < players.length; p++) if (tryPlace(p, new Array(spots.length).fill(false))) filled++;
-  return spots.length - filled;
+export function startingGaps(players: HasPositions[], format?: SquadFormat | null): number {
+  return squadStartingGaps(players, format ?? STANDARD_SQUAD);
 }
 
 /** Shuffle (for the random draft order). */

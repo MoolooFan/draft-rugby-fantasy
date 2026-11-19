@@ -1,5 +1,6 @@
 "use client";
 
+import { rosterSize, STANDARD_SQUAD } from "@/lib/league/squad";
 import { WatchEyeIcon } from "@/components/WatchEyeIcon";
 import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { card as themeCard } from "@/lib/ui/theme";
@@ -1137,8 +1138,8 @@ const yourRosterPlayers: Player[] = useMemo(() => {
   return list;
 }, [rostersForOwnership, yourDraftTeamId, allPlayers]);
 
-  // Fewer than 20 (not counting IR): the team can add without dropping anyone.
-  const hasFreePlace = yourRosterPlayers.length > 0 && yourRosterPlayers.length < 20;
+  // Fewer than the league's roster size (Standard 20, not counting IR): the team can add without dropping anyone.
+  const hasFreePlace = yourRosterPlayers.length > 0 && yourRosterPlayers.length < rosterSize(activeLeague?.squadFormat ?? STANDARD_SQUAD);
 
   // Given an addPlayer, compute droppable players that keep roster valid after swap
   const droppableCandidates: Player[] = useMemo(() => {

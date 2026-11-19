@@ -5,7 +5,9 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { advanceDraft, DraftError, getDraftState } from "@/lib/draft/engine";
-import { ROSTER_SIZE, teamForPick } from "@/lib/draft/rules";
+import { teamForPick } from "@/lib/draft/rules";
+import { rosterSize } from "@/lib/league/squad";
+import { loadSquadFormat } from "@/lib/league/squadServer";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +35,7 @@ export async function GET(req: Request) {
       myTeamId: teamId,
       state: {
         ...state,
-        total_picks: order.length * ROSTER_SIZE,
+        total_picks: order.length * rosterSize(await loadSquadFormat(supabaseAdmin, leagueId)),
         on_the_clock_team_id: state.phase === "live" ? teamForPick(order, state.pick_index) : null,
       },
       picks: picks ?? [],

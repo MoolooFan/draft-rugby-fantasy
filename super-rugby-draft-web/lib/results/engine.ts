@@ -8,6 +8,7 @@
 //
 // The database client is passed in, so the website, the scheduled job and test scripts
 // all run exactly the same code.
+import { squadFormatOf } from "@/lib/league/squad";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { postFreeAgentReport, postRoundPosts } from "@/lib/chat/server";
 import { loadSeasonPlayers } from "@/lib/players/db";
@@ -173,7 +174,8 @@ async function lockedTeamCount(db: Db, leagueId: string, week: number) {
 
 /** Locks every team's lineup for a week: their saved one, or their latest one, matched to the current roster. */
 export async function lockWeek(db: Db, leagueId: string, week: number, nowMs: number) {
-  const { data: lg } = await db.from("leagues").select("season").eq("id", leagueId).single();
+  const { data: lg } = await db.from("leagues").select("season, squad_format").eq("id", leagueId).single();
+  const squad = squadFormatOf(lg?.squad_format);
   await loadPlayers(db, Number(lg?.season));
   const teams = await q<Array<{ id: string }>>(db.from("teams").select("id").eq("league_id", leagueId));
   const rosters = await q<Array<{ team_id: string; data: { playerIds?: string[]; irIds?: string[] } }>>(
@@ -193,8 +195,8 @@ export async function lockWeek(db: Db, leagueId: string, week: number, nowMs: nu
     const latest = existing ?? selections.filter((s) => s.team_id === t.id).sort((a, b) => b.week - a.week)[0] ?? null;
     const rosterIds = activeIdsOf(rosters.find((r) => r.team_id === t.id)?.data); // IR players never play
     const roster = rosterIds.map(playerInfo).sort((a, b) => pickRank(a.id) - pickRank(b.id));
-    const lineup = reconcileLineup(latest?.lineup ?? null, roster);
-    const caps = fixCaptains(lineup, latest?.captain_id, latest?.vice_id, pickRank);
+    const lineup = reconcileLineup(latest?.lineup ?? null, roster, squad);
+    const caps = fixCaptains(lineup, latest?.captain_id, latest?.vice_id, pickRank, squad);
     await q(
       db.from("team_selections").upsert(
         {
@@ -290,6 +292,7 @@ export async function finaliseWeek(
       statsFor: (id) => stats.get(normId(id)) ?? null,
       frontRow: (id) => isFrontRow(playerInfo(id), rules),
       rules,
+      format: squadFormatOf((league as { squad_format?: unknown }).squad_format),
     });
     return {
       league_id: leagueId, week, team_id: s.team_id,

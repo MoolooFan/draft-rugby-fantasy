@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { loadSquadFormat } from "@/lib/league/squadServer";
 import { postTradeResult } from "@/lib/chat/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
@@ -226,9 +227,10 @@ const requested = uniq((offer.request_player_ids ?? []) as any);
 
     // 9b) Both teams must keep the position rules (so each can always field a full XV)
     const rosterPlayers = await loadRosterPlayers(supabaseAdmin, season, [...nextFrom, ...nextTo]);
-    const toProblem = rosterProblem(uniq(nextTo), rosterPlayers, toExtract.ids);
+    const format = await loadSquadFormat(supabaseAdmin, offer.league_id);
+    const toProblem = rosterProblem(uniq(nextTo), rosterPlayers, toExtract.ids, format);
     if (toProblem) throw new Error(`Your team: ${toProblem}`);
-    const fromProblem = rosterProblem(uniq(nextFrom), rosterPlayers, fromExtract.ids);
+    const fromProblem = rosterProblem(uniq(nextFrom), rosterPlayers, fromExtract.ids, format);
     if (fromProblem) throw new Error(`The other team: ${fromProblem}`);
 
     const nextFromData = writePlayerIds(fromRoster.data, fromExtract.key, uniq(nextFrom));

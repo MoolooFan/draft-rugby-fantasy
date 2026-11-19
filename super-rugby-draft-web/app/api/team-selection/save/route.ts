@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { loadSquadFormat } from "@/lib/league/squadServer";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { selectionDeadlineMs } from "@/lib/league/deadlines";
@@ -22,20 +23,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Missing fields" }, { status: 400 });
     }
 
-    const requiredSlots = [
-      "prop1", "hooker1", "prop2",
-      "lock1", "lock2",
-      "looseforward1", "looseforward2", "looseforward3",
-      "halfback1", "flyhalf1",
-      "centre1", "centre2",
-      "outsideback1", "outsideback2", "outsideback3",
-      "bench1", "bench2", "bench3", "bench4", "bench5",
-    ];
-
-    const hasAnyPlayer = requiredSlots.some((slot) => {
-      const p = (lineup as any)?.[slot];
-      return !!p?.id;
-    });
+    // (the slots themselves are checked against the league's squad below, by updateLineup)
+    const hasAnyPlayer = Object.values(lineup as Record<string, { id?: unknown } | null>).some((p) => !!p?.id);
 
     if (!hasAnyPlayer) {
       return NextResponse.json(
@@ -90,8 +79,9 @@ export async function POST(req: Request) {
       .sort((a, b) => pickRank(a.id) - pickRank(b.id));
     // If the team can't fill every starting spot (only possible while a player is in IR and the
     // team is short of his position) the lineup is still saved, with that spot empty.
-    const fixed = updateLineup(lineup as Lineup, roster);
-    const caps = fixCaptains(fixed.lineup, captainId, viceId, pickRank);
+    const format = await loadSquadFormat(supabaseAdmin, leagueId);
+    const fixed = updateLineup(lineup as Lineup, roster, format);
+    const caps = fixCaptains(fixed.lineup, captainId, viceId, pickRank, format);
 
     const { error } = await supabaseAdmin
       .from("team_selections")
