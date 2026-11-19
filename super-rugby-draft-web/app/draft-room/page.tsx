@@ -1,5 +1,6 @@
 "use client";
 
+import { WatchEyeIcon } from "@/components/WatchEyeIcon";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { card as themeCard } from "@/lib/ui/theme";
 import { leagueRefreshMs, usePoll } from "@/lib/hooks/usePoll";
@@ -515,7 +516,7 @@ const DraftButton = useStableComponent(DraftButton__render);
           fontWeight: 700,
         }}
       >
-        {active ? "★" : "☆"}
+        <WatchEyeIcon active={active} />
       </button>
     );
   }

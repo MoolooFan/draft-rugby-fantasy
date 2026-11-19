@@ -343,7 +343,7 @@ function PlayersTab({ season, setMsg }: { season: number; setMsg: (m: string | n
                 {p.firstName} {p.lastName} {p.active ? "" : "(hidden)"}
               </div>
               <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.65 }}>
-                {p.teamCode} · {p.posAbbrev}{p.secondaryPosAbbrev ? `/${p.secondaryPosAbbrev}` : ""}{p.thirdPosAbbrev ? `/${p.thirdPosAbbrev}` : ""} · rank {p.draftRank < 9999 ? p.draftRank : "—"}
+                {p.teamCode} · {p.posAbbrev}{p.secondaryPosAbbrev ? `, ${p.secondaryPosAbbrev}` : ""}{p.thirdPosAbbrev ? `, ${p.thirdPosAbbrev}` : ""} · rank {p.draftRank < 9999 ? p.draftRank : "—"}
                 {p.status ? ` · ${p.status}` : ""}
               </div>
             </div>

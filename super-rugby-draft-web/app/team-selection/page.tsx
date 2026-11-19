@@ -1534,7 +1534,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
           width: 70,
           height: 70,
           borderRadius: 14,
-          border: irPlayerFit ? "2px solid rgba(250,204,21,0.95)" : "1px dashed rgba(248,113,113,0.85)",
+          border: irPlayerFit ? "2px solid rgba(250,204,21,0.95)" : "3px dashed rgba(239,68,68,0.95)",
           background: p ? "#eef2f6" : "#f8fafc",
           boxShadow: "0 4px 12px rgba(0,0,0,0.10)",
           opacity: swapping ? 0.45 : 1,
@@ -1570,7 +1570,6 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
         ) : (
           <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, opacity: 0.75, lineHeight: "12px", textAlign: "center" }}>
             <span>IR</span>
-            <span style={{ fontWeight: 600, fontSize: 9 }}>Injury reserve</span>
           </div>
         )}
       </button>

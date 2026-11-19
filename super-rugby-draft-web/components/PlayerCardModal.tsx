@@ -1,5 +1,6 @@
 "use client";
 
+import { useCoachName } from "@/lib/coach/name";
 import { useEffect, useMemo, useState } from "react";
 import { getPlayerPool } from "@/lib/players/pool";
 import { PointsBreakdownModal } from "@/components/PointsBreakdownModal";
@@ -455,6 +456,7 @@ const [selectedRound, setSelectedRound] = useState<PlayerRound | null>(null);
 
   // Transactions (C3) are this league's, so only shown when you're in a league; AI Coach (C4) is a placeholder
   const leagueId = useLeagueStore((s) => s.activeLeagueId);
+  const coachName = useCoachName();
   const tabs: PlayerCardTab[] = useMemo(
   () => (leagueId ? ["Results", "Stats", "Fixtures", "Transactions", "AI Coach"] : ["Results", "Stats", "Fixtures", "AI Coach"]),
   [leagueId]
@@ -910,7 +912,7 @@ const teamLabelFull =
                       cursor: "pointer",
                     }}
                   >
-                    {t}
+                    {t === "AI Coach" ? coachName : t}
                   </button>
                 );
               })}

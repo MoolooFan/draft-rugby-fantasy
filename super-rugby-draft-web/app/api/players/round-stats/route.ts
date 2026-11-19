@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { STATS } from "@/lib/scoring";
+import { RESULT_STATS, STATS } from "@/lib/scoring";
+import { addMatchResults } from "@/lib/results/matchResults";
 import { fantasyWeekForRealRound, getSeason, SEASONS } from "@/lib/season";
 import { currentSeasonYear } from "@/lib/season";
 import { demo } from "@/lib/demo";
@@ -29,6 +30,8 @@ function mapRawJsonToLegacyRow(row: any) {
 
     // raw stat COUNTS under the page-style headers ("Minutes played", "Tries", ...)
     ...Object.fromEntries(STATS.map((st) => [st.header, toNum(stats[st.code])])),
+    // team win / draw in games he played ("Team win": 1), for leagues that score them
+    ...Object.fromEntries(RESULT_STATS.filter((st) => toNum(stats[st.code])).map((st) => [st.header, toNum(stats[st.code])])),
 
     // useful extras
     points: toNum(raw.points ?? row.points),
@@ -71,6 +74,7 @@ export async function GET(req: Request) {
       from += pageSize;
     }
 
+    await addMatchResults(supabaseAdmin, season, allRows);
     let rows = allRows.map(mapRawJsonToLegacyRow);
     // demo site: nothing after the frozen moment's last round (lib/demo.ts)
     const d = demo();
