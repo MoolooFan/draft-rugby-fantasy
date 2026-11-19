@@ -439,6 +439,8 @@ type StandingRow = {
   pd: number;
   pts: number;
   movement: "same" | "up" | "down";
+  /** places moved since the round before (+ = up) */
+  moved: number;
 };
 
 const currentWeek = league?.currentWeek ?? 1;
@@ -469,9 +471,9 @@ const regularWeeks = Math.max(
 // ✅ Total season weeks = regular + playoffs
 const totalWeeks = regularWeeks + playoffWeeks;
 
-function buildStandingsFromResults(uptoWeekInclusive: number): Omit<StandingRow, "rank" | "movement">[] {
+function buildStandingsFromResults(uptoWeekInclusive: number): Omit<StandingRow, "rank" | "movement" | "moved">[] {
   const teams = league?.teams ?? [];
-  const base = new Map<string, Omit<StandingRow, "rank" | "movement">>();
+  const base = new Map<string, Omit<StandingRow, "rank" | "movement" | "moved">>();
 
   for (const t of teams) {
     base.set(t.id, {
@@ -596,7 +598,7 @@ const standings = useMemo<StandingRow[]>(() => {
       else if (rank > prevRank) movement = "down";
     }
 
-    return { rank, ...r, movement };
+    return { rank, ...r, movement, moved: prevRank != null ? prevRank - rank : 0 };
   });
 }, [sheetFixtures, league?.teams]);
 
@@ -786,37 +788,25 @@ const Header = useStableComponent(Header__render);
   }
 const Tabs = useStableComponent(Tabs__render);
 
-  function MovementCircle__render({ movement }: { movement: "same" | "up" | "down" }) {
-  const isUp = movement === "up";
-  const isDown = movement === "down";
-  const isSame = movement === "same";
-  const bg = isUp ? "#22C55E" : isDown ? "#EF4444" : "rgba(0,0,0,0.12)";
-  const symbol = isUp ? "▲" : isDown ? "▼" : "=";
+  // Up / down / no change since the round before (Ethan, 20 Nov 2026: drawn chevrons on a soft
+  // tinted circle instead of text symbols, which sat off-centre and looked different on each phone)
+  function MovementCircle__render({ movement, moved = 0 }: { movement: "same" | "up" | "down"; moved?: number }) {
+  const look = {
+    up: { bg: "#bbf7d0", fg: "#15803d", path: "M4.5 10 L8 6.5 L11.5 10", label: `Up ${Math.abs(moved) || 1} since last round` },
+    down: { bg: "#fecaca", fg: "#b91c1c", path: "M4.5 6.5 L8 10 L11.5 6.5", label: `Down ${Math.abs(moved) || 1} since last round` },
+    same: { bg: "#e2e8f0", fg: "#64748b", path: "M5 8.25 H11", label: "No change since last round" },
+  }[movement];
 
   return (
     <span
-      style={{
-        width: 18,
-        height: 18,
-        borderRadius: 999,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: bg,
-        color: "white",
-        fontWeight: 700,
-        fontSize: isSame ? 12 : 10,
-        lineHeight: "12px",
-      }}
+      title={look.label}
+      aria-label={look.label}
+      role="img"
+      style={{ width: 18, height: 18, borderRadius: 999, background: look.bg, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
     >
-      <span
-        style={{
-          display: "block",
-          transform: isDown ? "translateY(1px)" : "translateY(0)",
-        }}
-      >
-        {symbol}
-      </span>
+      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" style={{ display: "block" }}>
+        <path d={look.path} fill="none" stroke={look.fg} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
     </span>
   );
 }
@@ -877,7 +867,7 @@ const MovementCircle = useStableComponent(MovementCircle__render);
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ width: 14, textAlign: "right", fontWeight: 700 }}>{r.rank}</span>
-                    <MovementCircle movement={r.movement} />
+                    <MovementCircle movement={r.movement} moved={r.moved} />
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                     {(() => {
