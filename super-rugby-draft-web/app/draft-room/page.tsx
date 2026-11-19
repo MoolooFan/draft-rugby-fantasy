@@ -1,5 +1,6 @@
 "use client";
 
+import { assignToSlots, isStandardSquad, SLOT_KINDS, squadSlots, STANDARD_SQUAD } from "@/lib/league/squad";
 import { WatchEyeIcon } from "@/components/WatchEyeIcon";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { card as themeCard } from "@/lib/ui/theme";
@@ -359,8 +360,8 @@ function resolvePlayer(x: any): Player | null {
   }, [allPlayers, draftedIds, search, poolFilters, getLivePlayerById]);
 
   const playerPoolPlayers = useMemo(() => {
-    return filteredPlayers.filter((p) => canTeamDraftPlayer(yourTeamId, p));
-  }, [filteredPlayers, canTeamDraftPlayer, yourTeamId]);
+    return filteredPlayers.filter((p) => canTeamDraftPlayer(yourTeamId, p, activeLeague?.squadFormat));
+  }, [filteredPlayers, canTeamDraftPlayer, yourTeamId, activeLeague?.squadFormat]);
 
   // In the order you set (auto-pick takes the first that's still free and fits)
   const watchlistPlayers = useMemo(() => {
@@ -385,7 +386,7 @@ function resolvePlayer(x: any): Player | null {
     if (phase !== "liveDraft") return;
     if (draftComplete) return;
     if (!isYouOnClock) return;
-    if (!canTeamDraftPlayer(onTheClockTeamId, p)) return;
+    if (!canTeamDraftPlayer(onTheClockTeamId, p, activeLeague?.squadFormat)) return;
 
     setModal({ type: "draftConfirm", player: p });
   }
@@ -738,7 +739,7 @@ const PlayerRow = useStableComponent(PlayerRow__render);
 
   function PlayerPoolTab__render() {
     const draftEnabledFor = (p: Player) =>
-      phase === "liveDraft" && isYouOnClock && canTeamDraftPlayer(yourTeamId, p) && !draftComplete;
+      phase === "liveDraft" && isYouOnClock && canTeamDraftPlayer(yourTeamId, p, activeLeague?.squadFormat) && !draftComplete;
 
     return (
       <>
@@ -766,7 +767,7 @@ const PlayerPoolTab = useStableComponent(PlayerPoolTab__render);
 
   function WatchlistTab__render() {
     const draftEnabledFor = (p: Player) =>
-      phase === "liveDraft" && isYouOnClock && canTeamDraftPlayer(yourTeamId, p) && !draftComplete;
+      phase === "liveDraft" && isYouOnClock && canTeamDraftPlayer(yourTeamId, p, activeLeague?.squadFormat) && !draftComplete;
 
     return (
       <>
@@ -806,6 +807,33 @@ useEffect(() => {
 
   function TeamsTab__render() {
     const roster = rosters[selectedTeamId] ?? null;
+    // the roster's groups: Standard as before (positions + wildcards); a custom squad
+    // (lib/league/squad.ts): each kind of starting slot, then the bench
+    const squad = activeLeague?.squadFormat ?? STANDARD_SQUAD;
+    type Group = { key: string; label: string; emptyLabel: string; entries: unknown[] };
+    let groups: Group[] = [];
+    if (roster && isStandardSquad(squad)) {
+      groups = rosterSlots.map((slot) => ({
+        key: slot.slotId,
+        label: slot.label,
+        emptyLabel: slot.posAbbrev === "WC" ? "Wildcard" : slot.label.slice(0, -1),
+        entries: Array.from({ length: slot.count }, (_, i) =>
+          slot.posAbbrev === "WC" ? roster?.wildcards?.[i] ?? null : (roster?.slots as Record<string, unknown[]> | undefined)?.[slot.posAbbrev]?.[i] ?? null
+        ),
+      }));
+    } else if (roster) {
+      const all = [...Object.values((roster.slots ?? {}) as Record<string, unknown[]>).flat(), ...(roster.wildcards ?? [])]
+        .map((raw) => resolvePlayer(raw))
+        .filter((x): x is NonNullable<ReturnType<typeof resolvePlayer>> => !!x)
+        .sort((a, b) => (getPlayerPickNumber(a.id) ?? 9999) - (getPlayerPickNumber(b.id) ?? 9999));
+      const placed = assignToSlots(all, squad);
+      const { starters, bench } = squadSlots(squad);
+      for (const k of SLOT_KINDS) {
+        const ids = starters.filter((x) => x.kind === k.kind).map((x) => x.id);
+        if (ids.length) groups.push({ key: k.kind, label: k.label, emptyLabel: k.label, entries: ids.map((id) => placed.get(id) ?? null) });
+      }
+      if (bench.length) groups.push({ key: "bench", label: "Bench", emptyLabel: "Bench", entries: bench.map((id) => placed.get(id) ?? null) });
+    }
 
     if (!roster) {
     return (
@@ -850,23 +878,18 @@ useEffect(() => {
             </div>
           </div>
 
-          {rosterSlots.map((slot) => (
-            <div key={slot.slotId} style={{ borderTop: "1px solid rgba(0,0,0,0.08)" }}>
+          {groups.map((slot) => (
+            <div key={slot.key} style={{ borderTop: "1px solid rgba(0,0,0,0.08)" }}>
               <div style={{ padding: "8px 10px", fontSize: 11, fontWeight: 700, opacity: 0.75 }}>
                 {slot.label}
               </div>
 
-              {Array.from({ length: slot.count }).map((_, i) => {
-               const rawEntry =
-  slot.posAbbrev === "WC"
-    ? roster?.wildcards?.[i] ?? null
-    : roster?.slots?.[slot.posAbbrev]?.[i] ?? null;
-
-const entry = resolvePlayer(rawEntry);
+              {slot.entries.map((rawEntry, i) => {
+const entry = resolvePlayer(rawEntry as never);
 
                 return (
                   <div
-                    key={`${slot.slotId}-${i}`}
+                    key={`${slot.key}-${i}`}
                     style={{
                       display: "grid",
                       gridTemplateColumns: "1fr 70px",
@@ -907,7 +930,7 @@ const entry = resolvePlayer(rawEntry);
                           +
                         </div>
                         <div style={{ fontSize: 12, fontWeight: 500 }}>
-                          {slot.posAbbrev === "WC" ? "Wildcard" : slot.label.slice(0, -1)}
+                          {slot.emptyLabel}
                         </div>
                       </div>
                     )}

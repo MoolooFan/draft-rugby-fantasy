@@ -12,7 +12,8 @@
 //   games still to come. Auto-subs only for starters who are ruled out or didn't get on.
 // - Win probability: the chance team A's final score beats team B's, from the two projections
 //   and how uncertain they still are (less and less as games finish).
-import { applyAutoSubs, captainUsed, STARTER_SLOTS, type Lineup } from "@/lib/scoring/week";
+import { applyAutoSubs, captainUsed, startersOf, type Lineup } from "@/lib/scoring/week";
+import type { SquadFormat } from "@/lib/league/squad";
 import { CAPTAIN_MULTIPLIER } from "@/lib/scoring";
 
 /** Typical miss for a player with this projection (standard deviation, 2026). */
@@ -96,6 +97,8 @@ export function teamOutlook(args: {
   viceId: string | null;
   state: (playerId: string) => PlayerWeekState | null;
   nowMs: number;
+  /** the league's squad (Standard if not given) */
+  format?: SquadFormat | null;
 }): TeamOutlook {
   const st = (id: string) => args.state(id);
   // "plays" = will or did get on the field, as far as we can tell now
@@ -105,10 +108,10 @@ export function teamOutlook(args: {
     if (remainingShare(s, args.nowMs) === 0) return s.minutes > 0;
     return true;
   };
-  const finalLineup = applyAutoSubs(args.lineup, plays);
-  const cap = captainUsed(finalLineup, args.captainId, args.viceId, plays);
+  const finalLineup = applyAutoSubs(args.lineup, plays, args.format);
+  const cap = captainUsed(finalLineup, args.captainId, args.viceId, plays, args.format);
   let expected = 0, scored = 0, variance = 0;
-  for (const slot of STARTER_SLOTS) {
+  for (const slot of startersOf(args.format)) {
     const id = finalLineup[slot]?.id;
     if (!id) continue;
     const s = st(id);

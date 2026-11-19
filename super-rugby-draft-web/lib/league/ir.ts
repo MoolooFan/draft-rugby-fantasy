@@ -12,10 +12,11 @@
 //   or swap him with another injured player.
 // - IR moves aren't listed in the Transactions tab.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ROSTER_SIZE } from "@/lib/draft/rules";
+import { rosterSize, STANDARD_SQUAD, type SquadFormat } from "@/lib/league/squad";
 import { rosterProblem, type RosterPlayer } from "@/lib/league/rosterChange";
 import { currentStatusWeek, statusKind } from "@/lib/status/kind";
 
+/** Standard's IR spots (a league's own: its squad format's `ir`). */
 export const IR_SPOTS = 1;
 
 /** rosters.data (old rows may have other shapes, so everything is optional). */
@@ -68,7 +69,8 @@ export function applyIrAction(
   input: { active: string[]; ir: string[] },
   a: IrAction,
   players: Map<string, RosterPlayer>,
-  statusOf: (id: string) => string | null
+  statusOf: (id: string) => string | null,
+  format: SquadFormat = STANDARD_SQUAD
 ): IrResult {
   const active = [...input.active];
   const ir = [...input.ir];
@@ -77,7 +79,8 @@ export function applyIrAction(
 
   if (a.action === "move") {
     if (!active.includes(a.playerId)) return { ok: false, error: "That player isn't in your team" };
-    if (ir.length >= IR_SPOTS) return { ok: false, error: "Your IR spot is already taken" };
+    if (format.ir <= 0) return { ok: false, error: "This league has no IR spots" };
+    if (ir.length >= format.ir) return { ok: false, error: format.ir === 1 ? "Your IR spot is already taken" : "Your IR spots are all taken" };
     if (!irEligible(statusOf(a.playerId))) return { ok: false, error: notEligible(a.playerId) };
     return {
       ok: true,
@@ -96,10 +99,10 @@ export function applyIrAction(
     const drop = a.dropPlayerId ? String(a.dropPlayerId) : null;
     if (drop && !active.includes(drop)) return { ok: false, error: "The player to drop isn't in your team" };
     const next = [...active.filter((id) => id !== drop), a.playerId];
-    if (next.length > ROSTER_SIZE) {
+    if (next.length > rosterSize(format)) {
       return { ok: false, error: `Your team is full - choose a player to drop to make room for ${nameOf(players, a.playerId)}` };
     }
-    const problem = rosterProblem(next, players, active);
+    const problem = rosterProblem(next, players, active, format);
     if (problem) return { ok: false, error: problem };
     return { ok: true, active: next, ir: restIr, dropped: drop, toIr: null, fromIr: a.playerId };
   }
@@ -108,7 +111,7 @@ export function applyIrAction(
   if (!active.includes(a.swapPlayerId)) return { ok: false, error: "That player isn't in your team" };
   if (!irEligible(statusOf(a.swapPlayerId))) return { ok: false, error: notEligible(a.swapPlayerId) };
   const next = [...active.filter((id) => id !== a.swapPlayerId), a.playerId];
-  const problem = rosterProblem(next, players, active);
+  const problem = rosterProblem(next, players, active, format);
   if (problem) return { ok: false, error: problem };
   return { ok: true, active: next, ir: [...restIr, a.swapPlayerId], dropped: null, toIr: a.swapPlayerId, fromIr: a.playerId };
 }

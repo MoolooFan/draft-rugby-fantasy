@@ -7,17 +7,13 @@
 //   in bench order. Players can move to their other listed position so more bench players
 //   fit, but every starter who played stays in the XV.
 // - The captain scores x2. The vice-captain takes the x2 only if the captain didn't play.
+// - The league's squad (lib/league/squad.ts) sets the starting slots and bench (Standard: the
+//   15 below + 5 bench); every function takes it, Standard if not given.
 import { CAPTAIN_MULTIPLIER, STANDARD_SCORING, playerPoints, roundPoints, type ScoringRules, type StatCounts } from "@/lib/scoring";
-import { canPlayPosition } from "@/lib/players/positions";
+import { STANDARD_SQUAD, slotAccepts, squadSlots, type SquadFormat } from "@/lib/league/squad";
 
-export type SlotId =
-  | "prop1" | "hooker1" | "prop2"
-  | "lock1" | "lock2"
-  | "looseforward1" | "looseforward2" | "looseforward3"
-  | "halfback1" | "flyhalf1"
-  | "centre1" | "centre2"
-  | "outsideback1" | "outsideback2" | "outsideback3"
-  | "bench1" | "bench2" | "bench3" | "bench4" | "bench5";
+/** A lineup slot: "prop1" ... "outsideback3", "bench1"..., or a custom squad's ("tightfive1", "forward2", ...). */
+export type SlotId = string;
 
 export const STARTER_SLOTS: SlotId[] = [
   "prop1", "hooker1", "prop2",
@@ -29,7 +25,7 @@ export const STARTER_SLOTS: SlotId[] = [
 ];
 export const BENCH_SLOTS: SlotId[] = ["bench1", "bench2", "bench3", "bench4", "bench5"];
 
-/** Position each starting slot needs. */
+/** Position each Standard starting slot needs (custom squads: lib/league/squad.ts slotAccepts). */
 export const SLOT_POSITION: Record<string, string> = {
   prop1: "PR", hooker1: "HO", prop2: "PR",
   lock1: "LK", lock2: "LK",
@@ -42,15 +38,15 @@ export const SLOT_POSITION: Record<string, string> = {
 export type LineupPlayer = { id: string; posAbbrev?: string | null; secondaryPosAbbrev?: string | null; thirdPosAbbrev?: string | null; [k: string]: unknown };
 export type Lineup = Partial<Record<SlotId, LineupPlayer | null>>;
 
-function canPlay(p: LineupPlayer, pos: string): boolean {
-  return canPlayPosition(p, pos);
-}
+/** The league's starting slots and bench (Standard if not given). */
+export const startersOf = (format?: SquadFormat | null) => squadSlots(format ?? STANDARD_SQUAD).starters.map((s) => s.id);
+export const benchOf = (format?: SquadFormat | null) => squadSlots(format ?? STANDARD_SQUAD).bench;
 
-/** Put 15 players into the starting slots by position, or null if they can't make a valid XV. */
-function assignStarters(players: LineupPlayer[]): Partial<Record<SlotId, LineupPlayer>> | null {
-  const slots = STARTER_SLOTS.map((slot) => ({
+/** Put players into the starting slots by position, or null if they can't make a full team. */
+function assignStarters(players: LineupPlayer[], starterSlots: string[]): Partial<Record<SlotId, LineupPlayer>> | null {
+  const slots = starterSlots.map((slot) => ({
     slot,
-    candidates: players.map((p, i) => ({ p, i })).filter(({ p }) => canPlay(p, SLOT_POSITION[slot])),
+    candidates: players.map((p, i) => ({ p, i })).filter(({ p }) => slotAccepts(slot, p)),
   })).sort((a, b) => a.candidates.length - b.candidates.length);
   const used = new Array(players.length).fill(false);
   const out: Partial<Record<SlotId, LineupPlayer>> = {};
@@ -84,26 +80,31 @@ function combinations<T>(arr: T[], k: number): T[][] {
  * Auto-subs. played(id) = the player got on the field this week.
  * Returns the final lineup (starters may be reshuffled; bench holds whoever didn't make the XV).
  */
-export function applyAutoSubs(lineup: Lineup, played: (playerId: string) => boolean): Lineup {
-  const starters = STARTER_SLOTS.map((s) => lineup[s]).filter((p): p is LineupPlayer => !!p?.id);
-  const bench = BENCH_SLOTS.map((s) => lineup[s]).filter((p): p is LineupPlayer => !!p?.id);
+export function applyAutoSubs(lineup: Lineup, played: (playerId: string) => boolean, format?: SquadFormat | null): Lineup {
+  const starterSlots = startersOf(format);
+  const benchSlots = benchOf(format);
+  const starters = starterSlots.map((s) => lineup[s]).filter((p): p is LineupPlayer => !!p?.id);
+  const bench = benchSlots.map((s) => lineup[s]).filter((p): p is LineupPlayer => !!p?.id);
 
   const playedStarters = starters.filter((p) => played(p.id));
   const dnpStarters = starters.filter((p) => !played(p.id));
   const usableBench = bench.filter((p) => played(p.id) && !starters.some((s) => s.id === p.id));
   if (!dnpStarters.length || !usableBench.length) return { ...lineup };
 
-  const pool = [...playedStarters, ...dnpStarters, ...usableBench];
-  if (pool.length < 15) return { ...lineup };
-  const mustKeep = new Set(playedStarters.map((p) => p.id));
+  const size = starterSlots.length;
+  if (playedStarters.length + dnpStarters.length + usableBench.length < size) return { ...lineup };
   const dnpIds = new Set(dnpStarters.map((p) => p.id));
 
-  // Best XV: most bench players used; ties go to the higher bench order; then fewest non-players.
+  // Best team: most bench players used; ties go to the higher bench order; then fewest non-players.
+  // Every starter who played stays, so only the other places are chosen (from the non-players
+  // and the bench players who played).
+  const optional = [...dnpStarters, ...usableBench];
+  const open = size - playedStarters.length;
   let best: { combo: LineupPlayer[]; count: number; vector: number[]; dnp: number } | null = null;
-  for (const combo of combinations(pool, 15)) {
+  for (const extra of combinations(optional, Math.max(0, open))) {
+    const combo = [...playedStarters, ...extra];
     const ids = new Set(combo.map((p) => p.id));
-    if ([...mustKeep].some((id) => !ids.has(id))) continue;
-    if (!assignStarters(combo)) continue;
+    if (!assignStarters(combo, starterSlots)) continue;
     const vector: number[] = usableBench.map((p) => (ids.has(p.id) ? 1 : 0));
     const count = vector.reduce((a, b) => a + b, 0);
     const dnp = combo.filter((p) => dnpIds.has(p.id)).length;
@@ -116,11 +117,11 @@ export function applyAutoSubs(lineup: Lineup, played: (playerId: string) => bool
   }
   if (!best || best.count === 0) return { ...lineup };
 
-  const xv = assignStarters(best.combo)!;
+  const xv = assignStarters(best.combo, starterSlots)!;
   const inXv = new Set(Object.values(xv).map((p) => p!.id));
   const rest = [...bench, ...starters].filter((p, i, arr) => !inXv.has(p.id) && arr.findIndex((x) => x.id === p.id) === i);
   const out: Lineup = { ...xv };
-  BENCH_SLOTS.forEach((slot, i) => (out[slot] = rest[i] ?? null));
+  benchSlots.forEach((slot, i) => (out[slot] = rest[i] ?? null));
   return out;
 }
 
@@ -133,8 +134,8 @@ function compareVectors(a: number[], b: number[]) {
 }
 
 /** Who gets the x2: the captain if he played in the final XV, otherwise the vice if he did, else nobody. */
-export function captainUsed(finalLineup: Lineup, captainId: string | null, viceId: string | null, played: (id: string) => boolean): string | null {
-  const xv = new Set(STARTER_SLOTS.map((s) => finalLineup[s]?.id).filter(Boolean) as string[]);
+export function captainUsed(finalLineup: Lineup, captainId: string | null, viceId: string | null, played: (id: string) => boolean, format?: SquadFormat | null): string | null {
+  const xv = new Set(startersOf(format).map((s) => finalLineup[s]?.id).filter(Boolean) as string[]);
   if (captainId && xv.has(captainId) && played(captainId)) return captainId;
   if (viceId && xv.has(viceId) && played(viceId)) return viceId;
   return null;
@@ -160,16 +161,18 @@ export function scoreTeamWeek(args: {
   statsFor: (playerId: string) => StatCounts | null;
   frontRow: (playerId: string) => boolean;
   rules?: ScoringRules;
+  /** The league's squad (Standard if not given). */
+  format?: SquadFormat | null;
 }): WeekScore {
   const rules = args.rules ?? STANDARD_SCORING;
   const played = (id: string) => Number(args.statsFor(id)?.minutesPlayed ?? 0) > 0;
-  const finalLineup = applyAutoSubs(args.lineup, played);
-  const cap = captainUsed(finalLineup, args.captainId, args.viceId, played);
+  const finalLineup = applyAutoSubs(args.lineup, played, args.format);
+  const cap = captainUsed(finalLineup, args.captainId, args.viceId, played, args.format);
 
   const playerPointsMap: Record<string, number> = {};
   let score = 0;
   let tries = 0;
-  for (const slot of STARTER_SLOTS) {
+  for (const slot of startersOf(args.format)) {
     const p = finalLineup[slot];
     if (!p?.id) continue;
     const counts = args.statsFor(p.id);

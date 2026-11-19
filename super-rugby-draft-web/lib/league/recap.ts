@@ -4,7 +4,8 @@
 // your biggest dud (lowest-scoring starter - a starter who didn't play was replaced by a sub,
 // so he isn't counted), the league's crown and spoon, your ladder change and your next
 // opponent. Pure code: the route (app/api/recap) loads the data.
-import { STARTER_SLOTS, type Lineup } from "@/lib/scoring/week";
+import type { Lineup } from "@/lib/scoring/week";
+import { isBenchSlot } from "@/lib/league/squad";
 import { buildLadder, type LadderMatchup } from "@/lib/league/ladder";
 import { weeklyAwards } from "@/lib/league/weeklyAwards";
 
@@ -114,7 +115,8 @@ export function buildRecap(input: {
       captain: mine.captain_used_id === id,
     });
     const counted = Object.keys(pts);
-    const starters = STARTER_SLOTS.map((s) => mine.final_lineup?.[s]?.id).filter((x): x is string => !!x);
+    // starting slots = everything but the bench (any league's squad)
+    const starters = Object.entries(mine.final_lineup ?? {}).filter(([s]) => !isBenchSlot(s)).map(([, p]) => p?.id).filter((x): x is string => !!x);
     const pool = starters.length ? starters : counted;
     if (counted.length) best = counted.map(player).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name))[0];
     if (pool.length) dud = pool.map(player).sort((a, b) => a.points - b.points || a.name.localeCompare(b.name))[0];

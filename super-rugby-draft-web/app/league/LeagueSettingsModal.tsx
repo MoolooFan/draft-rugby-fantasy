@@ -1,6 +1,8 @@
 "use client";
 // app/league/LeagueSettingsModal.tsx
 // (moved out of page.tsx unchanged)
+import { SquadFormatFields } from "@/components/SquadFormatFields";
+import { STANDARD_SQUAD, starterCount, type SquadFormat } from "@/lib/league/squad";
 import { LeagueStakesSection } from "@/components/LeagueStakes";
 import { ShieldRewardsFields } from "@/components/ShieldRewardsFields";
 import { BonusPointsFields } from "@/components/BonusPointsFields";
@@ -56,6 +58,7 @@ const computedSeasonWeeks = computedRegularWeeks + selectedPlayoffWeeks;
   const settingsLocked = readOnly || draftStarted;
   const [scoringSystem, setScoringSystem] = useState<"standard" | "alternate" | "custom">(league.scoringSystem ?? "standard");
   const [bonusRules, setBonusRules] = useState<BonusRules>(league.bonusRules ?? cleanBonusRules(null, league.bonusPoints !== false));
+  const [squadFormat, setSquadFormat] = useState<SquadFormat>(league.squadFormat ?? STANDARD_SQUAD);
   const [shieldEnabled, setShieldEnabled] = useState<boolean>(league.shieldEnabled !== false);
   const [shieldName, setShieldName] = useState<string>(league.shieldName ?? "The Shield");
   const [shieldRewards, setShieldRewards] = useState<ShieldRewards>(league.shieldRewards ?? NO_SHIELD_REWARDS);
@@ -161,6 +164,10 @@ setDraftOrderIds((prev) => {
   </Field>
 ) : null}
 
+<Field label="Squad">
+<SquadFormatFields value={squadFormat} onChange={setSquadFormat} disabled={settingsLocked} teamCount={league.teams.length} />
+</Field>
+
 <Field label="Bonus Points">
 <BonusPointsFields value={bonusRules} onChange={setBonusRules} disabled={settingsLocked} />
 </Field>
@@ -185,7 +192,7 @@ setDraftOrderIds((prev) => {
 
 {draftStarted ? (
   <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.85 }}>
-    Finals, scoring, bonus points, the Shield&apos;s rewards and the draft order are locked now the draft has started.
+    Finals, scoring, the squad, bonus points, the Shield&apos;s rewards and the draft order are locked now the draft has started.
   </div>
 ) : null}
 
@@ -315,6 +322,8 @@ startRound,
 totalWeeks: computedSeasonWeeks, // ✅ IMPORTANT: includes finals weeks
 scoringSystem,
 ...(!draftStarted ? { bonusRules } : {}),
+// the squad (only a valid one: at least 5 starters)
+...(!draftStarted && starterCount(squadFormat) >= 5 ? { squadFormat } : {}),
 shieldEnabled,
 shieldName,
 ...(!draftStarted ? { shieldRewards } : {}),

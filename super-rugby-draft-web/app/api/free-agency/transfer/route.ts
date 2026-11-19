@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { loadSquadFormat } from "@/lib/league/squadServer";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { buildAndValidateNextIds } from "@/lib/transactions/rosterValidate";
@@ -195,7 +196,7 @@ export async function POST(req: Request) {
 
     // Position rules (so the team can always field a full XV), checked with the players table.
     const rosterPlayers = await loadRosterPlayers(supabaseAdmin, Number(lg?.season), [...built.nextIds, ...currentIds]);
-    const problem = rosterProblem(built.nextIds, rosterPlayers, currentIds);
+    const problem = rosterProblem(built.nextIds, rosterPlayers, currentIds, await loadSquadFormat(supabaseAdmin, leagueId));
     if (problem) {
       return recordFailed("ROSTER_VALIDATION_FAILED", { validationError: problem });
     }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { MAX_LEAGUE_TEAMS } from "@/lib/league/squad";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
@@ -45,6 +46,15 @@ export async function POST(req: Request) {
   }
 
   let team = existing;
+
+  // a league holds at most 16 teams (Ethan, 19 Nov 2026)
+  if (!team) {
+    const { count, error: countErr } = await supabaseAdmin.from("teams").select("id", { count: "exact", head: true }).eq("league_id", league.id);
+    if (countErr) return NextResponse.json({ ok: false, error: countErr.message }, { status: 500 });
+    if ((count ?? 0) >= MAX_LEAGUE_TEAMS) {
+      return NextResponse.json({ ok: false, error: `This league is full (${MAX_LEAGUE_TEAMS} teams)` }, { status: 400 });
+    }
+  }
 
   // 3) otherwise create team. Someone who played in this league before (any earlier season,
   //    E8) has their old name and picture pre-filled on the join pop-up; they can change them.

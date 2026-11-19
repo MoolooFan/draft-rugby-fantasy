@@ -38,7 +38,8 @@ import {
   CAPTAIN_MULTIPLIER, STANDARD_SCORING, STATS, minutesPoints, statPoints,
   type EventStatKey, type ScoringRules, type StatCounts,
 } from "@/lib/scoring";
-import { applyAutoSubs, captainUsed, STARTER_SLOTS, type Lineup } from "@/lib/scoring/week";
+import { applyAutoSubs, captainUsed, startersOf, type Lineup } from "@/lib/scoring/week";
+import type { SquadFormat } from "@/lib/league/squad";
 
 /** One past game: what the team list said (if known) and his stats. */
 export type PastGame = { round: number; counts: StatCounts; listed?: "starting" | "bench" | null };
@@ -449,12 +450,13 @@ export function projectTeamScore(args: {
   viceId: string | null;
   projection: (playerId: string) => number;
   ruledOut: (playerId: string) => boolean;
+  format?: SquadFormat | null;
 }): { total: number; finalLineup: Lineup; captainUsedId: string | null } {
   const playing = (id: string) => !args.ruledOut(id);
-  const finalLineup = applyAutoSubs(args.lineup, playing);
-  const cap = captainUsed(finalLineup, args.captainId, args.viceId, playing);
+  const finalLineup = applyAutoSubs(args.lineup, playing, args.format);
+  const cap = captainUsed(finalLineup, args.captainId, args.viceId, playing, args.format);
   let total = 0;
-  for (const slot of STARTER_SLOTS) {
+  for (const slot of startersOf(args.format)) {
     const id = finalLineup[slot]?.id;
     if (!id || !playing(id)) continue;
     const v = args.projection(id);
