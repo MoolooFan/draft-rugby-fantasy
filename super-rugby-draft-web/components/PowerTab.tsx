@@ -10,6 +10,7 @@ import { roundLabel } from "@/lib/season";
 import type { PowerRow, PowerTable } from "@/lib/league/powerServer";
 import { TREND_ROUNDS } from "@/lib/league/odds";
 import { muted as mutedInk, num } from "@/lib/ui/theme";
+import { useTeamProfileStore } from "@/lib/league/teamProfileStore";
 
 type TeamLite = { id: string; name: string; ownerName?: string | null; pictureUrl?: string | null; userInitials?: string | null; initials?: string | null; stars?: number };
 
@@ -154,6 +155,8 @@ function PreseasonChart({ rows, name, myTeamId }: { rows: PowerRow[]; name: (id:
 }
 
 export function PowerTab({ leagueId, teams }: { leagueId: string; teams: TeamLite[] }) {
+  // tap a team: its profile pop-up (components/TeamProfileModal.tsx)
+  const openTeam = useTeamProfileStore((s) => s.openTeam);
   const [data, setData] = useState<{ leagueId: string; power: PowerTable; myTeamId: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -226,7 +229,14 @@ export function PowerTab({ leagueId, teams }: { leagueId: string; teams: TeamLit
         {p.rows.map((r) => {
           const t = team(r.teamId);
           return (
-            <div key={r.teamId} style={{ display: "grid", gridTemplateColumns: cols, gap: 8, alignItems: "center", padding: "8px 10px", borderTop: "1px solid rgba(0,0,0,0.08)" }}>
+            <div
+              key={r.teamId}
+              role="button"
+              tabIndex={0}
+              onClick={() => openTeam(r.teamId)}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openTeam(r.teamId)}
+              style={{ display: "grid", gridTemplateColumns: cols, gap: 8, alignItems: "center", padding: "8px 10px", borderTop: "1px solid rgba(0,0,0,0.08)", cursor: "pointer" }}
+            >
               <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{r.rank}</span>
               <Movement n={r.movement} />
               <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
