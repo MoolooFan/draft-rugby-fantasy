@@ -62,6 +62,8 @@ type PlayerRound = {
   breakdown?: RoundBreakdown; // RAW COUNTS per stat
   date?: string;
   minutes?: number;
+  /** what the team list said that round (lib/status/roles.ts) */
+  role?: "starting" | "bench" | null;
 };
 
 /**
@@ -308,11 +310,13 @@ function buildRoundsFromSheetRows(
 
       const minutes = toNum(pickAny(r, ["Minutes played"]));
 
+      const role: PlayerRound["role"] = r.role === "starting" || r.role === "bench" ? r.role : null;
       return {
         week,
         points: rowPoints,
         breakdown,
         minutes,
+        role,
       };
     })
     .filter((r) => r.week > 0)
@@ -487,29 +491,13 @@ const statusText = useMemo<string | null>(() => {
 }, [status, statusFromSheet, weeklyFromSheet, p.weeklyStatus]);
 const statusK = statusKind(statusText);
 
+// Games Played / Starts for the season shown (Ethan, 20 Nov 2026): a game is a round he played
+// in (minutes in the stats); a start is one of those where the team list (or a late change) had
+// him in the starting XV. A player named to start who pulled out doesn't get either.
 const computed = useMemo(() => {
-  const ws = weeklyFromSheet ?? p.weeklyStatus ?? {};
-
-  // Support BOTH:
-  //  - new API format: { W1: "starting", W2: "benched", ... }
-  //  - old format:     { statusW1: "starting", statusW2: "benched", ... }
-  const vals: string[] = [];
-  for (let w = 1; w <= 16; w++) {
-    const v =
-      ws[`W${w}`] ??
-      ws[`statusW${w}`] ??
-      ws[`statusw${w}`] ??
-      ws[`StatusW${w}`] ??
-      ws[`Statusw${w}`];
-
-    if (typeof v === "string" && v.trim() !== "") vals.push(v.trim().toLowerCase());
-  }
-
-  const gamesPlayed = vals.filter((v) => { const k = statusKind(v); return k === "starting" || k === "bench"; }).length;
-  const starts = vals.filter((v) => statusKind(v) === "starting").length;
-
-  return { gamesPlayed, starts };
-}, [weeklyFromSheet, p.weeklyStatus]);
+  const played = rounds.filter((r) => Number(r.minutes) > 0);
+  return { gamesPlayed: played.length, starts: played.filter((r) => r.role === "starting").length };
+}, [rounds]);
 
 useEffect(() => {
   setTab(initialTab);

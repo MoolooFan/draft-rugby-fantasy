@@ -563,7 +563,7 @@ function StatusTab({ setMsg }: { setMsg: (m: string | null) => void }) {
           <div key={f.id} style={{ borderTop: "1px solid rgba(0,0,0,0.08)", paddingTop: 6, display: "grid", gap: 4 }}>
             <div style={{ fontSize: 13, fontWeight: 700 }}>{f.problem}</div>
             <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.65 }}>
-              {f.weekLabel} · {f.team} · {f.source === "team-list" ? "team list" : "injury list"} · {f.text}
+              {f.weekLabel} · {f.team} · {f.source === "team-list" ? "team list" : f.source === "fantasy-feed" ? "fantasy game" : "injury list"} · {f.text}
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               {f.suggestionId ? (
@@ -572,7 +572,7 @@ function StatusTab({ setMsg }: { setMsg: (m: string | null) => void }) {
                 </button>
               ) : null}
               <button disabled={busy === f.id} onClick={() => resolve(f, false)} style={{ ...primaryButton, height: 30, fontSize: 12, background: "rgba(15,23,42,0.35)" }}>
-                Ignore
+                {f.source === "fantasy-feed" && !f.suggestionId ? "OK" : "Ignore"}
               </button>
             </div>
           </div>
@@ -584,7 +584,9 @@ function StatusTab({ setMsg }: { setMsg: (m: string | null) => void }) {
           <div style={{ fontWeight: 700, fontSize: 14 }}>Recently read</div>
           {imports.map((i) => (
             <div key={i.id} style={{ fontSize: 11, fontWeight: 500, opacity: 0.8 }}>
-              Round {i.real_round} {i.kind === "team-list" ? "team lists" : "injury list"}: {i.matched} players, {i.flagged} to check ·{" "}
+              {i.kind === "fantasy-feed"
+                ? `Round ${i.real_round} late changes from the fantasy game: ${i.matched} change${i.matched === 1 ? "" : "s"}, ${i.flagged} to check · `
+                : `Round ${i.real_round} ${i.kind === "team-list" ? "team lists" : "injury list"}: ${i.matched} players, ${i.flagged} to check · `}
               {new Date(i.imported_at).toLocaleString("en-AU", { weekday: "short", hour: "numeric", minute: "2-digit" })}
             </div>
           ))}

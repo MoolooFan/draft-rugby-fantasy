@@ -5,6 +5,7 @@ import { addMatchResults } from "@/lib/results/matchResults";
 import { fantasyWeekForRealRound, getSeason, SEASONS } from "@/lib/season";
 import { currentSeasonYear } from "@/lib/season";
 import { demo } from "@/lib/demo";
+import { loadRoundRoles, roleKey } from "@/lib/status/roles";
 
 function toNum(v: any): number {
   const n = Number(v);
@@ -74,8 +75,13 @@ export async function GET(req: Request) {
       from += pageSize;
     }
 
-    await addMatchResults(supabaseAdmin, season, allRows);
-    let rows = allRows.map(mapRawJsonToLegacyRow);
+    const [, roles] = await Promise.all([addMatchResults(supabaseAdmin, season, allRows), loadRoundRoles(supabaseAdmin, season)]);
+    // role: what the team list said that round (starting / bench / null), for the player card's
+    // Starts (lib/status/roles.ts)
+    let rows = allRows.map((r) => {
+      const row = mapRawJsonToLegacyRow(r);
+      return { ...row, role: roles.get(roleKey(row.playerId, row.round)) ?? null };
+    });
     // demo site: nothing after the frozen moment's last round (lib/demo.ts)
     const d = demo();
     if (d && season === d.season) rows = rows.filter((r) => Number(r.realRound) <= d.lastRealRound);
