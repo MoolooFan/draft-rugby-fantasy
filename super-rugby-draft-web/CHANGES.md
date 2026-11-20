@@ -23,6 +23,8 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `6bc4c96` | Dashboard: tapping the watchlist eye a second time now removes the player (it used to add him again) |  |
+| `f795eff` | Split the Dashboard page (2,397 -> 1,145 lines): header, cards and helpers moved to components/dashboard. No visible change |  |
 | `3195ef6` | Split the Matchup page (2,410 -> 1,202 lines): header, scoreboard, lineup rows and helpers moved to components/matchup. No visible change |  |
 | `365d736` | Split the Transactions page (3,753 -> 1,927 lines): the Transactions tab, Pending Claims tab, add/drop pop-up, accept-trade pop-up, player row and … |  |
 | `e0a5be9` | League Table Updated shows Pending until done; first and last names are required to create an account |  |
