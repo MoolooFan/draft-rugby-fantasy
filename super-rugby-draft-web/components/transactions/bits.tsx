@@ -3,6 +3,7 @@
 // app/transactions/page.tsx; they look and work the same).
 import React from "react";
 import { WatchEyeIcon } from "@/components/WatchEyeIcon";
+import { PlusMinusIcon } from "@/components/PlusMinusIcon";
 
 /** The watchlist eye on a player row. */
 export function StarButton({ active, onClick }: { active: boolean; onClick: () => void }) {
@@ -97,3 +98,65 @@ export function StatusPill({ status }: { status: string }) {
         </div>
       );
     }
+
+/** The add / claim (+), trade (arrows) or owner's initials button on a player row. */
+export function TxActionButton({
+  enabled,
+  onClick,
+  label,
+  bg,
+  fg = "white",
+}: {
+  enabled: boolean;
+  onClick: () => void;
+  label: string; // "+" or "ES"
+  bg: string;
+  fg?: string;
+}) {
+  const isPlus = label === "+";
+  const isTrade = label === "↔";
+
+  return (
+    <button
+      disabled={!enabled}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!enabled) return;
+        onClick();
+      }}
+      style={{
+        height: 28,
+        width: 28,
+        borderRadius: 10,
+        border: "none",
+        background: bg,
+        color: fg,
+        fontWeight: 700,
+        // ✅ Bigger +, smaller initials
+        fontSize: isPlus ? 20 : 11,
+        lineHeight: 1,
+        letterSpacing: isPlus ? 0 : 0.3,
+
+        cursor: enabled ? "pointer" : "not-allowed",
+        opacity: enabled ? 1 : 0.85,
+        display: "grid",
+        placeItems: "center",
+        userSelect: "none",
+      }}
+      aria-label={isPlus ? "Add / Claim" : isTrade ? "Propose a trade" : `Owned by ${label}`}
+      title={isPlus ? "Add / Claim" : isTrade ? "Propose a trade" : label}
+    >
+      {isPlus ? (
+        <PlusMinusIcon kind="plus" size={15} />
+      ) : isTrade ? (
+        // two arrows swapping places (trade)
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2.5 5.5h10.5M10.5 3l2.5 2.5-2.5 2.5" />
+          <path d="M13.5 10.5H3M5.5 8L3 10.5 5.5 13" />
+        </svg>
+      ) : (
+        label
+      )}
+    </button>
+  );
+}

@@ -202,3 +202,21 @@ export const SORT_OPTIONS: Array<{ value: string; label: string }> = [
 
 /** Drop-list choice meaning "don't drop anyone" (the team has a free place). */
 export const NO_DROP = "__no_drop__";
+
+/** "C. Tangitau" (first initial and last name). */
+export function shortName(p: { firstName?: string; lastName?: string } | null | undefined) {
+  const first = (p?.firstName ?? "").trim();
+  const last = (p?.lastName ?? "").trim();
+  const initial = first ? first[0].toUpperCase() : "?";
+  return last ? `${initial}. ${last}` : `${initial}.`;
+}
+
+/** The light list box the Transactions page uses for its lists. */
+export const listBox: React.CSSProperties = {
+  marginTop: 10,
+  borderRadius: 12,
+  background: "rgba(255,255,255,0.92)",
+  border: "1px solid rgba(0,0,0,0.08)",
+  overflow: "hidden",
+  color: "#0f172a",
+};
