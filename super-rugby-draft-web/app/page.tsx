@@ -152,6 +152,10 @@ useEffect(() => {
     const p = validateNewPassword(password);
     if (!p.ok) return stop(p.message);
 
+    // first and last names are required (Ethan, 20 Nov 2026): shown as "Ethan S." on the ladder
+    if (!firstName.trim()) return stop("Please enter your first name.");
+    if (!lastName.trim()) return stop("Please enter your last name.");
+
     const r = await postJson("/api/auth/signup", {
       username: u.value.clean,
       email: e.value,
@@ -335,7 +339,8 @@ useEffect(() => {
 
                   <input
                     type="text"
-                    placeholder="First Name (optional)"
+                    placeholder="First Name"
+                    autoComplete="given-name"
                     disabled={isLoading}
                     value={firstName}
                     className={INPUT_CLASS}
@@ -344,7 +349,8 @@ useEffect(() => {
 
                   <input
                     type="text"
-                    placeholder="Last Name (optional)"
+                    placeholder="Last Name"
+                    autoComplete="family-name"
                     disabled={isLoading}
                     value={lastName}
                     className={INPUT_CLASS}
