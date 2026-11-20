@@ -41,6 +41,8 @@ import { ladderOrder, tieBreakHolder } from "@/lib/league/ladder";
 import { MovementCircle } from "@/components/MovementCircle";
 import { useTeamProfileStore } from "@/lib/league/teamProfileStore";
 import type { PowerTable } from "@/lib/league/powerServer";
+import { PlusMinusIcon } from "@/components/PlusMinusIcon";
+import { WeekGamesCard } from "@/components/WeekGamesCard";
 
 type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null } | null;
 
@@ -1863,7 +1865,7 @@ const NoLeague = useStableComponent(NoLeague__render);
 
             {upcomingOutlook ? (
               <div style={{ marginTop: 12 }}>
-                <div style={{ textAlign: "center", fontSize: 11, fontWeight: 500, color: muted }}>Win probability</div>
+                <div style={{ textAlign: "center", fontSize: 11, fontWeight: 500, color: muted }}>Win Probability</div>
                 <div style={{ marginTop: 4, display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600 }}>
                   <span style={{ color: "#15803d" }}>{upcomingOutlook.leftWin}%</span>
                   <div style={{ height: 7, borderRadius: 999, overflow: "hidden", display: "flex", background: "#e2e8f0" }}>
@@ -1901,6 +1903,9 @@ const NoLeague = useStableComponent(NoLeague__render);
             </button>
           ) : null}
         </div>
+
+        {/* this round's Super Rugby games and where their points stand (before round 1: round 1's) */}
+        <WeekGamesCard leagueId={activeLeague?.id ?? null} week={displayWeek > 0 ? displayWeek : selectionWeek} />
 
         {preseasonPower ? <PowerCard /> : <StandingsCard />}
 
@@ -2125,9 +2130,10 @@ onClick={() => {
       alignItems: "center",
       justifyContent: "center",
       cursor: "pointer",
+      padding: 0,
     }}
   >
-    +
+    <PlusMinusIcon kind="plus" size={16} />
   </button>
 </div>
                   </div>

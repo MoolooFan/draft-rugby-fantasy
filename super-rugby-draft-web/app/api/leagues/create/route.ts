@@ -9,6 +9,7 @@ import { currentSeasonYear, getSeason, totalFantasyWeeks } from "@/lib/season";
 import { getDraftState } from "@/lib/draft/engine";
 import { cleanScoringRules } from "@/lib/scoring/validate";
 import { getSystemRules } from "@/lib/scoring/leagueRules";
+import { randomTeamIcon } from "@/lib/teams/icons";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -143,6 +144,7 @@ if (draftAtRaw !== null && draftAtRaw !== undefined && draftAtRaw !== "") {
       name: teamName,
       owner_username: username,
       user_id: username,
+      picture_url: randomTeamIcon(), // a default icon until they choose a picture
     })
     .select("*")
     .single();

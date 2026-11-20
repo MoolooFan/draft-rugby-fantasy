@@ -25,6 +25,8 @@ import { toMs, getWeekDeadlineMs, getWeeksSorted } from "@/lib/league/weekHelper
 import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
 import { positionsLabel } from "@/lib/players/positions";
 import { StatusTag } from "@/components/StatusTag";
+import { formatProjection, projectionFor, useProjections, type WeekProjections } from "@/lib/projections/useProjections";
+import { roundLabel } from "@/lib/season";
 import { StatViewToggle } from "@/components/StatViewToggle";
 import { applyStatView, formatStatView, useStatView, type StatView } from "@/lib/players/statView";
 
@@ -67,7 +69,7 @@ type AnyFixture = {
 };
 
 type Step = "REQUESTING" | "OFFERING" | "REVIEW";
-type InfoMode = "DRAFT_RANK" | "AVG_PPG" | "TOTAL_PTS" | "FORM";
+type InfoMode = "DRAFT_RANK" | "AVG_PPG" | "TOTAL_PTS" | "FORM" | "PROJ";
 
 function jerseySrcForTeamCode(teamCode: string | null | undefined, prefer: "angle" | "front" = "angle") {
   const code = normalizeTeamCode(teamCode);
@@ -309,7 +311,12 @@ function getFormLast3AvgFromRounds(p: Player, roundRows: any[]): number | null {
   return sum / last3.length;
 }
 
-function metricValue(p: Player, mode: InfoMode, roundRows: any[], view: StatView = "game"): string {
+function metricValue(p: Player, mode: InfoMode, roundRows: any[], view: StatView = "game", proj: WeekProjections | null = null): string {
+  // projected points for the next round (Ethan, 20 Nov 2026)
+  if (mode === "PROJ") {
+    const v = projectionFor(proj, p.id)?.pts;
+    return v == null ? "-" : formatProjection(v);
+  }
   if (mode === "DRAFT_RANK") {
     return typeof p.draftRank === "number" ? String(p.draftRank) : "-";
   }
@@ -490,6 +497,8 @@ const livePlayersLoaded = usePlayersStore((s) => s.loaded);
 const refreshLivePlayers = usePlayersStore((s) => s.refresh);
 // season stats people browse (last season's until this season's first kickoff: lib/season statsSeasonYear)
 const roundRows = usePlayersStore((s) => s.statRows);
+// next round's projected points (the "Projected" view)
+const tradeProj = useProjections(activeLeague?.id ?? null, "current");
 const getLivePlayerById = usePlayersStore((s) => s.getById);
 
 useEffect(() => {
@@ -971,16 +980,21 @@ const StepButtons = useStableComponent(StepButtons__render);
           <button
             onClick={goBackToReturnTo}
             aria-label="Close"
+            title="Close"
             style={{
               width: 32,
               height: 32,
-              borderRadius: 10,
+              borderRadius: 999,
               border: "none",
-              background: "rgba(255,255,255,0.18)",
-              color: "white",
-              fontSize: 18,
+              background: "rgba(15,23,42,0.06)",
+              color: "#0f172a",
+              fontSize: 16,
               fontWeight: 700,
               cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 0,
             }}
           >
             ✕
@@ -1080,6 +1094,7 @@ const StepButtons = useStableComponent(StepButtons__render);
 <option value="AVG_PPG">Match Average</option>
 <option value="TOTAL_PTS">Points</option>
 <option value="FORM">Form</option>
+<option value="PROJ">{tradeProj ? `Projected (${roundLabel(tradeProj.week)})` : "Projected"}</option>
 
             </select>
             <span
@@ -1180,7 +1195,7 @@ function PlayerRow__render({
 
       {/* Metric + live week points */}
       <div style={{ textAlign: "right", fontSize: 12, fontWeight: 700 }}>
-  {metricValue(p, infoMode, roundRows ?? [], statView)}
+  {metricValue(p, infoMode, roundRows ?? [], statView, tradeProj)}
 
 </div>
 

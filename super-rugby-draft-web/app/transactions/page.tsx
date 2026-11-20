@@ -41,6 +41,7 @@ import { TradeReviewModal } from "@/components/TradeReviewModal";
 import { applyStatView, formatStatView, STAT_VIEW_LABEL, useStatView } from "@/lib/players/statView";
 import { useStatSeason, useStatSeasonRows } from "@/lib/players/useStatSeason";
 import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
+import { PlusMinusIcon } from "@/components/PlusMinusIcon";
 
 function TransactionsPageInner() {
   const router = useRouter();
@@ -1513,12 +1514,13 @@ async function submitProposedTransaction() {
                         fontWeight: 700,
                         fontSize: selected ? 11 : 20, // smaller text for “Dropping”
                         cursor: "pointer",
-                        lineHeight: "32px",
                         padding: 0,
-    textAlign: "center",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
                       }}
                     >
-                      {selected ? "Dropping" : "−"}
+                      {selected ? "Dropping" : <PlusMinusIcon kind="minus" size={15} />}
                     </button>
                   </div>
                 );
@@ -2281,8 +2283,6 @@ const Tabs = useStableComponent(Tabs__render);
       <div
         style={{
           marginTop: 10,
-          marginLeft: -14,
-          marginRight: -14,
           borderRadius: 999,
           overflow: "hidden",
           boxShadow: "0 10px 20px rgba(0,0,0,0.18)",
@@ -2293,7 +2293,7 @@ const Tabs = useStableComponent(Tabs__render);
             background: "#FACC15",
             color: "#0f172a",
             textAlign: "center",
-            padding: "3px 12px",
+            padding: "6px 12px",
             fontWeight: 700,
             fontSize: 11,
           }}
@@ -2305,7 +2305,7 @@ const Tabs = useStableComponent(Tabs__render);
             background: "rgba(255,255,255,0.88)",
             color: "#0f172a",
             textAlign: "center",
-            padding: "3px 12px",
+            padding: "6px 12px",
             fontWeight: 500,
             fontSize: 11,
             borderTop: "1px solid rgba(15,23,42,0.12)",
@@ -2365,7 +2365,9 @@ function TxActionButton__render({
       aria-label={isPlus ? "Add / Claim" : isTrade ? "Propose a trade" : `Owned by ${label}`}
       title={isPlus ? "Add / Claim" : isTrade ? "Propose a trade" : label}
     >
-      {isTrade ? (
+      {isPlus ? (
+        <PlusMinusIcon kind="plus" size={15} />
+      ) : isTrade ? (
         // two arrows swapping places (trade)
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
           <path d="M2.5 5.5h10.5M10.5 3l2.5 2.5-2.5 2.5" />
@@ -3596,11 +3598,12 @@ const url =
             <div style={{ flex: 1 }} />
           </div>
 
-          <DeadlineBanner />
-
           <div style={{ marginTop: 10, fontSize: 18, fontWeight: 700 }}>Transactions</div>
           
         </div>
+
+        {/* the deadline, below the white header card like the dashboard's (Ethan, 20 Nov 2026) */}
+        <DeadlineBanner />
 
         <Tabs />
 

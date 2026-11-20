@@ -107,7 +107,9 @@ const ownerNames = new Map<string, string>();
     for (const u of users ?? []) {
       const first = String(u.first_name ?? "").trim();
       const last = String(u.last_name ?? "").trim();
-      ownerNames.set(u.username_norm, first ? `${first}${last ? ` ${last[0].toUpperCase()}.` : ""}` : u.username);
+      // no name set: their username, with a capital first letter
+      const uname = String(u.username ?? "");
+      ownerNames.set(u.username_norm, first ? `${first}${last ? ` ${last[0].toUpperCase()}.` : ""}` : uname.charAt(0).toUpperCase() + uname.slice(1));
     }
   }
 }

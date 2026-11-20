@@ -176,7 +176,7 @@ function PlayerForm({
       </label>
       {err ? <div style={{ color: "#b91c1c", fontSize: 12, fontWeight: 600 }}>{err}</div> : null}
       <div style={{ display: "flex", gap: 8 }}>
-        <button style={primaryButton} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save player"}</button>
+        <button style={primaryButton} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save Player"}</button>
         <button style={{ ...primaryButton, background: "rgba(15,23,42,0.35)" }} onClick={onCancel}>Close</button>
       </div>
 
@@ -202,7 +202,7 @@ function PlayerForm({
             <input aria-label="Round status" style={inputStyle} list="status-presets" value={weekStatus} onChange={(e) => setWeekStatus(e.target.value)} />
           </div>
           {weekStatus.trim() ? <div style={{ fontSize: 11, fontWeight: 600 }}>Shows as <StatusTag text={weekStatus} /></div> : null}
-          <button style={primaryButton} disabled={busy} onClick={saveWeekStatus}>Save round status</button>
+          <button style={primaryButton} disabled={busy} onClick={saveWeekStatus}>Save Round Status</button>
         </div>
       ) : null}
     </div>
@@ -249,7 +249,7 @@ function PlayersTab({ season, setMsg }: { season: number; setMsg: (m: string | n
           {TEAMS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
         </select>
       </div>
-      <button style={primaryButton} onClick={() => setEditing("new")}>Add a player</button>
+      <button style={primaryButton} onClick={() => setEditing("new")}>Add a Player</button>
 
       {editing ? (
         <PlayerForm
@@ -448,7 +448,7 @@ function RoundsTab({ setMsg }: { setMsg: (m: string | null) => void }) {
           <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 600 }}>
             <input type="checkbox" checked={regather} onChange={(e) => setRegather(e.target.checked)} /> Regather stats from playfantasyrugby first
           </label>
-          <button style={primaryButton} disabled={!!busy || !week} onClick={() => run(false)}>{busy && !busy.startsWith("Final") ? busy : "Preview new scores"}</button>
+          <button style={primaryButton} disabled={!!busy || !week} onClick={() => run(false)}>{busy && !busy.startsWith("Final") ? busy : "Preview New Scores"}</button>
         </>
       ) : null}
 
@@ -551,7 +551,7 @@ function StatusTab({ setMsg }: { setMsg: (m: string | null) => void }) {
         </select>
         <input style={inputStyle} placeholder="Team lists article link (optional)" value={teamsUrl} onChange={(e) => setTeamsUrl(e.target.value)} />
         <input style={inputStyle} placeholder="Injury list article link (optional)" value={injuriesUrl} onChange={(e) => setInjuriesUrl(e.target.value)} />
-        <button style={primaryButton} disabled={!!busy} onClick={runImport}>{busy === "import" ? "Reading articles…" : "Read articles now"}</button>
+        <button style={primaryButton} disabled={!!busy} onClick={runImport}>{busy === "import" ? "Reading articles…" : "Read Articles Now"}</button>
         {err ? <div style={{ color: "#b91c1c", fontWeight: 600, fontSize: 12 }}>{err}</div> : null}
       </div>
 
@@ -563,7 +563,7 @@ function StatusTab({ setMsg }: { setMsg: (m: string | null) => void }) {
           <div key={f.id} style={{ borderTop: "1px solid rgba(0,0,0,0.08)", paddingTop: 6, display: "grid", gap: 4 }}>
             <div style={{ fontSize: 13, fontWeight: 700 }}>{f.problem}</div>
             <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.65 }}>
-              {f.weekLabel} · {f.team} · {f.source === "team-list" ? "team list" : f.source === "fantasy-feed" ? "fantasy game" : "injury list"} · {f.text}
+              {f.weekLabel} · {f.team} · {f.source === "team-list" ? "Team list" : f.source === "fantasy-feed" ? "Fantasy game" : "Injury list"} · {f.text}
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               {f.suggestionId ? (
@@ -790,8 +790,8 @@ function CoachTab({ season, setMsg }: { season: number; setMsg: (m: string | nul
           </select>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button style={primaryButton} disabled={busy || !data.hasKey} onClick={() => act({ action: "outlooks" })}>Write season outlooks</button>
-          <button style={{ ...primaryButton, background: "rgba(15,23,42,0.35)" }} disabled={busy || !data.hasKey} onClick={() => act({ action: "run" }, "Checked")}>Check now</button>
+          <button style={primaryButton} disabled={busy || !data.hasKey} onClick={() => act({ action: "outlooks" })}>Write Season Outlooks</button>
+          <button style={{ ...primaryButton, background: "rgba(15,23,42,0.35)" }} disabled={busy || !data.hasKey} onClick={() => act({ action: "run" }, "Checked")}>Check Now</button>
         </div>
         {data.jobs.length ? (
           <div style={{ fontSize: 11, fontWeight: 500, display: "grid", gap: 2 }}>
@@ -858,7 +858,7 @@ function CoachTab({ season, setMsg }: { season: number; setMsg: (m: string | nul
                   <b>{c.scope === "player" ? nameOf(c.player_id) : c.scope === "team" ? c.team_code : "Everyone"}:</b> {c.text}
                 </div>
                 <button style={{ ...primaryButton, height: 26, width: "auto", padding: "0 10px", fontSize: 11 }} onClick={() => act({ action: "context_toggle", id: c.id, active: !c.active }, c.active ? "Turned off" : "Turned on")}>
-                  {c.active ? "Turn off" : "Turn on"}
+                  {c.active ? "Turn Off" : "Turn On"}
                 </button>
               </div>
             ))}

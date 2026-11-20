@@ -24,6 +24,15 @@ export const TEAM_ICON_COLOURS = [
 
 const KINDS = new Set<string>(TEAM_ICON_KINDS.map((k) => k.kind));
 
+/** A new team's picture until they choose one (Ethan, 20 Nov 2026): a random default icon in a
+ *  random colour (not white, which would vanish on the white circle). */
+export function randomTeamIcon(rand: () => number = Math.random): string {
+  const pick = <T,>(xs: T[]) => xs[Math.floor(rand() * xs.length) % xs.length];
+  const kind = pick(TEAM_ICON_KINDS).kind;
+  const colour = pick(TEAM_ICON_COLOURS.filter((c) => c !== "#ffffff"));
+  return teamIconValue({ kind, colour, number: 1 + Math.floor(rand() * 23) })!;
+}
+
 export function isTeamIcon(url: string | null | undefined): boolean {
   return !!parseTeamIcon(url);
 }

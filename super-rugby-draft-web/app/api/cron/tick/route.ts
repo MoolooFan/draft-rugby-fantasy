@@ -1,7 +1,7 @@
 // app/api/cron/tick/route.ts
 // Called every 5 minutes by Supabase's scheduler (pg_cron), with the CRON_SECRET password.
-// - While a game is on (kickoff to 3h after): pulls fresh player stats every call (5 min).
-// - After a game until its stats are final (13.5h after kickoff): pulls them once an hour.
+// - Player stats game by game (lib/stats/gameRuns.ts): every call (5 min) while a game is on,
+//   hourly after, and a last run about 13.5h after kickoff, recorded as that game's final stats.
 // - Reads each round's official team-list and injury articles once, from Wednesday 4:30pm NZT
 //   (retrying every call until they're out); then, until each game kicks off, late changes from the
 //   official fantasy game (lib/status/fantasyFeed.ts); clears Starting/Benched once a game has
@@ -12,9 +12,9 @@
 // Outside game weekends it does almost nothing, so it's cheap to call often.
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { syncExternalStats } from "@/lib/players/syncStats";
+import { finishGames, runGameStats, type GameRunReport } from "@/lib/stats/gameRuns";
 import { runResultsTick } from "@/lib/results/engine";
-import { currentSeasonYear, getSeason, liveRealRounds, realRoundsAwaitingFinalStats, realRoundsAwaitingTeamLists } from "@/lib/season";
+import { currentSeasonYear, getSeason, realRoundsAwaitingTeamLists } from "@/lib/season";
 import { applyFantasyFeed, applyQuestionable, clearFinishedGameStatuses, importRoundStatus, type ImportReport } from "@/lib/status/import";
 import { runDueWaivers } from "@/lib/waivers/process";
 import { advanceDraft } from "@/lib/draft/engine";
@@ -33,17 +33,10 @@ async function tick() {
   const season = getSeason(seasonYear);
   const now = Date.now();
 
-  let synced: { rounds: number[]; rows: number; failed: number } | null = null;
-  const sync = async (rounds: number[]) => {
-    const r = await syncExternalStats(supabaseAdmin, seasonYear, { onlyRounds: rounds });
-    synced = { rounds, rows: r.insertedOrUpdated, failed: r.failedPlayers };
-  };
-
-  // Live games every call; finished games only on the first call of each hour.
+  // Player stats: live games every call; finished ones hourly; each game's last run once due.
   const firstCallOfHour = new Date(now).getUTCMinutes() < 5;
-  const rounds = new Set(liveRealRounds(season, now));
-  if (firstCallOfHour) for (const r of realRoundsAwaitingFinalStats(season, now)) rounds.add(r);
-  if (rounds.size) await sync([...rounds]);
+  const synced = await runGameStats(supabaseAdmin, seasonYear, now, { firstCallOfHour });
+  let finishedBeforeFinalise: GameRunReport | null = null;
 
   // Team lists / injury lists: each article is read once, from Wednesday 4:30pm NZT until kickoff.
   const statusImports: Array<ImportReport | { realRound: number; error: string }> = [];
@@ -91,13 +84,16 @@ async function tick() {
 
   // Before finalising a week, pull its final stats (all of its real rounds).
   const results = await runResultsTick(supabaseAdmin, seasonYear, now, {
-    beforeFinalise: (realRounds) => sync(realRounds),
+    // any of the week's games still waiting get their last stats run first
+    beforeFinalise: async (realRounds) => {
+      finishedBeforeFinalise = await finishGames(supabaseAdmin, seasonYear, realRounds, now);
+    },
   });
 
   // Nightly backup (3am NZ time, once a day)
   const backup = await backupIfDue(supabaseAdmin, now).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
 
-  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, statusImports, lateChanges, statusesCleared, questionable, waivers, drafts, coach, backup, ...results };
+  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, finishedBeforeFinalise, statusImports, lateChanges, statusesCleared, questionable, waivers, drafts, coach, backup, ...results };
 }
 
 async function handle(req: Request) {

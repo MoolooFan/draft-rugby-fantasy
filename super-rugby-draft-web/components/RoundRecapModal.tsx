@@ -1,10 +1,12 @@
 "use client";
 // components/RoundRecapModal.tsx
 // The round recap pop-up, opened from the "Round N recap" message in the league chat (Ethan,
-// 19 Nov 2026): results, the Shield, player of the week, and the best and worst pickups.
+// 19 Nov 2026): results, the Shield, player of the week, and the best and worst pickups (each
+// player with his jersey, 20 Nov 2026).
 // Data: /api/leagues/round-recap (lib/league/roundRecap.ts).
 import React, { useEffect, useState } from "react";
 import { ShieldIcon } from "@/components/AwardIcons";
+import { JerseyTile } from "@/components/transactions/helpers";
 import type { RecapPickup, RoundRecap } from "@/lib/league/roundRecap";
 import { ink, muted, num, teal } from "@/lib/ui/theme";
 
@@ -16,18 +18,24 @@ function Pickup({ label, colour, p }: { label: string; colour: string; p: RecapP
   return (
     <div style={section}>
       <div style={{ ...title, color: colour }}>{label}</div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700 }}>{p.name}</div>
-          <div style={{ fontSize: 11, color: muted }}>
-            {p.team.name} · {p.via === "waiver" ? "waiver claim" : "free agent"}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          {p.teamCode ? <JerseyTile teamCode={p.teamCode} size={36} /> : null}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>{p.name}</div>
+            <div style={{ fontSize: 11, color: muted }}>
+              {p.team.name} · {p.via === "waiver" ? "Waiver claim" : "Free agent"}
+            </div>
           </div>
         </div>
         <div style={{ ...num, fontSize: 22, fontWeight: 600, color: colour }}>{fmt(p.points)}</div>
       </div>
       {p.dropped ? (
-        <div style={{ fontSize: 11, color: muted }}>
-          Replaced {p.dropped.name}, who scored {fmt(p.dropped.points)}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: muted }}>
+          {p.dropped.teamCode ? <JerseyTile teamCode={p.dropped.teamCode} size={22} /> : null}
+          <span>
+            Replaced {p.dropped.name}, who scored {fmt(p.dropped.points)}
+          </span>
         </div>
       ) : null}
     </div>
@@ -83,7 +91,7 @@ export function RoundRecapModal({ leagueId, week, onClose }: { leagueId: string;
                     <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 8, alignItems: "center", fontSize: 13 }}>
                       <span style={{ fontWeight: homeWon ? 700 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.home?.name ?? "—"}</span>
                       <span style={{ ...num, fontSize: 14, fontWeight: 600, whiteSpace: "nowrap" }}>
-                        {g.away ? `${fmt(g.homeScore)} – ${fmt(g.awayScore)}` : "bye"}
+                        {g.away ? `${fmt(g.homeScore)} – ${fmt(g.awayScore)}` : "Bye"}
                       </span>
                       <span style={{ fontWeight: awayWon ? 700 : 500, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.away?.name ?? ""}</span>
                     </div>
@@ -118,12 +126,15 @@ export function RoundRecapModal({ leagueId, week, onClose }: { leagueId: string;
               <div style={section}>
                 <div style={title}>Player of the week</div>
                 {r.playersOfWeek.map((p) => (
-                  <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700 }}>{p.name}</div>
-                      <div style={{ fontSize: 11, color: muted }}>
-                        {p.teamCode ? `${p.teamCode} · ` : ""}
-                        {p.fantasyTeam ? `scored for ${p.fantasyTeam.name}` : "not in anyone's team"}
+                  <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                      {p.teamCode ? <JerseyTile teamCode={p.teamCode} size={36} /> : null}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700 }}>{p.name}</div>
+                        <div style={{ fontSize: 11, color: muted }}>
+                          {p.teamCode ? `${p.teamCode} · ` : ""}
+                          {p.fantasyTeam ? `Scored for ${p.fantasyTeam.name}` : "Not in anyone's team"}
+                        </div>
                       </div>
                     </div>
                     <div style={{ ...num, fontSize: 22, fontWeight: 600, color: teal }}>{fmt(p.points)}</div>
@@ -135,7 +146,6 @@ export function RoundRecapModal({ leagueId, week, onClose }: { leagueId: string;
             {/* Pickups */}
             {r.bestPickup ? <Pickup label="Best pickup" colour="#16a34a" p={r.bestPickup} /> : null}
             {r.worstPickup ? <Pickup label="Worst pickup" colour="#dc2626" p={r.worstPickup} /> : null}
-            {!r.bestPickup ? <div style={{ fontSize: 12, color: muted, textAlign: "center" }}>No pickups who played this round.</div> : null}
           </>
         )}
       </div>

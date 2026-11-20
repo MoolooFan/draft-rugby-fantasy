@@ -18,10 +18,12 @@ export type RecapTeam = { id: string; name: string };
 export type RecapPickup = {
   playerId: string;
   name: string;
+  /** Super Rugby team, for the jersey */
+  teamCode: string | null;
   points: number;
   team: RecapTeam;
   via: "waiver" | "free agent";
-  dropped: { id: string; name: string; points: number } | null;
+  dropped: { id: string; name: string; teamCode: string | null; points: number } | null;
 };
 export type RoundRecap = {
   week: number;
@@ -102,6 +104,7 @@ export async function loadRoundRecap(db: SupabaseClient, leagueId: string, week:
     const p = players.get(id);
     return c ? roundPoints(playerPoints(c, isFrontRow(p ?? null, rules), rules)) : 0;
   };
+  const codeOf = (id: string): string | null => ((players.get(id) as { teamCode?: string } | undefined)?.teamCode ?? null) || null;
   const nameOf = (id: string) => {
     const p = players.get(id) as { firstName?: string; lastName?: string } | undefined;
     return p ? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() : id;
@@ -125,7 +128,7 @@ export async function loadRoundRecap(db: SupabaseClient, leagueId: string, week:
     top > 0
       ? [...counts.keys()]
           .filter((id) => pointsOf(id) === top)
-          .map((id) => ({ id, name: nameOf(id), teamCode: ((players.get(id) as { teamCode?: string } | undefined)?.teamCode ?? null) as string | null, points: top, fantasyTeam: team(scoredFor(id)) }))
+          .map((id) => ({ id, name: nameOf(id), teamCode: codeOf(id), points: top, fantasyTeam: team(scoredFor(id)) }))
       : [];
 
   // --- pickups for the round, by the points the new player scored in it
@@ -137,10 +140,11 @@ export async function loadRoundRecap(db: SupabaseClient, leagueId: string, week:
     .map((p) => ({
       playerId: String(p.add_player_id),
       name: nameOf(String(p.add_player_id)),
+      teamCode: codeOf(String(p.add_player_id)),
       points: pointsOf(String(p.add_player_id)),
       team: team(p.team_id)!,
       via: p.via,
-      dropped: p.drop_player_id ? { id: String(p.drop_player_id), name: nameOf(String(p.drop_player_id)), points: pointsOf(String(p.drop_player_id)) } : null,
+      dropped: p.drop_player_id ? { id: String(p.drop_player_id), name: nameOf(String(p.drop_player_id)), teamCode: codeOf(String(p.drop_player_id)), points: pointsOf(String(p.drop_player_id)) } : null,
     }))
     .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
   const bestPickup = rated[0] ?? null;

@@ -222,7 +222,7 @@ export default function AccountPage() {
 
           {/* Switch team */}
           <div style={cardStyle}>
-            <div style={sectionTitle}>Your team</div>
+            <div style={sectionTitle}>Your Team</div>
             {myLeagues.length ? (
               <>
                 <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.9, marginBottom: 8 }}>
@@ -253,21 +253,21 @@ export default function AccountPage() {
 
           {/* Change password */}
           <div style={cardStyle}>
-            <div style={sectionTitle}>Change password</div>
+            <div style={sectionTitle}>Change Password</div>
             <div style={{ display: "grid", gap: 8 }}>
               <input id="pw-current" type="password" autoComplete="current-password" placeholder="Current password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} style={inputStyle} />
               <input id="pw-new" type="password" autoComplete="new-password" placeholder="New password (at least 8 characters)" value={newPw} onChange={(e) => setNewPw(e.target.value)} style={inputStyle} />
               <input id="pw-confirm" type="password" autoComplete="new-password" placeholder="New password again" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} style={inputStyle} />
             </div>
             <button onClick={changePassword} disabled={pwBusy} style={{ ...primaryButton, marginTop: 10, opacity: pwBusy ? 0.7 : 1 }}>
-              {pwBusy ? "Changing…" : "Change password"}
+              {pwBusy ? "Changing…" : "Change Password"}
             </button>
             {pwMsg ? <div style={note(pwMsg.kind)}>{pwMsg.text}</div> : null}
           </div>
 
           {/* AI assistant coach's name */}
           <div style={cardStyle}>
-            <div style={sectionTitle}>Your AI assistant coach</div>
+            <div style={sectionTitle}>Your AI Assistant Coach</div>
             <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.9, marginBottom: 8 }}>
               Give your coach a name. It shows on player cards and in Coach News (only you see it).
             </div>
@@ -281,7 +281,7 @@ export default function AccountPage() {
               aria-label="Coach name"
             />
             <button onClick={saveCoachName} disabled={coachBusy || coachDraft == null} style={{ ...primaryButton, marginTop: 10, opacity: coachBusy || coachDraft == null ? 0.6 : 1 }}>
-              {coachBusy ? "Saving…" : "Save name"}
+              {coachBusy ? "Saving…" : "Save Name"}
             </button>
             {coachMsg ? <div style={note(coachMsg.kind)}>{coachMsg.text}</div> : null}
           </div>
@@ -336,7 +336,7 @@ export default function AccountPage() {
           {/* Log out */}
           <div style={cardStyle}>
             <button onClick={handleLogout} disabled={loggingOut} style={{ ...dangerButton, opacity: loggingOut ? 0.7 : 1 }}>
-              {loggingOut ? "Logging out…" : "Log out"}
+              {loggingOut ? "Logging out…" : "Log Out"}
             </button>
           </div>
         </div>

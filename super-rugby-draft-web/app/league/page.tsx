@@ -1430,7 +1430,7 @@ function JoinLeagueModal__render() {
                 <TeamAvatar pictureUrl={pic.kind === "none" ? null : pic.url} initials={teamName.trim().slice(0, 2) || "?"} size={56} />
                 <div style={{ display: "grid", gap: 6, flex: 1, minWidth: 0 }}>
                   <label style={{ ...saveButton(), display: "grid", placeItems: "center", background: "#eef2f6", color: "#0f172a", border: "1px solid #cbd5e1" }}>
-                    {pic.kind === "none" ? "Add picture" : "Change picture"}
+                    {pic.kind === "none" ? "Add Picture" : "Change Picture"}
                     <input
                       id="join-picture"
                       type="file"
