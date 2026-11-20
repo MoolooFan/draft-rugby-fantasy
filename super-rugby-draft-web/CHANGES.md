@@ -23,6 +23,7 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `0d1b1fd` | Split the trade page (1,469 -> 646 lines): top card, player lists, Cancel / Propose buttons and helpers moved to their own files in app/trade/propose. No visible change |  |
 | `5e85444` | Split the League page (1,844 -> 838 lines): Standings, Fixtures and Results tabs, Join and Create League pop-ups moved to their own files in app/league. No visible change |  |
 | `794ab2a` | Split the Team Selection page (1,959 -> 1,170 lines): header, pitch, subs & IR box, tiles and helpers moved to components/teamSelection. No visible change |  |
 | `6bc4c96` | Dashboard: tapping the watchlist eye a second time now removes the player (it used to add him again) |  |

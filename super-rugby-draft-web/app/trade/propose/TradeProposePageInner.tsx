@@ -1,10 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { card as themeCard } from "@/lib/ui/theme";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { TEAM_OPTIONS } from "@/lib/constants";
 import { getActiveUser, getActiveUsername } from "@/lib/session";
 
 import { useLeagueStore } from "@/lib/league/store";
@@ -18,373 +16,28 @@ const fixturesData = fixturesByFantasyWeek();
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 import { usePlayersStore } from "@/lib/players/store";
-import { canPlayPosition } from "@/lib/players/positions";
-import { useStableComponent } from "@/lib/hooks/useStableComponent";
-import { playerRoundRows } from "@/lib/players/roundIndex";
 import { toMs, getWeekDeadlineMs, getWeeksSorted } from "@/lib/league/weekHelpers";
-import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
-import { positionsLabel } from "@/lib/players/positions";
-import { StatusTag } from "@/components/StatusTag";
-import { formatProjection, projectionFor, useProjections, type WeekProjections } from "@/lib/projections/useProjections";
+import { useProjections } from "@/lib/projections/useProjections";
 import { roundLabel } from "@/lib/season";
-import { StatViewToggle } from "@/components/StatViewToggle";
-import { applyStatView, formatStatView, useStatView, type StatView } from "@/lib/players/statView";
-
-// -----------------------
-// Types
-// -----------------------
-type Player = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  teamCode: string;
-  posAbbrev: string;
-  secondaryPosAbbrev?: string;   // string | undefined
-  posName: string;
-  secondaryPosName?: string;     // string | undefined
-  draftRank?: number;
-
-  // live sheet fields (safe/optional)
-  status?: any;
-  weeklyStatus?: any;
-
-  // modal expected / derived
-  totalPoints?: number | null;
-  matchesPlayed?: number | null;
-  avgPointsPerMatch?: number | null;
-
-  // stats object the modal reads from (or your metricValue reads from)
-  stats?: any;
-  playerStats?: any;
-};
-
-type AnyFixture = {
-  id: string;
-  week: number;
-  kickoffAt: string | number;
-  kickoffMs?: number;
-  status?: string;
-  homeScore?: number | null;
-  awayScore?: number | null;
-};
-
-type Step = "REQUESTING" | "OFFERING" | "REVIEW";
-type InfoMode = "DRAFT_RANK" | "AVG_PPG" | "TOTAL_PTS" | "FORM" | "PROJ";
-
-function jerseySrcForTeamCode(teamCode: string | null | undefined, prefer: "angle" | "front" = "angle") {
-  const code = normalizeTeamCode(teamCode);
-  const j = JERSEYS[code];
-  if (!j) return JERSEY_PLACEHOLDER;
-  if (prefer === "angle") return j.angle ?? j.single ?? j.front ?? JERSEY_PLACEHOLDER;
-  return j.front ?? j.single ?? j.angle ?? JERSEY_PLACEHOLDER;
-}
-
-function JerseyTile({ teamCode, size = 34 }: { teamCode: string; size?: number }) {
-  return (
-    <img
-      src={jerseySrcForTeamCode(teamCode, "angle")}
-      alt=""
-      style={{ width: size, height: size, borderRadius: 10, objectFit: "contain", display: "block" }}
-      draggable={false}
-    />
-  );
-}
-
-function normUser(x: any) {
-  return String(x ?? "").trim().toLowerCase();
-}
-
-// -----------------------
-// Position + roster validity helpers (matches your waiver validity logic)
-// -----------------------
-const POSITION_ORDER: Record<string, number> = {
-  HO: 1,
-  PR: 2,
-  LK: 3,
-  LF: 4,
-  HB: 5,
-  FH: 6,
-  CE: 7,
-  OB: 8,
-};
-
-function playerCanPlayPos(p: any, pos: string) {
-  return canPlayPosition(p, pos);
-}
-
-function buildRequiredSlots() {
-  const req: string[] = [];
-  req.push("HO");
-  req.push("PR", "PR");
-  req.push("LK", "LK");
-  req.push("LF", "LF", "LF");
-  req.push("HB");
-  req.push("FH");
-  req.push("CE", "CE");
-  req.push("OB", "OB", "OB");
-  return req;
-}
-
-function canFillRequiredSlots(players: Player[]) {
-  const REQUIRED_POS_SLOTS = buildRequiredSlots();
-  const required = REQUIRED_POS_SLOTS.slice();
-
-  const candidatesByPos = new Map<string, number[]>();
-  for (const pos of new Set(required)) {
-    const idxs: number[] = [];
-    players.forEach((pl, i) => {
-      if (playerCanPlayPos(pl, pos)) idxs.push(i);
-    });
-    candidatesByPos.set(pos, idxs);
-  }
-
-  required.sort((a, b) => {
-    const ca = candidatesByPos.get(a)?.length ?? 0;
-    const cb = candidatesByPos.get(b)?.length ?? 0;
-    return ca - cb;
-  });
-
-  const used = new Array(players.length).fill(false);
-
-  function dfs(i: number): boolean {
-    if (i >= required.length) return true;
-    const pos = required[i];
-    const cand = candidatesByPos.get(pos) ?? [];
-    for (const pi of cand) {
-      if (used[pi]) continue;
-      used[pi] = true;
-      if (dfs(i + 1)) return true;
-      used[pi] = false;
-    }
-    return false;
-  }
-
-  return dfs(0);
-}
-
-function toNum(v: any): number | null {
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  if (typeof v === "string") {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
-}
-
-function getRowNumber(row: any, header: string): number {
-  if (!row) return 0;
-
-  if (row[header] != null) {
-    const n = toNum(row[header]);
-    return n != null ? n : 0;
-  }
-
-  const keys = Object.keys(row);
-  const found = keys.find((k) => String(k).trim().toLowerCase() === header.trim().toLowerCase());
-  if (found && row[found] != null) {
-    const n = toNum(row[found]);
-    return n != null ? n : 0;
-  }
-
-  return 0;
-}
-
-function normaliseId(x: any) {
-  return String(x ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
-
-function playerGetsScrumPoints(p: Player): boolean {
-  return canPlayPosition(p, "PR") || canPlayPosition(p, "HO");
-}
-
-function getRoundPointsFromRow(row: any, p: Player): number | null {
-  if (!row) return null;
-
-  const minutes = getRowNumber(row, "Minutes played");
-  if (!minutes) return null;
-
-  let total = 0;
-
-  // minutes
-  total += minutes >= 61 ? 2 : 1;
-
-  // attack
-  total += getRowNumber(row, "Tries") * 15;
-  total += getRowNumber(row, "Try Assists") * 9;
-  total += getRowNumber(row, "Linebreaks") * 7;
-  total += getRowNumber(row, "Linebreak assists") * 5;
-  total += getRowNumber(row, "Defenders beaten") * 2;
-  total += Math.floor(getRowNumber(row, "Carries (m)") / 10);
-  total += getRowNumber(row, "Offloads") * 2;
-
-  // defence / playmaking
-  total += getRowNumber(row, "Tackles") * 1;
-  total += getRowNumber(row, "Missed tackles") * -1;
-  total += getRowNumber(row, "Turnover Forced") * 4;
-  total += getRowNumber(row, "Interceptions") * 5;
-  total += getRowNumber(row, "50:22 Kicks") * 10;
-
-  // discipline / errors
-  total += getRowNumber(row, "Penalties Conceded") * -1;
-  total += getRowNumber(row, "Errors") * -1;
-
-  // set piece
-  total += getRowNumber(row, "Lineouts won") * 1;
-  total += getRowNumber(row, "Lineout steals") * 5;
-  total += getRowNumber(row, "Lineout errors") * -2;
-
-  if (playerGetsScrumPoints(p)) {
-    total += getRowNumber(row, "Scrums won outright") * 3;
-  }
-
-  // kicking
-  total += getRowNumber(row, "Conversions") * 2;
-  total += getRowNumber(row, "Conversions missed") * -1;
-  total += getRowNumber(row, "Penalty scored") * 3;
-  total += getRowNumber(row, "Penalty missed") * -1;
-  total += getRowNumber(row, "Drop goal scored") * 3;
-  total += getRowNumber(row, "Drop goal missed") * -1;
-
-  // cards
-  total += getRowNumber(row, "Yellow cards") * -5;
-  total += getRowNumber(row, "Red cards") * -10;
-
-  return Number.isFinite(total) ? total : null;
-}
-
-function getPlayerRounds(playerId: string, roundRows: any[]) {
-  return playerRoundRows(roundRows, playerId); // grouped by player once (lib/players/roundIndex)
-}
-
-function getTotalPointsFromRounds(p: Player, roundRows: any[]): number | null {
-  const rounds = getPlayerRounds(p.id, roundRows);
-  if (!rounds.length) return null;
-
-  let total = 0;
-  let any = false;
-
-  for (const r of rounds) {
-    const pts = getRoundPointsFromRow(r, p);
-    if (pts == null) continue;
-    total += pts;
-    any = true;
-  }
-
-  return any ? total : null;
-}
-
-function getMatchesPlayedFromRounds(p: Player, roundRows: any[]): number | null {
-  const rounds = getPlayerRounds(p.id, roundRows);
-  if (!rounds.length) return null;
-
-  const played = rounds.reduce(
-    (acc: number, r: any) => acc + (getRoundPointsFromRow(r, p) != null ? 1 : 0),
-    0
-  );
-
-  return played || null;
-}
-
-function getAvgPPGFromRounds(p: Player, roundRows: any[]): number | null {
-  const tot = getTotalPointsFromRounds(p, roundRows);
-  const gp = getMatchesPlayedFromRounds(p, roundRows);
-  if (tot != null && gp != null && gp > 0) return tot / gp;
-  return null;
-}
-
-function getFormLast3AvgFromRounds(p: Player, roundRows: any[]): number | null {
-  const rounds = getPlayerRounds(p.id, roundRows);
-  if (!rounds.length) return null;
-
-  const played = rounds
-    .map((r: any) => ({ r, pts: getRoundPointsFromRow(r, p) }))
-    .filter((x: any) => typeof x.pts === "number");
-
-  if (!played.length) return null;
-
-  played.sort((a: any, b: any) => (toNum(a.r?.round) ?? 0) - (toNum(b.r?.round) ?? 0));
-
-  const last3 = played.slice(-3);
-  const sum = last3.reduce((acc: number, x: any) => acc + (x.pts as number), 0);
-  return sum / last3.length;
-}
-
-function metricValue(p: Player, mode: InfoMode, roundRows: any[], view: StatView = "game", proj: WeekProjections | null = null): string {
-  // projected points for the next round (Ethan, 20 Nov 2026)
-  if (mode === "PROJ") {
-    const v = projectionFor(proj, p.id)?.pts;
-    return v == null ? "-" : formatProjection(v);
-  }
-  if (mode === "DRAFT_RANK") {
-    return typeof p.draftRank === "number" ? String(p.draftRank) : "-";
-  }
-
-  if (mode === "TOTAL_PTS") {
-    // C1: points follow the Per game / Total / Per 80 switch
-    const t = getTotalPointsFromRounds(p, roundRows);
-    const gp = getMatchesPlayedFromRounds(p, roundRows) ?? 0;
-    const mins = getPlayerRounds(p.id, roundRows).reduce((a: number, r: any) => a + (toNum(r?.["Minutes played"]) ?? 0), 0);
-    return formatStatView(applyStatView(t, gp, mins, view), view);
-  }
-
-  if (mode === "AVG_PPG") {
-    const v = getAvgPPGFromRounds(p, roundRows);
-    return typeof v === "number" ? v.toFixed(1) : "-";
-  }
-
-  if (mode === "FORM") {
-    const f = getFormLast3AvgFromRounds(p, roundRows);
-    return typeof f === "number" ? f.toFixed(1) : "-";
-  }
-
-  return "—";
-}
-
-function fullTeamName(teamCode: string) {
-  const code = normalizeTeamCode(teamCode);
-
-  // normal lookup
-  const direct = TEAM_OPTIONS.find((t) => t.value === code)?.label;
-  if (direct) return direct;
-
-  // handle Moana code mismatch (MOA vs MOP)
-  if (code === "MOA") return TEAM_OPTIONS.find((t) => t.value === "MOP")?.label ?? "Moana Pasifika";
-  if (code === "MOP") return TEAM_OPTIONS.find((t) => t.value === "MOA")?.label ?? "Moana Pasifika";
-
-  return code;
-}
-
-function shortName(p: { firstName?: string; lastName?: string } | null | undefined) {
-  const first = (p?.firstName ?? "").trim();
-  const last = (p?.lastName ?? "").trim();
-  const initial = first ? first[0].toUpperCase() : "?";
-  return last ? `${initial}. ${last}` : `${initial}.`;
-}
-
-// -----------------------
-// Roster helpers (canonical = data.playerIds from API)
-// -----------------------
-function normId(x: any) {
-  return String(x ?? "").trim();
-}
-
-function extractRosterIdsFromData(data: any): string[] {
-  // canonical
-  if (Array.isArray(data?.playerIds)) return data.playerIds.map(normId).filter(Boolean);
-
-  // fallback if older slot-based shape is ever returned
-  const ids: string[] = [];
-  for (const arr of Object.values(data?.slots ?? {})) {
-    if (!Array.isArray(arr)) continue;
-    for (const p of arr as any[]) if (p?.id != null) ids.push(normId(p.id));
-  }
-  for (const p of (data?.wildcards ?? []) as any[]) if (p?.id != null) ids.push(normId(p.id));
-
-  return Array.from(new Set(ids.filter(Boolean)));
-}
-
+import { useStatView } from "@/lib/players/statView";
+import { TradeTopBar } from "./TradeTopBar";
+import { GroupedList, ReviewButtons } from "./TradeLists";
+import {
+  canFillRequiredSlots,
+  extractRosterIdsFromData,
+  getAvgPPGFromRounds,
+  getMatchesPlayedFromRounds,
+  getTotalPointsFromRounds,
+  inputWrap,
+  metricValue,
+  normUser,
+  toggleId,
+  type AnyFixture,
+  type InfoMode,
+  type ModalContext,
+  type Player,
+  type Step,
+} from "./helpers";
 // -----------------------
 // Page
 // -----------------------
@@ -415,8 +68,6 @@ const userId = useMemo(() => normUser(getActiveUsername()), []);
 const [apiRostersByTeam, setApiRostersByTeam] = useState<Record<string, any>>({});
 const watchlist = useDraftStore((s) => (s as any).watchlist ?? {});
 const toggleWatchlist = useDraftStore((s) => (s as any).toggleWatchlist ?? (() => {}));
-
-  type ModalContext = "REQUESTING" | "OFFERING";
 
 const [modalPlayer, setModalPlayer] = useState<Player | null>(null);
 const [modalContext, setModalContext] = useState<ModalContext>("REQUESTING");
@@ -757,34 +408,6 @@ useEffect(() => {
   });
 }, [prefillRequestPlayerId, partnerRoster]);
 
-  // Group-by-position helper (keeps your exact order)
-  function groupByPosition(players: Player[]) {
-    const map = new Map<string, Player[]>();
-    for (const p of players) {
-      const key = String(p.posAbbrev ?? "").toUpperCase();
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(p);
-    }
-
-    for (const arr of map.values()) {
-      arr.sort((a, b) => {
-        const an = `${a.firstName ?? ""} ${a.lastName ?? ""}`.trim().toLowerCase();
-        const bn = `${b.firstName ?? ""} ${b.lastName ?? ""}`.trim().toLowerCase();
-        return an.localeCompare(bn);
-      });
-    }
-
-    const orderedKeys = Object.keys(POSITION_ORDER).sort((a, b) => (POSITION_ORDER[a] ?? 99) - (POSITION_ORDER[b] ?? 99));
-    return orderedKeys
-      .map((k) => ({ pos: k, players: map.get(k) ?? [] }))
-      .filter((g) => g.players.length > 0);
-  }
-
-  // Toggle select helper
-  function toggleId(list: string[], id: string) {
-    return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
-  }
-
   // Validity check (both rosters must remain viable after swap)
   const validity = useMemo(() => {
     const reqPlayers = requestingIds
@@ -858,472 +481,8 @@ const offPlayers = offeringIds
   }
 }
 
-  // UI styles (match your Transactions vibe)
-  const card35: React.CSSProperties = { ...themeCard, padding: undefined };
-
-  const listBox: React.CSSProperties = {
-    marginTop: 10,
-    borderRadius: 12,
-    background: "rgba(255,255,255,0.92)",
-    border: "1px solid rgba(0,0,0,0.08)",
-    overflow: "hidden",
-    color: "#0f172a",
-  };
-
-  const inputWrap: React.CSSProperties = {
-    background: "rgba(255,255,255,0.92)",
-    borderRadius: 10,
-    padding: "8px 10px",
-    boxShadow: "0 10px 20px rgba(0,0,0,0.12)",
-  };
-
-  function StepButtons__render() {
-  // REQUESTING: Next (right aligned)
-  if (step === "REQUESTING") {
-    const canNext = requestingIds.length > 0;
-    return (
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <div />
-        <button
-          disabled={!canNext}
-          onClick={() => setStep("OFFERING")}
-          style={{
-            height: 38,
-            borderRadius: 12,
-            border: "none",
-            background: canNext ? "#2563EB" : "rgba(0,0,0,0.20)",
-            color: "white",
-            fontWeight: 700,
-            cursor: canNext ? "pointer" : "not-allowed",
-          }}
-        >
-          Next
-        </button>
-      </div>
-    );
-  }
-
-  // OFFERING: Back + Review
-  if (step === "OFFERING") {
-    const canReview = offeringIds.length === requestingIds.length && requestingIds.length > 0;
-
-    return (
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <button
-          onClick={() => setStep("REQUESTING")}
-          style={{
-            height: 38,
-            borderRadius: 12,
-            border: "3px solid rgba(37,99,235,0.90)",
-            background: "white",
-            color: "#2563EB",
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          Back
-        </button>
-
-        <button
-          disabled={!canReview}
-          onClick={() => setStep("REVIEW")}
-          style={{
-            height: 38,
-            borderRadius: 12,
-            border: "none",
-            background: canReview ? "#2563EB" : "rgba(0,0,0,0.20)",
-            color: "white",
-            fontWeight: 700,
-            cursor: canReview ? "pointer" : "not-allowed",
-          }}
-        >
-          Review
-        </button>
-      </div>
-    );
-  }
-
-// REVIEW: Back only (Propose is in the footer)
-if (step === "REVIEW") {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-      <button
-        onClick={() => setStep("OFFERING")}
-        style={{
-          height: 38,
-          borderRadius: 12,
-          border: "3px solid rgba(37,99,235,0.90)",
-          background: "white",
-          color: "#2563EB",
-          fontWeight: 700,
-          cursor: "pointer",
-        }}
-      >
-        Back
-      </button>
-      <div />
-    </div>
-  );
-}
-
-  return null;
-
-}
-const StepButtons = useStableComponent(StepButtons__render);
-
-  function TopBar__render() {
-    return (
-      <div style={{ ...card35, padding: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
-        <div style={{ display: "flex", alignItems: "center" }}>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>Propose Trade</div>
-          <div style={{ flex: 1 }} />
-          <button
-            onClick={goBackToReturnTo}
-            aria-label="Close"
-            title="Close"
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 999,
-              border: "none",
-              background: "rgba(15,23,42,0.06)",
-              color: "#0f172a",
-              fontSize: 16,
-              fontWeight: 700,
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 0,
-            }}
-          >
-            ✕
-          </button>
-        </div>
-
-        <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-          {/* Team selector / display */}
-{step === "REQUESTING" ? (
-  // STEP 1: Pick partner team
-  <div style={{ ...inputWrap, position: "relative" }}>
-    <select
-      value={partnerTeamId}
-      onChange={(e) => setPartnerTeamId(e.target.value)}
-      style={{
-        width: "100%",
-        height: 34,
-        border: "none",
-        outline: "none",
-        background: "transparent",
-        fontSize: 13,
-        fontWeight: 600,
-        color: partnerTeamId ? "#0f172a" : "rgba(15,23,42,0.55)",
-        WebkitAppearance: "none",
-        appearance: "none",
-        paddingRight: 30,
-      }}
-    >
-      {(activeLeague as any)?.teams
-        ?.filter((t: any) => t.id !== yourDraftTeamId)
-        .map((t: any) => (
-          <option key={t.id} value={t.id}>
-            {t.name}
-          </option>
-        ))}
-    </select>
-
-    <span
-      aria-hidden="true"
-      style={{
-        position: "absolute",
-        right: 10,
-        top: "50%",
-        transform: "translateY(-50%)",
-        color: "rgba(15,23,42,0.45)",
-        fontSize: 16,
-        pointerEvents: "none",
-      }}
-    >
-      ▾
-    </span>
-  </div>
-) : (
-  // STEP 2 + 3: Locked display (no dropdown)
-  <div
-    style={{
-      ...inputWrap,
-      fontSize: 13,
-      fontWeight: 700,
-      color: "#0f172a",
-      height: 34,
-      display: "flex",
-      alignItems: "center",
-    }}
-  >
-    {step === "OFFERING" ? yourTeamName : partnerTeamName}
-  </div>
-)}
-
-          {/* C1: Per game / Total / Per 80 (for Points) */}
-          {infoMode === "TOTAL_PTS" ? (
-            <div style={{ display: "flex", justifyContent: "center" }}>
-              <StatViewToggle />
-            </div>
-          ) : null}
-
-          {/* View selector */}
-          <div style={{ ...inputWrap, position: "relative" }}>
-            <select
-              value={infoMode}
-              onChange={(e) => setInfoMode(e.target.value as InfoMode)}
-              style={{
-                width: "100%",
-                height: 34,
-                border: "none",
-                outline: "none",
-                background: "transparent",
-                fontSize: 13,
-                fontWeight: 600,
-                color: "#0f172a",
-                WebkitAppearance: "none",
-                appearance: "none",
-                paddingRight: 30,
-              }}
-            >
-              <option value="DRAFT_RANK">Draft Rank</option>
-<option value="AVG_PPG">Match Average</option>
-<option value="TOTAL_PTS">Points</option>
-<option value="FORM">Form</option>
-<option value="PROJ">{tradeProj ? `Projected (${roundLabel(tradeProj.week)})` : "Projected"}</option>
-
-            </select>
-            <span
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                right: 10,
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: "rgba(15,23,42,0.45)",
-                fontSize: 16,
-                pointerEvents: "none",
-              }}
-            >
-              ▾
-            </span>
-          </div>
-{/* Step buttons (moved from footer) */}
-<StepButtons />
-
-          
-        </div>
-      </div>
-    );
-  }
-const TopBar = useStableComponent(TopBar__render);
-
-  function SectionHeader__render({ title, color }: { title: string; color: string }) {
-    return (
-      <div
-        style={{
-          padding: "8px 10px",
-          borderTop: "1px solid rgba(0,0,0,0.08)",
-          borderBottom: "1px solid rgba(0,0,0,0.08)",
-          fontSize: 12,
-          fontWeight: 700,
-          color,
-        }}
-      >
-        {title}
-      </div>
-    );
-  }
-const SectionHeader = useStableComponent(SectionHeader__render);
-
-function PlayerRow__render({
-  p,
-  selected,
-  onToggle,
-  onOpen,
-  infoMode,
-}: {
-  p: Player;
-  selected: boolean;
-  onToggle: () => void;
-  onOpen: () => void;
-  infoMode: InfoMode;
-}) {
-
-  return (
-    <div
-      onClick={onOpen}
-      style={{
-        padding: "8px 10px",
-        borderTop: "1px solid rgba(0,0,0,0.08)",
-        display: "grid",
-        gridTemplateColumns: "1fr 82px 82px",
-        gap: 10,
-        alignItems: "center",
-        background: selected ? "rgba(37,99,235,0.10)" : "transparent",
-        cursor: "pointer",
-        userSelect: "none",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-        <JerseyTile teamCode={p.teamCode} size={26} />
-        <div style={{ minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {shortName(p)}
-            </div>
-            <StatusTag player={p} />
-          </div>
-          <div
-            style={{
-              fontSize: 10,
-              fontWeight: 600,
-              opacity: 0.7,
-              whiteSpace: "nowrap",
-              overflow: "visible",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {fullTeamName(p.teamCode)} — {positionsLabel(p)}
-          </div>
-        </div>
-      </div>
-
-      {/* Metric + live week points */}
-      <div style={{ textAlign: "right", fontSize: 12, fontWeight: 700 }}>
-  {metricValue(p, infoMode, roundRows ?? [], statView, tradeProj)}
-
-</div>
-
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle();
-        }}
-        style={{
-          height: 26,
-          padding: "0 10px",
-          borderRadius: 999,
-          border: "2px solid #2563EB",
-          background: selected ? "#2563EB" : "transparent",
-          color: selected ? "white" : "#2563EB",
-          fontWeight: 700,
-          fontSize: 12,
-          cursor: "pointer",
-          whiteSpace: "nowrap",
-        }}
-      >
-        Trade
-      </button>
-    </div>
-  );
-}
-const PlayerRow = useStableComponent(PlayerRow__render);
-
-function GroupedList__render({
-  title,
-  titleColor,
-  players,
-  selectedIds,
-  onToggleId,
-  context,
-  infoMode,
-  hidePositionHeaders = false,
-}: {
-  title: string;
-  titleColor: string;
-  players: Player[];
-  selectedIds: string[];
-  onToggleId: (id: string) => void;
-  context: ModalContext;
-  infoMode: InfoMode;
-  hidePositionHeaders?: boolean;
-}) {
-
-    const groups = groupByPosition(players);
-    return (
-      <div style={listBox}>
-        <SectionHeader title={title} color={titleColor} />
-        {groups.map((g) => (
-          <div key={g.pos}>
-            {!hidePositionHeaders && (
-  <div style={{ padding: "6px 10px", fontSize: 11, fontWeight: 700, opacity: 0.55 }}>
-    {g.pos === "HO" ? "Hookers" :
-     g.pos === "PR" ? "Props" :
-     g.pos === "LK" ? "Locks" :
-     g.pos === "LF" ? "Loose Forwards" :
-     g.pos === "HB" ? "Halfbacks" :
-     g.pos === "FH" ? "Flyhalves" :
-     g.pos === "CE" ? "Centres" :
-     "Outside Backs"}
-  </div>
-)}
-
-            {g.players.map((p) => (
-<PlayerRow
-  key={p.id}
-  p={p}
-  selected={selectedIds.includes(p.id)}
-  onToggle={() => onToggleId(p.id)}
-  onOpen={() => openPlayerCard(p, context)}
-  infoMode={infoMode}
-/>
-
-            ))}
-          </div>
-        ))}
-      </div>
-    );
-  }
-const GroupedList = useStableComponent(GroupedList__render);
-
-  // Footer buttons for each step
-function Footer__render() {
-  // Only show footer buttons on REVIEW
-  if (step !== "REVIEW") return null;
-
-  const canPropose = validity.ok && !tradeWindowClosed;
-
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-      <button
-        onClick={goBackToReturnTo}
-        style={{
-          height: 42,
-          borderRadius: 12,
-          border: "2px solid rgba(239,68,68,0.9)",
-          background: "transparent",
-          color: "rgba(239,68,68,0.95)",
-          fontWeight: 700,
-          cursor: "pointer",
-        }}
-      >
-        Cancel
-      </button>
-
-      <button
-        disabled={!canPropose || isProposing}
-        onClick={proposeTrade}
-        style={{
-          height: 42,
-          borderRadius: 12,
-          border: "none",
-          background: canPropose && !isProposing ? "#22C55E" : "rgba(0,0,0,0.20)",
-          color: "white",
-          fontWeight: 700,
-          cursor: canPropose && !isProposing ? "pointer" : "not-allowed",
-        }}
-      >
-        {isProposing ? "Proposing..." : "Propose"}
-      </button>
-    </div>
-  );
-}
-const Footer = useStableComponent(Footer__render);
+  // the chosen view's number for a player row
+  const metricOf = (p: Player) => metricValue(p, infoMode, roundRows ?? [], statView, tradeProj);
 
   // Render the correct list
   const requestingCount = requestingIds.length;
@@ -1353,7 +512,21 @@ const reviewOfferPlayers = offeringIds
       />
 
       <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px", paddingBottom: "calc(18px + env(safe-area-inset-bottom))" }}>
-        <TopBar />
+        <TradeTopBar
+          step={step}
+          onStep={setStep}
+          requestingCount={requestingIds.length}
+          offeringCount={offeringIds.length}
+          onClose={goBackToReturnTo}
+          partnerTeamId={partnerTeamId}
+          onPartnerTeam={setPartnerTeamId}
+          partnerOptions={((activeLeague as any)?.teams ?? []).filter((t: any) => t.id !== yourDraftTeamId)}
+          yourTeamName={yourTeamName}
+          partnerTeamName={partnerTeamName}
+          infoMode={infoMode}
+          onInfoMode={setInfoMode}
+          projLabel={tradeProj ? `Projected (${roundLabel(tradeProj.week)})` : "Projected"}
+        />
 
 {step !== "REVIEW" && (
   <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700 }}>
@@ -1378,7 +551,8 @@ const reviewOfferPlayers = offeringIds
   onToggleId={(id) => setRequestingIds((prev) => toggleId(prev, id))}
   context="REQUESTING"
 
-  infoMode={infoMode}
+  metricOf={metricOf}
+  onOpenPlayer={openPlayerCard}
 />
 
         )}
@@ -1392,7 +566,8 @@ const reviewOfferPlayers = offeringIds
   onToggleId={(id) => setOfferingIds((prev) => toggleId(prev, id))}
   context="OFFERING"
 
-  infoMode={infoMode}
+  metricOf={metricOf}
+  onOpenPlayer={openPlayerCard}
 />
 
         )}
@@ -1408,7 +583,8 @@ const reviewOfferPlayers = offeringIds
   context="OFFERING"
   hidePositionHeaders
 
-  infoMode={infoMode}
+  metricOf={metricOf}
+  onOpenPlayer={openPlayerCard}
 />
 
 <GroupedList
@@ -1420,7 +596,8 @@ const reviewOfferPlayers = offeringIds
   context="REQUESTING"
   hidePositionHeaders
 
-  infoMode={infoMode}
+  metricOf={metricOf}
+  onOpenPlayer={openPlayerCard}
 />
 
 <div style={{ ...inputWrap, marginTop: 10 }}>
@@ -1445,7 +622,7 @@ const reviewOfferPlayers = offeringIds
 
   {/* Cancel / Propose buttons */}
   <div style={{ marginTop: 10 }}>
-    <Footer />
+    <ReviewButtons canPropose={validity.ok && !tradeWindowClosed} isProposing={isProposing} onCancel={goBackToReturnTo} onPropose={proposeTrade} />
   </div>
 </div>
 
