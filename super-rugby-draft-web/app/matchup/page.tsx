@@ -3,7 +3,6 @@
 import { benchOf, startersOf } from "@/lib/scoring/week";
 import { slotShortLabel, STANDARD_SQUAD } from "@/lib/league/squad";
 import React, { useEffect, useMemo, useState } from "react";
-import { card as themeCard, muted, num } from "@/lib/ui/theme";
 import { useRouter } from "next/navigation";
 
 import { getActiveUsername } from "@/lib/session";
@@ -15,7 +14,6 @@ import { currentSeasonYear, fixturesByFantasyWeek, getSeason, roundLabel, SEASON
 
 // This season's fixtures, numbered by fantasy week (see lib/season).
 const fixturesData = fixturesByFantasyWeek();
-import type { Fixture } from "@/lib/fixtures/types";
 
 import { AppMenu } from "@/components/AppMenu";
 import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib/league/week";
@@ -23,270 +21,46 @@ import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 import { PointsBreakdownModal } from "@/components/PointsBreakdownModal";
 import { usePlayersStore } from "@/lib/players/store";
-import { CAPTAIN_MULTIPLIER, isFrontRow, pointsBreakdown, pointsFromRow, statCountsFromRow, roundPoints } from "@/lib/scoring";
+import { CAPTAIN_MULTIPLIER, roundPoints } from "@/lib/scoring";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { toMs, pickValue } from "@/lib/league/weekHelpers";
-import { JERSEYS } from "@/lib/teams/images";
-import { formatStatCount } from "@/lib/scoring";
-import { TeamAvatar } from "@/components/TeamAvatar";
-import { ShieldIcon } from "@/components/AwardIcons";
 import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
 import { remainingShare, teamOutlook, winProbability, type PlayerWeekState } from "@/lib/projections/live";
 import { irIdsOf } from "@/lib/league/ir";
 import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
-import { useTeamProfileStore } from "@/lib/league/teamProfileStore";
-
-
-function normaliseId(x: any) {
-  return String(x ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
-
-function exactId(x: any) {
-  return String(x ?? "").trim().toLowerCase();
-}
-
-function rowPlayerId(row: any) {
-  return pickValue(row, ["playerId", "Player ID", "player_id", "id"]);
-}
-
-function rowRound(row: any) {
-  const v = pickValue(row, ["round", "Round", "week", "Week"]);
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
-// Stats are raw counts; the shared scoring rules (lib/scoring) turn them into fantasy points.
-function calcFantasyPoints(
-  row: any,
-  player: Pick<Player, "posAbbrev" | "secondaryPosAbbrev"> | null
-): number {
-  return pointsFromRow(row, player);
-}
-
-// Build breakdown rows for PointsBreakdownModal (matches Row: { label, right })
-function buildBreakdownRows(row: any, player: Player | null): Array<{ label: string; right?: string; count?: string }> {
-  return pointsBreakdown(statCountsFromRow(row), isFrontRow(player)).map((b) => ({
-    label: b.stat.header,
-    count: formatStatCount(b.stat.key, b.count),
-    right: String(b.points),
-  }));
-}
-
-/**
- * Your Player currently uses `teamCode` for fixture matching in some places
- * (sometimes a full team name), and in other places you use abbreviations.
- * This makes jersey lookup tricky, so we normalize to a 3-letter code.
- */
-function normalizeTeamCode(raw: string | null | undefined): string | null {
-  const s = (raw ?? "").trim();
-  if (!s) return null;
-
-  const upper = s.toUpperCase();
-
-  // ✅ Canonicalise Moana early (must be BEFORE JERSEYS check)
-if (upper === "MOP" || upper === "MOA" || upper === "MOANA") return "MOA";
-
-  // Already a valid code?
-  if (JERSEYS[upper]) return upper;
-
-  // Common name -> code fallbacks (edit these names to match your fixtures JSON)
-  const NAME_TO_CODE: Record<string, string> = {
-    BLUES: "BLU",
-    BLUESRUGBY: "BLU",
-
-    BRUMBIES: "BRU",
-
-    CHIEFS: "CHI",
-
-    CRUSADERS: "CRU",
-
-    DRUA: "DRU",
-    FIJIAN_DRUA: "DRU",
-    FIJIANDRUA: "DRU",
-
-    FORCE: "FOR",
-    WESTERN_FORCE: "FOR",
-    WESTERNFORCE: "FOR",
-
-    HIGHLANDERS: "HIG",
-
-    HURRICANES: "HUR",
-
-    MOA: "MOA",
-    MOP: "MOA",
-    MOANA: "MOA",
-    MOANA_PASIFIKA: "MOA",
-    MOANAPASIFIKA: "MOA",
-
-    REDS: "RED",
-    QUEENSLAND_REDS: "RED",
-    QUEENSLANDREDS: "RED",
-
-    WARATAHS: "WAR",
-    NSW_WARATAHS: "WAR",
-    NSWWARATAHS: "WAR",
-  };
-
-  // Normalize spaces/underscores to help matching
-  const key = upper.replace(/\s+/g, "_").replace(/[^A-Z_]/g, "");
-  if (NAME_TO_CODE[key]) return NAME_TO_CODE[key];
-
-  // Last fallback: first 3 letters (only if it exists in JERSEYS)
-  const guess = upper.slice(0, 3);
-  return JERSEYS[guess] ? guess : null;
-}
-
-function jerseySrcForTeam(
-  code: string | null,
-  prefer: "angle" | "front" = "angle"
-): string | null {
-  if (!code) return null;
-  const j = JERSEYS[code];
-  if (!j) return null;
-
-  if (prefer === "angle") return j.angle ?? j.single ?? j.front ?? null;
-  return j.front ?? j.single ?? j.angle ?? null;
-}
-
-function jerseySrcForPlayer(
-  p: { teamCode: string } | null,
-  prefer: "angle" | "front" = "angle"
-): string | null {
-  const code = normalizeTeamCode(p?.teamCode);
-  return jerseySrcForTeam(code, prefer);
-}
-
-type TeamRecord = { w: number; l: number; d: number };
-type Streak = { type: "W" | "L"; n: number } | null;
-
-// --- Types (match your Team Selection page) ---
-/** a lineup slot ("prop1", "bench2", or a custom squad's "tightfive1"...: lib/league/squad.ts) */
-type SlotId = string;
-
-type Player = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  teamCode: string;
-  posAbbrev: string;
-  secondaryPosAbbrev?: string | null;
-  posName: string;
-  secondaryPosName?: string | null;
-};
-
-type Lineup = Record<SlotId, Player | null>;
-
-type LockedSnapshot = {
-  week: number;
-  teamId: string;
-  lockedAtMs: number;
-  lineup: Lineup;
-  captainId: string | null;
-  viceId: string | null;
-};
-
-type AnyFixture = Fixture & {
-  id: string;
-  week: number;
-  kickoffAt: string | number;
-  status?: string;
-  homeTeam?: string;
-  awayTeam?: string;
-  homeScore?: number | null;
-  awayScore?: number | null;
-};
-
-function isFixtureComplete(f: AnyFixture) {
-  const s = (f.status ?? "").toLowerCase();
-
-  // your fixtures-2026.json uses "final"
-  if (s === "final" || s === "complete") return true;
-
-  // still treat it as complete if both scores exist
-  if (f.homeScore != null && f.awayScore != null) return true;
-
-  return false;
-}
-
-// Storage keys (must match Team Selection page)
-function matchupSnapshotKey(leagueId: string | null, week: number, teamId: string | null) {
-  return `mu_snapshot_${leagueId ?? "no-league"}_wk${week}_${teamId ?? "no-team"}`;
-}
-
-// ---- Team Selection localStorage keys (must match Team Selection page) ----
-function teamSelectionLineupKey(leagueId: string | null, teamId: string | null) {
-  return `ts_lineup_${leagueId ?? "no-league"}_${teamId ?? "no-team"}`;
-}
-
-function teamSelectionCapsBase(leagueId: string | null, teamId: string | null) {
-  return `ts_caps_${leagueId ?? "no-league"}_${teamId ?? "no-team"}`;
-}
-
-function readTeamSelectionLineup(leagueId: string | null, teamId: string | null): Lineup | null {
-  if (typeof window === "undefined") return null;
-  if (!leagueId || !teamId) return null;
-
-  const raw = window.localStorage.getItem(teamSelectionLineupKey(leagueId, teamId));
-  if (!raw) return null;
-
-  try {
-    const parsed = JSON.parse(raw);
-
-    // basic shape check (prevents accidentally reading roster shapes)
-    const ok =
-      parsed &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed) &&
-      Object.keys(parsed).some((k) => /^[a-z]+\d+$/.test(k)); // slot keys (any league's squad)
-
-    return ok ? (parsed as Lineup) : null;
-  } catch {
-    return null;
-  }
-}
-
-function readTeamSelectionCaps(leagueId: string | null, teamId: string | null) {
-  if (typeof window === "undefined") return { captainId: null as string | null, viceId: null as string | null };
-  if (!leagueId || !teamId) return { captainId: null, viceId: null };
-
-  const base = teamSelectionCapsBase(leagueId, teamId);
-  const captainId = window.localStorage.getItem(`${base}_captain`);
-  const viceId = window.localStorage.getItem(`${base}_vice`);
-  return { captainId: captainId || null, viceId: viceId || null };
-}
-
-function teamSelectionFallbackSnapshot(
-  leagueId: string | null,
-  displayWeek: number,
-  teamId: string | null,
-  mounted: boolean
-): LockedSnapshot | null {
-  if (!mounted) return null;
-  if (typeof window === "undefined") return null;
-  if (!leagueId || !teamId) return null;
-  if (displayWeek <= 0) return null;
-
-  const lineup = readTeamSelectionLineup(leagueId, teamId);
-  if (!lineup) return null;
-
-  const { captainId, viceId } = readTeamSelectionCaps(leagueId, teamId);
-  return { week: displayWeek, teamId, lockedAtMs: 0, lineup, captainId, viceId };
-}
-
-function useNowTick(ms = 1000) {
-  const [now, setNow] = useState<number>(0);
-
-  useEffect(() => {
-    // First client paint: still 0 (matches server), then update
-    setNow(Date.now());
-    const t = window.setInterval(() => setNow(Date.now()), ms);
-    return () => window.clearInterval(t);
-  }, [ms]);
-
-  return now;
-}
+import { MatchupHeader } from "@/components/matchup/MatchupHeader";
+import { Scoreboard, type ScoreboardSide } from "@/components/matchup/Scoreboard";
+import { BenchHeader, LineupRow, type CellPill, type LineupCell } from "@/components/matchup/LineupRow";
+import {
+  buildBreakdownRows,
+  calcFantasyPoints,
+  currentWeekFromSheet,
+  exactId,
+  fixtureTagFor,
+  isFixtureComplete,
+  isSheetPlayableRow,
+  jerseySrcForPlayer,
+  latestCompletedWeekFromSheet,
+  listBox,
+  matchupSnapshotKey,
+  normaliseId,
+  rosterContainsPlayer,
+  rosterDataToLineup,
+  rowPlayerId,
+  rowRound,
+  teamRecords,
+  teamSelectionFallbackSnapshot,
+  teamStreaks,
+  useNowTick,
+  type AnyFixture,
+  type Lineup,
+  type LockedSnapshot,
+  type Player,
+  type SheetFixtureRow,
+  type SlotId,
+  type Streak,
+  type TeamRecord,
+} from "@/components/matchup/helpers";
 
 export default function MatchupPage() {
   useRequireSession();
@@ -314,19 +88,6 @@ const [selectedRows, setSelectedRows] = useState<Array<{ label: string; right?: 
 
   const userId = useMemo(() => getActiveUsername(), []);
   
-type SheetFixtureRow = {
-  season: number;
-  weekFantasy: number;
-  weekReal: number | null;
-  label: string | null;
-  kind: string | null;
-  homeTeamId: string | null;
-  awayTeamId: string | null;
-  status: string; // upcoming | complete
-  homeScore: number | null;
-  awayScore: number | null;
-};
-
 const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
 
 useEffect(() => {
@@ -368,166 +129,14 @@ useEffect(() => {
     .catch((e) => console.error(e));
 }, [activeLeague?.id]);
 
-function isSheetLabelRow(r: SheetFixtureRow) {
-  return !!r.label || String(r.kind ?? "").toLowerCase() === "label";
-}
-
-function isCompletedPlayableRow(r: SheetFixtureRow) {
-  if (isSheetLabelRow(r)) return false;
-  const st = String(r.status ?? "").toLowerCase();
-  if (st !== "complete") return false;
-  // Needs 2 teams to count as a match
-  if (!r.homeTeamId || !r.awayTeamId) return false;
-  // Needs scores to determine W/L/D
-  if (r.homeScore == null || r.awayScore == null) return false;
-  return true;
-}
-
-function outcomeForTeam(match: SheetFixtureRow, teamId: string): "W" | "L" | "D" | null {
-  const homeId = match.homeTeamId!;
-  const awayId = match.awayTeamId!;
-  const hs = match.homeScore!;
-  const as = match.awayScore!;
-
-  if (teamId !== homeId && teamId !== awayId) return null;
-
-  if (hs === as) return "D";
-  const teamIsHome = teamId === homeId;
-  const teamWon = teamIsHome ? hs > as : as > hs;
-  return teamWon ? "W" : "L";
-}
-
 const lastCompletedWeek = useMemo(() => {
   if (!sheetFixtures.length) return (activeLeague?.currentWeek ?? 1) - 1;
-  return latestCompletedWeekFromSheet();
+  return latestCompletedWeekFromSheet(sheetFixtures);
 }, [sheetFixtures, activeLeague?.currentWeek]);
 
-const recordByTeamId = useMemo(() => {
-  const map = new Map<string, TeamRecord>();
-  const ensure = (id: string) => {
-    if (!map.has(id)) map.set(id, { w: 0, l: 0, d: 0 });
-    return map.get(id)!;
-  };
+const recordByTeamId = useMemo(() => teamRecords(sheetFixtures, lastCompletedWeek), [sheetFixtures, lastCompletedWeek]);
 
-  // Completed matches up to lastCompletedWeek
-  const rows = sheetFixtures
-    .filter(isCompletedPlayableRow)
-    // win / loss records and streaks are the regular season only: finals don't change them
-    .filter((r) => String(r.kind ?? "regular").toLowerCase() === "regular")
-    .filter((r) => Number(r.weekFantasy) <= lastCompletedWeek);
-
-  for (const m of rows) {
-    const homeId = m.homeTeamId!;
-    const awayId = m.awayTeamId!;
-    const hs = m.homeScore!;
-    const as = m.awayScore!;
-
-    const home = ensure(homeId);
-    const away = ensure(awayId);
-
-    if (hs > as) { home.w += 1; away.l += 1; }
-    else if (as > hs) { away.w += 1; home.l += 1; }
-    else { home.d += 1; away.d += 1; }
-  }
-
-  return map;
-}, [sheetFixtures, lastCompletedWeek]);
-
-const streakByTeamId = useMemo(() => {
-  const map = new Map<string, Streak>();
-
-  // For streaks, we need each team’s results in chronological order
-  const rows = sheetFixtures
-    .filter(isCompletedPlayableRow)
-    // win / loss records and streaks are the regular season only: finals don't change them
-    .filter((r) => String(r.kind ?? "regular").toLowerCase() === "regular")
-    .filter((r) => Number(r.weekFantasy) <= lastCompletedWeek)
-    .slice()
-    .sort((a, b) => {
-      // stable order: week asc, then sheet order is already preserved normally
-      return Number(a.weekFantasy) - Number(b.weekFantasy);
-    });
-
-  const resultsByTeam = new Map<string, Array<"W" | "L" | "D">>();
-
-  const push = (teamId: string, res: "W" | "L" | "D") => {
-    if (!resultsByTeam.has(teamId)) resultsByTeam.set(teamId, []);
-    resultsByTeam.get(teamId)!.push(res);
-  };
-
-  for (const m of rows) {
-    const homeId = m.homeTeamId!;
-    const awayId = m.awayTeamId!;
-    const homeRes = outcomeForTeam(m, homeId);
-    const awayRes = outcomeForTeam(m, awayId);
-    if (homeRes) push(homeId, homeRes);
-    if (awayRes) push(awayId, awayRes);
-  }
-
-  for (const [teamId, arr] of resultsByTeam.entries()) {
-    if (!arr.length) { map.set(teamId, null); continue; }
-
-    // streak ignores D (your UI currently shows (-) when no streak)
-    // If last result is D => no streak
-    const last = arr[arr.length - 1];
-    if (last === "D") { map.set(teamId, null); continue; }
-
-    let n = 1;
-    for (let i = arr.length - 2; i >= 0; i--) {
-      if (arr[i] === last) n++;
-      else break;
-    }
-    map.set(teamId, { type: last, n });
-  }
-
-  return map;
-}, [sheetFixtures, lastCompletedWeek]);
-
-function isSheetPlayableRow(r: SheetFixtureRow) {
-  // “playable” = an actual matchup row (regular/playoffs/consolation), not the header label rows
-  return !isSheetLabelRow(r);
-}
-
-function isFantasyWeekCompleteFromSheet(weekNo: number) {
-  const rows = sheetFixtures.filter((r) => Number(r.weekFantasy) === weekNo && isSheetPlayableRow(r));
-  if (rows.length === 0) return false;
-  return rows.every((r) => String(r.status ?? "").toLowerCase() === "complete");
-}
-
-function latestCompletedWeekFromSheet() {
-  const weeks = Array.from(
-    new Set(
-      sheetFixtures
-        .filter(isSheetPlayableRow)
-        .map((r) => Number(r.weekFantasy))
-        .filter((w) => Number.isFinite(w) && w > 0)
-    )
-  ).sort((a, b) => a - b);
-
-  let latest = 0;
-  for (const w of weeks) {
-    if (isFantasyWeekCompleteFromSheet(w)) latest = w;
-  }
-  return latest;
-}
-
-function currentWeekFromSheet() {
-  // current week = first non-complete playable week
-  const weeks = Array.from(
-    new Set(
-      sheetFixtures
-        .filter(isSheetPlayableRow)
-        .map((r) => Number(r.weekFantasy))
-        .filter((w) => Number.isFinite(w) && w > 0)
-    )
-  ).sort((a, b) => a - b);
-
-  for (const w of weeks) {
-    if (!isFantasyWeekCompleteFromSheet(w)) return w;
-  }
-  // if everything complete, fallback to latest complete
-  return latestCompletedWeekFromSheet() || 1;
-}
+const streakByTeamId = useMemo(() => teamStreaks(sheetFixtures, lastCompletedWeek), [sheetFixtures, lastCompletedWeek]);
 
   // Your team id (league team)
   const norm = (s: any) => String(s ?? "").trim().toLowerCase();
@@ -578,7 +187,7 @@ const getLivePlayerById = useDraftStore((s) => (s as any).getLivePlayerById ?? n
 // 1) The week we are currently selecting for (drives the deadline)
 const selectionWeek = useMemo(() => {
   if (!sheetFixtures.length) return activeLeague?.currentWeek ?? 1;
-  return currentWeekFromSheet(); // first non-complete week from sheet
+  return currentWeekFromSheet(sheetFixtures); // first non-complete week from sheet
 }, [sheetFixtures, activeLeague?.currentWeek]);
 
 const startRound = activeLeague?.startRound ?? 1;
@@ -825,63 +434,6 @@ type RosterApiRow = { team_id: string; data: any };
 const [rosterByTeamId, setRosterByTeamId] = useState<Map<string, any>>(new Map());
 const [selectionByTeamId, setSelectionByTeamId] = useState<Map<string, any>>(new Map());
 
-  // -----------------------
-// OWNER LOOKUP (from rosters table you already fetched)
-// -----------------------
-function rosterContainsPlayer(roster: any, playerId: string) {
-  if (!roster || !playerId) return false;
-
-  const target = String(playerId);
-
-  const itemMatches = (x: any) => {
-    if (x == null) return false;
-    if (typeof x === "string" || typeof x === "number") return String(x) === target;
-    if (typeof x === "object") {
-      if (x.id != null && String(x.id) === target) return true;
-      if (x.playerId != null && String(x.playerId) === target) return true;
-    }
-    return false;
-  };
-
-  // 0) roster itself may rarely be an array
-  if (Array.isArray(roster)) {
-    return roster.some(itemMatches);
-  }
-
-  if (typeof roster === "object") {
-    // 1) canonical ownership shape: playerIds
-    const playerIds = roster.playerIds ?? roster.data?.playerIds ?? null;
-    if (Array.isArray(playerIds) && playerIds.some(itemMatches)) return true;
-
-    // 2) slots arrays
-    const slots = roster.slots ?? roster.data?.slots ?? null;
-    if (slots && typeof slots === "object") {
-      for (const v of Object.values(slots)) {
-        if (Array.isArray(v) && v.some(itemMatches)) return true;
-      }
-    }
-
-    // 3) wildcards array
-    const wild = roster.wildcards ?? roster.data?.wildcards ?? null;
-    if (Array.isArray(wild) && wild.some(itemMatches)) return true;
-
-    // 4) lineup-style keys directly on roster
-    for (const v of Object.values(roster)) {
-      if (itemMatches(v)) return true;
-    }
-
-    // 5) nested lineup
-    const lineup = roster.lineup ?? roster.data?.lineup ?? null;
-    if (lineup && typeof lineup === "object") {
-      for (const v of Object.values(lineup)) {
-        if (itemMatches(v)) return true;
-      }
-    }
-  }
-
-  return false;
-}
-
 const ownerTeamIdForSelected = useMemo(() => {
   if (!selectedPlayer?.id) return null;
 
@@ -1024,60 +576,6 @@ if (!lineup) return null;
     viceId: data.viceId ?? null,
   };
 }
-function rosterDataToLineup(data: any): Lineup | null {
-  if (!data) return null;
-
-  // If it already looks like a Lineup (SlotId keys), return it
-  if (data.prop1 || data.hooker1 || data.bench1) return data as Lineup;
-  if (data.lineup && (data.lineup.prop1 || data.lineup.bench1)) return data.lineup as Lineup;
-
-  const slots = data.slots ?? {};
-  const wild = Array.isArray(data.wildcards) ? data.wildcards : [];
-
-  const arr = (k: string) => (Array.isArray(slots?.[k]) ? slots[k] : []);
-  const get = (a: any[], i: number) => (Array.isArray(a) ? a[i] ?? null : null);
-
-  const PR = arr("PR");
-  const HO = arr("HO");
-  const LK = arr("LK");
-  const LF = arr("LF");
-  const HB = arr("HB");
-  const FH = arr("FH");
-  const CE = arr("CE");
-  const OB = arr("OB");
-
-  const lineup: Lineup = {
-    prop1: get(PR, 0),
-    hooker1: get(HO, 0),
-    prop2: get(PR, 1),
-
-    lock1: get(LK, 0),
-    lock2: get(LK, 1),
-
-    looseforward1: get(LF, 0),
-    looseforward2: get(LF, 1),
-    looseforward3: get(LF, 2),
-
-    halfback1: get(HB, 0),
-    flyhalf1: get(FH, 0),
-
-    centre1: get(CE, 0),
-    centre2: get(CE, 1),
-
-    outsideback1: get(OB, 0),
-    outsideback2: get(OB, 1),
-    outsideback3: get(OB, 2),
-
-    bench1: wild[0] ?? null,
-    bench2: wild[1] ?? null,
-    bench3: wild[2] ?? null,
-    bench4: wild[3] ?? null,
-    bench5: wild[4] ?? null,
-  };
-
-  return lineup;
-}
-
 const readSnapshot = (teamId: string | null): LockedSnapshot | null => {
   if (!mounted) return null;            // ✅ ADD
   if (typeof window === "undefined") return null;
@@ -1358,11 +856,7 @@ const shieldDefender: string | null = (() => {
   return n && n.week === displayWeek && pairIs(n.homeTeamId, n.awayTeamId) ? n.homeTeamId : null;
 })();
 const shieldTag = (teamId: string | null) =>
-  !shieldDefender || !teamId ? null : (
-    <div style={{ marginTop: 2, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, color: "#6a4426" }}>
-      {teamId === shieldDefender ? "SHIELD DEFENCE" : "SHIELD CHALLENGE"}
-    </div>
-  );
+  !shieldDefender || !teamId ? null : teamId === shieldDefender ? "SHIELD DEFENCE" : "SHIELD CHALLENGE";
 const holdsShield = (teamId: string | null) => !!shieldInfo && !!teamId && shieldInfo.holderTeamId === teamId;
 
 // ---- Expected points + win probability (F2, ESPN-style; Ethan 19 Nov 2026):
@@ -1430,10 +924,6 @@ const leftWinPct = (() => {
   return leftOutlook && rightOutlook ? Math.round(winProbability(leftOutlook, rightOutlook) * 100) : null;
 })();
 
-// The captain's projection is in purple (like his points pill) to show it has been doubled
-// (Ethan, 20 Nov 2026).
-const CAPTAIN_PROJ_STYLE = { fontWeight: 700, color: "#9333ea" } as const;
-
 /** A player's projection for the row (x2 for the captain, like his points): live while his game is on. */
 function projText(p: Player | null, captainId: string | null): string | null {
   if (!showProj || !p?.id) return null;
@@ -1445,15 +935,6 @@ function projText(p: Player | null, captainId: string | null): string | null {
   return formatProjection(p.id === captainId ? pts * CAP_MULT : pts);
 }
 
-// -----------------------
-// RECORD + STREAK (TEMP MOCK)
-// -----------------------
-
-function streakColor(s: Streak) {
-  if (!s) return "rgba(15,23,42,0.55)";
-  return s.type === "W" ? "#16a34a" : "#dc2626"; // green / red
-}
-
 // TEMP placeholders until you wire real data
 const leftRecord = (leftTeamId ? recordByTeamId.get(leftTeamId) : null) ?? { w: 0, l: 0, d: 0 };
 const rightRecord = (rightTeamId ? recordByTeamId.get(rightTeamId) : null) ?? { w: 0, l: 0, d: 0 };
@@ -1461,42 +942,8 @@ const rightRecord = (rightTeamId ? recordByTeamId.get(rightTeamId) : null) ?? { 
 const leftStreak: Streak = (leftTeamId ? streakByTeamId.get(leftTeamId) : null) ?? null;
 const rightStreak: Streak = (rightTeamId ? streakByTeamId.get(rightTeamId) : null) ?? null;
 
-function recordText(r: { w: number; l: number; d: number }) {
-  return `${r.w}-${r.l}-${r.d} `;
-}
-
-function streakText(s: Streak) {
-  if (!s) return "(-)";
-  return `(${s.type}${s.n})`;
-}
-
-  // Fixture tag helper for player rows for THIS week (code-based, fixes MOA/MOP)
-const fixtureTagForPlayer = (p: Player | null) => {
-  if (!p) return "—";
-
-  const playerCode = normalizeTeamCode(p.teamCode);
-  if (!playerCode) return "BYE";
-
-  const f = normalizedFixtures.find((x) => {
-    if (x.week !== displayRealRound) return false;
-
-    const homeCode = normalizeTeamCode(x.homeTeam ?? "");
-    const awayCode = normalizeTeamCode(x.awayTeam ?? "");
-
-    return homeCode === playerCode || awayCode === playerCode;
-  });
-
-  if (!f) return "BYE";
-
-  const homeCode = normalizeTeamCode(f.homeTeam ?? "");
-  const awayCode = normalizeTeamCode(f.awayTeam ?? "");
-
-  const isHome = homeCode === playerCode;
-  const oppCode = isHome ? awayCode : homeCode;
-
-  if (!oppCode) return "BYE";
-  return `${oppCode} (${isHome ? "H" : "A"})`;
-};
+// Fixture tag for player rows for THIS week
+const fixtureTagForPlayer = (p: Player | null) => fixtureTagFor(p, normalizedFixtures, displayRealRound);
 
 function openPlayerCard(p: Player, owned: boolean, side: "left" | "right") {
   setSelectedPlayer(p);
@@ -1533,43 +980,6 @@ return (
   setPointsOpen(true);
 }
 
-  // --- Styling (match your app vibe) ---
-  const card35: React.CSSProperties = { ...themeCard, padding: undefined };
-
-  const listBox: React.CSSProperties = {
-    marginTop: 10,
-    borderRadius: 12,
-    background: "rgba(255,255,255,0.92)",
-    border: "1px solid rgba(0,0,0,0.08)",
-    overflow: "hidden",
-    color: "#0f172a",
-  };
-
-  function Hamburger() {
-    return (
-      <button
-        onClick={() => setMenuOpen(true)}
-        aria-label="Open menu"
-        style={{
-          background: "transparent",
-          border: "none",
-          padding: 0,
-          margin: 0,
-          color: "inherit",
-          fontSize: 30,
-          fontWeight: 700,
-          lineHeight: "30px",
-          cursor: "pointer",
-        }}
-      >
-        ☰
-      </button>
-    );
-  }
-
-  
-
-  
   // Row order (matches your design)
   const ROWS: Array<{ slot: SlotId; label: string }> = STARTER_SLOTS.map((slot) => ({ slot, label: slotShortLabel(slot) }));
 
@@ -1588,6 +998,69 @@ return (
 
   const canGo = matchupsThisWeek.length > 1;
 
+  // ---- What the scoreboard and lineup rows show (components/matchup) ----
+  const scoreSide = (
+    teamId: string | null,
+    name: string,
+    record: TeamRecord,
+    streak: Streak,
+    score: number,
+    outlook: { expected: number } | null
+  ): ScoreboardSide => ({
+    teamId,
+    name,
+    pictureUrl: teamPicture(teamId),
+    initials: teamInitials(teamId),
+    stars: teamStars(teamId),
+    holdsShield: holdsShield(teamId),
+    record,
+    streak,
+    shieldTag: shieldTag(teamId),
+    score,
+    projected: outlook ? outlook.expected : null,
+  });
+
+  const lineupCell = (p: Player | null, side: "left" | "right", pill: CellPill, proj: LineupCell["proj"]): LineupCell => {
+    const teamId = side === "left" ? leftTeamId : rightTeamId;
+    return {
+      player: p,
+      fixtureTag: p ? fixtureTagForPlayer(p) : "—",
+      pill,
+      proj,
+      onOpenCard: () => {
+        if (p) openPlayerCard(p, teamId === yourLeagueTeamId, side);
+      },
+      onOpenPoints: () => {
+        if (p) openPointsBreakdown(p, teamId === yourLeagueTeamId, side);
+      },
+    };
+  };
+
+  // a starter's points pill: purple for the captain (or the vice once activated), a purple ring for the vice
+  const starterPill = (p: Player | null, effCaptainId: string | null, captainId: string | null, viceId: string | null): CellPill => {
+    const isVice = !!p?.id && viceId === p.id;
+    const isActiveCaptain = !!p?.id && effCaptainId === p.id; // captain OR activated vice
+    return {
+      text: p ? (hasScoreForPlayer(p) ? pointsWithCaptain(p, effCaptainId) : "-") : "—",
+      look: isActiveCaptain ? "captain" : isVice ? "vice" : "plain",
+      title: isActiveCaptain
+        ? `Captain x${CAP_MULT}${isVice && captainId !== viceId ? " (VC activated)" : ""}`
+        : isVice
+          ? "Vice Captain"
+          : "Player points",
+    };
+  };
+  const starterProj = (p: Player | null, captainId: string | null): LineupCell["proj"] => {
+    const text = projText(p, captainId);
+    return text ? { text, captain: !!p?.id && p.id === captainId } : null;
+  };
+  // a bench (or IR) player's pill: IR players don't score
+  const benchPill = (p: Player | null, ir: boolean, effCaptainId: string | null, captainId: string | null): CellPill => ({
+    text: ir ? (p?.id ? "-" : "—") : p?.id ? (hasScoreForPlayer(p) ? pointsWithCaptain(p, effCaptainId) : "-") : "—",
+    look: "bench",
+    title: !!p?.id && captainId === p.id ? `Captain x${CAP_MULT}` : "Player points",
+  });
+
   return (
     <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
       <div
@@ -1601,744 +1074,63 @@ return (
       />
 
       <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px", paddingBottom: "calc(18px + env(safe-area-inset-bottom))" }}>
-        {/* Header */}
-        <div
-  style={{
-    ...card35,
-    padding: 14,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-    position: "relative",   // ✅ allows bottom-right positioning
-    minHeight: 92,          // ✅ ensures space for arrows
-  }}
->
+        <MatchupHeader
+          onOpenMenu={() => setMenuOpen(true)}
+          canGo={canGo}
+          matchupIdx={matchupIdx}
+          matchupCount={matchupsThisWeek.length}
+          onPrevMatchup={() => setMatchupIdx((i) => (i - 1 + matchupsThisWeek.length) % matchupsThisWeek.length)}
+          onNextMatchup={() => setMatchupIdx((i) => (i + 1) % matchupsThisWeek.length)}
+          mounted={mounted}
+          displayWeek={displayWeek}
+          latestWeek={latestWeek}
+          goWeek={goWeek}
+        />
 
-          {/* Top row (just hamburger) */}
-<div style={{ display: "flex", alignItems: "center" }}>
-  {Hamburger()}
-</div>
-{/* Large page title */}
-<div
-  style={{
-    marginTop: 10,
-    fontSize: 20,
-    fontWeight: 700,
-    lineHeight: "20px",
-  }}
->
-  Match Up
-</div>
-
-{/* Matchup navigation – bottom right */}
-<div
-  style={{
-    position: "absolute",
-    right: 12,
-    bottom: 10,
-    display: "flex",
-    alignItems: "center",
-    gap: 4,
-  }}
->
-  <div style={{ position: "relative", width: 22, height: 22 }}>
-  {/* Invisible big hitbox (does NOT affect layout) */}
-  <button
-    disabled={!canGo}
-    onClick={() =>
-      setMatchupIdx((i) => (i - 1 + matchupsThisWeek.length) % matchupsThisWeek.length)
-    }
-    aria-label="Previous matchup"
-    style={{
-      position: "absolute",
-      inset: -12,            // ✅ controls hitbox size (bigger click area)
-      border: "none",
-      background: "transparent",
-      padding: 0,
-      margin: 0,
-      cursor: canGo ? "pointer" : "not-allowed",
-    }}
-  />
-
-  {/* Visible arrow (not clickable; click goes to invisible button) */}
-  <div
-    aria-hidden="true"
-    style={{
-      position: "absolute",
-      inset: 0,
-      display: "grid",
-      placeItems: "center",
-      pointerEvents: "none",
-      color: canGo ? "#0f172a" : "rgba(15,23,42,0.25)",
-      fontSize: 22,
-      fontWeight: 700,
-      lineHeight: "22px",
-    }}
-  >
-    ‹
-  </div>
-</div>
-
-  <div
-    style={{
-      fontSize: 13,
-      fontWeight: 700,
-      color: "#0f172a",
-      whiteSpace: "nowrap",
-    }}
-  >
-    {canGo ? `Matchup ${matchupIdx + 1} of ${matchupsThisWeek.length}` : "Matchup"}
-  </div>
-
-  <div style={{ position: "relative", width: 22, height: 22 }}>
-  <button
-    disabled={!canGo}
-    onClick={() => setMatchupIdx((i) => (i + 1) % matchupsThisWeek.length)}
-    aria-label="Next matchup"
-    style={{
-      position: "absolute",
-      inset: -12,
-      border: "none",
-      background: "transparent",
-      padding: 0,
-      margin: 0,
-      cursor: canGo ? "pointer" : "not-allowed",
-    }}
-  />
-
-  <div
-    aria-hidden="true"
-    style={{
-      position: "absolute",
-      inset: 0,
-      display: "grid",
-      placeItems: "center",
-      pointerEvents: "none",
-      color: canGo ? "#0f172a" : "rgba(15,23,42,0.25)",
-      fontSize: 22,
-      fontWeight: 700,
-      lineHeight: "22px",
-    }}
-  >
-    ›
-  </div>
-</div>
-</div>
-
-<div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6, minHeight: 24 }}>
-  {mounted && displayWeek > 0 ? (
-    <button
-      onClick={() => goWeek(displayWeek - 1)}
-      disabled={displayWeek <= 1}
-      aria-label="Previous round"
-      style={{ border: "none", background: "transparent", padding: "0 4px", fontSize: 22, fontWeight: 700, lineHeight: "22px", color: displayWeek <= 1 ? "rgba(15,23,42,0.25)" : "#0f172a", cursor: displayWeek <= 1 ? "default" : "pointer" }}
-    >
-      ‹
-    </button>
-  ) : null}
-  <span style={{ fontSize: 16, fontWeight: 700, opacity: 0.95 }}>{!mounted ? "Loading…" : displayWeek <= 0 ? "Pre-season" : roundLabel(displayWeek)}</span>
-  {mounted && displayWeek > 0 ? (
-    <button
-      onClick={() => goWeek(displayWeek + 1)}
-      disabled={displayWeek >= latestWeek}
-      aria-label="Next round"
-      style={{ border: "none", background: "transparent", padding: "0 4px", fontSize: 22, fontWeight: 700, lineHeight: "22px", color: displayWeek >= latestWeek ? "rgba(15,23,42,0.25)" : "#0f172a", cursor: displayWeek >= latestWeek ? "default" : "pointer" }}
-    >
-      ›
-    </button>
-  ) : null}
-</div>
-
-{/* looking at an earlier round: a way straight back (top right of the card) */}
-{mounted && displayWeek > 0 && displayWeek < latestWeek ? (
-  <button
-    onClick={() => goWeek(latestWeek)}
-    style={{ position: "absolute", top: 18, right: 14, border: "1px solid #99f6e4", background: "#f0fdfa", borderRadius: 999, padding: "4px 10px", fontSize: 11, fontWeight: 700, color: "#0f766e", cursor: "pointer" }}
-  >
-    Back to {roundLabel(latestWeek)} ›
-  </button>
-) : null}
-
-        </div>
-
-        {/* Scoreboard */}
-        <div style={{ marginTop: 10, ...listBox, padding: 10 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10 }}>
-            {/* tap a team: its profile pop-up (components/TeamProfileModal.tsx) */}
-            <div style={{ textAlign: "left", cursor: leftTeamId ? "pointer" : "default" }} onClick={() => leftTeamId && useTeamProfileStore.getState().openTeam(leftTeamId)}>
-              {leftTeamId ? (
-                // the Shield sits beside the holder's team picture (Ethan, 19 Nov 2026)
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, marginTop: 6 }}>
-                  <TeamAvatar pictureUrl={teamPicture(leftTeamId)} initials={teamInitials(leftTeamId)} size={44} stars={teamStars(leftTeamId)} />
-                  {holdsShield(leftTeamId) ? <ShieldIcon size={28} title={`${shieldInfo?.name} holder`} /> : null}
-                </div>
-              ) : null}
-              <div style={{ fontSize: 18, fontWeight: 700 }}>{leftName}</div>
-
-<div style={{ fontSize: 13, fontWeight: 700, opacity: 0.75 }}>
-  {recordText(leftRecord)}{" "}
-  <span style={{ color: streakColor(leftStreak), fontWeight: 500 }}>
-    {streakText(leftStreak)}
-  </span>
-</div>
-{mounted ? shieldTag(leftTeamId) : null}
-
-            </div>
-
-            <div style={{ fontSize: 18, fontWeight: 700, opacity: 0.85 }}></div>
-
-            <div style={{ textAlign: "right", cursor: rightTeamId ? "pointer" : "default" }} onClick={() => rightTeamId && useTeamProfileStore.getState().openTeam(rightTeamId)}>
-              {rightTeamId ? (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, marginBottom: 6, marginTop: 6 }}>
-                  {holdsShield(rightTeamId) ? <ShieldIcon size={28} title={`${shieldInfo?.name} holder`} /> : null}
-                  <TeamAvatar pictureUrl={teamPicture(rightTeamId)} initials={teamInitials(rightTeamId)} size={44} stars={teamStars(rightTeamId)} />
-                </div>
-              ) : null}
-              <div style={{ fontSize: 18, fontWeight: 700 }}>{rightName}</div>
-
-<div style={{ fontSize: 13, fontWeight: 700, opacity: 0.75 }}>
-  {recordText(rightRecord)}{" "}
-  <span style={{ color: streakColor(rightStreak), fontWeight: 500 }}>
-    {streakText(rightStreak)}
-  </span>
-</div>
-{mounted ? shieldTag(rightTeamId) : null}
-
-            </div>
-          </div>
-
-          <div
-  style={{
-    marginTop: 8,
-    display: "grid",
-    gridTemplateColumns: "1fr auto 1fr",
-    alignItems: "center",
-  }}
->
-  {/* Left total pulled inward */}
-  <div style={{ display: "flex", justifyContent: "flex-end", paddingRight: 20 }}>
-    <div style={{ textAlign: "right" }}>
-      <div style={{ ...num, fontSize: 34, fontWeight: 600, lineHeight: 1 }}>{leftScore}</div>
-      {leftOutlook ? <div style={{ ...num, fontSize: 14, fontWeight: 500, color: muted, marginTop: 3 }} title="Expected points">Proj {formatProjection(leftOutlook.expected)}</div> : null}
-    </div>
-  </div>
-
-  <div style={{ textAlign: "center" }}>
-    <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.7 }}>vs</div>
-    {/* shown once the page has loaded in the browser (the server has no league data yet) */}
-    {mounted && (scoresLocked || displayLocked || (displayWeek > 0 && displayWeek === selectionWeek)) ? (
-      <div style={{ marginTop: 2, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, opacity: 0.6 }}>
-        {scoresLocked ? "FINAL" : displayLocked ? "LIVE" : "UPCOMING"}
-      </div>
-    ) : null}
-
-  </div>
-
-  {/* Right total pulled inward */}
-  <div style={{ display: "flex", justifyContent: "flex-start", paddingLeft: 20 }}>
-    <div style={{ textAlign: "left" }}>
-      <div style={{ ...num, fontSize: 34, fontWeight: 600, lineHeight: 1 }}>{rightScore}</div>
-      {rightOutlook ? <div style={{ ...num, fontSize: 14, fontWeight: 500, color: muted, marginTop: 3 }} title="Expected points">Proj {formatProjection(rightOutlook.expected)}</div> : null}
-    </div>
-  </div>
-</div>
-
-{/* Win probability (from the projections; moves as real points come in) */}
-{leftWinPct != null ? (
-  <div style={{ marginTop: 10 }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, fontWeight: 700 }}>
-      <span>{leftWinPct}%</span>
-      <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.6 }}>Win Probability</span>
-      <span>{100 - leftWinPct}%</span>
-    </div>
-    <div style={{ marginTop: 4, height: 6, borderRadius: 999, overflow: "hidden", display: "flex", background: "rgba(15,23,42,0.12)" }}>
-      <div style={{ width: `${leftWinPct}%`, background: "#16a34a", transition: "width 0.4s" }} />
-      <div style={{ flex: 1, background: "rgba(15,23,42,0.35)" }} />
-    </div>
-  </div>
-) : null}
-
-        </div>
+        <Scoreboard
+          left={scoreSide(leftTeamId, leftName, leftRecord, leftStreak, leftScore, leftOutlook)}
+          right={scoreSide(rightTeamId, rightName, rightRecord, rightStreak, rightScore, rightOutlook)}
+          mounted={mounted}
+          shieldName={shieldInfo?.name}
+          statusLabel={
+            // shown once the page has loaded in the browser (the server has no league data yet)
+            mounted && (scoresLocked || displayLocked || (displayWeek > 0 && displayWeek === selectionWeek))
+              ? scoresLocked ? "FINAL" : displayLocked ? "LIVE" : "UPCOMING"
+              : null
+          }
+          leftWinPct={leftWinPct}
+        />
 
         {/* Lineups */}
         <div style={{ marginTop: 10, ...listBox }}>
           {ROWS.map((r) => {
             const lp = effectiveLeftLineup ? effectiveLeftLineup[r.slot] : null;
-const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
-
+            const rp = effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
             return (
-              <div
+              <LineupRow
                 key={r.slot}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 34px 1fr",
-                  gap: 10,
-                  padding: "7px 10px",
-                  borderTop: "1px solid rgba(0,0,0,0.08)",
-                  alignItems: "center",
-                }}
-              >
-                {/* Left player */}
-                <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 8, alignItems: "center", minWidth: 0 }}>
-                  <button
-  onClick={() => lp && openPlayerCard(lp, leftTeamId === yourLeagueTeamId, "left")
-}
-  style={{ background: "transparent", border: "none", padding: 0, margin: 0, cursor: lp ? "pointer" : "default" }}
-  aria-label="Open player card"
->
-  {lp ? (() => {
-  const src = jerseySrcForPlayer(lp, "angle");
-  return src ? (
-    <img
-      src={src}
-      alt=""
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: 8,
-        objectFit: "contain",
-        display: "block",
-      }}
-    />
-  ) : (
-    <div style={{ width: 28, height: 28 }} />
-  );
-})() : (
-  <div style={{ width: 28, height: 28 }} />
-)}
-</button>
-
-                  <div style={{ minWidth: 0 }}>
-                    <div
-  onClick={() => lp && openPlayerCard(lp, leftTeamId === yourLeagueTeamId, "left")
-}
-  style={{
-    fontSize: 12,
-    fontWeight: 700,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    cursor: lp ? "pointer" : "default",
-  }}
->
-  {lp ? lp.lastName : "—"}
-</div>
-
-                    <div style={{ fontSize: 10, fontWeight: 600, opacity: 0.55 }}>
-                      {lp ? fixtureTagForPlayer(lp) : "—"}
-
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-  
-
-  {/* Score pill */}
-  {(() => {
-  const isVice = !!lp?.id && leftV === lp.id;
-  const isActiveCaptain = !!lp?.id && leftEffC === lp.id; // captain OR activated vice
-
-  const pillBg = isActiveCaptain ? "rgba(168,85,247,0.95)" : "rgba(15,23,42,0.08)";
-  const pillColor = isActiveCaptain ? "white" : "#0f172a";
-  const pillBorder = isActiveCaptain
-    ? "0px solid rgba(255,255,255,0.9)" // captain style outline
-    : isVice
-      ? "2px solid rgba(168,85,247,0.95)" // vice thin purple border
-      : "1px solid transparent";
-
-  return (
-  <div
-    onClick={() => lp && openPointsBreakdown(lp, leftTeamId === yourLeagueTeamId, "left")
-}
-    style={{
-      minWidth: 32,
-      height: 20,
-      padding: "0 6px",
-      borderRadius: 999,
-      background: pillBg,
-      border: pillBorder,
-      display: "grid",
-      placeItems: "center",
-      ...num,
-      fontSize: 13,
-      fontWeight: 600,
-      color: pillColor,
-      cursor: lp ? "pointer" : "default",
-    }}
-    title={
-      isActiveCaptain
-        ? `Captain x${CAP_MULT}${isVice && leftC !== leftV ? " (VC activated)" : ""}`
-        : isVice
-          ? "Vice Captain"
-          : "Player points"
-    }
-  >
-    {lp ? (hasScoreForPlayer(lp) ? pointsWithCaptain(lp, leftEffC) : "-") : "—"}
-  </div>
-);
-
-})()}
-{projText(lp, leftC) ? <div style={{ ...num, fontSize: 10.5, ...(lp?.id && lp.id === leftC ? CAPTAIN_PROJ_STYLE : { fontWeight: 500, color: muted }), lineHeight: "12px" }} title={lp?.id && lp.id === leftC ? "Expected points (doubled for the captain)" : "Expected points"}>{projText(lp, leftC)}</div> : null}
-
-</div>
-
-                </div>
-
-                {/* Middle position */}
-                <div style={{ textAlign: "center", fontSize: 11, fontWeight: 700, opacity: 0.7 }}>
-                  {r.label}
-                </div>
-
-                {/* Right player */}
-                <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 8, alignItems: "center", minWidth: 0 }}>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-  {/* Score pill */}
-  {(() => {
-  const isVice = !!rp?.id && rightV === rp.id;
-  const isActiveCaptain = !!rp?.id && rightEffC === rp.id;
-
-  const pillBg = isActiveCaptain ? "rgba(168,85,247,0.95)" : "rgba(15,23,42,0.08)";
-  const pillColor = isActiveCaptain ? "white" : "#0f172a";
-  const pillBorder = isActiveCaptain
-    ? "0px solid rgba(255,255,255,0.9)"
-    : isVice
-      ? "2px solid rgba(168,85,247,0.95)"
-      : "1px solid transparent";
-
-  return (
-    <div
-  onClick={() => rp && openPointsBreakdown(rp, rightTeamId === yourLeagueTeamId, "right")
-}
-  style={{
-    minWidth: 32,
-    height: 20,
-    padding: "0 6px",
-    borderRadius: 999,
-    background: pillBg,
-    border: pillBorder,
-    display: "grid",
-    placeItems: "center",
-    ...num,
-    fontSize: 13,
-    fontWeight: 600,
-    color: pillColor,
-    cursor: rp ? "pointer" : "default",
-  }}
-
-      title={
-        isActiveCaptain
-          ? `Captain x${CAP_MULT}${isVice && rightC !== rightV ? " (VC activated)" : ""}`
-          : isVice
-            ? "Vice Captain"
-            : "Player points"
-      }
-    >
-      {rp ? (hasScoreForPlayer(rp) ? pointsWithCaptain(rp, rightEffC) : "-") : "—"}
-    </div>
-  );
-})()}
-{projText(rp, rightC) ? <div style={{ ...num, fontSize: 10.5, ...(rp?.id && rp.id === rightC ? CAPTAIN_PROJ_STYLE : { fontWeight: 500, color: muted }), lineHeight: "12px" }} title={rp?.id && rp.id === rightC ? "Expected points (doubled for the captain)" : "Expected points"}>{projText(rp, rightC)}</div> : null}
-
-</div>
-
-                  <div style={{ minWidth: 0, textAlign: "right" }}>
-                    <div
-  onClick={() => rp && openPlayerCard(rp, rightTeamId === yourLeagueTeamId, "right")
-}
-  style={{
-    fontSize: 12,
-    fontWeight: 700,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    cursor: rp ? "pointer" : "default",
-  }}
->
-  {rp ? rp.lastName : "—"}
-</div>
-
-                    <div style={{ fontSize: 10, fontWeight: 600, opacity: 0.55 }}>
-                      {rp ? fixtureTagForPlayer(rp) : "—"}
-
-                    </div>
-                  </div>
-
-                  <button
-  onClick={() => rp && openPlayerCard(rp, rightTeamId === yourLeagueTeamId, "right")
-}
-  style={{
-    background: "transparent",
-    border: "none",
-    padding: 0,
-    margin: 0,
-    cursor: rp ? "pointer" : "default",
-    justifySelf: "end",
-  }}
-  aria-label="Open player card"
->
-  {rp ? (() => {
-  const src = jerseySrcForPlayer(rp, "angle");
-  return src ? (
-    <img
-      src={src}
-      alt=""
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: 8,
-        objectFit: "contain",
-        display: "block",
-      }}
-    />
-  ) : (
-    <div style={{ width: 28, height: 28 }} />
-  );
-})() : (
-  <div style={{ width: 28, height: 28 }} />
-)}
-</button>
-
-                </div>
-              </div>
+                label={r.label}
+                left={lineupCell(lp, "left", starterPill(lp, leftEffC, leftC, leftV), starterProj(lp, leftC))}
+                right={lineupCell(rp, "right", starterPill(rp, rightEffC, rightC, rightV), starterProj(rp, rightC))}
+              />
             );
           })}
 
-          {/* Bench header */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr auto 1fr",
-              alignItems: "center",
-              padding: "8px 10px",
-              borderTop: "2px solid rgba(0,0,0,0.08)",
-              background: "rgba(15,23,42,0.06)",
-              fontSize: 12,
-              fontWeight: 700,
-            }}
-          >
-            <div>Bench</div>
-            <div style={{ opacity: 0.7 }}>{leftBenchScore} • {rightBenchScore}</div>
-            <div style={{ textAlign: "right" }}>Bench</div>
-          </div>
+          <BenchHeader leftScore={leftBenchScore} rightScore={rightBenchScore} />
 
           {BENCH_ROWS.map((r) => {
-  const lp = r.ir ? irPlayerOf(leftTeamId, r.irIndex) : effectiveLeftLineup ? effectiveLeftLineup[r.slot] : null;
-const rp = r.ir ? irPlayerOf(rightTeamId, r.irIndex) : effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
-
-  // (captain/vice badges technically don’t apply on bench, but leaving the logic harmless)
-  const lIsC = !!lp?.id && leftC === lp.id;
-  const lIsV = !!lp?.id && leftV === lp.id;
-  const rIsC = !!rp?.id && rightC === rp.id;
-  const rIsV = !!rp?.id && rightV === rp.id;
-
-  return (
-    <div
-      key={r.slot}
-      style={{
-        display: "grid",
-        gridTemplateColumns: "1fr 34px 1fr",
-        gap: 10,
-        padding: "7px 10px", // same as starters
-        borderTop: "1px solid rgba(0,0,0,0.08)",
-        alignItems: "center",
-      }}
-    >
-      {/* Left bench player (same format as starters) */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "auto 1fr auto",
-          gap: 8,
-          alignItems: "center",
-          minWidth: 0,
-        }}
-      >
-        <button
-  onClick={() => lp && openPlayerCard(lp, leftTeamId === yourLeagueTeamId, "left")
-}
-  style={{ background: "transparent", border: "none", padding: 0, margin: 0, cursor: lp ? "pointer" : "default" }}
-  aria-label="Open player card"
->
-  {lp ? (() => {
-  const src = jerseySrcForPlayer(lp, "angle");
-  return src ? (
-    <img
-      src={src}
-      alt=""
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: 8,
-        objectFit: "contain",
-        display: "block",
-      }}
-    />
-  ) : (
-    <div style={{ width: 28, height: 28 }} />
-  );
-})() : (
-  <div style={{ width: 28, height: 28 }} />
-)}
-</button>
-
-        <div style={{ minWidth: 0 }}>
-          <div
-  onClick={() => lp && openPlayerCard(lp, leftTeamId === yourLeagueTeamId, "left")
-}
-  style={{
-    fontSize: 12,
-    fontWeight: 700,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    cursor: lp ? "pointer" : "default",
-  }}
->
-  {lp ? lp.lastName : "—"}
-</div>
-
-          <div style={{ fontSize: 10, fontWeight: 600, opacity: 0.55 }}>
-            {lp ? fixtureTagForPlayer(lp) : "—"}
-          </div>
-        </div>
-
-        {/* MOVE pill closer to centre:
-            keep this column, but align it to the right edge of the left side,
-            which is closest to the middle */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-          {/* Bench score pill */}
-          <div
-  onClick={() => lp && openPointsBreakdown(lp, leftTeamId === yourLeagueTeamId, "left")
-}
-  style={{
-    minWidth: 32,
-    height: 20,
-    padding: "0 6px",
-    borderRadius: 999,
-    background: "rgba(15,23,42,0.08)",
-    display: "grid",
-    placeItems: "center",
-    ...num,
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#0f172a",
-    cursor: lp ? "pointer" : "default",
-  }}
-  title={lIsC ? `Captain x${CAP_MULT}` : "Player points"}
->
-  {r.ir ? (lp?.id ? "-" : "—") : lp?.id ? (hasScoreForPlayer(lp) ? pointsWithCaptain(lp, leftEffC) : "-") : "—"}
-</div>
-{!r.ir && projText(lp, null) ? <div style={{ ...num, fontSize: 10.5, fontWeight: 500, color: muted, lineHeight: "12px" }} title="Expected points">{projText(lp, null)}</div> : null}
-
-          
-        </div>
-      </div>
-
-      {/* Middle bench number (1–5), or IR */}
-      <div style={{ textAlign: "center", fontSize: 11, fontWeight: 700, opacity: r.ir ? 1 : 0.7, color: r.ir ? "#dc2626" : undefined }}>
-        {r.label}
-      </div>
-
-      {/* Right bench player (same format as starters) */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "auto 1fr auto",
-          gap: 8,
-          alignItems: "center",
-          minWidth: 0,
-        }}
-      >
-        {/* MOVE pill closer to centre:
-            this column sits on the left of the right side, which is closest to middle */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-          
-
-          {/* Bench score pill */}
-          <div
-  onClick={() => rp && openPointsBreakdown(rp, rightTeamId === yourLeagueTeamId, "right")
-}
-  style={{
-    minWidth: 32,
-    height: 20,
-    padding: "0 6px",
-    borderRadius: 999,
-    background: "rgba(15,23,42,0.08)",
-    display: "grid",
-    placeItems: "center",
-    ...num,
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#0f172a",
-    cursor: rp ? "pointer" : "default",
-  }}
-  title={rIsC ? `Captain x${CAP_MULT}` : "Player points"}
->
-  {r.ir ? (rp?.id ? "-" : "—") : rp?.id ? (hasScoreForPlayer(rp) ? pointsWithCaptain(rp, rightEffC) : "-") : "—"}
-</div>
-{!r.ir && projText(rp, null) ? <div style={{ ...num, fontSize: 10.5, fontWeight: 500, color: muted, lineHeight: "12px" }} title="Expected points">{projText(rp, null)}</div> : null}
-
-        </div>
-
-        <div style={{ minWidth: 0, textAlign: "right" }}>
-          <div
-  onClick={() => rp && openPlayerCard(rp, rightTeamId === yourLeagueTeamId, "right")
-}
-  style={{
-    fontSize: 12,
-    fontWeight: 700,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    cursor: rp ? "pointer" : "default",
-  }}
->
-  {rp ? rp.lastName : "—"}
-</div>
-
-          <div style={{ fontSize: 10, fontWeight: 600, opacity: 0.55 }}>
-            {rp ? fixtureTagForPlayer(rp) : "—"}
-          </div>
-        </div>
-
-        <button
-  onClick={() => rp && openPlayerCard(rp, rightTeamId === yourLeagueTeamId, "right")
-}
-  style={{
-    background: "transparent",
-    border: "none",
-    padding: 0,
-    margin: 0,
-    cursor: rp ? "pointer" : "default",
-    justifySelf: "end",
-  }}
-  aria-label="Open player card"
->
-  {rp ? (() => {
-  const src = jerseySrcForPlayer(rp, "angle");
-  return src ? (
-    <img
-      src={src}
-      alt=""
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: 8,
-        objectFit: "contain",
-        display: "block",
-      }}
-    />
-  ) : (
-    <div style={{ width: 28, height: 28 }} />
-  );
-})() : (
-  <div style={{ width: 28, height: 28 }} />
-)}
-</button>
-
-      </div>
-    </div>
-  );
-})}
-
+            const lp = r.ir ? irPlayerOf(leftTeamId, r.irIndex) : effectiveLeftLineup ? effectiveLeftLineup[r.slot] : null;
+            const rp = r.ir ? irPlayerOf(rightTeamId, r.irIndex) : effectiveRightLineup ? effectiveRightLineup[r.slot] : null;
+            return (
+              <LineupRow
+                key={r.slot}
+                label={r.label}
+                ir={!!r.ir}
+                left={lineupCell(lp, "left", benchPill(lp, !!r.ir, leftEffC, leftC), r.ir ? null : starterProj(lp, null))}
+                right={lineupCell(rp, "right", benchPill(rp, !!r.ir, rightEffC, rightC), r.ir ? null : starterProj(rp, null))}
+              />
+            );
+          })}
         </div>
       </div>
 
