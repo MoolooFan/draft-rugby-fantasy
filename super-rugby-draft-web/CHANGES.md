@@ -19,6 +19,13 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 ## Changes
 
+### 21 Nov 2026
+
+| Code | What changed | Database |
+|---|---|---|
+| `04bae63` | AI coach articles: paste a link in Admin → Coach and the site reads it and finds the players and teams it mentions (or says why it can’t, so you paste the text); coach notes use the parts about each player. Coach notes box now 1,500 characters | Yes |
+| `82e9fe3` | Draft Strategy page (round-by-round plan, position targets, do-not-draft list, your own rankings) and Mock Draft against computer teams (last 5 kept on the device). Auto-pick now uses the strategy after the watchlist; the draft room shows your plan, targets and Plan / Avoid tags | Yes |
+
 ### 20 Nov 2026
 
 | Code | What changed | Database |
