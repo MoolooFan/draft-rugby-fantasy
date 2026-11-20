@@ -39,6 +39,7 @@ import { teamOutlook, winProbability } from "@/lib/projections/live";
 import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
 import { ladderOrder, tieBreakHolder } from "@/lib/league/ladder";
 import { MovementCircle } from "@/components/MovementCircle";
+import { useTeamProfileStore } from "@/lib/league/teamProfileStore";
 import type { PowerTable } from "@/lib/league/powerServer";
 
 type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null } | null;
@@ -58,6 +59,7 @@ type DashboardState = "noLeague" | "preDraft" | "postDraft";
 type Movement = "same" | "up" | "down";
 type StandingRow = {
   rank: number;
+  teamId: string;
   team: string;
   pts: number;
   movement: Movement;
@@ -1391,6 +1393,7 @@ const standings: StandingRow[] = useMemo(() => {
 
       return {
         rank,
+        teamId: r.teamId,
         team: r.teamName,
         pts: r.pts,
         movement,
@@ -2191,6 +2194,7 @@ const PostDraft = useStableComponent(PostDraft__render);
 const ScoreBlock = useStableComponent(ScoreBlock__render);
 
   function StandingsCard__render() {
+    const openTeam = useTeamProfileStore.getState().openTeam; // tap a team: its profile pop-up
     return (
       <div style={cardStyle}>
         <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 8 }}>{leagueName}</div>
@@ -2215,7 +2219,12 @@ const ScoreBlock = useStableComponent(ScoreBlock__render);
           {standings.map((r) => (
             <div
               key={r.rank}
+              role="button"
+              tabIndex={0}
+              onClick={() => openTeam(r.teamId)}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openTeam(r.teamId)}
               style={{
+                cursor: "pointer",
                 display: "grid",
                 gridTemplateColumns: "56px 1fr 44px",
                 gap: 8,
@@ -2264,6 +2273,7 @@ const StandingsCard = useStableComponent(StandingsCard__render);
   // The power rankings, in the standings' place until round 1 kicks off
   function PowerCard__render() {
     const rows = preseasonPower?.rows ?? [];
+    const openTeam = useTeamProfileStore.getState().openTeam; // tap a team: its profile pop-up
     return (
       <div style={cardStyle}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
@@ -2280,7 +2290,11 @@ const StandingsCard = useStableComponent(StandingsCard__render);
             return (
               <div
                 key={r.teamId}
-                style={{ display: "grid", gridTemplateColumns: "56px 1fr", gap: 8, alignItems: "center", borderRadius: 10, background: "#f6f8fa", border: "1px solid #e5e9ef", padding: "6px 6px", fontSize: 12 }}
+                role="button"
+                tabIndex={0}
+                onClick={() => openTeam(r.teamId)}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openTeam(r.teamId)}
+                style={{ display: "grid", gridTemplateColumns: "56px 1fr", gap: 8, alignItems: "center", borderRadius: 10, background: "#f6f8fa", border: "1px solid #e5e9ef", padding: "6px 6px", fontSize: 12, cursor: "pointer" }}
               >
                 <span style={{ width: 16, textAlign: "right", fontWeight: 700 }}>{r.rank}</span>
                 <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{t?.name ?? "—"}</div>

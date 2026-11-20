@@ -8,6 +8,7 @@ import ScoringRulesSync from "@/components/ScoringRulesSync";
 import LeagueSync from "@/components/LeagueSync";
 import ChatNotifier from "@/components/ChatNotifier";
 import { PlayerCompareHost } from "@/components/PlayerCompare";
+import { TeamProfileHost } from "@/components/TeamProfileModal";
 import { LeagueStakesPrompt } from "@/components/LeagueStakes";
 import { demo, demoClockSource } from "@/lib/demo";
 
@@ -115,6 +116,8 @@ export default async function RootLayout({
             {children}
             {/* compare two players, from any page (player card Compare button, Stats Hub) */}
             {sessionProfile ? <PlayerCompareHost /> : null}
+            {/* a team's profile, tapping a team on the standings / power rankings / dashboard / matchup */}
+            {sessionProfile ? <TeamProfileHost /> : null}
             {/* league rewards / punishments: "I agree" until each league mate has */}
             {sessionProfile ? <LeagueStakesPrompt /> : null}
           </ScoringRulesSync>

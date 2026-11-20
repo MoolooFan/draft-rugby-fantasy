@@ -37,6 +37,7 @@ import { CrownIcon, ShieldIcon, SpoonIcon } from "@/components/AwardIcons";
 import { ShieldTab } from "@/components/ShieldTab";
 import { PowerTab } from "@/components/PowerTab";
 import { MovementCircle } from "@/components/MovementCircle";
+import { useTeamProfileStore } from "@/lib/league/teamProfileStore";
 import type { PowerTable } from "@/lib/league/powerServer";
 import { formatOdds } from "@/lib/league/odds";
 
@@ -247,6 +248,8 @@ type SheetFixtureRow = {
 const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
 // weekly crown / spoon (E6): only the most recent finalised round's - they move each week
 const [latestAward, setLatestAward] = useState<{ week: number; crown: string[]; spoon: string[] } | null>(null);
+// tap a team: its profile pop-up (components/TeamProfileModal.tsx)
+const openTeam = useTeamProfileStore((s) => s.openTeam);
 
 useEffect(() => {
   if (!league?.id) return;
@@ -838,7 +841,12 @@ const Tabs = useStableComponent(Tabs__render);
               {standings.map((r) => (
                 <div
                   key={r.rank}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openTeam(r.teamId)}
+                  onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openTeam(r.teamId)}
                   style={{
+                    cursor: "pointer",
                     display: "grid",
                     gridTemplateColumns: cols,
 

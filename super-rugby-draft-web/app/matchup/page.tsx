@@ -34,6 +34,7 @@ import { formatProjection, projectionFor, useProjections } from "@/lib/projectio
 import { remainingShare, teamOutlook, winProbability, type PlayerWeekState } from "@/lib/projections/live";
 import { irIdsOf } from "@/lib/league/ir";
 import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
+import { useTeamProfileStore } from "@/lib/league/teamProfileStore";
 
 
 function normaliseId(x: any) {
@@ -1762,7 +1763,8 @@ return (
         {/* Scoreboard */}
         <div style={{ marginTop: 10, ...listBox, padding: 10 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10 }}>
-            <div style={{ textAlign: "left" }}>
+            {/* tap a team: its profile pop-up (components/TeamProfileModal.tsx) */}
+            <div style={{ textAlign: "left", cursor: leftTeamId ? "pointer" : "default" }} onClick={() => leftTeamId && useTeamProfileStore.getState().openTeam(leftTeamId)}>
               {leftTeamId ? (
                 // the Shield sits beside the holder's team picture (Ethan, 19 Nov 2026)
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, marginTop: 6 }}>
@@ -1784,7 +1786,7 @@ return (
 
             <div style={{ fontSize: 18, fontWeight: 700, opacity: 0.85 }}></div>
 
-            <div style={{ textAlign: "right" }}>
+            <div style={{ textAlign: "right", cursor: rightTeamId ? "pointer" : "default" }} onClick={() => rightTeamId && useTeamProfileStore.getState().openTeam(rightTeamId)}>
               {rightTeamId ? (
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, marginBottom: 6, marginTop: 6 }}>
                   {holdsShield(rightTeamId) ? <ShieldIcon size={28} title={`${shieldInfo?.name} holder`} /> : null}
