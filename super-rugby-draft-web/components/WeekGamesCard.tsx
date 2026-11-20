@@ -85,7 +85,7 @@ export function WeekGamesCard({ leagueId, week }: { leagueId: string | null; wee
               Done
             </Pill>
           ) : (
-            <Pill bg="#e2e8f0" fg="#475569">Not yet</Pill>
+            <Pill bg="#e2e8f0" fg="#475569">Pending</Pill>
           )}
         </div>
       </div>

@@ -31,6 +31,8 @@ export async function POST(req: Request) {
 
   const firstName = String(body?.firstName ?? "").trim().slice(0, 40);
   const lastName = String(body?.lastName ?? "").trim().slice(0, 40);
+  if (!firstName) return fail("Please enter your first name.");
+  if (!lastName) return fail("Please enter your last name.");
   const rememberMe = body?.rememberMe === true;
 
   // Friendly check first; the database's unique rule is the real guard.
