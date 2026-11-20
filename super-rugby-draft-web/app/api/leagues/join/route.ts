@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUsername } from "@/lib/serverSession";
 import { refreshDraftOrder } from "@/lib/draft/engine";
 import { previousTeam } from "@/lib/league/honours";
+import { randomTeamIcon } from "@/lib/teams/icons";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -75,7 +76,8 @@ export async function POST(req: Request) {
         name: teamName,
         owner_username: username,
         user_id: username,
-        picture_url: keepPreviousPicture ? prev?.picture_url ?? null : null,
+        // their old picture if they keep it, otherwise a default icon until they choose one
+        picture_url: (keepPreviousPicture ? prev?.picture_url : null) ?? randomTeamIcon(),
       })
       .select("*")
       .single();

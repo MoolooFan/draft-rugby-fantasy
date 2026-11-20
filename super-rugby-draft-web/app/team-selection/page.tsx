@@ -1777,14 +1777,22 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
             
           </div>
 
-          {/* Deadline banner (shared dashboard style) */}
+<div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10 }}>
+  <div style={{ fontSize: 18, fontWeight: 700 }}>Team Selection</div>
+  {teamProj != null ? (
+    <div style={{ textAlign: "right", lineHeight: 1 }} title="Expected points for this lineup">
+      <div style={{ ...num, fontSize: 22, fontWeight: 600 }}>{formatProjection(teamProj)}</div>
+      <div style={{ fontSize: 10, fontWeight: 500, color: muted, marginTop: 2 }}>Projected</div>
+    </div>
+  ) : null}
+</div>
+
+        </div>
+
+{/* Deadline banner, below the white header card like the dashboard's (Ethan, 20 Nov 2026) */}
 <div
   style={{
     marginTop: 10,
-
-    /* 👇 THIS is the important part */
-    marginLeft: -14,
-    marginRight: -14,
 
     borderRadius: 999,
     overflow: "hidden",
@@ -1797,7 +1805,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
       background: "#FACC15",
       color: "#0f172a",
       textAlign: "center",
-      padding: "3px 12px",
+      padding: "6px 12px",
       fontWeight: 600,
       fontSize: 11,
     }}
@@ -1812,7 +1820,7 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
       background: "rgba(255,255,255,0.88)",
       color: "#0f172a",
       textAlign: "center",
-      padding: "3px 12px",
+      padding: "6px 12px",
       fontWeight: 500,
       fontSize: 11,
       borderTop: "1px solid rgba(15,23,42,0.12)",
@@ -1821,17 +1829,6 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
     {deadlineText}
   </div>
 </div>
-<div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10 }}>
-  <div style={{ fontSize: 18, fontWeight: 700 }}>Team Selection</div>
-  {teamProj != null ? (
-    <div style={{ textAlign: "right", lineHeight: 1 }} title="Expected points for this lineup">
-      <div style={{ ...num, fontSize: 22, fontWeight: 600 }}>{formatProjection(teamProj)}</div>
-      <div style={{ fontSize: 10, fontWeight: 500, color: muted, marginTop: 2 }}>Projected</div>
-    </div>
-  ) : null}
-</div>
-
-        </div>
 
 {/* DEV dropdown (temporary) — below header, top-right */}
 <div

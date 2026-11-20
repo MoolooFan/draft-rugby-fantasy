@@ -18,6 +18,7 @@ import {
   type SquadFormat,
 } from "@/lib/league/squad";
 import { usePlayerPool } from "@/lib/players/pool";
+import { PlusMinusIcon } from "@/components/PlusMinusIcon";
 
 const stepBtn: React.CSSProperties = {
   width: 26,
@@ -28,20 +29,22 @@ const stepBtn: React.CSSProperties = {
   color: "#0f172a",
   fontSize: 15,
   fontWeight: 700,
-  lineHeight: "22px",
   padding: 0,
   cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 function Stepper({ value, onChange, min, max, disabled, label }: { value: number; onChange: (n: number) => void; min: number; max: number; disabled?: boolean; label: string }) {
   return (
     <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
       <button type="button" aria-label={`Fewer ${label}`} disabled={disabled || value <= min} onClick={() => onChange(value - 1)} style={{ ...stepBtn, opacity: disabled || value <= min ? 0.4 : 1 }}>
-        −
+        <PlusMinusIcon kind="minus" size={12} />
       </button>
       <span style={{ minWidth: 18, textAlign: "center", fontSize: 13, fontWeight: 700 }}>{value}</span>
       <button type="button" aria-label={`More ${label}`} disabled={disabled || value >= max} onClick={() => onChange(value + 1)} style={{ ...stepBtn, opacity: disabled || value >= max ? 0.4 : 1 }}>
-        +
+        <PlusMinusIcon kind="plus" size={12} />
       </button>
     </div>
   );

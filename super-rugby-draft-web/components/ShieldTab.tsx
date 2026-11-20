@@ -118,7 +118,7 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
       {/* Next shield game */}
       {s.enabled ? (
         <div style={box}>
-          <div style={heading}>Next shield game</div>
+          <div style={heading}>Next Shield Game</div>
           <div style={row}>
             {s.next ? (
               <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 8, alignItems: "center" }}>
@@ -146,7 +146,7 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
 
       {/* This season */}
       <div style={box}>
-        <div style={heading}>This season</div>
+        <div style={heading}>This Season</div>
         {started ? (
           <div style={row}>
             <span style={{ fontWeight: 700 }}>Before {roundLabel(started.fromWeek)}:</span> {started.teamName}{" "}

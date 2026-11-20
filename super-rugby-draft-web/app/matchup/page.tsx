@@ -1847,7 +1847,7 @@ return (
   <div style={{ marginTop: 10 }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, fontWeight: 700 }}>
       <span>{leftWinPct}%</span>
-      <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.6 }}>Win probability</span>
+      <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.6 }}>Win Probability</span>
       <span>{100 - leftWinPct}%</span>
     </div>
     <div style={{ marginTop: 4, height: 6, borderRadius: 999, overflow: "hidden", display: "flex", background: "rgba(15,23,42,0.12)" }}>

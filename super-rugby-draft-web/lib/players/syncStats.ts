@@ -2,7 +2,8 @@
 // Pulls player stats from playfantasyrugby.com into player_round_stats.
 // Fetches several players at once (it used to do ~450 one after another) and can be told to
 // save only the rounds currently in play.
-// Which players to fetch: the season's players in the database that have a playfantasyrugby id.
+// Which players to fetch: the season's players in the database that have a playfantasyrugby id
+// (only some teams' players if asked: lib/stats/gameRuns.ts syncs game by game).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchExternalPlayerStatsByExternalId } from "@/lib/players/externalStats";
 
@@ -11,9 +12,11 @@ export type SyncResult = { ok: true; insertedOrUpdated: number; failedPlayers: n
 export async function syncExternalStats(
   db: SupabaseClient,
   season: number,
-  opts: { onlyRounds?: number[]; concurrency?: number } = {}
+  opts: { onlyRounds?: number[]; onlyTeams?: string[]; concurrency?: number } = {}
 ): Promise<SyncResult> {
-  const { data: players, error: pErr } = await db.from("players").select("id, external_id").eq("season", season).not("external_id", "is", null);
+  let q = db.from("players").select("id, external_id").eq("season", season).not("external_id", "is", null);
+  if (opts.onlyTeams) q = q.in("team_code", opts.onlyTeams.length ? opts.onlyTeams : ["-"]);
+  const { data: players, error: pErr } = await q;
   if (pErr) throw pErr;
   // stats are stored under lower-case ids (e.g. "d.mckenzie"), as they always have been
   const entries = (players ?? []).map((p) => [String(p.id).toLowerCase(), Number(p.external_id)] as [string, number]);

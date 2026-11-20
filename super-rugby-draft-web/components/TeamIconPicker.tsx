@@ -37,7 +37,7 @@ export function TeamIconPicker({
         onClick={(e) => e.stopPropagation()}
         style={{ width: "100%", maxWidth: 380, borderRadius: 18, background: "white", color: "#0f172a", padding: 14, display: "grid", gap: 12 }}
       >
-        <div style={{ fontWeight: 700, fontSize: 15 }}>Choose an icon</div>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>Choose an Icon</div>
 
         <div style={{ display: "grid", placeItems: "center" }}>
           <TeamAvatar pictureUrl={value} initials="?" size={96} />

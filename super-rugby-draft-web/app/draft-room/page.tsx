@@ -30,6 +30,7 @@ import { useRequireSession } from "@/lib/session/useRequireSession";
 import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { positionsLabel } from "@/lib/players/positions";
 import { StatusTag } from "@/components/StatusTag";
+import { PlusMinusIcon } from "@/components/PlusMinusIcon";
 
 type DraftTab = "Player Pool" | "Watchlist" | "Teams" | "Draft Results";
 type DraftPhase = "preDraft" | "liveDraft";
@@ -978,7 +979,7 @@ const entry = resolvePlayer(rawEntry as never);
                             color: "rgba(15,23,42,0.55)",
                           }}
                         >
-                          +
+                          <PlusMinusIcon kind="plus" size={16} strokeWidth={2} />
                         </div>
                         <div style={{ fontSize: 12, fontWeight: 500 }}>
                           {slot.emptyLabel}

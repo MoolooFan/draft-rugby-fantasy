@@ -12,6 +12,7 @@ import { getServerUsername } from "@/lib/serverSession";
 import { currentSeasonYear, getSeason, restartWindow, totalFantasyWeeks } from "@/lib/season";
 import { getDraftState } from "@/lib/draft/engine";
 import { previousTeam } from "@/lib/league/honours";
+import { randomTeamIcon } from "@/lib/teams/icons";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -114,7 +115,7 @@ export async function POST(req: Request) {
     name: prev?.name ?? "My Team",
     owner_username: username,
     user_id: username,
-    picture_url: prev?.picture_url ?? null,
+    picture_url: prev?.picture_url ?? randomTeamIcon(),
   });
   if (teamErr) return NextResponse.json({ ok: false, error: teamErr.message }, { status: 500 });
 

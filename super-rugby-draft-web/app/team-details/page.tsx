@@ -308,9 +308,6 @@ export default function TeamDetailsPage() {
         <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
           <div style={cardStyle}>
             <div style={{ textAlign: "center", fontWeight: 700, fontSize: 22 }}>Team Details</div>
-            <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
-              Your team&apos;s picture and name
-            </div>
 
             {(msg || err) ? (
               <div
@@ -337,7 +334,7 @@ export default function TeamDetailsPage() {
               <TeamAvatar pictureUrl={myTeam?.pictureUrl} initials={myTeam?.userInitials ?? myTeam?.initials} size={72} stars={myTeam?.stars} />
               <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 8 }}>
                 <label style={{ ...primaryButton, display: "grid", placeItems: "center", opacity: picBusy || !yourTeamId ? 0.7 : 1 }}>
-                  {myTeam?.pictureUrl ? "Change picture" : "Upload picture"}
+                  {myTeam?.pictureUrl ? "Change Picture" : "Upload Picture"}
                   <input
                     id="team-picture-file"
                     type="file"
@@ -356,7 +353,7 @@ export default function TeamDetailsPage() {
                   disabled={picBusy || !yourTeamId}
                   style={{ height: 30, borderRadius: 999, border: "1px solid #cbd5e1", background: "#eef2f6", color: "#0f172a", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
                 >
-                  Choose an icon
+                  Choose an Icon
                 </button>
                 {myTeam?.pictureUrl ? (
                   <button

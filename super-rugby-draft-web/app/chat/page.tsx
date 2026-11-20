@@ -213,7 +213,7 @@ function ChatPageInner() {
   }
 
   // ---- layout
-  const title = !channel ? "Messages" : channel === LEAGUE_CHANNEL ? "League chat" : (() => {
+  const title = !channel ? "Messages" : channel === LEAGUE_CHANNEL ? "League Chat" : (() => {
     const t = dmTeams(channel);
     const other = t ? (t[0] === myTeamId ? t[1] : t[0]) : null;
     return team(other)?.name ?? "Messages";
@@ -367,7 +367,7 @@ function ChatPageInner() {
                     </span>
                   )}
                   <span style={{ minWidth: 0, display: "grid" }}>
-                    <span style={{ fontSize: 13, fontWeight: 700 }}>{other ? other.name : "League chat"}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700 }}>{other ? other.name : "League Chat"}</span>
                     <span style={{ fontSize: 11, fontWeight: n ? 800 : 600, opacity: n ? 0.9 : 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{preview(last)}</span>
                   </span>
                   <span style={{ display: "grid", justifyItems: "end", gap: 3 }}>

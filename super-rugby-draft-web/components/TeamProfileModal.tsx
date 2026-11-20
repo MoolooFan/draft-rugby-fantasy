@@ -3,7 +3,8 @@
 // A team's profile (Ethan, 20 Nov 2026): tap a team on the standings, power rankings, dashboard
 // or matchup. Shows the current squad (each player with a Trade button, if it isn't your team),
 // standings and power ranking with the movement since the round before, the Shield (holding it,
-// or the next chance to win it) and the team's results. Data: app/api/leagues/team-profile.
+// or the next chance to win it; no box when neither) and the team's results. The squad shows
+// each player's match average or next-round projection (a toggle). Data: app/api/leagues/team-profile.
 // Opened from anywhere with useTeamProfileStore().openTeam(teamId); <TeamProfileHost /> is in
 // app/layout.tsx.
 import React, { useEffect, useMemo, useState } from "react";
@@ -14,13 +15,21 @@ import { usePlayers, usePlayersStore, type PlayerFromSheet } from "@/lib/players
 import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
 import { positionsLabel, playerPositions } from "@/lib/players/positions";
 import { roundLabel } from "@/lib/season";
+import { playerRoundRows } from "@/lib/players/roundIndex";
+import { pointsFromRow, roundPoints } from "@/lib/scoring";
+import { ShieldIcon } from "@/components/AwardIcons";
 import type { TeamProfile, TeamProfileResult } from "@/lib/league/teamProfile";
 import { TeamAvatar } from "@/components/TeamAvatar";
 import { MovementCircle } from "@/components/MovementCircle";
 import { StatusTag } from "@/components/StatusTag";
 import { JerseyTile } from "@/components/transactions/helpers";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
-import { ink, line, muted, num, soft, teal } from "@/lib/ui/theme";
+import { ink, line, muted, num, soft } from "@/lib/ui/theme";
+
+/** the Transactions page's trade button colour */
+const TRADE_BLUE = "#2563EB";
+const AMOUNT_W = 44;
+const TRADE_W = 64;
 
 const POS_ORDER = ["PR", "HO", "LK", "LF", "HB", "FH", "CE", "OB"];
 
@@ -31,6 +40,8 @@ const ordinal = (n: number) => {
 };
 const movementOf = (moved: number | null) => (moved == null ? null : moved > 0 ? "up" : moved < 0 ? "down" : "same");
 const shortName = (p: Pick<PlayerFromSheet, "firstName" | "lastName">) => `${p.firstName ? `${p.firstName[0]}. ` : ""}${p.lastName}`;
+const movementText = (moved: number | null) =>
+  moved == null ? "" : moved > 0 ? `Up ${moved} since last round` : moved < 0 ? `Down ${-moved} since last round` : "No change since last round";
 const pts = (n: number | null) => (n == null ? "—" : Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 export function TeamProfileHost() {
@@ -51,7 +62,24 @@ function TeamProfileModal({ leagueId, teamId }: { leagueId: string; teamId: stri
 
   usePlayers();
   const getById = usePlayersStore((s) => s.getById);
+  const statRows = usePlayersStore((s) => s.statRows);
   const proj = useProjections(leagueId, "current");
+  const [show, setShow] = useState<"avg" | "proj">("avg");
+  /** match average: points per game played (minutes > 0) this stats season, league scoring */
+  const matchAvg = (p: PlayerFromSheet): number | null => {
+    const played = playerRoundRows(statRows, p.id).filter((r) => Number(r?.["Minutes played"]) > 0);
+    if (!played.length) return null;
+    return roundPoints(played.reduce((a, r) => a + pointsFromRow(r, p), 0) / played.length);
+  };
+  const amountFor = (p: PlayerFromSheet): string => {
+    if (show === "proj") {
+      const v = projectionFor(proj, p.id)?.pts;
+      return v == null ? "–" : formatProjection(v);
+    }
+    const v = matchAvg(p);
+    return v == null ? "–" : v.toFixed(1);
+  };
+  const projLabel = proj ? `Proj ${roundLabel(proj.week, league?.season ?? undefined).replace(/^Round /, "R")}` : "Projected";
 
   const [data, setData] = useState<TeamProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -134,8 +162,7 @@ function TeamProfileModal({ leagueId, teamId }: { leagueId: string; teamId: stri
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 17, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team?.name ?? "Team"}</div>
             <div style={{ fontSize: 12, fontWeight: 500, color: muted }}>
-              {team?.ownerName ?? team?.userId ?? ""}
-              {isMine ? " · Your team" : ""}
+              {[team?.ownerName, isMine ? "Your team" : null].filter(Boolean).join(" · ")}
             </div>
           </div>
           <button onClick={close} aria-label="Close" style={{ border: "none", background: "rgba(15,23,42,0.06)", borderRadius: 999, width: 30, height: 30, fontWeight: 700, cursor: "pointer", color: ink, flexShrink: 0 }}>
@@ -175,9 +202,7 @@ function TeamProfileModal({ leagueId, teamId }: { leagueId: string; teamId: stri
                         <span style={{ ...num, fontSize: 26, fontWeight: 600, lineHeight: 1 }}>{ordinal(data.power.rank)}</span>
                         {movementOf(data.power.moved) ? <MovementCircle movement={movementOf(data.power.moved)!} moved={data.power.moved ?? 0} size={18} /> : null}
                       </div>
-                      <div style={{ fontSize: 11, fontWeight: 500, color: muted }}>
-                        {data.power.simulated ? `${Math.round(data.power.titlePct)}% title chance` : "On squad strength"}
-                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 500, color: muted }}>{movementText(data.power.moved)}</div>
                     </>
                   ) : (
                     <div style={{ fontSize: 12, fontWeight: 500, color: muted }}>After the draft</div>
@@ -186,25 +211,43 @@ function TeamProfileModal({ leagueId, teamId }: { leagueId: string; teamId: stri
               </div>
 
               {/* the Shield */}
-              {data.shield ? <ShieldLine shield={data.shield} season={data.season} nameOf={nameOf} /> : null}
+              {data.shield && (data.shield.holding || data.shield.next) ? <ShieldLine shield={data.shield} season={data.season} nameOf={nameOf} /> : null}
 
               {/* squad */}
               <div style={{ display: "grid", gap: 6 }}>
-                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                   <div style={sectionTitle}>Squad</div>
-                  {proj ? <div style={{ fontSize: 10, fontWeight: 600, color: muted }}>Proj {roundLabel(proj.week, data.season).replace(/^Round /, "R")}</div> : null}
+                  <div role="group" aria-label="Show" style={{ display: "inline-flex", background: "rgba(15,23,42,0.06)", borderRadius: 999, padding: 2 }}>
+                    {([["avg", "Match Avg"], ["proj", projLabel]] as const).map(([k, label]) => (
+                      <button
+                        key={k}
+                        onClick={() => setShow(k)}
+                        aria-pressed={show === k}
+                        style={{ border: "none", borderRadius: 999, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer", background: show === k ? "#0f172a" : "transparent", color: show === k ? "white" : ink }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+                {squad.active.length || squad.ir.length ? (
+                  <div style={{ display: "flex", gap: 8, padding: "0 8px", fontSize: 10, fontWeight: 700, color: muted }}>
+                    <span style={{ flex: 1 }} />
+                    <span style={{ width: AMOUNT_W, textAlign: "right" }}>{show === "avg" ? "Avg" : projLabel}</span>
+                    {canTrade ? <span style={{ width: TRADE_W }} /> : null}
+                  </div>
+                ) : null}
                 {!squad.active.length && !squad.ir.length ? (
                   <div style={{ fontSize: 12, fontWeight: 500, color: muted }}>{data.draftDone ? "No players." : "Squads are picked in the draft."}</div>
                 ) : null}
                 {squad.active.map((p) => (
-                  <PlayerRow key={p.id} p={p} proj={projectionFor(proj, p.id)?.pts ?? null} onOpen={() => setCardPlayer(p)} onTrade={canTrade ? () => trade(p) : null} />
+                  <PlayerRow key={p.id} p={p} amount={amountFor(p)} onOpen={() => setCardPlayer(p)} onTrade={canTrade ? () => trade(p) : null} tradeSpace={canTrade} />
                 ))}
                 {squad.ir.length ? (
                   <>
                     <div style={{ ...sectionTitle, marginTop: 4 }}>IR</div>
                     {squad.ir.map((p) => (
-                      <PlayerRow key={p.id} p={p} proj={null} onOpen={() => setCardPlayer(p)} onTrade={null} note="Can't be traded from IR" />
+                      <PlayerRow key={p.id} p={p} amount={amountFor(p)} onOpen={() => setCardPlayer(p)} onTrade={null} tradeSpace={canTrade} note="Can't be traded from IR" />
                     ))}
                   </>
                 ) : null}
@@ -236,7 +279,7 @@ function TeamProfileModal({ leagueId, teamId }: { leagueId: string; teamId: stri
   );
 }
 
-function PlayerRow({ p, proj, onOpen, onTrade, note }: { p: PlayerFromSheet; proj: number | null; onOpen: () => void; onTrade: (() => void) | null; note?: string }) {
+function PlayerRow({ p, amount, onOpen, onTrade, tradeSpace, note }: { p: PlayerFromSheet; amount: string; onOpen: () => void; onTrade: (() => void) | null; tradeSpace: boolean; note?: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, borderRadius: 12, background: soft, border: `1px solid ${line}`, padding: "6px 8px" }}>
       <button onClick={onOpen} style={{ all: "unset", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
@@ -252,15 +295,17 @@ function PlayerRow({ p, proj, onOpen, onTrade, note }: { p: PlayerFromSheet; pro
           </span>
         </span>
       </button>
-      {proj != null ? <span style={{ ...num, fontSize: 14, fontWeight: 600, minWidth: 34, textAlign: "right" }}>{formatProjection(proj)}</span> : null}
+      <span style={{ ...num, fontSize: 14, fontWeight: 600, width: AMOUNT_W, textAlign: "right", flexShrink: 0 }}>{amount}</span>
       {onTrade ? (
         <button
           onClick={onTrade}
           aria-label={`Trade for ${p.firstName} ${p.lastName}`}
-          style={{ height: 28, padding: "0 12px", borderRadius: 999, border: "none", background: teal, color: "white", fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}
+          style={{ height: 28, width: TRADE_W, borderRadius: 999, border: "none", background: TRADE_BLUE, color: "white", fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
         >
           Trade
         </button>
+      ) : tradeSpace ? (
+        <span style={{ width: TRADE_W, flexShrink: 0 }} />
       ) : null}
     </div>
   );
@@ -281,7 +326,7 @@ function ShieldLine({ shield, season, nameOf }: { shield: NonNullable<TeamProfil
   }
   return (
     <div style={{ borderRadius: 12, background: shield.holding ? "#fef3c7" : soft, border: `1px solid ${shield.holding ? "#fcd34d" : line}`, padding: "10px 12px", display: "flex", gap: 10, alignItems: "center" }}>
-      <span aria-hidden style={{ fontSize: 22, lineHeight: 1 }}>🛡️</span>
+      <ShieldIcon size={30} title={shield.name} />
       <span style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.4 }}>{text}</span>
     </div>
   );
