@@ -2,7 +2,6 @@
 
 import { rosterSize, STANDARD_SQUAD } from "@/lib/league/squad";
 import React, { Suspense, useEffect, useMemo, useState } from "react";
-import { card as themeCard } from "@/lib/ui/theme";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { AppMenu } from "@/components/AppMenu";
@@ -20,9 +19,8 @@ import { usePlayersStore } from "@/lib/players/store";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 
 import { usePlayerPool } from "@/lib/players/pool";
-import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/season";
+import { currentSeasonYear, fixturesByFantasyWeek } from "@/lib/season";
 
-import { listBox } from "@/components/transactions/helpers";
 import { TransactionsTab } from "@/components/transactions/TransactionsTab";
 import { WaiverClaimsTab } from "@/components/transactions/WaiverClaimsTab";
 import { DropSelectModal } from "@/components/transactions/DropSelectModal";
@@ -31,11 +29,15 @@ import { createPlayerMetrics, VIEW_MODES, type InfoMode } from "@/components/tra
 import { formatDeadline, useNowTick, normUser, extractRosterIdsClient, SORT_OPTIONS, NO_DROP } from "@/components/transactions/helpers";
 import type { Player, AnyFixture, TabKey } from "@/components/transactions/helpers";
 import { PlayerRow } from "@/components/transactions/PlayerRow";
+import { PlayerListBox } from "@/components/transactions/PlayerListBox";
+import { DeadlineBanner, TxHeaderCard, TxTabs } from "@/components/transactions/TxHeader";
+import { useLeagueWatchlist } from "@/components/transactions/useLeagueWatchlist";
+import { playerCardActions } from "@/components/transactions/playerCardActions";
+import { nextWeekFrom, normStr, pickFirstTruthy } from "@/components/transactions/helpers";
 
 // This season's fixtures, numbered by fantasy week (see lib/season).
 const fixturesData = fixturesByFantasyWeek();
 import { canPlayPosition } from "@/lib/players/positions";
-import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { toMs, getWeekDeadlineMs, getWeeksSorted, type SheetFixtureRow, currentWeekFromSheet } from "@/lib/league/weekHelpers";
 import { PoolFilterBar, matchesPoolFilters, EMPTY_FILTERS, type PoolFilters } from "@/components/PoolFilters";
 import { TradeReviewModal } from "@/components/TradeReviewModal";
@@ -77,58 +79,7 @@ const activeLeague = useMemo(() => {
   const rosters = useDraftStore((s) => s.rosters);
   const applyRosterMove = useDraftStore((s) => (s as any).applyRosterMove);
 
-const [watchlistSet, setWatchlistSet] = useState<Set<string>>(new Set());
-const [watchlistLoaded, setWatchlistLoaded] = useState(false);
-
-const toggleWatchlist = React.useCallback(
-  async (playerId: string) => {
-    const leagueId = String(activeLeague?.id ?? "");
-    if (!leagueId) return;
-
-    // (TEMP) league-wide watchlist
-    // Later when you make it per-team, include teamId in these API calls.
-    const isStar = watchlistSet.has(playerId);
-
-    // optimistic UI
-    setWatchlistSet((prev) => {
-      const next = new Set(prev);
-      if (isStar) next.delete(playerId);
-      else next.add(playerId);
-      return next;
-    });
-
-    try {
-      if (isStar) {
-        await fetch(
-          `/api/watchlist?leagueId=${encodeURIComponent(leagueId)}&playerId=${encodeURIComponent(playerId)}`,
-          { method: "DELETE" }
-        );
-      } else {
-        await fetch(`/api/watchlist`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ leagueId, playerId }),
-        });
-      }
-    } catch (e) {
-      // rollback on failure
-      setWatchlistSet((prev) => {
-        const next = new Set(prev);
-        if (isStar) next.add(playerId);
-        else next.delete(playerId);
-        return next;
-      });
-    }
-  },
-  [activeLeague?.id, watchlistSet]
-);
-
-const watchlist = useMemo(() => {
-  // keep your existing "watchlist[playerId]" checks working
-  const obj: Record<string, boolean> = {};
-  watchlistSet.forEach((id) => (obj[id] = true));
-  return obj;
-}, [watchlistSet]);
+const { watchlist, toggleWatchlist } = useLeagueWatchlist(activeLeague);
 
 useEffect(() => {
   if (!activeLeague?.id) return;
@@ -148,31 +99,6 @@ useEffect(() => {
       else console.error("fixtures fetch failed", j?.error);
     })
     .catch((e) => console.error(e));
-}, [activeLeague?.id]);
-
-useEffect(() => {
-  const leagueId = String(activeLeague?.id ?? "");
-  if (!leagueId) return;
-
-  let cancelled = false;
-  (async () => {
-    setWatchlistLoaded(false);
-    const res = await fetch(`/api/watchlist?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" });
-    const json = await res.json().catch(() => null);
-
-    if (cancelled) return;
-
-    if (res.ok && json?.ok) {
-      setWatchlistSet(new Set<string>((json.data ?? []).map(String)));
-    } else {
-      setWatchlistSet(new Set());
-    }
-    setWatchlistLoaded(true);
-  })();
-
-  return () => {
-    cancelled = true;
-  };
 }, [activeLeague?.id]);
 
   // Transactions store (local fallback data)
@@ -202,15 +128,6 @@ useEffect(() => {
 // -----------------------
 // Resolve "your team id" robustly (THIS FIXES RECEIVED TRADES NOT SHOWING)
 // -----------------------
-function pickFirstTruthy<T>(...vals: Array<T | null | undefined>): T | null {
-  for (const v of vals) if (v != null && String(v).trim() !== "") return v as T;
-  return null;
-}
-
-function normStr(x: any) {
-  return String(x ?? "").trim().toLowerCase();
-}
-
 const yourDraftTeamId = useMemo(() => {
   const l: any = activeLeague;
   if (!l) return null;
@@ -337,12 +254,6 @@ const liveWeek = useMemo(() => {
   if (!nowMs || !waiverDeadlineMs || !selectionDeadlineMs) return "WAIVERS";
   return nowMs < waiverDeadlineMs ? "WAIVERS" : nowMs < selectionDeadlineMs ? "FREE_AGENCY" : "WAIVERS";
 }, [nowMs, waiverDeadlineMs, selectionDeadlineMs]);
-
-function nextWeekFrom(weeksSorted: number[], week: number) {
-  const idx = weeksSorted.indexOf(week);
-  if (idx >= 0 && idx < weeksSorted.length - 1) return weeksSorted[idx + 1];
-  return week + 1;
-}
 
 // ✅ Claims week flips immediately once waiver deadline passes
 const claimsWeek = useMemo(() => {
@@ -1159,106 +1070,6 @@ const { metricLabel, metricSortValue, metricValue, ownerTeamLabelForPlayerId } =
   draftTeams,
 });
 
-  // =========================
-// DEV MOCKS (hoisted so badge + tab both see them)
-// =========================
-const DEV_MOCK_TX = false; // <- set false to remove all examples instantly
-
-const leagueIdForMock = activeLeague?.id ?? "";
-const yourIdForMock = yourDraftTeamId ?? "";
-
-const { mockTrades, mockClaims, mockFreeAgents } = useMemo(() => {
-  if (!DEV_MOCK_TX) return { mockTrades: [], mockClaims: [], mockFreeAgents: [] };
-
-  const teams = activeLeague?.teams ?? [];
-  const yourTeam = teams.find((t: any) => t.id === yourIdForMock) ?? teams[0] ?? null;
-
-  const otherTeams = teams.filter((t: any) => t.id !== yourIdForMock);
-  const otherA = otherTeams[0] ?? null;
-  const otherB = otherTeams[1] ?? otherTeams[0] ?? null;
-
-  const p0 = allPlayers[0] ?? null;
-  const p1 = allPlayers[1] ?? null;
-  const p2 = allPlayers[2] ?? null;
-  const p3 = allPlayers[3] ?? null;
-  const p4 = allPlayers[4] ?? null;
-  const p5 = allPlayers[5] ?? null;
-
-  const now = Date.now();
-
-  // --- Trades ---
-  const tradesOut: any[] = [];
-
-  // 1) Offer RECEIVED (from otherA -> you)
-  if (otherA && yourTeam && p0 && p1) {
-    tradesOut.push({
-      id: "mock_trade_received_1",
-      leagueId: leagueIdForMock,
-      status: "PENDING",
-      fromTeamId: otherA.id,
-      toTeamId: yourIdForMock,
-      offerPlayerIds: [p0.id],
-      requestPlayerIds: [p1.id],
-      createdAtMs: now - 1000 * 60 * 12,
-      updatedAtMs: now - 1000 * 60 * 12,
-    });
-  }
-
-  // 2) Offer SENT (from you -> otherB)
-  if (otherB && yourTeam && p2 && p3) {
-    tradesOut.push({
-      id: "mock_trade_sent_1",
-      leagueId: leagueIdForMock,
-      status: "PENDING",
-      fromTeamId: yourIdForMock,
-      toTeamId: otherB.id,
-      offerPlayerIds: [p2.id],
-      requestPlayerIds: [p3.id],
-      createdAtMs: now - 1000 * 60 * 35,
-      updatedAtMs: now - 1000 * 60 * 35,
-    });
-  }
-
-  // 3) COMPLETED trade (ACCEPTED)
-  if (otherA && otherB && p4 && p5) {
-    tradesOut.push({
-      id: "mock_trade_accepted_1",
-      leagueId: leagueIdForMock,
-      status: "ACCEPTED",
-      fromTeamId: otherA.id,
-      toTeamId: otherB.id,
-      offerPlayerIds: [p4.id],
-      requestPlayerIds: [p5.id],
-      createdAtMs: now - 1000 * 60 * 60 * 20,
-      acceptedAtMs: now - 1000 * 60 * 60 * 2,
-      updatedAtMs: now - 1000 * 60 * 60 * 2,
-    });
-  }
-
-  // --- Waiver claims feed (your existing mock claims logic) ---
-  // (Paste your exact claimsOut code here unchanged)
-  const claimsOut: any[] = [];
-  // ... keep the exact code you already had ...
-
-  // --- Free agent transfers feed ---
-  const freeOut: any[] = [];
-  if (yourTeam && p0 && p2) {
-    freeOut.push({
-      id: "mock_free_1",
-      leagueId: leagueIdForMock,
-      week: selectionWeek,
-      teamId: yourIdForMock,
-      addPlayerId: p0.id,
-      dropPlayerId: p2.id,
-      status: "PROCESSED",
-      createdAtMs: now - 1000 * 60 * 18,
-      updatedAtMs: now - 1000 * 60 * 18,
-    });
-  }
-
-  return { mockTrades: tradesOut, mockClaims: claimsOut, mockFreeAgents: freeOut };
-}, [DEV_MOCK_TX, activeLeague?.teams, yourIdForMock, leagueIdForMock, allPlayers, selectionWeek]);
-
 // ✅ arrays the UI should use (badge + tab)
 const tradesSource = txLoaded ? txTrades : (trades as any[]);
 const claimsSource = txLoaded ? txClaims : (claims as any[]);
@@ -1266,9 +1077,9 @@ const dropLocksSource = txLoaded ? txDropLocks : (dropLocks as any[]);
 const freeAgentsSource = txLoaded ? txFreeAgents : (freeAgentTransfers as any[]);
 
 // ✅ arrays the UI should use (badge + tab)
-const tradesForUi = DEV_MOCK_TX ? [...mockTrades, ...tradesSource] : tradesSource;
-const claimsForUi = DEV_MOCK_TX ? [...mockClaims, ...claimsSource] : claimsSource;
-const freeForUi = DEV_MOCK_TX ? [...mockFreeAgents, ...freeAgentsSource] : freeAgentsSource;
+const tradesForUi = tradesSource;
+const claimsForUi = claimsSource;
+const freeForUi = freeAgentsSource;
 
   // ✅ Badge count: pending trade offers RECEIVED by you (league mates -> you)
 const pendingOffersCount = useMemo(() => {
@@ -1349,144 +1160,6 @@ return list
     });
 }, [claims, txClaims, txLoaded, activeLeague?.id, claimsWeek, yourDraftTeamId]);
 
-  // -----------------------
-  // UI styles (match your vibe + Draft Room list styling)
-  // -----------------------
-  const card35: React.CSSProperties = { ...themeCard, padding: undefined };
-
-  const tabBarStyle: React.CSSProperties = {
-    marginTop: 10,
-    borderRadius: 10,
-    overflow: "hidden",
-    border: "1px solid rgba(255,255,255,0.18)",
-  };
-
-  const tabBtn = (active: boolean): React.CSSProperties => ({
-    height: 30,
-    border: "none",
-    background: active ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.10)",
-    color: "white",
-    fontSize: 11,
-    fontWeight: 700,
-    cursor: "pointer",
-  });
-
-  function Hamburger__render() {
-    return (
-      <button
-        onClick={() => setMenuOpen(true)}
-        aria-label="Open menu"
-        style={{
-          background: "transparent",
-          border: "none",
-          padding: 0,
-          margin: 0,
-          color: "inherit",
-          fontSize: 30,
-          fontWeight: 700,
-          lineHeight: "30px",
-          cursor: "pointer",
-        }}
-      >
-        ☰
-      </button>
-    );
-  }
-const Hamburger = useStableComponent(Hamburger__render);
-
-  function Tabs__render() {
-  const tabs: TabKey[] = ["Player Pool", "Watchlist", "Pending Claims", "Transactions"];
-
-  const badgeStyle: React.CSSProperties = {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    minWidth: 16,
-    height: 16,
-    padding: "0 5px",
-    borderRadius: 999,
-    background: "#EF4444",
-    color: "white",
-    fontSize: 10,
-    fontWeight: 700,
-    display: "grid",
-    placeItems: "center",
-    lineHeight: "16px",
-    boxShadow: "0 6px 14px rgba(0,0,0,0.20)",
-  };
-
-  return (
-    <div style={tabBarStyle}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
-        {tabs.map((t) => {
-          const isActive = t === tab;
-          const showBadge = t === "Transactions" && pendingOffersCount > 0;
-
-          return (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              style={{
-                ...tabBtn(isActive),
-                position: "relative", // ✅ required so badge anchors to the button
-              }}
-            >
-              {t}
-
-              {showBadge ? (
-                <span style={badgeStyle}>
-                  {pendingOffersCount > 99 ? "99+" : pendingOffersCount}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-const Tabs = useStableComponent(Tabs__render);
-
-  function DeadlineBanner__render() {
-    return (
-      <div
-        style={{
-          marginTop: 10,
-          borderRadius: 999,
-          overflow: "hidden",
-          boxShadow: "0 10px 20px rgba(0,0,0,0.18)",
-        }}
-      >
-        <div
-          style={{
-            background: "#FACC15",
-            color: "#0f172a",
-            textAlign: "center",
-            padding: "6px 12px",
-            fontWeight: 700,
-            fontSize: 11,
-          }}
-        >
-          {roundLabel(selectionWeek)} • {deadlineLabel}
-        </div>
-        <div
-          style={{
-            background: "rgba(255,255,255,0.88)",
-            color: "#0f172a",
-            textAlign: "center",
-            padding: "6px 12px",
-            fontWeight: 500,
-            fontSize: 11,
-            borderTop: "1px solid rgba(15,23,42,0.12)",
-          }}
-        >
-          {deadlineText}
-        </div>
-      </div>
-    );
-  }
-const DeadlineBanner = useStableComponent(DeadlineBanner__render);
-
 function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
   const url =
     `/trade/propose` +
@@ -1531,97 +1204,23 @@ useEffect(() => {
 
   // Player modal actions: keep blank placeholder buttons at bottom (for now)
   // Player modal actions
-const modalActions = useMemo(() => {
-  if (!modalPlayer) return [];
-
-  const playerId = modalPlayer.id;
-
-  const ownerTeamId = ownerByPlayerId.get(playerId) ?? null;
-  const isOwned = !!ownerTeamId;
-  const isOwnedByYou = isOwned && ownerTeamId === yourDraftTeamId;
-
-  // Locked means: unowned BUT temporarily locked
-  const isLocked = lockedUnownedSet.has(playerId);
-
-  const isOnWatchlist = !!(watchlist as any)[playerId];
-
-  // If owned by you: no buttons
-  if (isOwnedByYou) return [];
-
-  // Watchlist button (always shown unless owned-by-you)
-  const watchlistAction = {
-  label: isOnWatchlist ? "Remove from Watchlist" : "Add to Watchlist",
-  variant: "secondary" as const,
-  onClick: () => toggleWatchlist(playerId),
-};
-
-  // Unowned: Claim/Sign/Locked
-  if (!isOwned) {
-    // FREE_AGENCY locked -> Locked button does nothing
-    if (windowMode === "FREE_AGENCY" && isLocked) {
-      return [
-        watchlistAction,
-        {
-          label: "Locked",
-          variant: "secondary" as const,
-          onClick: () => {}, // no-op
-        },
-      ];
-    }
-
-    // Otherwise allow opening the add/drop modal
-    const label = windowMode === "WAIVERS" ? "Submit Claim" : "Sign Player";
-
-    return [
-      watchlistAction,
-      {
-        label,
-        variant: "primary" as const,
-onClick: () => {
-  const addP = modalPlayer; // capture before closing
-  if (!addP) return;
-
-  // close player card first
-  setModalPlayer(null);
-
-  // open add/drop modal next tick
-  window.setTimeout(() => {
-    openDropModal(addP);
-  }, 0);
-},
-
-      },
-    ];
-  }
-
-  // Owned by another leaguemate: Propose trade (we'll wire to a real page soon)
-  return [
-    watchlistAction,
-    {
-  label: "Propose Trade",
-  variant: "primary" as const,
-  onClick: () => {
-    const playerId = modalPlayer.id;
-    const ownerTeamId = ownerByPlayerId.get(playerId) ?? null;
-
-    if (!activeLeague?.id || !yourDraftTeamId || !ownerTeamId) return;
-
-    // Close the player card before navigating
-    setModalPlayer(null);
-
-const url =
-  `/trade/propose` +
-  `?partnerTeamId=${encodeURIComponent(ownerTeamId)}` +
-  `&prefillRequestPlayerId=${encodeURIComponent(playerId)}` +
-  `&returnTo=${encodeURIComponent(returnTo)}`;
-
-    // Navigate on next tick so the modal unmount doesn't fight routing
-    window.setTimeout(() => router.push(url), 0);
-  },
-},
-
-  ];
-}, [
+const modalActions = useMemo(
+  () =>
+    playerCardActions({
+      modalPlayer,
+      ownerByPlayerId,
+      yourDraftTeamId,
+      lockedUnownedSet,
+      watchlist,
+      toggleWatchlist,
+      windowMode,
+      openDropModal,
+      setModalPlayer,
+      activeLeagueId: activeLeague?.id ?? null,
+      returnTo,
+      push: router.push,
+    }),
+  [
   modalPlayer,
   ownerByPlayerId,
   yourDraftTeamId,
@@ -1635,6 +1234,30 @@ const url =
   activeLeague?.id,
   selectionWeek,
 ]);
+  // one Player Pool / Watchlist row
+  const renderPlayerRow = (p: Player) => (
+    <PlayerRow
+      key={p.id}
+      p={p}
+      yourDraftTeamId={yourDraftTeamId}
+      activeLeague={activeLeague}
+      ownerByPlayerId={ownerByPlayerId}
+      lockedUnownedSet={lockedUnownedSet}
+      watchlist={watchlist}
+      toggleWatchlist={toggleWatchlist}
+      windowMode={windowMode}
+      tradeWindowOpen={tradeWindowOpen}
+      enableTrades={ENABLE_TRADES}
+      infoMode={infoMode}
+      metricValue={metricValue}
+      teamLabel={teamLabel}
+      isAddCoolingDown={isAddCoolingDown}
+      guardedAdd={guardedAdd}
+      openDropModal={openDropModal}
+      goToTradeProposal={goToTradeProposal}
+      openPlayer={(pl) => setModalPlayer(hydratePlayer(pl))}
+    />
+  );
 
   return (
     <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
@@ -1658,20 +1281,12 @@ const url =
         }}
       >
         {/* Header */}
-        <div style={{ ...card35, padding: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Hamburger />
-            <div style={{ flex: 1 }} />
-          </div>
-
-          <div style={{ marginTop: 10, fontSize: 18, fontWeight: 700 }}>Transactions</div>
-          
-        </div>
+        <TxHeaderCard onOpenMenu={() => setMenuOpen(true)} />
 
         {/* the deadline, below the white header card like the dashboard's (Ethan, 20 Nov 2026) */}
-        <DeadlineBanner />
+        <DeadlineBanner selectionWeek={selectionWeek} deadlineLabel={deadlineLabel} deadlineText={deadlineText} />
 
-        <Tabs />
+        <TxTabs tab={tab} onTab={setTab} pendingOffersCount={pendingOffersCount} />
 
         {tab === "Player Pool" && (
           <>
@@ -1689,43 +1304,7 @@ const url =
   statOptions
 />
 
-            <div style={listBox}>
-              {/* the column's name, right above the numbers (same layout as the rows below) */}
-              <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: "1fr 132px", gap: 10, alignItems: "center" }}>
-                <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.7 }}>{statViewLabelFor(infoMode)}</div>
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                  <div style={{ width: 34, display: "flex", justifyContent: "flex-end", whiteSpace: "nowrap", fontSize: 10, fontWeight: 600, opacity: 0.7 }}>{metricLabel(infoMode)}</div>
-                  <div style={{ width: 28 }} />
-                  <div style={{ width: 28 }} />
-                </div>
-              </div>
-
-              {playerPoolPlayers.length === 0 ? (
-                <div style={{ padding: 14, fontSize: 12, fontWeight: 500, opacity: 0.7 }}>No available players found.</div>
-              ) : (
-                playerPoolPlayers.map((p) => <PlayerRow
-                  key={p.id}
-                  p={p}
-                  yourDraftTeamId={yourDraftTeamId}
-                  activeLeague={activeLeague}
-                  ownerByPlayerId={ownerByPlayerId}
-                  lockedUnownedSet={lockedUnownedSet}
-                  watchlist={watchlist}
-                  toggleWatchlist={toggleWatchlist}
-                  windowMode={windowMode}
-                  tradeWindowOpen={tradeWindowOpen}
-                  enableTrades={ENABLE_TRADES}
-                  infoMode={infoMode}
-                  metricValue={metricValue}
-                  teamLabel={teamLabel}
-                  isAddCoolingDown={isAddCoolingDown}
-                  guardedAdd={guardedAdd}
-                  openDropModal={openDropModal}
-                  goToTradeProposal={goToTradeProposal}
-                  openPlayer={(pl) => setModalPlayer(hydratePlayer(pl))}
-                />)
-              )}
-            </div>
+            <PlayerListBox viewLabel={statViewLabelFor(infoMode)} metricHeading={metricLabel(infoMode)} players={playerPoolPlayers} emptyText="No available players found." renderRow={renderPlayerRow} />
           </>
         )}
 
@@ -1745,43 +1324,7 @@ const url =
   statOptions
 />
 
-            <div style={listBox}>
-              {/* the column's name, right above the numbers (same layout as the rows below) */}
-              <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: "1fr 132px", gap: 10, alignItems: "center" }}>
-                <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.7 }}>{statViewLabelFor(infoMode)}</div>
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                  <div style={{ width: 34, display: "flex", justifyContent: "flex-end", whiteSpace: "nowrap", fontSize: 10, fontWeight: 600, opacity: 0.7 }}>{metricLabel(infoMode)}</div>
-                  <div style={{ width: 28 }} />
-                  <div style={{ width: 28 }} />
-                </div>
-              </div>
-
-              {watchlistPlayers.length === 0 ? (
-                <div style={{ padding: 14, fontSize: 12, fontWeight: 500, opacity: 0.7 }}>No players in your watchlist yet.</div>
-              ) : (
-                watchlistPlayers.map((p) => <PlayerRow
-                  key={p.id}
-                  p={p}
-                  yourDraftTeamId={yourDraftTeamId}
-                  activeLeague={activeLeague}
-                  ownerByPlayerId={ownerByPlayerId}
-                  lockedUnownedSet={lockedUnownedSet}
-                  watchlist={watchlist}
-                  toggleWatchlist={toggleWatchlist}
-                  windowMode={windowMode}
-                  tradeWindowOpen={tradeWindowOpen}
-                  enableTrades={ENABLE_TRADES}
-                  infoMode={infoMode}
-                  metricValue={metricValue}
-                  teamLabel={teamLabel}
-                  isAddCoolingDown={isAddCoolingDown}
-                  guardedAdd={guardedAdd}
-                  openDropModal={openDropModal}
-                  goToTradeProposal={goToTradeProposal}
-                  openPlayer={(pl) => setModalPlayer(hydratePlayer(pl))}
-                />)
-              )}
-            </div>
+            <PlayerListBox viewLabel={statViewLabelFor(infoMode)} metricHeading={metricLabel(infoMode)} players={watchlistPlayers} emptyText="No players in your watchlist yet." renderRow={renderPlayerRow} />
           </>
         )}
 
