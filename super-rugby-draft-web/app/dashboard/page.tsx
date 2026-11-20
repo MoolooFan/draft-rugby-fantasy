@@ -1,13 +1,11 @@
 "use client";
 
 import { lineupWarnings, warningSummary } from "@/lib/league/lineupWarnings";
-import { WatchEyeIcon } from "@/components/WatchEyeIcon";
 import React, { useEffect, useMemo, useState } from "react";
-import { card as themeCard, muted, num, teal } from "@/lib/ui/theme";
 import { leagueRefreshMs, usePoll } from "@/lib/hooks/usePoll";
 import { useRouter } from "next/navigation";
 
-import { PlayerCardModal, type PlayerStatus, type PlayerCardTab } from "@/components/PlayerCardModal";
+import { PlayerCardModal, type PlayerStatus } from "@/components/PlayerCardModal";
 import { CoachFeed } from "@/components/CoachFeed";
 import { AppMenu } from "@/components/AppMenu";
 import { loadMyLeagues, useLeagueStore } from "@/lib/league/store";
@@ -22,249 +20,54 @@ import { getActiveTimezone } from "@/lib/session";
 import { usePlayersStore } from "@/lib/players/store";
 import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib/league/week";
 import { getActiveUsername } from "@/lib/session";
-import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
-import { CAPTAIN_MULTIPLIER, pointsFromRow, roundPoints } from "@/lib/scoring";
-import { useStableComponent } from "@/lib/hooks/useStableComponent";
-import { toMs, getWeekFirstKickoffMs, getSelectionDeadlineMs, getWeeksSorted, type SheetFixtureRow, isSheetLabelRow, isSheetPlayableRow, currentWeekFromSheet, latestCompletedWeekFromSheet } from "@/lib/league/weekHelpers";
+import { roundPoints } from "@/lib/scoring";
+import { toMs, getWeekFirstKickoffMs, getSelectionDeadlineMs, getWeeksSorted, type SheetFixtureRow, isSheetPlayableRow, currentWeekFromSheet, latestCompletedWeekFromSheet } from "@/lib/league/weekHelpers";
 import { startersOf } from "@/lib/scoring/week";
-import { positionsLabel } from "@/lib/players/positions";
-import { TeamAvatar } from "@/components/TeamAvatar";
 import { WeeklyRecapModal } from "@/components/WeeklyRecapModal";
 import { ShieldSecuredModal } from "@/components/ShieldSecuredModal";
 import { SeasonRecapModal } from "@/components/SeasonRecapModal";
 import { statusKind } from "@/lib/status/kind";
-import { ShieldIcon } from "@/components/AwardIcons";
-import { formatProjection, useProjections } from "@/lib/projections/useProjections";
+import { useProjections } from "@/lib/projections/useProjections";
 import { teamOutlook, winProbability } from "@/lib/projections/live";
 import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
-import { ladderOrder, tieBreakHolder } from "@/lib/league/ladder";
-import { MovementCircle } from "@/components/MovementCircle";
-import { useTeamProfileStore } from "@/lib/league/teamProfileStore";
 import type { PowerTable } from "@/lib/league/powerServer";
-import { PlusMinusIcon } from "@/components/PlusMinusIcon";
 import { WeekGamesCard } from "@/components/WeekGamesCard";
-
-type PositionInfo = { posAbbrev?: string | null; secondaryPosAbbrev?: string | null } | null;
-
-type ActiveMenu =
-  | "Dashboard"
-  | "Matchup"
-  | "Team Selection"
-  | "Transactions"
-  | "League"
-  | "Draft Room"
-  | "Fixtures"
-  | "Team Details";
-
-type DashboardState = "noLeague" | "preDraft" | "postDraft";
-
-type Movement = "same" | "up" | "down";
-type StandingRow = {
-  rank: number;
-  teamId: string;
-  team: string;
-  pts: number;
-  movement: Movement;
-};
-
-type Player = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  teamCode: string; // e.g. CHI
-  posAbbrev: string; // e.g. FH
-  posName: string; // e.g. Flyhalf
-  positions?: string; // e.g. "CE/OB/FH"
-  form: number;
-  points?: number;
-};
-
-type Modal =
-  | null
-  | {
-      type: "playerCard";
-      player: Player;
-      ownerTeamId?: string | null;
-      teamLabel?: string;
-      /** e.g. open on the AI Coach tab from Coach News */
-      tab?: PlayerCardTab;
-    };
-
-  type AnyFixture = {
-  week: number;
-  kickoffAt: string | number;
-  kickoffMs?: number;
-};
-
-function singularPosLabel(pos: string) {
-  const p = String(pos ?? "").trim();
-
-  const map: Record<string, string> = {
-    Hookers: "Hooker",
-    Prop: "Prop",
-    Lock: "Lock",
-    Halfback: "Halfback",
-    Flyhalf: "Flyhalf",
-    "Loose Forward": "Loose Forward",
-    Centre: "Centre",
-    "Outside Backs": "Outside Back",
-  };
-
-  return map[p] ?? p;
-}
-
-function getLiveWeekFromNow(fixtures: AnyFixture[], nowMs: number) {
-  if (!fixtures.length) return 1;
-
-  // next fixture that hasn't kicked off yet
-  const next = fixtures.find((f) => (f.kickoffMs ?? toMs(f.kickoffAt)) >= nowMs);
-
-  if (next) return next.week;
-
-  // season finished: use last week in fixtures
-  const weeks = getWeeksSorted(fixtures);
-  return weeks[weeks.length - 1] ?? 1;
-}
-
-function formatDeadline(dtMs: number, timeZone?: string) {
-  const d = new Date(dtMs);
-  return d.toLocaleString(undefined, {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone,
-  });
-}
-
-function isSheetRegularRow(r: SheetFixtureRow) {
-  const k = String(r.kind ?? "").toLowerCase();
-  return !k || k === "regular";
-}
-
-function isSheetMatchRow(r: SheetFixtureRow) {
-  // non-label row and has at least one team id (includes BYE)
-  if (isSheetLabelRow(r)) return false;
-  const home = (r.homeTeamId ?? "").trim();
-  const away = (r.awayTeamId ?? "").trim();
-  return home !== "" || away !== "";
-}
-
-type TeamRecord = { w: number; l: number; d: number };
-
-function buildRecordsUpToWeek(rows: SheetFixtureRow[], upToWeek: number) {
-  const map = new Map<string, TeamRecord>();
-  const ensure = (id: string) => {
-    if (!map.has(id)) map.set(id, { w: 0, l: 0, d: 0 });
-    return map.get(id)!;
-  };
-
-  const playable = rows
-    .filter(isSheetPlayableRow)
-    // win / loss records are the regular season only: finals don't change them
-    .filter((r) => String(r.kind ?? "regular").toLowerCase() === "regular")
-    .filter((r) => String(r.status ?? "").toLowerCase() === "complete")
-    .filter((r) => Number(r.weekFantasy) <= upToWeek)
-    .filter((r) => r.homeTeamId && r.awayTeamId && r.homeScore != null && r.awayScore != null);
-
-  for (const m of playable) {
-    const home = ensure(m.homeTeamId!);
-    const away = ensure(m.awayTeamId!);
-
-    const hs = m.homeScore!;
-    const as = m.awayScore!;
-
-    if (hs > as) { home.w += 1; away.l += 1; }
-    else if (as > hs) { away.w += 1; home.l += 1; }
-    else { home.d += 1; away.d += 1; }
-  }
-
-  return map;
-}
-
-/** a lineup slot ("prop1", "bench2", or a custom squad's "tightfive1"...: lib/league/squad.ts) */
-type SlotId = string;
-
-type Lineup = Record<SlotId, any | null>;
-
-const CAP_MULT = CAPTAIN_MULTIPLIER;
-
-function effectiveCaptainId(lineup: Lineup | null, captainId: string | null, viceId: string | null) {
-  if (!lineup) return null;
-  const cap = Object.values(lineup).find((x: any) => x?.id === captainId) ?? null;
-  const vice = Object.values(lineup).find((x: any) => x?.id === viceId) ?? null;
-
-  // dashboard doesn’t have minutes logic; we keep it simple:
-  // if captain exists in lineup, use captain, else use vice if exists
-  if (cap?.id) return cap.id;
-  if (vice?.id) return vice.id;
-  return captainId;
-}
-
-// ✅ Stable fallbacks for Zustand selectors (avoid new refs each render)
-const EMPTY_ARR: any[] = [];
-const NOOP = () => {};
-
-function normaliseId(x: any) {
-  return String(x ?? "")
-    .trim()
-    .toLowerCase();
-}
-
-// Fantasy points for one stat row, using the shared scoring rules (lib/scoring).
-// Pass the player so props/hookers get their scrum points.
-function getRoundPointsFromRow(row: any, player?: PositionInfo): number | null {
-  if (!row) return null;
-  return pointsFromRow(row, player ?? null);
-}
-
-function rowRound(row: any) {
-  const v = row?.round ?? row?.Round ?? row?.week ?? row?.Week ?? 0;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
-// Points mapping for this displayed round
-function rowPlayerId(row: any) {
-  return (
-    row?.playerId ??
-    row?.internalPlayerId ??
-    row?.internal_player_id ??
-    row?.["Player ID"] ??
-    row?.player_id ??
-    row?.id ??
-    null
-  );
-}
-
-function getLatest3FormFromRoundRows(playerId: string, roundRows: any[], player?: PositionInfo): number {
-  const want = normaliseId(playerId);
-
-  const rows = (roundRows ?? [])
-    .filter((r: any) => normaliseId(rowPlayerId(r)) === want)
-    .map((r: any) => ({
-      round: rowRound(r),
-      points: getRoundPointsFromRow(r, player) ?? 0,
-    }))
-    .filter((x: any) => Number.isFinite(x.round) && x.round > 0 && Number.isFinite(x.points))
-    .sort((a: any, b: any) => b.round - a.round);
-
-  const latest3: Array<{ round: number; points: number }> = [];
-  const seenRounds = new Set<number>();
-
-  for (const r of rows) {
-    if (seenRounds.has(r.round)) continue;
-    seenRounds.add(r.round);
-    latest3.push(r);
-    if (latest3.length === 3) break;
-  }
-
-  if (!latest3.length) return 0;
-
-  const sum = latest3.reduce((acc, r) => acc + r.points, 0);
-  return sum / latest3.length;
-}
+import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
+import { NoLeague } from "@/components/dashboard/NoLeague";
+import { MatchupCard } from "@/components/dashboard/MatchupCard";
+import { UpcomingFixtureCard } from "@/components/dashboard/UpcomingFixtureCard";
+import { PowerCard, StandingsCard } from "@/components/dashboard/StandingsCard";
+import { PlayerOfWeekCard } from "@/components/dashboard/PlayerOfWeekCard";
+import { BestAvailableCard } from "@/components/dashboard/BestAvailableCard";
+import {
+  bestAvailable,
+  buildRecordsUpToWeek,
+  buildStandings,
+  calcFantasyPoints,
+  CAP_MULT,
+  cardStyle,
+  collectPlayerIdsDeep,
+  collectPlayerIdsFromRoster,
+  effectiveCaptainId,
+  EMPTY_ARR,
+  findPlayerMetaById,
+  formatDeadline,
+  getLiveWeekFromNow,
+  isSheetMatchRow,
+  normaliseId,
+  playersOfTheWeek,
+  rosterDataToLineup,
+  rowPlayerId,
+  rowRound,
+  type ActiveMenu,
+  type AnyFixture,
+  type DashboardState,
+  type Lineup,
+  type Modal,
+  type Player,
+  type SlotId,
+  type StandingRow,
+} from "@/components/dashboard/helpers";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -654,36 +457,6 @@ const leagueId = activeLeague?.id ?? null;
 const [selectionByTeamId, setSelectionByTeamId] = useState<Map<string, any>>(new Map());
 const [rosterByTeamId, setRosterByTeamId] = useState<Map<string, any>>(new Map());
 
-function collectPlayerIdsDeep(x: any, out: Set<string>) {
-  if (!x) return;
-
-  // id string/number
-  if (typeof x === "string" || typeof x === "number") {
-    // ignore obvious non-player ids if you have them; otherwise keep simple:
-    const s = String(x).trim();
-    if (s) out.add(s.toLowerCase());
-    return;
-  }
-
-  // array
-  if (Array.isArray(x)) {
-    for (const it of x) collectPlayerIdsDeep(it, out);
-    return;
-  }
-
-  // object
-  if (typeof x === "object") {
-    // common shapes
-    const pid = x.id ?? x.playerId ?? x.player_id;
-    if (pid != null) {
-      const s = String(pid).trim();
-      if (s) out.add(s.toLowerCase());
-    }
-
-    for (const v of Object.values(x)) collectPlayerIdsDeep(v, out);
-  }
-}
-
 const rosteredIds = useMemo(() => {
   const ids = new Set<string>();
 
@@ -708,28 +481,6 @@ const rosteredIds = useMemo(() => {
 
   return ids;
 }, [rosterByTeamId]);
-
-  function collectPlayerIdsFromRoster(raw: any): Set<string> {
-  const out = new Set<string>();
-
-  // preferred: slot-lineup shape
-  const lineup =
-    rosterDataToLineup(raw) ??
-    rosterDataToLineup(raw?.data) ??
-    rosterDataToLineup(raw?.lineup) ??
-    null;
-
-  if (lineup) {
-    for (const p of Object.values(lineup) as any[]) {
-      if (p?.id) out.add(normaliseId(p.id));
-    }
-    return out;
-  }
-
-  // fallback: deep scan any other structure
-  collectPlayerIdsDeep(raw, out);
-  return out;
-}
 
 const ownerTeamIdByPlayerId = useMemo(() => {
   const m = new Map<string, string>(); // pidLower -> teamId
@@ -843,13 +594,6 @@ useEffect(() => {
     .catch((e) => console.error(e));
 }, [leagueId]);
 
-function rosterDataToLineup(data: any): Lineup | null {
-  if (!data) return null;
-  if (data.prop1 || data.hooker1 || data.bench1) return data as Lineup;
-  if (data.lineup && (data.lineup.prop1 || data.lineup.bench1)) return data.lineup as Lineup;
-  return null;
-}
-
 function selectionLineupForTeam(teamId: string | null) {
   if (!teamId) return { lineup: null as Lineup | null, captainId: null as string | null, viceId: null as string | null };
 
@@ -878,10 +622,6 @@ function selectionLineupForTeam(teamId: string | null) {
   };
 }
 
-function calcFantasyPoints(row: any, player?: PositionInfo): number {
-  return getRoundPointsFromRow(row, player) ?? 0;
-}
-
 const weekPointsByPlayerId = useMemo(() => {
   const m = new Map<string, number>();
   const metaById = new Map<string, any>();
@@ -901,18 +641,6 @@ const weekPointsByPlayerId = useMemo(() => {
 
   return m;
 }, [roundRows, displayRealRound, allPlayers]);
-
-function findPlayerMetaById(allPlayersAny: any[], playerId: string) {
-  const want = normaliseId(playerId);
-  if (!want) return null;
-
-  return (
-    (allPlayersAny ?? []).find((p: any) => {
-      const pid = p?.id ?? p?.playerId ?? p?.player_id ?? p?.["Player ID"] ?? null;
-      return pid != null && normaliseId(pid) === want;
-    }) ?? null
-  );
-}
 
 function pointsForPlayer(p: any | null) {
   if (!p?.id) return 0;
@@ -1168,9 +896,7 @@ const upcomingWeek = seasonOver ? "Season complete" : upcomingMatch ? roundLabel
 const upcomingHome = seasonOver ? "—" : upcomingMatch ? upcomingMatch.leftName : "Loading…";
 const upcomingAway = seasonOver ? "—" : upcomingMatch ? upcomingMatch.rightName : "Loading…";
 
-// The Shield: the holder's icon, and whether the upcoming matchup is a shield game
-const shieldHolder = (teamId: string | null | undefined) =>
-  !!teamId && !!activeLeague?.shield?.enabled && activeLeague.shield.holderTeamId === teamId;
+// The Shield: whether the upcoming matchup is a shield game
 const upcomingShield: "defending" | "challenging" | "other" | null = (() => {
   const s = activeLeague?.shield;
   const n = s?.enabled ? s.next : null;
@@ -1250,265 +976,14 @@ const myLineupCheck = useMemo(() => {
   }, [activeLeagueId]);
   const preseasonPower = power && power.leagueId === activeLeagueId && power.table.simulated && !power.table.started ? power.table : null;
 
-  // -----------------------
-// Standings (LIVE from sheetFixtures + activeLeague teams)
-// -----------------------
-type StandingCalc = {
-  teamId: string;
-  teamName: string;
-  played: number;
-  wins: number;
-  draws: number;
-  losses: number;
-  pf: number;
-  pa: number;
-  pd: number;
-  pts: number;
-};
-
-function buildStandingsFromResults(uptoWeekInclusive: number): StandingCalc[] {
-  const teams = activeLeague?.teams ?? [];
-  const base = new Map<string, StandingCalc>();
-
-  for (const t of teams) {
-    base.set(t.id, {
-      teamId: t.id,
-      teamName: t.name,
-      played: 0,
-      wins: 0,
-      draws: 0,
-      losses: 0,
-      pf: 0,
-      pa: 0,
-      pd: 0,
-      pts: 0,
-    });
-  }
-
-  const rows = sheetFixtures
-    .filter((r) => isSheetMatchRow(r))
-    .filter((r) => isSheetRegularRow(r))
-    .filter((r) => String(r.status ?? "").toLowerCase() === "complete")
-    .filter((r) => Number(r.weekFantasy) <= uptoWeekInclusive);
-
-  for (const m of rows) {
-    const homeId = m.homeTeamId ?? null;
-    const awayId = m.awayTeamId ?? null;
-
-    const hs = m.homeScore;
-    const as = m.awayScore;
-
-    // BYE row: include the real team's score in PF only
-    if (!homeId || !awayId) {
-      const realTeamId = homeId ?? awayId;
-      const realScore = homeId ? hs : as;
-
-      if (!realTeamId || realScore == null) continue;
-
-      const team = base.get(realTeamId);
-      if (!team) continue;
-
-      team.pf += realScore;
-      team.pd = team.pf - team.pa;
-      continue;
-    }
-
-    if (hs == null || as == null) continue;
-
-    const home = base.get(homeId);
-    const away = base.get(awayId);
-    if (!home || !away) continue;
-
-    home.played += 1;
-    away.played += 1;
-
-    home.pf += hs;
-    home.pa += as;
-    away.pf += as;
-    away.pa += hs;
-
-    if (hs > as) {
-      home.wins += 1;
-      home.pts += 4;
-      away.losses += 1;
-    } else if (as > hs) {
-      away.wins += 1;
-      away.pts += 4;
-      home.losses += 1;
-    } else {
-      home.draws += 1;
-      away.draws += 1;
-      home.pts += 2;
-      away.pts += 2;
-    }
-
-    // bonus ladder points (if the league uses them) and the Shield's ladder rewards, as on the League page
-    home.pts += Number(m.homeBonus ?? 0) + Number(m.homeShieldPts ?? 0);
-    away.pts += Number(m.awayBonus ?? 0) + Number(m.awayShieldPts ?? 0);
-
-    home.pd = home.pf - home.pa;
-    away.pd = away.pf - away.pa;
-  }
-
-  return Array.from(base.values());
-}
-
 const standings: StandingRow[] = useMemo(() => {
   if (!activeLeague?.teams?.length) return [];
-
-  // standings should advance only based on completed REGULAR weeks
-  const playedNow = sheetFixtures.length ? latestCompletedWeekFromSheet(
-    sheetFixtures.filter(isSheetRegularRow)
-  ) : 0;
-
-  const playedPrev = Math.max(0, playedNow - 1);
-
-  const curr = buildStandingsFromResults(playedNow);
-  const prev = buildStandingsFromResults(playedPrev);
-
-  // level on points: the Shield holder first, if the league uses that tie-break (lib/league/ladder.ts)
-  const holderUpTo = (upto: number) =>
-    tieBreakHolder(
-      sheetFixtures
-        .filter((r) => Number(r.weekFantasy) <= upto && isSheetRegularRow(r) && isSheetMatchRow(r) && String(r.status ?? "").toLowerCase() === "complete")
-        .map((r) => ({ week: Number(r.weekFantasy), holder: r.shieldHolderAfter ?? null }))
-    );
-  const sortRows = (arr: StandingCalc[], upto: number) =>
-    arr.slice().sort(ladderOrder<StandingCalc>(holderUpTo(upto), (r) => r.teamId, (r) => r.pts, (r) => r.pf, (r) => r.pd));
-
-  const currSorted = sortRows(curr, playedNow);
-  const prevSorted = sortRows(prev, playedPrev);
-
-  const prevRankById = new Map(prevSorted.map((r, i) => [r.teamId, i + 1]));
-
-  // Dashboard StandingRow is { rank, team, pts, movement }
-  return currSorted
-    .map((r, i) => {
-      const rank = i + 1;
-      const prevRank = prevRankById.get(r.teamId);
-
-      let movement: Movement = "same";
-      if (prevRank != null) {
-        if (rank < prevRank) movement = "up";
-        else if (rank > prevRank) movement = "down";
-      }
-
-      return {
-        rank,
-        teamId: r.teamId,
-        team: r.teamName,
-        pts: r.pts,
-        movement,
-      };
-    })
-    .slice(0, 10); // safety cap for dashboard
+  return buildStandings(activeLeague.teams, sheetFixtures);
 }, [activeLeague?.teams, sheetFixtures]);
 
-const bestAvailablePlayers: Player[] = useMemo(() => {
-  const src = Array.isArray(allPlayers) ? allPlayers : [];
+const bestAvailablePlayers: Player[] = useMemo(() => bestAvailable(allPlayers, rosteredIds, statRows), [allPlayers, rosteredIds, statRows]);
 
-  const mapped: Player[] = src
-    .map((p: any) => {
-      const id = String(p.id ?? p.playerId ?? "").trim();
-      if (!id) return null;
-
-      const firstName = String(p.firstName ?? p.first_name ?? "").trim();
-      const lastName = String(p.lastName ?? p.last_name ?? "").trim();
-
-      const teamCode = String(p.teamCode ?? p.team ?? p.team_code ?? "").trim() || "TBC";
-      const posAbbrev = String(p.posAbbrev ?? p.pos ?? p.position ?? "").trim() || "—";
-const posNamePrimary = String(p.posName ?? p.positionName ?? "").trim() || posAbbrev;
-
-// try common secondary fields
-const pos2 =
-  String(
-    p.pos2 ?? p.secondaryPos ?? p.secondary_position ?? p.secondaryPosition ?? ""
-  ).trim();
-
-const posName = pos2 ? `${posNamePrimary} / ${pos2}` : posNamePrimary;
-
-      const form = getLatest3FormFromRoundRows(id, statRows, p);
-
-      return {
-        id,
-        firstName: firstName || "?",
-        lastName: lastName || "?",
-        teamCode,
-        posAbbrev,
-        posName,
-        positions: positionsLabel(p),
-        form: Number.isFinite(form) ? form : 0,
-      } as Player;
-    })
-    .filter(Boolean) as Player[];
-
-  // "Available" = not currently rostered by ANY team in the league
-  const available = mapped.filter((p) => !rosteredIds.has(String(p.id).toLowerCase()));
-
-  // Sort by form desc, then name as tie-break
-  available.sort((a, b) => {
-    if (b.form !== a.form) return b.form - a.form;
-    const an = `${a.lastName} ${a.firstName}`.toLowerCase();
-    const bn = `${b.lastName} ${b.firstName}`.toLowerCase();
-    return an.localeCompare(bn);
-  });
-
-  return available.slice(0, 10);
-}, [allPlayers, rosteredIds, statRows]);
-
-  const playersOfWeek: Player[] = useMemo(() => {
-  if (!displayWeek) return [];
-  if (!weekPointsByPlayerId || weekPointsByPlayerId.size === 0) return [];
-
-  // find max points this round
-  let maxPts = -Infinity;
-  for (const pts of weekPointsByPlayerId.values()) {
-    if (typeof pts === "number" && pts > maxPts) maxPts = pts;
-  }
-  if (!Number.isFinite(maxPts) || maxPts <= 0) return [];
-
-  // all playerIds with maxPts
-  const topIds: string[] = [];
-  for (const [pid, pts] of weekPointsByPlayerId.entries()) {
-    if (pts === maxPts) topIds.push(pid);
-  }
-  if (!topIds.length) return [];
-
-  const src = Array.isArray(allPlayers) ? allPlayers : [];
-
-  const mapped: Player[] = topIds
-    .map((pidLower) => {
-      const meta = findPlayerMetaById(src, pidLower);
-      // if we can't find metadata, still show something sane
-      const firstName = String(meta?.firstName ?? meta?.first_name ?? "?").trim() || "?";
-      const lastName = String(meta?.lastName ?? meta?.last_name ?? "?").trim() || "?";
-      const teamCode = String(meta?.teamCode ?? meta?.team ?? meta?.team_code ?? "TBC").trim() || "TBC";
-      const posAbbrev = String(meta?.posAbbrev ?? meta?.pos ?? meta?.position ?? "—").trim() || "—";
-      const posName = String(meta?.posName ?? meta?.positionName ?? posAbbrev).trim() || posAbbrev;
-
-      return {
-        id: String(meta?.id ?? meta?.playerId ?? meta?.player_id ?? pidLower),
-        firstName,
-        lastName,
-        teamCode,
-        posAbbrev,
-        posName,
-        positions: meta ? positionsLabel(meta) : posAbbrev,
-        form: 0,
-        points: maxPts,
-      } as Player;
-    })
-    .filter(Boolean);
-
-  // stable ordering for ties
-  mapped.sort((a, b) => {
-    const an = `${a.lastName} ${a.firstName}`.toLowerCase();
-    const bn = `${b.lastName} ${b.firstName}`.toLowerCase();
-    return an.localeCompare(bn);
-  });
-
-  return mapped;
-}, [allPlayers, weekPointsByPlayerId, displayWeek]);
+const playersOfWeek: Player[] = useMemo(() => playersOfTheWeek(allPlayers, weekPointsByPlayerId, displayWeek), [allPlayers, weekPointsByPlayerId, displayWeek]);
 
 function goToTransactionsForAdd(playerId: string) {
   router.push(`/transactions?addPlayerId=${encodeURIComponent(playerId)}`);
@@ -1524,802 +999,16 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
   router.push(url);
 }
 
-  // -----------------------
-  // Styles
-  // -----------------------
-  const cardStyle: React.CSSProperties = { ...themeCard };
-
-  const primaryButton: React.CSSProperties = {
-    height: 36,
-    width: "100%",
-    borderRadius: 999,
-    background: "linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))",
-    color: "white",
-    fontSize: 13,
-    fontWeight: 600,
-    border: "2px solid rgba(255,255,255,0.85)",
-    boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)",
-    cursor: "pointer",
+  // a player in Player of the Week or Best Available: his player card
+  const openPlayerOfWeek = (p: Player) => {
+    const ownerTeamId = ownerTeamIdByPlayerId.get(normaliseId(p.id)) ?? null;
+    setModal({ type: "playerCard", player: p, ownerTeamId });
   };
-
-  const secondaryButton: React.CSSProperties = {
-    height: 36,
-    width: "100%",
-    borderRadius: 999,
-    background: "linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))",
-    color: "white",
-    fontSize: 12,
-    fontWeight: 600,
-    border: "2px solid rgba(255,255,255,0.85)",
-    cursor: "pointer",
+  const openAvailablePlayer = (p: Player) => {
+    const ownerTeamId = ownerTeamIdByPlayerId.get(normaliseId(p.id)) ?? null;
+    setModal({ type: "playerCard", player: p, ownerTeamId, teamLabel: ownerTeamId ? nameByTeamId(ownerTeamId) : "Available" });
   };
-
-  // Small square icon buttons (match Transactions look/feel)
-const iconBtnBase: React.CSSProperties = {
-  width: 34,
-  height: 34,
-  borderRadius: 10,
-  border: "1px solid rgba(15,23,42,0.18)",
-  boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.22)",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  cursor: "pointer",
-};
-
-const iconGlyphStyle: React.CSSProperties = {
-  lineHeight: "1",
-  transform: "translateY(-1px)", // <-- the key: fixes “looks low” on ★ and +
-  display: "block",
-};
-
-
-const JERSEYS: Record<string, { angle?: string; front?: string; single?: string }> = {
-  BLU: { angle: "/images/jerseys/BLUJerseyAngle.webp", front: "/images/jerseys/BLUJerseyFront.webp" },
-  BRU: { single: "/images/jerseys/BRUJersey.webp" },
-  CHI: { angle: "/images/jerseys/CHIJerseyAngle.webp", front: "/images/jerseys/CHIJerseyFront.webp" },
-  CRU: { angle: "/images/jerseys/CRUJerseyAngle.webp", front: "/images/jerseys/CRUJerseyFront.webp" },
-  DRU: { single: "/images/jerseys/DRUJersey.webp" },
-  FOR: { single: "/images/jerseys/FORJersey.webp" },
-  HIG: { angle: "/images/jerseys/HIGJerseyAngle.webp", front: "/images/jerseys/HIGJerseyFront.webp" },
-  HUR: { angle: "/images/jerseys/HURJerseyAngle.webp", front: "/images/jerseys/HURJerseyFront.webp" },
-  MOA: { angle: "/images/jerseys/MOPJerseyAngle.webp", front: "/images/jerseys/MOPJerseyFront.webp" },
-  RED: { single: "/images/jerseys/REDJersey.webp" },
-  WAR: { single: "/images/jerseys/WARJersey.webp" },
-};
-
-const JERSEY_PLACEHOLDER = "/images/jersey-placeholder.webp";
-
-function jerseySrcForTeamCode(teamCode: string | null | undefined, prefer: "angle" | "front" = "angle") {
-  const code = normalizeTeamCode(teamCode);
-  const j = JERSEYS[code];
-  if (!j) return JERSEY_PLACEHOLDER;
-
-  if (prefer === "angle") return j.angle ?? j.single ?? j.front ?? JERSEY_PLACEHOLDER;
-  return j.front ?? j.single ?? j.angle ?? JERSEY_PLACEHOLDER;
-}
-
-function fullTeamNameFromCode(teamCode: string | null | undefined) {
-  const code = normalizeTeamCode(teamCode);
-
-  const MAP: Record<string, string> = {
-    BLU: "Blues",
-    BRU: "Brumbies",
-    CHI: "Chiefs",
-    CRU: "Crusaders",
-    DRU: "Drua",
-    FOR: "Force",
-    HIG: "Highlanders",
-    HUR: "Hurricanes",
-    MOA: "Moana",
-    RED: "Reds",
-    WAR: "Waratahs",
-  };
-
-  return MAP[code] ?? (teamCode ? String(teamCode) : "TBC");
-}
-
-function JerseyTile__render({
-  size = 36,
-  teamCode,
-}: {
-  size?: number;
-  teamCode?: string;
-}) {
-  const src = jerseySrcForTeamCode(teamCode, "angle");
-
-  return (
-    <img
-      src={src}
-      alt=""
-      width={size}
-      height={size}
-      style={{
-        width: 30,
-        height: 30,
-        borderRadius: 10,
-        objectFit: "contain",
-        display: "block",
-      }}
-      draggable={false}
-      onError={(e) => {
-        (e.currentTarget as HTMLImageElement).src = JERSEY_PLACEHOLDER;
-      }}
-    />
-  );
-}
-const JerseyTile = useStableComponent(JerseyTile__render);
-
-  // -----------------------
-  // Layout blocks
-  // -----------------------
-  function Header__render() {
-    return (
-      <>
-
-        {/* Hamburger */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-  <button
-    onClick={() => setMenuOpen(true)}
-    aria-label="Open menu"
-    style={{
-      background: "transparent",
-      border: "none",
-      padding: 0,
-      margin: 0,
-      color: "inherit",
-      fontSize: 36,
-      fontWeight: 700,
-      lineHeight: "36px",
-      cursor: "pointer",
-    }}
-  >
-    ☰
-  </button>
-
-  <div style={{ flex: 1 }} />
-</div>
-
-        {/* Deadline banner */}
-        <div
-          style={{
-            marginTop: 10,
-            borderRadius: 999,
-            overflow: "hidden",
-            boxShadow: "0 10px 20px rgba(0,0,0,0.18)",
-          }}
-        >
-          <div
-            style={{
-              background: "#FACC15",
-              color: "#0f172a",
-              textAlign: "center",
-              padding: "6px 12px",
-              fontWeight: 600,
-              fontSize: 11,
-            }}
-          >
-            {bannerTitle}
-          </div>
-          <div
-            style={{
-              background: "rgba(255,255,255,0.88)",
-              color: "#0f172a",
-              textAlign: "center",
-              padding: "6px 12px",
-              fontWeight: 500,
-              fontSize: 11,
-              borderTop: "1px solid rgba(15,23,42,0.12)",
-            }}
-          >
-            {bannerTime}
-          </div>
-        </div>
-      </>
-    );
-  }
-const Header = useStableComponent(Header__render);
-
-  function NoLeague__render() {
-    return (
-      <div style={{ marginTop: 14 }}>
-        <div style={cardStyle}>
-          <div style={{ textAlign: "center", fontSize: 16, fontWeight: 700 }}>
-            No League Joined
-          </div>
-          <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
-            <button style={primaryButton} onClick={() => router.push("/league")}>
-  Join League
-</button>
-<button style={primaryButton} onClick={() => router.push("/league")}>
-  Create New League
-</button>
-
-          </div>
-        </div>
-      </div>
-    );
-  }
-const NoLeague = useStableComponent(NoLeague__render);
-
-  function PostDraft__render() {
-    return (
-      <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
-        {/* League / matchup card */}
-        <div style={cardStyle}>
-          <div style={{ textAlign: "center", fontWeight: 700, fontSize: 24 }}>
-            {leagueName}
-          </div>
-          <div style={{ textAlign: "center", marginTop: 4, fontSize: 18, fontWeight: 600 }}>
-            {weekLabel}
-          </div>
-
-          <div
-            style={{
-              marginTop: 10,
-              borderTop: "1px solid #e5e9ef",
-              paddingTop: 10,
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 10,
-            }}
-          >
-            <ScoreBlock score={userScore} team={leftName} record={userRecord} align="left" teamId={leftTeamId} />
-<ScoreBlock score={oppScore} team={rightName} record={oppRecord} align="right" teamId={rightTeamId} />
-          </div>
-
-          <button style={{ ...primaryButton, marginTop: 12 }} onClick={() => router.push("/matchup")}>
-  View Matchup
-</button>
-
-          <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-            <button style={secondaryButton} onClick={() => router.push("/team-selection")}>
-  Select Team
-</button>
-<button
-  style={{ ...secondaryButton, position: "relative" }}
-  onClick={() => router.push("/transactions")}
->
-  Make Transfers
-
-  {pendingTradeCount > 0 ? (
-    <span
-      style={{
-        position: "absolute",
-        top: -6,
-        right: -6,
-        minWidth: 18,
-        height: 18,
-        padding: "0 6px",
-        borderRadius: 999,
-        background: "#EF4444",
-        color: "white",
-        fontSize: 11,
-        fontWeight: 700,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        lineHeight: "18px",
-        border: "2px solid rgba(255,255,255,0.9)",
-        boxShadow: "0 10px 18px rgba(0,0,0,0.25)",
-      }}
-      aria-label={`${pendingTradeCount} pending trade offers`}
-    >
-      {pendingTradeCount > 99 ? "99+" : pendingTradeCount}
-    </span>
-  ) : null}
-</button>
-          </div>
-        </div>
-
-        {/* Upcoming fixture */}
-        <div style={cardStyle}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Upcoming Fixture</div>
-
-          <div
-            style={{
-              borderRadius: 12,
-              background: "#f6f8fa",
-              border: "1px solid #e5e9ef",
-              padding: 12,
-            }}
-          >
-            <div style={{ textAlign: "center", fontSize: 12, fontWeight: 500, opacity: 0.85 }}>
-              {upcomingWeek}
-            </div>
-
-            <div
-              style={{
-                marginTop: 8,
-                display: "grid",
-                gridTemplateColumns: "1fr auto 1fr",
-                alignItems: "center",
-                gap: 10,
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              <div style={{ textAlign: "left" }}>{upcomingHome}</div>
-              <div style={{ opacity: 0.85 }}>v</div>
-              <div style={{ textAlign: "right" }}>{upcomingAway}</div>
-            </div>
-
-            {/* projected scores under each team (separate from the win probability bar) */}
-            {upcomingOutlook ? (
-              <div style={{ ...num, display: "grid", gridTemplateColumns: "1fr 1fr", marginTop: 2, fontSize: 13, fontWeight: 500, color: muted }}>
-                <div style={{ textAlign: "left" }}>Proj {formatProjection(upcomingOutlook.left)}</div>
-                <div style={{ textAlign: "right" }}>Proj {formatProjection(upcomingOutlook.right)}</div>
-              </div>
-            ) : null}
-
-            {upcomingShield ? (
-              <div style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 11, fontWeight: 700 }}>
-                <ShieldIcon size={18} />
-                {upcomingShield === "defending"
-                  ? `Shield defence: ${activeLeague?.shield?.name} on the line at home`
-                  : upcomingShield === "challenging"
-                    ? `Shield challenge: you can take ${activeLeague?.shield?.name} away`
-                    : `Shield challenge: ${activeLeague?.shield?.name} on the line`}
-              </div>
-            ) : null}
-
-            {upcomingOutlook ? (
-              <div style={{ marginTop: 12 }}>
-                <div style={{ textAlign: "center", fontSize: 11, fontWeight: 500, color: muted }}>Win Probability</div>
-                <div style={{ marginTop: 4, display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600 }}>
-                  <span style={{ color: "#15803d" }}>{upcomingOutlook.leftWin}%</span>
-                  <div style={{ height: 7, borderRadius: 999, overflow: "hidden", display: "flex", background: "#e2e8f0" }}>
-                    <div style={{ width: `${upcomingOutlook.leftWin}%`, background: "#16a34a" }} />
-                  </div>
-                  <span style={{ color: muted }}>{100 - upcomingOutlook.leftWin}%</span>
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          {myLineupCheck ? (
-            <button
-              onClick={() => router.push("/team-selection")}
-              style={{
-                marginTop: 8,
-                width: "100%",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 8,
-                padding: "8px 10px",
-                borderRadius: 12,
-                border: "1px solid #fca5a5",
-                background: "#fef2f2",
-                color: "#991b1b",
-                fontSize: 12,
-                fontWeight: 600,
-                textAlign: "left",
-                cursor: "pointer",
-              }}
-            >
-              <span>{myLineupCheck}</span>
-              <span style={{ whiteSpace: "nowrap" }}>Fix lineup ›</span>
-            </button>
-          ) : null}
-        </div>
-
-        {/* this round's Super Rugby games and where their points stand (before round 1: round 1's) */}
-        <WeekGamesCard leagueId={activeLeague?.id ?? null} week={displayWeek > 0 ? displayWeek : selectionWeek} />
-
-        {preseasonPower ? <PowerCard /> : <StandingsCard />}
-
-        {/* Player of the week */}
-        <div style={cardStyle}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Player of the Week</div>
-
-          <div
-            style={{
-              borderRadius: 12,
-              background: "rgba(255,255,255,0.92)",
-              border: "1px solid rgba(0,0,0,0.08)",
-              padding: 10,
-              minHeight: 54,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              color: "#0f172a",
-            }}
-          >
-            {playersOfWeek.length ? (
-  <div style={{ display: "grid", gap: 8, width: "100%" }}>
-    {playersOfWeek.map((p) => (
-      <button
-        key={p.id}
-        onClick={() => {
-  const ownerTeamId = ownerTeamIdByPlayerId.get(normaliseId(p.id)) ?? null;
-
-  setModal({
-  type: "playerCard",
-  player: p,
-  ownerTeamId,
-});
-}}
-        style={{
-          border: "none",
-          background: "transparent",
-          padding: 0,
-          textAlign: "left",
-          cursor: "pointer",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            width: "100%",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <JerseyTile size={44} teamCode={p.teamCode} />
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 12 }}>
-                {p.firstName} {p.lastName}
-              </div>
-              <div style={{ fontSize: 11, opacity: 0.7 }}>
-                {fullTeamNameFromCode(p.teamCode)} — {p.positions ?? singularPosLabel(p.posName)}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-            {(p.points ?? 0)} pts
-          </div>
-        </div>
-      </button>
-    ))}
-  </div>
-) : (
-  <div style={{ opacity: 0.35, fontWeight: 600, fontSize: 12 }}>
-    No scores yet this week
-  </div>
-)}
-          </div>
-
-          <button
-            style={{ ...primaryButton, marginTop: 10, height: 34, fontSize: 12 }}
-            onClick={() => router.push("/team-of-the-week")}
-          >
-            Team of the Week
-          </button>
-        </div>
-
-        {/* AI coach: the latest notes about your players (lib/coach) */}
-        {activeLeague?.id ? (
-          <CoachFeed
-            leagueId={activeLeague.id}
-            style={cardStyle}
-            nameOf={(id) => {
-              const p = (allPlayers as Player[]).find((x) => normaliseId(x.id) === normaliseId(id));
-              return p ? `${p.firstName} ${p.lastName}` : null;
-            }}
-            onOpen={(id) => {
-              const p = (allPlayers as Player[]).find((x) => normaliseId(x.id) === normaliseId(id));
-              if (p) setModal({ type: "playerCard", player: p, ownerTeamId: ownerTeamIdByPlayerId.get(normaliseId(p.id)) ?? null, tab: "AI Coach" });
-            }}
-          />
-        ) : null}
-
-        {/* Best available players */}
-        <div style={cardStyle}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
-            Best Available Players
-          </div>
-
-          <div
-            style={{
-              borderRadius: 12,
-              background: "rgba(255,255,255,0.92)",
-              border: "1px solid rgba(0,0,0,0.08)",
-              overflow: "hidden",
-              color: "#0f172a",
-            }}
-          >
-            <div style={{ padding: 5, fontSize: 10, fontWeight: 600, opacity: 0.7 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 73px", gap: 10 }}>
-                <div />
-                <div style={{ textAlign: "right", paddingRight: -0 }}>Form</div>
-                <div />
-              </div>
-            </div>
-
-            <div style={{ display: "grid" }}>
-              {bestAvailablePlayers.map((p, idx) => (
-                <div
-                  key={p.id}
-                  role="button"
-                  tabIndex={0}
-                  // (a clickable block, not a <button>: it holds the star and add buttons)
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") (e.currentTarget as HTMLDivElement).click();
-                  }}
-onClick={() => {
-  const ownerTeamId = ownerTeamIdByPlayerId.get(normaliseId(p.id)) ?? null;
-
-  setModal({
-    type: "playerCard",
-    player: p,
-    ownerTeamId,
-    teamLabel: ownerTeamId ? nameByTeamId(ownerTeamId) : "Available",
-  });
-}}                  style={{
-                    border: "none",
-                    background: "transparent",
-                    padding: 0,
-                    textAlign: "left",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 64px 66px",
-                      gap: 10,
-                      alignItems: "center",
-                      padding: "5px 10px",
-                      borderTop: idx === 0 ? "1px solid rgba(0,0,0,0.08)" : undefined,
-                      borderBottom: "1px solid rgba(0,0,0,0.08)",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <JerseyTile size={34} teamCode={p.teamCode} />
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 12 }}>
-                          {p.firstName[0]}. {p.lastName}
-                        </div>
-                        <div style={{ fontSize: 10, opacity: 0.7 }}>
-  {fullTeamNameFromCode(p.teamCode)} — {p.positions ?? singularPosLabel(p.posName)}
-</div>
-                      </div>
-                    </div>
-
-                    <div style={{ textAlign: "right", fontWeight: 600, fontSize: 12 }}>
-                      {p.form.toFixed(1)}
-                    </div>
-
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-{/* Watchlist */}
-<button
-  onClick={(e) => {
-    e.stopPropagation();
-    toggleWatchlistForDashboard(p.id);
-  }}
-  aria-label={isWatched(p.id) ? "Remove from watchlist" : "Add to watchlist"}
-  style={{
-    width: 28,
-    height: 28,
-    borderRadius: 10,
-    border: "1px solid rgba(15,23,42,0.22)",
-    background: isWatched(p.id) ? "#F6E7A6" : "rgba(15,23,42,0.10)",
-    color: "#0f172a",
-    fontWeight: 700,
-    fontSize: 16,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "pointer",
-  }}
->
-  <WatchEyeIcon active={isWatched(p.id)} />
-</button>
-
-  {/* Add -> Transactions prefill */}
-  <button
-    onClick={(e) => {
-      e.stopPropagation();
-      goToTransactionsForAdd(p.id);
-    }}
-    aria-label="Add player"
-    style={{
-      width: 28,
-      height: 28,
-      borderRadius: 10,
-      border: "none",
-      background: addBtnBg,
-      color: "white",
-      fontWeight: 700,
-      fontSize: 24,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      cursor: "pointer",
-      padding: 0,
-    }}
-  >
-    <PlusMinusIcon kind="plus" size={16} />
-  </button>
-</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ padding: 10, display: "flex", justifyContent: "flex-end" }}>
-              <button
-                onClick={() => router.push("/transactions")}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "#0f172a",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  textDecoration: "underline",
-                  cursor: "pointer",
-                  padding: 0,
-                  opacity: 0.75,
-                }}
-              >
-                View All Players
-              </button>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    );
-  }
-const PostDraft = useStableComponent(PostDraft__render);
-
-  function ScoreBlock__render({
-    score,
-    team,
-    record,
-    align,
-    teamId,
-  }: {
-    score: number;
-    team: string;
-    record: string;
-    align: "left" | "right";
-    teamId?: string | null;
-  }) {
-    // the team's picture (E5) beside the score
-    const t: any = teamId ? (activeLeague?.teams ?? []).find((x: any) => x.id === teamId) : null;
-    return (
-      <div style={{ textAlign: align as any }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexDirection: align === "right" ? "row-reverse" : "row" }}>
-          {t ? <TeamAvatar pictureUrl={t.pictureUrl} initials={t.userInitials ?? t.initials} size={36} stars={t.stars} /> : null}
-          <div style={{ ...num, fontSize: 38, fontWeight: 600, lineHeight: "36px" }}>{score}</div>
-        </div>
-        <div style={{ marginTop: 6, fontSize: 17, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, justifyContent: align === "right" ? "flex-end" : "flex-start" }}>
-          {align === "right" && shieldHolder(teamId) ? <ShieldIcon size={20} title={`${activeLeague?.shield?.name} holder`} /> : null}
-          {team}
-          {align !== "right" && shieldHolder(teamId) ? <ShieldIcon size={20} title={`${activeLeague?.shield?.name} holder`} /> : null}
-        </div>
-        <div style={{ marginTop: 2, fontSize: 11, fontWeight: 600, opacity: 0.9 }}>{record}</div>
-      </div>
-    );
-  }
-const ScoreBlock = useStableComponent(ScoreBlock__render);
-
-  function StandingsCard__render() {
-    const openTeam = useTeamProfileStore.getState().openTeam; // tap a team: its profile pop-up
-    return (
-      <div style={cardStyle}>
-        <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 8 }}>{leagueName}</div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "56px 1fr 44px",
-            gap: 8,
-            fontSize: 11,
-            fontWeight: 700,
-            opacity: 0.9,
-            padding: "0 6px 6px 6px",
-          }}
-        >
-          <div>Rank</div>
-          <div>Team</div>
-          <div style={{ textAlign: "right" }}>Pts</div>
-        </div>
-
-        <div style={{ display: "grid", gap: 6 }}>
-          {standings.map((r) => (
-            <div
-              key={r.rank}
-              role="button"
-              tabIndex={0}
-              onClick={() => openTeam(r.teamId)}
-              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openTeam(r.teamId)}
-              style={{
-                cursor: "pointer",
-                display: "grid",
-                gridTemplateColumns: "56px 1fr 44px",
-                gap: 8,
-                alignItems: "center",
-                borderRadius: 10,
-                background: "#f6f8fa",
-                border: "1px solid #e5e9ef",
-                padding: "6px 6px",
-                fontSize: 12,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ width: 16, textAlign: "right", fontWeight: 700 }}>{r.rank}</span>
-                <MovementCircle movement={r.movement} size={20} />
-              </div>
-
-              <div style={{ fontWeight: 600 }}>{r.team}</div>
-
-              <div style={{ textAlign: "right", fontWeight: 700 }}>{r.pts}</div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
-          <button
-            onClick={() => router.push("/league")}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: teal,
-              fontSize: 11,
-              fontWeight: 600,
-              textDecoration: "underline",
-              cursor: "pointer",
-              padding: 0,
-            }}
-          >
-            View Full Standings
-          </button>
-        </div>
-      </div>
-    );
-  }
-const StandingsCard = useStableComponent(StandingsCard__render);
-
-  // The power rankings, in the standings' place until round 1 kicks off
-  function PowerCard__render() {
-    const rows = preseasonPower?.rows ?? [];
-    const openTeam = useTeamProfileStore.getState().openTeam; // tap a team: its profile pop-up
-    return (
-      <div style={cardStyle}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
-          <div style={{ fontWeight: 700, fontSize: 12, minWidth: 0 }}>{leagueName}</div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: teal, whiteSpace: "nowrap", flexShrink: 0 }}>Power Rankings</div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "56px 1fr", gap: 8, fontSize: 11, fontWeight: 700, opacity: 0.9, padding: "0 6px 6px 6px" }}>
-          <div>Rank</div>
-          <div>Team</div>
-        </div>
-        <div style={{ display: "grid", gap: 6 }}>
-          {rows.map((r) => {
-            const t = (activeLeague?.teams ?? []).find((x) => x.id === r.teamId);
-            return (
-              <div
-                key={r.teamId}
-                role="button"
-                tabIndex={0}
-                onClick={() => openTeam(r.teamId)}
-                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openTeam(r.teamId)}
-                style={{ display: "grid", gridTemplateColumns: "56px 1fr", gap: 8, alignItems: "center", borderRadius: 10, background: "#f6f8fa", border: "1px solid #e5e9ef", padding: "6px 6px", fontSize: 12, cursor: "pointer" }}
-              >
-                <span style={{ width: 16, textAlign: "right", fontWeight: 700 }}>{r.rank}</span>
-                <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{t?.name ?? "—"}</div>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 }}>
-          <button
-            onClick={() => router.push("/league?tab=Power")}
-            style={{ background: "transparent", border: "none", color: teal, fontSize: 11, fontWeight: 600, textDecoration: "underline", cursor: "pointer", padding: 0, whiteSpace: "nowrap" }}
-          >
-            View Power Rankings
-          </button>
-        </div>
-      </div>
-    );
-  }
-const PowerCard = useStableComponent(PowerCard__render);
+  const shieldHolderTeamId = activeLeague?.shield?.enabled ? (activeLeague.shield.holderTeamId ?? null) : null;
 
   // -----------------------
   // Render
@@ -2346,9 +1035,68 @@ const PowerCard = useStableComponent(PowerCard__render);
           paddingBottom: "calc(18px + env(safe-area-inset-bottom))",
         }}
       >
-        <Header />
+        <DashboardHeader onOpenMenu={() => setMenuOpen(true)} bannerTitle={bannerTitle} bannerTime={bannerTime} />
         {effectiveDashState === "noLeague" && <NoLeague />}
-{effectiveDashState === "postDraft" && <PostDraft />}
+        {effectiveDashState === "postDraft" && (
+          <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
+            <MatchupCard
+              leagueName={leagueName}
+              weekLabel={weekLabel}
+              left={{ score: userScore, team: leftName, record: userRecord, teamId: leftTeamId }}
+              right={{ score: oppScore, team: rightName, record: oppRecord, teamId: rightTeamId }}
+              teams={activeLeague?.teams ?? []}
+              shieldHolderTeamId={shieldHolderTeamId}
+              shieldName={activeLeague?.shield?.name}
+              pendingTradeCount={pendingTradeCount}
+            />
+
+            <UpcomingFixtureCard
+              upcomingWeek={upcomingWeek}
+              upcomingHome={upcomingHome}
+              upcomingAway={upcomingAway}
+              upcomingOutlook={upcomingOutlook}
+              upcomingShield={upcomingShield}
+              shieldName={activeLeague?.shield?.name}
+              myLineupCheck={myLineupCheck}
+            />
+
+            {/* this round's Super Rugby games and where their points stand (before round 1: round 1's) */}
+            <WeekGamesCard leagueId={activeLeague?.id ?? null} week={displayWeek > 0 ? displayWeek : selectionWeek} />
+
+            {preseasonPower ? (
+              <PowerCard leagueName={leagueName} rows={preseasonPower.rows ?? []} teams={activeLeague?.teams ?? []} />
+            ) : (
+              <StandingsCard leagueName={leagueName} standings={standings} />
+            )}
+
+            <PlayerOfWeekCard playersOfWeek={playersOfWeek} onOpenPlayer={openPlayerOfWeek} />
+
+            {/* AI coach: the latest notes about your players (lib/coach) */}
+            {activeLeague?.id ? (
+              <CoachFeed
+                leagueId={activeLeague.id}
+                style={cardStyle}
+                nameOf={(id) => {
+                  const p = (allPlayers as Player[]).find((x) => normaliseId(x.id) === normaliseId(id));
+                  return p ? `${p.firstName} ${p.lastName}` : null;
+                }}
+                onOpen={(id) => {
+                  const p = (allPlayers as Player[]).find((x) => normaliseId(x.id) === normaliseId(id));
+                  if (p) setModal({ type: "playerCard", player: p, ownerTeamId: ownerTeamIdByPlayerId.get(normaliseId(p.id)) ?? null, tab: "AI Coach" });
+                }}
+              />
+            ) : null}
+
+            <BestAvailableCard
+              players={bestAvailablePlayers}
+              onOpenPlayer={openAvailablePlayer}
+              isWatched={isWatched}
+              onToggleWatch={toggleWatchlistForDashboard}
+              onAdd={goToTransactionsForAdd}
+              addBtnBg={addBtnBg}
+            />
+          </div>
+        )}
 
       </div>
 
