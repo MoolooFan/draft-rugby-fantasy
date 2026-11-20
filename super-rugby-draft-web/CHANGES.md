@@ -23,6 +23,7 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `794ab2a` | Split the Team Selection page (1,959 -> 1,170 lines): header, pitch, subs & IR box, tiles and helpers moved to components/teamSelection. No visible change |  |
 | `6bc4c96` | Dashboard: tapping the watchlist eye a second time now removes the player (it used to add him again) |  |
 | `f795eff` | Split the Dashboard page (2,397 -> 1,145 lines): header, cards and helpers moved to components/dashboard. No visible change |  |
 | `3195ef6` | Split the Matchup page (2,410 -> 1,202 lines): header, scoreboard, lineup rows and helpers moved to components/matchup. No visible change |  |

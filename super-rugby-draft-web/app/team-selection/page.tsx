@@ -2,12 +2,11 @@
 
 import { PER80_MIN_MINUTES } from "@/lib/players/statView";
 import { useSeasonStatRows } from "@/lib/players/useStatRows";
-import { pitchRows, rosterSize, slotAccepts, squadSlots, STANDARD_SQUAD, type SlotKind, type SquadFormat } from "@/lib/league/squad";
+import { pitchRows, rosterSize, STANDARD_SQUAD } from "@/lib/league/squad";
 import React, { useEffect, useMemo, useState } from "react";
-import { card as themeCard, muted, num } from "@/lib/ui/theme";
 import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
 import { teamOutlook } from "@/lib/projections/live";
-import { CAPTAIN_MULTIPLIER, pointsFromRow, statCountsFromRow } from "@/lib/scoring";
+import { CAPTAIN_MULTIPLIER, statCountsFromRow } from "@/lib/scoring";
 
 import { AppMenu } from "@/components/AppMenu";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
@@ -20,213 +19,43 @@ import { currentSeasonYear, fixturesByFantasyWeek, roundLabel, SEASONS } from "@
 
 // This season's fixtures, numbered by fantasy week (see lib/season).
 const fixturesData = fixturesByFantasyWeek();
-import type { Fixture } from "@/lib/fixtures/types";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { getActiveUsername, getActiveTimezone } from "@/lib/session";
 import { usePlayersStore } from "@/lib/players/store";
 import { usePlayerPool } from "@/lib/players/pool";
 import { fantasyWeekToRealRound } from "@/lib/league/week";
 import { toMs, getWeekDeadlineMs, type SheetFixtureRow, currentWeekFromSheet, pickValue } from "@/lib/league/weekHelpers";
-import { JERSEYS } from "@/lib/teams/images";
-import { StatusTag } from "@/components/StatusTag";
 import { fixCaptains } from "@/lib/league/lineup";
 import type { Lineup as ServerLineup } from "@/lib/scoring/week";
 import { irEligible } from "@/lib/league/ir";
 import { currentStatusText } from "@/lib/status/kind";
-
-type ViewMode = "Projected" | "Fixture" | "Latest Score" | "PPG" | "LastSeason" | "Per80" | "Form";
-
-/** Slot layout exactly as you provided */
-/** a lineup slot ("prop1", "bench2", or a custom squad's "tightfive1"...: lib/league/squad.ts) */
-type SlotId = string;
-
-
-/** Match your player shape from draft/player JSON */
-type Player = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  teamCode: string; // or team name (we handle both)
-  posAbbrev: string; // e.g. PROP / HOOKER / etc (or your abbreviations)
-  secondaryPosAbbrev?: string | null;
-  posName: string;
-  secondaryPosName?: string | null;
-  draftRank?: number;
-};
-
-type AnyFixture = Fixture & {
-  id: string;
-  week: number;
-  kickoffAt: string | number;
-  status?: string;
-  homeTeam?: string;
-  awayTeam?: string;
-  homeScore?: number | null;
-  awayScore?: number | null;
-};
-
-type SlotDef = {
-  id: SlotId;
-  label: string; // for empty state ("Loose Forward" shows on two lines)
-  starter: boolean; // starters shown on field
-};
-
-function normalizeTeamCode(teamCodeOrName: string) {
-  const raw = (teamCodeOrName ?? "").trim();
-  if (!raw) return "TBD";
-  const upper = raw.toUpperCase();
-
-  // ✅ hard aliases
-  if (upper === "MOP") return "MOA";
-  if (upper === "MOA") return "MOA";
-  if (upper === "MOANA") return "MOA";
-
-  // If it's already a 3-letter code, use it
-  if (upper.length === 3) return upper;
-
-  // Otherwise derive a 3-letter abbrev from the name (moana -> MOA)
-  return abbrevTeam(raw).toUpperCase();
-}
-
-function jerseySrcForTeam(teamCodeOrName: string) {
-  const code = normalizeTeamCode(teamCodeOrName);
-  const j = JERSEYS[code];
-
-  // Team Selection: prefer FRONT, else ANGLE, else SINGLE, else placeholder
-  return (
-    j?.front ??
-    j?.angle ??
-    j?.single ??
-    "/images/jersey-placeholder.webp"
-  );
-}
-
-/** Empty-tile names for each kind of starting slot. */
-const KIND_TILE_LABEL: Record<SlotKind, string> = {
-  PR: "Prop", HO: "Hooker", LK: "Lock", LF: "Loose Forward", HB: "Halfback", FH: "Flyhalf", CE: "Centre", OB: "Outside Back",
-  TF: "Tight Five", HV: "Halves", FW: "Forward", BK: "Back", ANY: "Any",
-};
-
-/** The league's slots in order (Standard: prop1, hooker1, prop2, ... outsideback3, bench1-5). */
-function slotDefsFor(format: SquadFormat): SlotDef[] {
-  const { starters, bench } = squadSlots(format);
-  return [
-    ...starters.map((s) => ({ id: s.id, label: KIND_TILE_LABEL[s.kind], starter: true })),
-    ...bench.map((id) => ({ id, label: "Sub", starter: false })),
-  ];
-}
-
-function isFixtureComplete(f: AnyFixture) {
-  if ((f.status ?? "").toLowerCase() === "complete") return true;
-  if (f.homeScore != null && f.awayScore != null) return true;
-  return false;
-}
-
-function formatDeadline(dtMs: number, timeZone?: string) {
-  const d = new Date(dtMs);
-  return new Intl.DateTimeFormat("en-AU", {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-    timeZone,
-  }).format(d);
-}
-
-/** --- Field placement (percent coords): a row per line of the team (lib/league/squad.ts pitchRows) --- */
-const ROW_LEFTS: Record<number, string[]> = { 1: ["50%"], 2: ["38%", "62%"], 3: ["24%", "50%", "76%"], 4: ["14%", "38%", "62%", "86%"] };
-const STANDARD_ROW_TOPS = [14, 29, 44.5, 60, 75.5, 90.5];
-/**
- * Pitch height: 520px for 6 rows (Standard), taller for bigger squads. Smaller squads (e.g. 10
- * starters, 4 rows) get a shorter pitch with the rows the same distance apart as Standard's,
- * so the tiles sit close together and the subs box comes up under them (Ethan, 19 Nov 2026).
- */
-const COMPACT_FIRST_TOP = 66; // px, like Standard's first row
-const COMPACT_ROW_GAP = 80; // px, like Standard's rows
-const pitchHeight = (rows: number) =>
-  rows < 6 ? COMPACT_FIRST_TOP + (rows - 1) * COMPACT_ROW_GAP + 54 : Math.max(520, rows * 87);
-function fieldPositionsFor(format: SquadFormat): Record<SlotId, { top: string; left: string }> {
-  const rows = pitchRows(format);
-  const n = rows.length;
-  const tops =
-    n === 6
-      ? STANDARD_ROW_TOPS.map((t) => `${t}%`)
-      : n < 6
-        ? rows.map((_, i) => `${COMPACT_FIRST_TOP + i * COMPACT_ROW_GAP}px`)
-        : rows.map((_, i) => `${10 + (i * 80) / (n - 1)}%`);
-  const out: Record<SlotId, { top: string; left: string }> = {};
-  rows.forEach((row, i) => row.forEach((id, j) => (out[id] = { top: tops[i], left: (ROW_LEFTS[row.length] ?? ROW_LEFTS[3])[j] })));
-  return out;
-}
-
-type Lineup = Record<SlotId, Player | null>;
-
-function reconcileLineupWithRoster(prev: Lineup, rosterPool: Player[], SLOT_DEFS: SlotDef[]): Lineup {
-  const BENCH_IDS = SLOT_DEFS.filter((s) => !s.starter).map((s) => s.id);
-  const owned = new Map(rosterPool.map((p) => [p.id, p]));
-
-  // 1) Remove players no longer owned, and refresh objects from rosterPool (so updated fields come through).
-  //    Only this league's slots are kept (a lineup saved under other slot names starts again).
-  const cleaned: Lineup = Object.fromEntries(SLOT_DEFS.map((s) => [s.id, prev?.[s.id] ?? null]));
-  for (const s of SLOT_DEFS) {
-    const p = cleaned[s.id];
-    if (!p?.id) continue;
-
-    const liveOwned = owned.get(p.id);
-    if (!liveOwned) cleaned[s.id] = null;          // dropped
-    else cleaned[s.id] = liveOwned;                // refresh to owned copy
-  }
-
-  // 2) Figure out who is already placed
-  const placed = new Set<string>();
-  for (const s of SLOT_DEFS) {
-    const p = cleaned[s.id];
-    if (p?.id) placed.add(p.id);
-  }
-
-  // 3) Remaining owned players not currently in lineup
-  const remaining: Player[] = rosterPool.filter((p) => !placed.has(p.id));
-
-  // 4) Fill empty starter slots with best-fitting remaining players
-  for (const s of SLOT_DEFS) {
-    if (!s.starter) continue;
-    if (cleaned[s.id]) continue;
-
-    const idx = remaining.findIndex((p) => canPlayerFitSlot(p, s));
-    if (idx >= 0) cleaned[s.id] = remaining.splice(idx, 1)[0];
-  }
-
-  // 5) Fill bench slots with anything left
-  for (const id of BENCH_IDS) {
-    if (cleaned[id]) continue;
-    cleaned[id] = remaining.shift() ?? null;
-  }
-
-  return cleaned;
-}
-function canPlayerFitSlot(player: Player, slot: SlotDef) {
-  // bench: anyone; starting slots: the league's squad rules (positions or groups)
-  return slotAccepts(slot.id, player);
-}
-
-function abbrevTeam(name: string) {
-  const s = (name ?? "").trim();
-  if (!s) return "TBD";
-  // 3-letter-ish
-  return s.slice(0, 3).toUpperCase();
-}
-
-function normaliseId(x: any) {
-  return String(x ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
-
-function fixtureTeamCode(nameOrCode: string) {
-  return normalizeTeamCode(nameOrCode ?? "");
-}
+import { SelectionHeader } from "@/components/teamSelection/SelectionHeader";
+import { BenchPanel, Pitch } from "@/components/teamSelection/Pitch";
+import { IrTile, PlayerTile } from "@/components/teamSelection/Tiles";
+import {
+  calcFantasyPoints,
+  canPlayerFitSlot,
+  fieldPositionsFor,
+  fixtureTeamCode,
+  formatDeadline,
+  isFixtureComplete,
+  normaliseId,
+  normalizeTeamCode,
+  reconcileLineupWithRoster,
+  rosterRowToPlayerIds,
+  rowPlayerId,
+  rowRound,
+  slotDefsFor,
+  swapPlanFor,
+  useNowTick,
+  type AnyFixture,
+  type Lineup,
+  type Player,
+  type SlotDef,
+  type SlotId,
+  type SwapPlan,
+  type ViewMode,
+} from "@/components/teamSelection/helpers";
 
 export default function TeamSelectionPage() {
   useRequireSession();
@@ -333,41 +162,6 @@ const playersById = useMemo(() => {
   return m;
 }, [playerPool]);
 
-function rosterRowToPlayerIds(data: any): string[] {
-  const ids: string[] = [];
-
-  // TeamRosterState style: { slots: { HO: [{id}], PR: [{id}], ... }, wildcards: [{id}] }
-  const slots = data?.slots;
-  if (slots && typeof slots === "object") {
-    for (const arr of Object.values(slots)) {
-      if (!Array.isArray(arr)) continue;
-      for (const p of arr) {
-        const id = String((p as any)?.id ?? "");
-        if (id) ids.push(id);
-      }
-    }
-  }
-
-  const wcs = data?.wildcards;
-  if (Array.isArray(wcs)) {
-    for (const p of wcs) {
-      const id = String((p as any)?.id ?? "");
-      if (id) ids.push(id);
-    }
-  }
-
-  // fallback support: if you ever stored {playerIds:[...]}
-  if (!ids.length && Array.isArray(data?.playerIds)) {
-    for (const x of data.playerIds) {
-      const id = String(x ?? "");
-      if (id) ids.push(id);
-    }
-  }
-
-  // unique
-  return Array.from(new Set(ids));
-}
-
 useEffect(() => {
   const leagueId = activeLeague?.id;
   if (!leagueId) return;
@@ -473,45 +267,6 @@ const sheetPlayerByPlayerId = useMemo(() => {
 }, [sheetPlayers]);
 
 // Best-effort: find the round/week index (so we can sort)
-function rowPlayerId(row: any) {
-  return pickValue(row, [
-    // prefer explicit sheet player id columns
-    "playerId",
-    "player_id",
-    "player id",
-    "playerID",
-    "Player ID",
-    "PlayerId",
-
-    // fallbacks commonly used in other exports
-    "id",
-    "draftId",
-    "draft_id",
-    "Draft ID",
-    "playerKey",
-  ]);
-}
-
-function rowRound(row: any) {
-  const v = pickValue(row, [
-    "round",
-    "Round",
-    "week",
-    "Week",
-    "gameweek",
-    "Gameweek",
-    "GW",
-    "Round #",
-    "Week #",
-  ]);
-
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function calcFantasyPoints(row: any, player?: Player | null): number {
-  return pointsFromRow(row, player ?? null);
-}
 
 const statsByPlayerId = useMemo(() => {
   const buckets = new Map<string, Array<{ r: number; pts: number; mins: number }>>();
@@ -755,7 +510,6 @@ const [isDirty, setIsDirty] = useState(false);
 const [saveToast, setSaveToast] = useState<string | null>(null);
 const [loadedFromServer, setLoadedFromServer] = useState(false);
 const [loadedWeek, setLoadedWeek] = useState<number | null>(null);
-
 
 useEffect(() => {
   if (!yourDraftTeamId) return;
@@ -1051,62 +805,13 @@ He won't be in your lineup or score while he's in IR.`)) return;
     return map;
   }, [lineup, SLOT_DEFS]);
 
-  type SwapPlan =
-  | { kind: "direct" }
-  | { kind: "pivot"; pivotId: SlotId };
-
 function getSwapPlan(fromId: SlotId, toId: SlotId, l: Lineup = lineup): SwapPlan | null {
-
-  if (fromId === toId) return null;
-
-  const fromSlot = SLOT_DEFS.find((x) => x.id === fromId)!;
-  const toSlot = SLOT_DEFS.find((x) => x.id === toId)!;
-
-  const a = l[fromId];
-const b = l[toId];
-
-  // must swap with another PLAYER tile (no empty)
-  if (!a || !b) return null;
-
-  // ✅ Direct swap (always allowed if legal)
-  if (canPlayerFitSlot(a, toSlot) && canPlayerFitSlot(b, fromSlot)) {
-    return { kind: "direct" };
-  }
-
-  // ✅ IMPORTANT: Pivot rearrange ONLY to solve STARTING-LINEUP placement
-  // If the user tapped a bench tile as the TARGET, do NOT attempt a pivot.
-  if (!toSlot.starter) return null;
-
-  // Quick reject: if target player can't go back to fromSlot, no pivot can fix it
-  if (!canPlayerFitSlot(b, fromSlot)) return null;
-
-  // Pivot must be a STARTER slot (so rearrange never shuffles bench)
-  for (const pivotId of STARTER_IDS) {
-    if (pivotId === fromId || pivotId === toId) continue;
-
-    const pSlot = SLOT_DEFS.find((x) => x.id === pivotId)!;
-    const c = l[pivotId];
-    if (!c) continue;
-
-    // rotation:
-    // pivot <- source (a)
-    // target <- pivot (c)
-    // source <- target (b)
-
-    if (!canPlayerFitSlot(a, pSlot)) continue;     // a can go to pivot
-    if (!canPlayerFitSlot(c, toSlot)) continue;   // c can go to target
-
-    return { kind: "pivot", pivotId };
-  }
-
-  return null;
+  return swapPlanFor(fromId, toId, l, SLOT_DEFS, STARTER_IDS);
 }
 function isStarterSlotId(id: SlotId) {
   const s = SLOT_DEFS.find((x) => x.id === id);
   return !!s?.starter;
 }
-
-
 
   function onTilePress(slotId: SlotId) {
     const p = lineup[slotId];
@@ -1227,434 +932,48 @@ function tileSubtext(p: Player | null) {
 
   
 
-  // -----------------------
-  // Styles (match your app)
-  // -----------------------
-  const card35: React.CSSProperties = { ...themeCard, padding: undefined };
-
-  const listBox: React.CSSProperties = {
-    borderRadius: 14,
-    background: "rgba(255,255,255,0.18)",
-    border: "1px solid rgba(255,255,255,0.18)",
-    overflow: "hidden",
+  // a lineup tile (components/teamSelection/Tiles.tsx)
+  const renderTile = (slotId: SlotId) => {
+    const slot = SLOT_DEFS.find((s) => s.id === slotId)!;
+    const p = lineup[slotId];
+    const isCaptain = !!p?.id && captainId === p.id && slot.starter;
+    return (
+      <PlayerTile
+        slot={slot}
+        player={p}
+        isCaptain={isCaptain}
+        isVice={!!p?.id && viceId === p.id && slot.starter}
+        swapping={!!swapFromSlot}
+        isSwapSource={swapFromSlot === slotId}
+        // the tiles the swapping player can legally go to (another player's tile, not an empty one)
+        isSwapTarget={!!swapFromSlot && slotId !== swapFromSlot && !!p && !!getSwapPlan(swapFromSlot, slotId)}
+        irDropMode={irDropMode}
+        subtext={tileSubtext(p)}
+        captainProj={!!p && viewMode === "Projected" && p.id === captainId}
+        livePlayer={p ? getLivePlayerById(p.id) : null}
+        onPress={() => onTilePress(slotId)}
+      />
+    );
   };
 
-  function Hamburger() {
-    return (
-      <button
-        onClick={() => setMenuOpen(true)}
-        aria-label="Open menu"
-        style={{
-          background: "transparent",
-          border: "none",
-          padding: 0,
-          margin: 0,
-          color: "inherit",
-          fontSize: 30,
-          fontWeight: 700,
-          lineHeight: "30px",
-          cursor: "pointer",
-        }}
-      >
-        ☰
-      </button>
-    );
-  }
-const pulseStyle: React.CSSProperties = {
-  animation: "swapPulse 1.6s ease-in-out infinite",
-};
-
-  function CaptainBadge({ kind }: { kind: "C" | "V" }) {
-    return (
-      <div
-        style={{
-          width: 18,
-          height: 18,
-          borderRadius: 999,
-          background: "rgba(168,85,247,0.95)",
-          color: "white",
-          border: "1px solid rgba(255,255,255,0.9)",
-
-          fontSize: 10,
-          fontWeight: 700,
-          display: "grid",
-          placeItems: "center",
-          boxShadow: "0 6px 12px rgba(0,0,0,0.18)",
-        }}
-      >
-        {kind}
-      </div>
-    );
-  }
-
-  function PlayerTile({ slotId }: { slotId: SlotId }) {
-  const slot = SLOT_DEFS.find((s) => s.id === slotId)!;
-  const p = lineup[slotId];
-
-  const isCaptain = !!p?.id && captainId === p.id && slot.starter;
-const isVice = !!p?.id && viceId === p.id && slot.starter;
-
-  const swapping = !!swapFromSlot;
-  const isSwapSource = swapFromSlot === slotId;
-
-    const swapPlayer = swapFromSlot ? lineup[swapFromSlot] : null;
-
-  // ✅ Eligible swap targets: positions the swap player can legally go to.
-  // (Matches your current swap rules: must swap with another PLAYER tile, not empty)
-  const isSwapTarget =
-  !!swapFromSlot &&
-  slotId !== swapFromSlot &&
-  !!p &&
-  !!getSwapPlan(swapFromSlot, slotId);
-
- const border =
-  irDropMode && p
-    ? "2px solid rgba(248,113,113,0.95)"
-    : isSwapSource
-    ? "2px solid rgba(250,204,21,0.95)"
-    : isSwapTarget
-    ? "2px solid rgba(250,204,21,0.85)"
-    : swapping
-    ? "1px solid rgba(250,204,21,0.25)"
-    : "1px solid rgba(255,255,255,0.22)";
-
-const boxShadow = isSwapSource
-  ? `
-      0 10px 22px rgba(0,0,0,0.16),
-      0 0 0 3px rgba(250,204,21,0.85),
-      0 0 18px rgba(250,204,21,0.55)
-    `
-  : isSwapTarget
-  ? `
-      0 10px 22px rgba(0,0,0,0.16),
-      0 0 0 3px rgba(250,204,21,0.75),
-      0 0 14px rgba(250,204,21,0.45)
-    `
-  : "0 10px 22px rgba(0,0,0,0.16)";
-
-const jerseyUrl = p ? jerseySrcForTeam(p.teamCode) : "";
-
-  return (
-    <button
-      onClick={() => onTilePress(slotId)}
-      style={{
-        width: 70,
-        height: 70,
-        borderRadius: 14,
-        border,
-
-        // bench tiles sit on a white card (design refresh): light grey; pitch tiles stay see-through
-        background: String(slotId).startsWith("bench") ? (p ? "#eef2f6" : "#f8fafc") : p ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.10)",
-        backdropFilter: "blur(8px)",
-        boxShadow,
-opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
-...(isSwapTarget ? pulseStyle : {}),
-
-        padding: 0,
-        cursor: "pointer",
-        position: "relative",
-        overflow: "visible",
-        color: "white",
-      }}
-    >
-      {/* Corner badges are relative to the TILE */}
-      <div style={{ position: "absolute", top: -6, left: -2, zIndex: 3 }}>
-        {isCaptain ? CaptainBadge({ kind: "C" }) : null}
-        {!isCaptain && isVice ? CaptainBadge({ kind: "V" }) : null}
-      </div>
-
-      <div style={{ position: "absolute", top: -6, right: -2, zIndex: 3, lineHeight: "12px" }}>
-        {p ? <StatusTag player={getLivePlayerById(p.id)} style={{ fontSize: 8, padding: "1px 3px", boxShadow: "0 1px 2px rgba(0,0,0,0.35)" }} /> : null}
-      </div>
-
-      {/* Main content */}
-      {p ? (
-        <>
-          {/* Jersey image (clipped so it never peeks under the pill) */}
-<div
-  style={{
-    position: "absolute",
-    top: 3,
-    left: "50%",
-    transform: "translateX(-50%)",
-    width: 65,
-
-    // ✅ key: stop the jersey area above the pill
-    height: 44, // (70 tile height - ~26px pill space)
-
-    overflow: "hidden", // ✅ clips jersey + drop-shadow
-    zIndex: 1,
-    display: "grid",
-    placeItems: "center",
-  }}
->
-  <img
-    src={jerseyUrl}
-    alt=""
-    style={{
-      width: "100%",
-      height: 65,         // keep full jersey size
-      objectFit: "contain",
-      filter: "drop-shadow(0 8px 14px rgba(0,0,0,0.25))",
-    }}
-  />
-</div>
-
-          {/* Combined pill (split horizontally) */}
-          <div
-            style={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              bottom: 0,
-              borderRadius: 999,
-              overflow: "hidden",
-              zIndex: 2,
-              boxShadow: "0 10px 18px rgba(0,0,0,0.18)",
-            }}
-          >
-            {/* Top half: name */}
-            <div
-              style={{
-                background: "rgba(255,255,255,0.95)",
-                color: "#0f2a4a",
-                textAlign: "center",
-                padding: "3px 6px",
-                fontSize: 10,
-                fontWeight: 500,
-                lineHeight: "8px",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {p.lastName}
-            </div>
-
-            {/* Bottom half: view info */}
-            <div
-              style={{
-                background: "#133454",
-                // the captain's projection is purple, to show it has been doubled (Ethan, 20 Nov 2026)
-                color: viewMode === "Projected" && p.id === captainId ? "#c084fc" : "white",
-                textAlign: "center",
-                padding: "0px 0px",
-                fontSize: 10,
-                fontWeight: viewMode === "Projected" && p.id === captainId ? 700 : 500,
-                lineHeight: "12px",
-                borderTop: "1px solid rgba(15,23,42,0.10)",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {tileSubtext(p)}
-            </div>
-          </div>
-        </>
-      ) : (
-        // Empty state: ONLY position label, no jersey placeholder
-        <div
-  style={{
-    position: "absolute",
-    inset: 0,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "0 6px",
-    fontSize: 10,
-    fontWeight: 700,
-    opacity: 0.75,
-    lineHeight: "12px", // 👈 tighter
-    textAlign: "center",
-  }}
->
-  {slot.label.split(" ").map((w) => (
-    <span key={w}>{w}</span>
-  ))}
-</div>
-
-      )}
-    </button>
-  );
-}
-
-  // The IR spot: looks like a player tile, with a red "IR" corner badge.
-  function IrTile({ index }: { index: number }) {
+  const renderIr = (index: number) => {
     const p = irPlayers[index] ?? null;
-    const thisFit = !!p && !canGoInIr(p.id);
     const swapping = !!swapFromSlot;
     return (
-      <button
-        onClick={() => {
-          if (swapping) { setSwapFromSlot(null); return; } // IR isn't part of lineup swaps
-          if (irDropMode) { setIrDropMode(false); setIrNotice(null); return; }
-          if (p) { setIrFocus(index); openPlayer(p); }
-          else setIrNotice({ kind: "info", text: "To use your IR spot, tap an injured player (or one who is out) and choose Move to IR" });
+      <IrTile
+        player={p}
+        thisFit={!!p && !canGoInIr(p.id)}
+        swapping={swapping}
+        livePlayer={p ? getLivePlayerById(p.id) : null}
+        onPress={() => {
+      if (swapping) { setSwapFromSlot(null); return; } // IR isn't part of lineup swaps
+      if (irDropMode) { setIrDropMode(false); setIrNotice(null); return; }
+      if (p) { setIrFocus(index); openPlayer(p); }
+      else setIrNotice({ kind: "info", text: "To use your IR spot, tap an injured player (or one who is out) and choose Move to IR" });
         }}
-        style={{
-          width: 70,
-          height: 70,
-          borderRadius: 14,
-          border: thisFit ? "2px solid rgba(250,204,21,0.95)" : "3px dashed rgba(239,68,68,0.95)",
-          background: p ? "#eef2f6" : "#f8fafc",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.10)",
-          opacity: swapping ? 0.45 : 1,
-          padding: 0,
-          cursor: "pointer",
-          position: "relative",
-          overflow: "visible",
-          color: "white",
-        }}
-      >
-        {p ? (
-          <>
-            <div style={{ position: "absolute", top: -6, left: -2, zIndex: 3 }}>
-              <span style={{ display: "inline-block", fontSize: 8, fontWeight: 700, padding: "1px 3px", borderRadius: 4, background: "#dc2626", color: "#ffffff", boxShadow: "0 1px 2px rgba(0,0,0,0.35)", lineHeight: "10px" }}>
-                IR
-              </span>
-            </div>
-            <div style={{ position: "absolute", top: -6, right: -2, zIndex: 3, lineHeight: "12px" }}>
-              <StatusTag player={getLivePlayerById(p.id)} style={{ fontSize: 8, padding: "1px 3px", boxShadow: "0 1px 2px rgba(0,0,0,0.35)" }} />
-            </div>
-            <div style={{ position: "absolute", top: 3, left: "50%", transform: "translateX(-50%)", width: 65, height: 44, overflow: "hidden", zIndex: 1, display: "grid", placeItems: "center" }}>
-              <img src={jerseySrcForTeam(p.teamCode)} alt="" style={{ width: "100%", height: 65, objectFit: "contain", filter: "drop-shadow(0 8px 14px rgba(0,0,0,0.25)) grayscale(0.6)" }} />
-            </div>
-            <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, borderRadius: 999, overflow: "hidden", zIndex: 2, boxShadow: "0 10px 18px rgba(0,0,0,0.18)" }}>
-              <div style={{ background: "rgba(255,255,255,0.95)", color: "#0f2a4a", textAlign: "center", padding: "3px 6px", fontSize: 10, fontWeight: 500, lineHeight: "8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {p.lastName}
-              </div>
-              <div style={{ background: "#7f1d1d", color: "white", textAlign: "center", fontSize: 10, fontWeight: 500, lineHeight: "12px", borderTop: "1px solid rgba(15,23,42,0.10)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {thisFit ? "Fit - activate" : "IR"}
-              </div>
-            </div>
-          </>
-        ) : (
-          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#dc2626", lineHeight: "12px", textAlign: "center" }}>
-            <span>IR</span>
-          </div>
-        )}
-      </button>
+      />
     );
-  }
-
-  function FieldStarters() {
-    return (
-      <div
-        style={{
-          marginTop: 10,
-          borderRadius: 18,
-          overflow: "hidden",
-          position: "relative",
-          height: pitchHeight(PITCH_ROWS),
-          background:
-            // Use your field PNG later (drop it into /public/images/field.webp)
-            `linear-gradient(to bottom, rgba(5,150,105,0.92), rgba(16,185,129,0.92))`,
-          backgroundImage: `url("/images/field.webp")`,
-          backgroundSize: "cover",
-          // shorter pitches (small squads) keep the top of the picture: the posts end
-          backgroundPosition: PITCH_ROWS < 6 ? "center top" : "center",
-          
-          boxShadow: "0 18px 50px rgba(0,0,0,0.30)",
-        }}
-      >
-        {/* Light overlay so tiles pop even if image is bright */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            inset: 0,
-            background: "rgba(2,6,23,0.10)",
-          }}
-        />
-
-        {STARTER_IDS.map((id) => {
-          const pos = FIELD_POS[id];
-          return (
-            <div
-              key={id}
-              style={{
-                position: "absolute",
-                top: pos.top,
-                left: pos.left,
-                transform: "translate(-50%, -50%)",
-              }}
-            >
-              {PlayerTile({ slotId: id })}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  function BenchPanel() {
-    return (
-      <div style={{ marginTop: 10, ...card35, padding: 12, borderRadius: 18 }}>
-        <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.95, marginBottom: 8 }}>
-          Substitutes &amp; IR
-        </div>
-
-        {/* Bench layout: rows of three at 24/50/76 (like outside backs): the subs, then the IR spots */}
-<div
-  style={{
-    position: "relative",
-    height: Math.max(1, Math.ceil((BENCH_IDS.length + squad.ir) / 3)) * 80 - 14,
-  }}
->
-  {[...BENCH_IDS.map((id) => ({ id, ir: -1 })), ...Array.from({ length: squad.ir }, (_, i) => ({ id: `ir${i + 1}`, ir: i }))].map((t, idx) => {
-    const lefts = ["24%", "50%", "76%"];
-    return (
-      <div
-        key={t.id}
-        style={{
-          position: "absolute",
-          top: 29 + Math.floor(idx / 3) * 80,
-          left: lefts[idx % 3],
-          transform: "translate(-50%, -50%)",
-        }}
-      >
-        {t.ir >= 0 ? IrTile({ index: t.ir }) : PlayerTile({ slotId: t.id })}
-      </div>
-    );
-  })}
-</div>
-
-        {fitIrPlayer && !irNotice ? (
-          <div style={{ marginTop: 8, fontSize: 11, fontWeight: 500, color: "#FACC15", textAlign: "center" }}>
-            {nameOf(fitIrPlayer)} is fit again - activate him before making adds, claims or trades
-          </div>
-        ) : null}
-        {irNotice ? (
-          <div
-            style={{
-              marginTop: 8,
-              padding: "6px 10px",
-              borderRadius: 10,
-              fontSize: 11,
-              fontWeight: 500,
-              textAlign: "center",
-              background: irNotice.kind === "error" ? "rgba(220,38,38,0.9)" : "rgba(15,23,42,0.55)",
-              color: "white",
-            }}
-          >
-            {irNotice.text}
-            {irDropMode ? (
-              <button
-                onClick={() => { setIrDropMode(false); setIrNotice(null); }}
-                style={{ marginLeft: 8, border: "1px solid rgba(255,255,255,0.8)", background: "transparent", color: "white", borderRadius: 8, fontSize: 11, fontWeight: 600, padding: "1px 8px", cursor: "pointer" }}
-              >
-                Cancel
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-        {irBusy ? <div style={{ marginTop: 6, fontSize: 11, opacity: 0.8, textAlign: "center" }}>Updating…</div> : null}
-
-      </div>
-    );
-  }
+  };
 
   // Build modal actions for current modal player
   const modalActions = useMemo(() => {
@@ -1767,133 +1086,35 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
       paddingBottom: "calc(18px + env(safe-area-inset-bottom))",
     }}
   >
-        {/* Header + Hamburger */}
-        <div style={{ ...card35, padding: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {Hamburger()}
-           
-            <div style={{ flex: 1 }} />
-            {/* DEV dropdown (you said remove later) */}
-            
-          </div>
-
-<div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10 }}>
-  <div style={{ fontSize: 18, fontWeight: 700 }}>Team Selection</div>
-  {teamProj != null ? (
-    <div style={{ textAlign: "right", lineHeight: 1 }} title="Expected points for this lineup">
-      <div style={{ ...num, fontSize: 22, fontWeight: 600 }}>{formatProjection(teamProj)}</div>
-      <div style={{ fontSize: 10, fontWeight: 500, color: muted, marginTop: 2 }}>Projected</div>
-    </div>
-  ) : null}
-</div>
-
-        </div>
-
-{/* Deadline banner, below the white header card like the dashboard's (Ethan, 20 Nov 2026) */}
-<div
-  style={{
-    marginTop: 10,
-
-    borderRadius: 999,
-    overflow: "hidden",
-    boxShadow: "0 10px 20px rgba(0,0,0,0.18)",
-  }}
->
-
-  <div
-    style={{
-      background: "#FACC15",
-      color: "#0f172a",
-      textAlign: "center",
-      padding: "6px 12px",
-      fontWeight: 600,
-      fontSize: 11,
-    }}
-  >
-   {roundLabel(selectionWeek)} • Team Selection Deadline
-
-  </div>
-
-    <div
-    suppressHydrationWarning
-    style={{
-      background: "rgba(255,255,255,0.88)",
-      color: "#0f172a",
-      textAlign: "center",
-      padding: "6px 12px",
-      fontWeight: 500,
-      fontSize: 11,
-      borderTop: "1px solid rgba(15,23,42,0.12)",
-    }}
-  >
-    {deadlineText}
-  </div>
-</div>
-
-{/* DEV dropdown (temporary) — below header, top-right */}
-<div
-  style={{
-    marginTop: 10,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
-  }}
->
-  <select
-    value={viewMode}
-    onChange={(e) => setViewMode(e.target.value as ViewMode)}
-    style={{
-      height: 30,
-      width: 130,
-      borderRadius: 12,
-      border: "none",
-      outline: "none",
-      padding: "0 10px",
-      fontSize: 11,
-      fontWeight: 500,
-      color: "#0f172a",
-      background: "rgba(255,255,255,0.9)",
-      boxShadow: "0 10px 20px rgba(0,0,0,0.18)",
-    }}
-    title="DEV: view mode"
-  >
-    <option value="Projected">Projected</option>
-    <option value="Fixture">Next Fixture</option>
-    <option value="Latest Score">Latest Score</option>
-    <option value="PPG">Match Average</option>
-    {hasLastSeason ? <option value="LastSeason">{lastSeasonYear} Average</option> : null}
-    <option value="Per80">Per 80</option>
-    <option value="Form">Form</option>
-  </select>
-
-  <button
-  onClick={() => saveSelection()}   // ✅ important
-  disabled={!hasLoadedSaved || !isDirty}
-    style={{
-      height: 30,
-      padding: "0 30px",
-      borderRadius: 12,
-      border: "none",
-      fontSize: 11,
-      fontWeight: 700,
-      cursor: !hasLoadedSaved || !isDirty ? "default" : "pointer",
-      color: "#0f172a",
-      background: !hasLoadedSaved || !isDirty ? "rgba(255,255,255,0.55)" : "#FACC15",
-      boxShadow: "0 10px 20px rgba(0,0,0,0.18)",
-      opacity: !hasLoadedSaved || !isDirty ? 0.7 : 1,
-      whiteSpace: "nowrap",
-    }}
-  >
-    {saveToast ? saveToast : "Save"}
-</button>
-</div>
+        <SelectionHeader
+          onOpenMenu={() => setMenuOpen(true)}
+          teamProj={teamProj}
+          roundText={roundLabel(selectionWeek)}
+          deadlineText={deadlineText}
+          viewMode={viewMode}
+          onViewMode={setViewMode}
+          hasLastSeason={hasLastSeason}
+          lastSeasonYear={lastSeasonYear}
+          saveDisabled={!hasLoadedSaved || !isDirty}
+          saveLabel={saveToast ? saveToast : "Save"}
+          onSave={() => saveSelection()}
+        />
 
         {/* Starters on field */}
-        {FieldStarters()}
+        <Pitch pitchRowCount={PITCH_ROWS} starterIds={STARTER_IDS} fieldPos={FIELD_POS} renderTile={renderTile} />
 
-    {/* Bench */}
-    {BenchPanel()}
+        {/* Bench */}
+        <BenchPanel
+          benchIds={BENCH_IDS}
+          irCount={squad.ir}
+          renderTile={renderTile}
+          renderIr={renderIr}
+          fitIrName={fitIrPlayer ? nameOf(fitIrPlayer) : null}
+          irNotice={irNotice}
+          irDropMode={irDropMode}
+          onCancelDrop={() => { setIrDropMode(false); setIrNotice(null); }}
+          irBusy={irBusy}
+        />
   </div>
 )}
 
@@ -1946,14 +1167,4 @@ opacity: swapping && !isSwapSource && !isSwapTarget ? 0.45 : 1,
 
     </main>
   );
-}
-
-/** small time tick hook (same idea as your other pages) */
-function useNowTick(ms = 500) {
-  const [, force] = useState(0);
-  useEffect(() => {
-    const t = window.setInterval(() => force((x) => x + 1), ms);
-    return () => window.clearInterval(t);
-  }, [ms]);
-  return Date.now();
 }
