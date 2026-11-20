@@ -1,20 +1,15 @@
 "use client";
 
-import { SquadFormatFields } from "@/components/SquadFormatFields";
-import { STANDARD_SQUAD, type SquadFormat } from "@/lib/league/squad";
 import React, { useEffect, useMemo, useState } from "react";
 import { card as themeCard } from "@/lib/ui/theme";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { useLeagueStore, loadMyLeagues } from "@/lib/league/store";
-import type { PlayoffFormat } from "@/lib/league/types";
 
 import { AppMenu } from "@/components/AppMenu";
 import { usePlayersStore } from "@/lib/players/store";
-import { ScoringEditor } from "@/components/ScoringEditor";
-import { STANDARD_SCORING, type ScoringRules } from "@/lib/scoring";
 import { CAPTAIN_MULTIPLIER, pointsFromRow } from "@/lib/scoring";
 
-import { currentSeasonYear, fixturesByFantasyWeek, roundLabel } from "@/lib/season";
+import { currentSeasonYear, fixturesByFantasyWeek } from "@/lib/season";
 
 // This season's fixtures, numbered by fantasy week (see lib/season).
 const fixturesData = fixturesByFantasyWeek();
@@ -22,24 +17,18 @@ import type { Fixture } from "@/lib/fixtures/types";
 import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { toMs, pickValue } from "@/lib/league/weekHelpers";
 import { ladderOrder, tieBreakHolder } from "@/lib/league/ladder";
-import { ShieldRewardsFields } from "@/components/ShieldRewardsFields";
-import { ShieldStartFields } from "@/components/ShieldStartFields";
-import { BonusPointsFields } from "@/components/BonusPointsFields";
-import { DEFAULT_BONUS_RULES, type BonusRules } from "@/lib/league/bonus";
-import { TeamIconPicker } from "@/components/TeamIconPicker";
-import { parseTeamIcon } from "@/lib/teams/icons";
-import { DEFAULT_SHIELD_START, NO_SHIELD_REWARDS, type ShieldRewards, type ShieldStart } from "@/lib/league/shield";
-import { toDatetimeLocal, ModalOverlay, inputStyle, selectStyle, parseDatetimeLocal, saveButton } from "./ui";
 import { LeagueSettingsModal } from "./LeagueSettingsModal";
-import { TeamAvatar } from "@/components/TeamAvatar";
-import { PictureCropper } from "@/components/PictureCropper";
-import { CrownIcon, ShieldIcon, SpoonIcon } from "@/components/AwardIcons";
 import { ShieldTab } from "@/components/ShieldTab";
 import { PowerTab } from "@/components/PowerTab";
-import { MovementCircle } from "@/components/MovementCircle";
 import { useTeamProfileStore } from "@/lib/league/teamProfileStore";
 import type { PowerTable } from "@/lib/league/powerServer";
 import { formatOdds } from "@/lib/league/odds";
+import { StandingsTab } from "./StandingsTab";
+import { FixturesTab } from "./FixturesTab";
+import { ResultsTab } from "./ResultsTab";
+import { JoinLeagueModal } from "./JoinLeagueModal";
+import { CreateLeagueModal } from "./CreateLeagueModal";
+import { pillButton, type FixtureRow, type FixtureWeek, type StandingRow } from "./fixtureRows";
 
 type LeagueTab = "Standings" | "Fixtures" | "Results" | "Power" | "Shield";
 type Modal =
@@ -47,28 +36,6 @@ type Modal =
   | { type: "join" }
   | { type: "create" }
   | { type: "settings" };
-
-  type FixtureRow = {
-  weekNo: number;
-
-  home: string;
-  away: string;
-
-  homeTeamId?: string | null;
-  awayTeamId?: string | null;
-
-  homeScore: number | null;
-  awayScore: number | null;
-
-  // ✅ ADD THESE (for playoff label rows)
-  label?: string | null;
-  kind?: "regular" | "playoffs" | "consolation" | string | null;
-};
-
-type FixtureWeek = {
-  weekNo: number;
-  rows: FixtureRow[];
-};
 
 type AnyFixture = Fixture & {
   id: string;
@@ -283,34 +250,6 @@ function isSheetRegularRow(r: SheetFixtureRow) {
   return !k || k === "regular";
 }
 
-function isPlayoffsKind(kind: string | null) {
-  return String(kind ?? "").toLowerCase() === "playoffs";
-}
-
-function labelText(r: FixtureRow) {
-  return String(r.home ?? "").trim().toLowerCase();
-}
-
-function isGrandFinalHeader(r: FixtureRow) {
-  return labelText(r) === "grand final";
-}
-
-function shouldInjectPlaceholder(r: FixtureRow) {
-  if (!isPlayoffsKind(r.kind ?? null)) return false;
-
-  const text = labelText(r);
-
-  // Do NOT inject if sheet already contains a real matchup row
-  if (
-    text === "consolation final" ||
-    text === "consolation playoff"
-  ) {
-    return false;
-  }
-
-  return true;
-}
-
 // Week is "complete" only when ALL non-label regular rows are complete
 function isFantasyWeekComplete(weekNo: number) {
   const rows = sheetFixtures.filter((r) => Number(r.weekFantasy) === weekNo);
@@ -421,8 +360,6 @@ useEffect(() => {
 
   const updateLeagueSettings = useLeagueStore((s) => s.updateLeagueSettings);
   const setDraftOrder = useLeagueStore((s) => s.setDraftOrder);
-  const joinLeagueByCode = useLeagueStore((s) => s.joinLeagueByCode);
-  const createLeague = useLeagueStore((s) => s.createLeague);
 
   const [tab, setTab] = useState<LeagueTab>("Standings");
   // ?tab=Power (the dashboard's "View Power Rankings" link) opens that tab
@@ -435,23 +372,6 @@ useEffect(() => {
 
   const leagueName = league?.name ?? "League";
   const leagueCode = league?.code ?? "—";
-
-type StandingRow = {
-  rank: number;
-  teamId: string;
-  teamName: string;
-  played: number;
-  wins: number;
-  draws: number;
-  losses: number;
-  pf: number;
-  pa: number;
-  pd: number;
-  pts: number;
-  movement: "same" | "up" | "down";
-  /** places moved since the round before (+ = up) */
-  moved: number;
-};
 
 const currentWeek = league?.currentWeek ?? 1;
 
@@ -690,36 +610,6 @@ const kind = r.kind ? String(r.kind).toLowerCase() : null;
   // ------- styles (match your vibe) -------
   const card35: React.CSSProperties = { ...themeCard, padding: undefined };
 
-  const finalsLabelStyle: React.CSSProperties = {
-  padding: "2px 10px",
-  borderTop: "1px solid rgba(0,0,0,0.08)",
-  fontSize: 11,          // smaller
-  fontWeight: 500,
-  textAlign: "center",
-  background: "rgba(15,23,42,0.14)", // darker than normal label strip
-  color: "#0f172a",
-};
-
-const grandFinalLabelStyle: React.CSSProperties = {
-  ...finalsLabelStyle,
-  background: "rgba(245, 158, 11, 0.28)", // amber/gold tint
-  borderTop: "1px solid rgba(245, 158, 11, 0.45)",
-  borderBottom: "1px solid rgba(245, 158, 11, 0.45)",
-};
-
-const finalsPlaceholderRowStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr auto 1fr",
-  gap: 10,
-  padding: "7px 10px",
-  borderTop: "1px solid rgba(0,0,0,0.08)",
-  fontSize: 12,
-  fontWeight: 600,
-  alignItems: "center",
-  opacity: 0.85,
-  background: "rgba(15,23,42,0.03)",
-};
-
   const tabBarStyle: React.CSSProperties = {
     marginTop: 10,
     borderRadius: 10,
@@ -736,15 +626,6 @@ const finalsPlaceholderRowStyle: React.CSSProperties = {
     fontWeight: 700,
     cursor: "pointer",
   });
-
-  const listBox: React.CSSProperties = {
-    marginTop: 10,
-    borderRadius: 12,
-    background: "rgba(255,255,255,0.92)",
-    border: "1px solid rgba(0,0,0,0.08)",
-    overflow: "hidden",
-    color: "#0f172a",
-  };
 
   function Hamburger__render() {
     return (
@@ -797,913 +678,6 @@ const Header = useStableComponent(Header__render);
     );
   }
 const Tabs = useStableComponent(Tabs__render);
-
-
-  function StandingsTab__render() {
-    // horizontally scrollable table; the team column fits the longest team name (no cutting off)
-    const longest = Math.max(8, ...standings.map((r) => String(r.teamName ?? "").length));
-    const teamCol = Math.round(32 + longest * 7.4 + 40); // avatar + name + room for the shield / crown / spoon
-    const cols = `44px ${teamCol}px 24px 24px 24px 24px 38px 38px 40px 30px${showOdds ? " 56px" : ""}`;
-    return (
-      <>
-        <div style={listBox}>
-          <div style={{ padding: "10px 10px", overflowX: "auto" }}>
-            <div style={{ width: "max-content", minWidth: "100%" }}>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: cols,
-
-                  gap: 8,
-                  fontSize: 10,
-                  fontWeight: 500,
-                  opacity: 0.7,
-                  paddingBottom: 8,
-                }}
-              >
-                <div>Rk</div>
-                <div>Team</div>
-                <div>P</div>
-                <div>W</div>
-                <div>D</div>
-                <div>L</div>
-                <div>PF</div>
-                <div>PA</div>
-                <div>PD</div>
-                <div style={{ textAlign: "right" }}>Pts</div>
-                {showOdds ? (
-                  <div style={{ textAlign: "right", whiteSpace: "nowrap" }} title="Chance of making the playoffs">
-                    Playoff %
-                  </div>
-                ) : null}
-              </div>
-
-              {standings.map((r) => (
-                <div
-                  key={r.rank}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => openTeam(r.teamId)}
-                  onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openTeam(r.teamId)}
-                  style={{
-                    cursor: "pointer",
-                    display: "grid",
-                    gridTemplateColumns: cols,
-
-                    gap: 8,
-                    alignItems: "center",
-                    padding: "10px 0",
-                    borderTop: "1px solid rgba(0,0,0,0.08)",
-                    fontSize: 12,
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ width: 14, textAlign: "right", fontWeight: 700 }}>{r.rank}</span>
-                    <MovementCircle movement={r.movement} moved={r.moved} />
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                    {(() => {
-                      const t: any = (league?.teams ?? []).find((x: any) => x.id === r.teamId);
-                      return <TeamAvatar pictureUrl={t?.pictureUrl} initials={t?.userInitials ?? t?.initials} size={24} stars={t?.stars} />;
-                    })()}
-                    <span style={{ minWidth: 0, display: "grid" }}>
-                      <span style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.teamName}</span>
-                      {(() => {
-                        const owner = (league?.teams ?? []).find((x: any) => x.id === r.teamId)?.ownerName;
-                        return owner ? (
-                          <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{owner}</span>
-                        ) : null;
-                      })()}
-                    </span>
-                    {league?.shield?.enabled && league.shield.holderTeamId === r.teamId ? (
-                      <ShieldIcon size={16} title={`${league.shield.name} holder`} />
-                    ) : null}
-                    {latestAward?.crown.includes(r.teamId) ? (
-                      <CrownIcon size={15} title={`Top score in round ${latestAward.week}`} />
-                    ) : null}
-                    {latestAward?.spoon.includes(r.teamId) ? (
-                      <SpoonIcon size={15} title={`Lowest score in round ${latestAward.week}`} />
-                    ) : null}
-                  </div>
-                  <div>{r.played}</div>
-                  <div>{r.wins}</div>
-                  <div>{r.draws}</div>
-                  <div>{r.losses}</div>
-                  <div>{r.pf}</div>
-                  <div>{r.pa}</div>
-                  <div>{r.pd}</div>
-                  <div style={{ textAlign: "right", fontWeight: 700 }}>{r.pts}</div>
-                  {showOdds ? <div style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{playoffOdds(r.teamId)}</div> : null}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 18, textAlign: "center", fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
-          League Code: {leagueCode}
-        </div>
-
-        {/* E8: the commissioner starts last season's league again for this season (in the month before it starts) */}
-        {isCreator && league?.canRestart ? (
-          <div style={{ ...listBox, marginTop: 12, padding: 12, display: "grid", gap: 8 }}>
-            <div style={{ fontSize: 13, fontWeight: 700 }}>New season</div>
-            <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.8 }}>
-              Start {leagueName} again for {currentSeasonYear()}: same name, settings and history, with a new join code and draft.
-              Everyone rejoins with the new code and gets their team name and picture back.
-            </div>
-            <button
-              disabled={restarting}
-              onClick={restartLeague}
-              style={{ height: 38, borderRadius: 12, border: "none", background: "#22C55E", color: "white", fontWeight: 700, cursor: "pointer", opacity: restarting ? 0.7 : 1 }}
-            >
-              {restarting ? "Starting…" : `Start the ${currentSeasonYear()} season`}
-            </button>
-            {restartMsg ? <div style={{ fontSize: 12, fontWeight: 600 }}>{restartMsg}</div> : null}
-          </div>
-        ) : null}
-
-        <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-          <button
-            onClick={() => setModal({ type: "join" })}
-            style={pillButton("linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))")}
-          >
-            Join League
-          </button>
-
-          <button
-            onClick={() => setModal({ type: "create" })}
-            style={pillButton("linear-gradient(to right, rgb(15,23,42), rgb(29,78,216))")}
-          >
-            Create New League
-          </button>
-
-          <button
-            onClick={() => setModal({ type: "settings" })}
-            style={outlinePillButton()}
-          >
-            League Settings
-          </button>
-        </div>
-      </>
-    );
-  }
-const StandingsTab = useStableComponent(StandingsTab__render);
-
-  function FixturesTab__render() {
-    const future = fixtures.filter((w) => !isFantasyWeekComplete(w.weekNo));
-    return (
-      <div style={listBox}>
-        {future.map((w: FixtureWeek, idx) => {
-  const isPlayoffGroup = w.weekNo > regularWeeks;
-
-  return (
-
-          <div key={w.weekNo} style={{ borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)" }}>
-            <div
-  style={{
-    padding: "6px 10px",
-    fontSize: 11,
-    fontWeight: 600,
-    textAlign: "center",
-    background: "rgba(15,23,42,0.08)",   // darker strip
-    borderTop: "1px solid rgba(0,0,0,0.08)",
-    borderBottom: "1px solid rgba(0,0,0,0.08)",
-    letterSpacing: 0.4,
-  }}
->
-  {roundLabel(w.weekNo)}
-</div>
-
-            {w.rows.map((r, i) => {
-const isLabelRow = !!r.label;
-
-if (isLabelRow) {
-  const isFinalsHeader = isPlayoffsKind(r.kind ?? null);
-
-  return (
-    <React.Fragment key={`${w.weekNo}-${i}`}>
-      {/* Finals/label header */}
-      <div
-  style={
-    isFinalsHeader
-      ? (isGrandFinalHeader(r) ? grandFinalLabelStyle : finalsLabelStyle)
-      : {
-          padding: "9px 10px",
-          borderTop: "1px solid rgba(0,0,0,0.08)",
-          fontSize: 12,
-          fontWeight: 700,
-          textAlign: "center",
-          opacity: 0.9,
-        }
-  }
->
-  {r.home}
-</div>
-
-      {/* If it's a finals header, show a placeholder matchup under it */}
-      {shouldInjectPlaceholder(r) && (
-        <div style={finalsPlaceholderRowStyle}>
-          <div style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            TBC
-          </div>
-          <div style={{ opacity: 0.8, fontWeight: 600 }}>v</div>
-          <div style={{ textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            TBC
-          </div>
-        </div>
-      )}
-    </React.Fragment>
-  );
-}
-  const isHomeBye = r.home === "BYE";
-  const isAwayBye = r.away === "BYE";
-  const isBye = isHomeBye || isAwayBye;
-  const realTeamName = isHomeBye ? r.away : r.home;
-const realTeamId = isHomeBye ? (r.awayTeamId ?? null) : (r.homeTeamId ?? null);
-  
-if (isBye) {
-  return (
-    <div
-      key={`${w.weekNo}-${i}`}
-      style={{
-        padding: "7px 10px",
-        borderTop: "1px solid rgba(0,0,0,0.08)",
-        fontSize: 12,
-        fontWeight: 500,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        // background: "rgba(15,23,42,0.04)",
-      }}
-    >
-      <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {realTeamName}
-      </div>
-
-      <div
-        style={{
-
-          padding: "2px 10px",
-          borderRadius: 999,
-          background: "rgba(15,23,42,0.08)",
-          fontWeight: 500,
-          fontSize: 10,
-        }}
-      >
-        BYE
-      </div>
-    </div>
-  );
-}
-
-  const realTeam = isHomeBye ? r.away : r.home;
-  const played = rowPlayed(r, w.weekNo);
-
-  return (
-    <div
-      key={`${w.weekNo}-${i}`}
-      style={{
-        display: "grid",
-        gridTemplateColumns: "1fr auto 1fr",
-        gap: 10,
-        padding: "7px 10px",
-        borderTop: "1px solid rgba(0,0,0,0.08)",
-        fontSize: 12,
-        fontWeight: 500,
-        alignItems: "center",
-        opacity: isBye ? 0.9 : 1,
-      }}
-    >
-      <div style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {isHomeBye ? realTeam : r.home}
-      </div>
-
-      <div style={{ opacity: 0.8, fontWeight: 500, textAlign: "center" }}>
-        {isBye ? "BYE" : "v"}
-        {!isBye && !played && league?.shield?.enabled && league.shield.next?.week === w.weekNo &&
-        league.shield.next.homeTeamId === r.homeTeamId && league.shield.next.awayTeamId === r.awayTeamId ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 3, marginTop: 2, fontSize: 8, fontWeight: 700, letterSpacing: 0.5, color: "#6a4426" }}>
-            <ShieldIcon size={12} /> SHIELD CHALLENGE
-          </div>
-        ) : null}
-      </div>
-
-      <div style={{ textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {isAwayBye ? realTeam : r.away}
-      </div>
-    </div>
-  );
-})}
-
-          </div>
-        );
-      })}
-      </div>
-    );
-  }
-const FixturesTab = useStableComponent(FixturesTab__render);
-
-  function ResultsTab__render() {
-    const past = fixtures
-  .filter((w) => isFantasyWeekComplete(w.weekNo))
-  .slice()
-  .reverse();
-
-    return (
-      <div style={listBox}>
-        {past.map((w, idx) => (
-          <div key={w.weekNo} style={{ borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)" }}>
-
-  {/* Week heading */}
-  <div
-  style={{
-    padding: "6px 10px",
-    fontSize: 11,
-    fontWeight: 600,
-    textAlign: "center",
-    background: "rgba(15,23,42,0.08)",
-    borderTop: "1px solid rgba(0,0,0,0.08)",
-    borderBottom: "1px solid rgba(0,0,0,0.08)",
-    letterSpacing: 0.4,
-  }}
->
-  {roundLabel(w.weekNo)}
-</div>
-
-  {/* existing match rows below */}
-{w.rows.map((r, i) => {
-  const isLabelRow = !!r.label;
-
-if (isLabelRow) {
-  const isFinalsHeader = isPlayoffsKind(r.kind ?? null);
-
-  return (
-    <React.Fragment key={`${w.weekNo}-${i}`}>
-      <div
-  style={
-    isFinalsHeader
-      ? (isGrandFinalHeader(r) ? grandFinalLabelStyle : finalsLabelStyle)
-      : {
-          padding: "9px 10px",
-          borderTop: "1px solid rgba(0,0,0,0.08)",
-          fontSize: 12,
-          fontWeight: 700,
-          textAlign: "center",
-          opacity: 0.9,
-        }
-  }
->
-  {r.home}
-</div>
-
-      {shouldInjectPlaceholder(r) && (
-        <div style={finalsPlaceholderRowStyle}>
-          <div style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            TBC
-          </div>
-          <div style={{ opacity: 0.8, fontWeight: 600 }}>v</div>
-          <div style={{ textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            TBC
-          </div>
-        </div>
-      )}
-    </React.Fragment>
-  );
-}
-
-  const isHomeBye = r.home === "BYE";
-  const isAwayBye = r.away === "BYE";
-  const isBye = isHomeBye || isAwayBye;
-
-  const played = rowPlayed(r, w.weekNo);
-
-  const realTeamName = isHomeBye ? r.away : r.home;
-  const realTeamId = isHomeBye ? (r.awayTeamId ?? null) : (r.homeTeamId ?? null);
-
-  const byePoints =
-    isBye && realTeamId ? scoreFromSheet(w.weekNo, realTeamId) : null;
-
-      // ✅ BYE row (same format as Fixtures tab, but includes score)
-  if (isBye) {
-    return (
-      <div
-        key={`${w.weekNo}-${i}`}
-        style={{
-          padding: "8px 10px",
-          borderTop: "1px solid rgba(0,0,0,0.08)",
-          fontSize: 12,
-          fontWeight: 500,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          background: "rgba(15,23,42,0.04)",
-        }}
-      >
-        <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {realTeamName}
-        </div>
-
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {/* score chip */}
-          <div
-            style={{
-              padding: "2px 10px",
-              borderRadius: 999,
-              background: "rgba(15,23,42,0.10)",
-              fontWeight: 700,
-              fontSize: 10,
-            }}
-            title="Your score this week"
-          >
-            {byePoints ?? "—"}
-          </div>
-
-          {/* BYE chip */}
-          <div
-            style={{
-              padding: "2px 10px",
-              borderRadius: 999,
-              background: "rgba(15,23,42,0.08)",
-              fontWeight: 500,
-              fontSize: 10,
-            }}
-          >
-            BYE
-          </div>
-        </div>
-      </div>
-    );
-  }
-  
-  return (
-    <div
-      key={`${w.weekNo}-${i}`}
-      style={{
-        display: "grid",
-        gridTemplateColumns: "1fr auto 1fr",
-        gap: 10,
-        padding: "7px 10px",
-        borderTop: "1px solid rgba(0,0,0,0.08)",
-        fontSize: 12,
-        fontWeight: 500,
-        alignItems: "center",
-      }}
-    >
-      {/* Left side */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr auto",
-          alignItems: "center",
-          gap: 10,
-          minWidth: 0,
-        }}
-      >
-        <div style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {isHomeBye ? realTeamName : r.home}
-        </div>
-
-        <div style={{ fontWeight: 700, textAlign: "right", minWidth: 22 }}>
-          {isBye ? (isHomeBye ? byePoints : "—") : (r.homeScore ?? "—")}
-        </div>
-      </div>
-
-      {/* Middle */}
-<div style={{ opacity: 0.8, fontWeight: 500 }}>
-  {isBye ? "BYE" : "v"}
-</div>
-
-      {/* Right side */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "auto 1fr",
-          alignItems: "center",
-          gap: 10,
-          minWidth: 0,
-        }}
-      >
-        <div style={{ fontWeight: 700, textAlign: "left", minWidth: 22 }}>
-          {isBye ? (isAwayBye ? byePoints : "—") : (r.awayScore ?? "—")}
-        </div>
-
-        <div style={{ textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {isAwayBye ? realTeamName : r.away}
-        </div>
-      </div>
-      
-    </div>
-  );
-})}
-
-          </div>
-        ))}
-      </div>
-    );
-  }
-const ResultsTab = useStableComponent(ResultsTab__render);
-
-// Joining (E8): step 1 the league code; step 2 your team name and picture for that league
-// (pre-filled with your old ones if you've played in this league before - change them if you like).
-function JoinLeagueModal__render() {
-  const [step, setStep] = useState<"code" | "team">("code");
-  const [code, setCode] = useState("");
-  const [teamName, setTeamName] = useState("");
-  const [leagueTitle, setLeagueTitle] = useState("");
-  const [rejoining, setRejoining] = useState(false);
-  // the picture: the one from last time, a new one (chosen here), or none
-  const [pic, setPic] = useState<{ kind: "previous"; url: string } | { kind: "new"; blob: Blob; url: string } | { kind: "icon"; url: string } | { kind: "none" }>({ kind: "none" });
-  const [cropFile, setCropFile] = useState<File | null>(null);
-  const [iconOpen, setIconOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function findLeague() {
-    setError(null);
-    const clean = code.trim().toUpperCase();
-    if (!clean) return setError("Enter a league code.");
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/leagues/preview?code=${encodeURIComponent(clean)}`, { cache: "no-store", credentials: "include" });
-      const j = await res.json().catch(() => null);
-      if (!j?.ok) return setError(j?.error ?? "Couldn't find that league.");
-      setLeagueTitle(j.league?.name ?? "League");
-      setRejoining(!!j.previous);
-      setTeamName(j.previous?.name ?? "");
-      setPic(j.previous?.pictureUrl ? { kind: "previous", url: j.previous.pictureUrl } : { kind: "none" });
-      setStep("team");
-    } catch {
-      setError("Couldn't find that league.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function join() {
-    setError(null);
-    if (teamName.trim().length < 2) return setError("Team name must be at least 2 characters.");
-    setBusy(true);
-    try {
-      const res = await joinLeagueByCode({ code, teamName: teamName.trim(), keepPreviousPicture: pic.kind === "previous" });
-      if (!res.ok) return setError(res.error);
-      if (pic.kind === "new") {
-        const form = new FormData();
-        form.append("leagueId", res.leagueId);
-        form.append("file", pic.blob, "team.jpg");
-        await fetch("/api/teams/picture", { method: "POST", body: form, credentials: "include" }).catch(() => null);
-      }
-      if (pic.kind === "icon") {
-        await fetch("/api/teams/picture", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ leagueId: res.leagueId, icon: parseTeamIcon(pic.url) }),
-        }).catch(() => null);
-      }
-      refreshLeague(res.leagueId);
-      setModal(null);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <ModalOverlay onClose={() => !busy && setModal(null)}>
-      <div
-        style={{
-          borderRadius: 14,
-          background: "#ffffff",
-          padding: 14,
-          color: "#0f172a",
-          boxShadow: "0 20px 50px rgba(15,23,42,0.35)",
-          position: "relative",
-        }}
-      >
-        <button
-          onClick={() => setModal(null)}
-          aria-label="Close"
-          style={{
-            position: "absolute",
-            right: 10,
-            top: 10,
-            background: "transparent",
-            border: "none",
-            color: "#64748b",
-            fontSize: 20,
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          ×
-        </button>
-
-        {step === "code" ? (
-          <>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Join League</div>
-            <div style={{ display: "grid", gap: 10 }}>
-              <input
-                id="join-code"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && findLeague()}
-                style={inputStyle()}
-                placeholder="League Code"
-                autoCapitalize="characters"
-              />
-              {error && <div style={{ marginTop: 4, color: "#FCA5A5", fontSize: 12, fontWeight: 600 }}>{error}</div>}
-              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
-                <button disabled={busy} onClick={findLeague} style={{ ...saveButton(), height: 36, padding: "0 18px", opacity: busy ? 0.7 : 1 }}>
-                  {busy ? "Finding…" : "Next"}
-                </button>
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2, paddingRight: 24 }}>Join {leagueTitle}</div>
-            <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.85, marginBottom: 12 }}>
-              {rejoining ? "Welcome back! Your team from last time is filled in - change anything you like." : "Choose your team name and picture."}
-            </div>
-            <div style={{ display: "grid", gap: 10 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <TeamAvatar pictureUrl={pic.kind === "none" ? null : pic.url} initials={teamName.trim().slice(0, 2) || "?"} size={56} />
-                <div style={{ display: "grid", gap: 6, flex: 1, minWidth: 0 }}>
-                  <label style={{ ...saveButton(), display: "grid", placeItems: "center", background: "#eef2f6", color: "#0f172a", border: "1px solid #cbd5e1" }}>
-                    {pic.kind === "none" ? "Add Picture" : "Change Picture"}
-                    <input
-                      id="join-picture"
-                      type="file"
-                      accept="image/*"
-                      style={{ display: "none" }}
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        e.target.value = "";
-                        if (f) setCropFile(f);
-                      }}
-                    />
-                  </label>
-                  <button
-                    onClick={() => setIconOpen(true)}
-                    style={{ background: "transparent", border: "none", color: "#0d9488", fontSize: 11, fontWeight: 600, textDecoration: "underline", cursor: "pointer", justifySelf: "start", padding: 0 }}
-                  >
-                    Or choose an icon
-                  </button>
-                  {pic.kind !== "none" ? (
-                    <button
-                      onClick={() => setPic({ kind: "none" })}
-                      style={{ background: "transparent", border: "none", color: "#0d9488", fontSize: 11, fontWeight: 600, textDecoration: "underline", cursor: "pointer", justifySelf: "start", padding: 0 }}
-                    >
-                      Remove picture
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-              <input
-                id="join-team-name"
-                value={teamName}
-                onChange={(e) => setTeamName(e.target.value)}
-                style={inputStyle()}
-                placeholder="Team Name"
-              />
-              {error && <div style={{ marginTop: 4, color: "#FCA5A5", fontSize: 12, fontWeight: 600 }}>{error}</div>}
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                <button
-                  disabled={busy}
-                  onClick={() => { setStep("code"); setError(null); }}
-                  style={{ background: "transparent", border: "none", color: "#64748b", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-                >
-                  ‹ Back
-                </button>
-                <button disabled={busy} onClick={join} style={{ ...saveButton(), height: 36, padding: "0 18px", opacity: busy ? 0.7 : 1 }}>
-                  {busy ? "Joining…" : "Join"}
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-      {cropFile ? (
-        <PictureCropper
-          file={cropFile}
-          onCancel={() => setCropFile(null)}
-          onDone={(blob) => {
-            setPic({ kind: "new", blob, url: URL.createObjectURL(blob) });
-            setCropFile(null);
-          }}
-        />
-      ) : null}
-      {iconOpen ? (
-        <TeamIconPicker
-          current={pic.kind === "icon" ? pic.url : null}
-          onCancel={() => setIconOpen(false)}
-          onSave={(value) => {
-            setPic({ kind: "icon", url: value });
-            setIconOpen(false);
-          }}
-        />
-      ) : null}
-    </ModalOverlay>
-  );
-}
-const JoinLeagueModal = useStableComponent(JoinLeagueModal__render);
-
-  function CreateLeagueModal__render() {
-  const [name, setName] = useState("");
-  const [teamName, setTeamName] = useState("");
-
-  const [draftLocal, setDraftLocal] = useState(() => {
-  // default: today + 1 hour
-  const now = Date.now();
-  return toDatetimeLocal(now + 60 * 60 * 1000);
-});
-
-  const [playoffs, setPlayoffs] = useState<PlayoffFormat>("final4");
-  const [scoringSystem, setScoringSystem] = useState<"standard" | "alternate" | "custom">("standard");
-  const [bonusRules, setBonusRules] = useState<BonusRules>(DEFAULT_BONUS_RULES);
-  const [shieldEnabled, setShieldEnabled] = useState(true);
-  const [shieldName, setShieldName] = useState("The Shield");
-  const [shieldRewards, setShieldRewards] = useState<ShieldRewards>(NO_SHIELD_REWARDS);
-  const [shieldStart, setShieldStart] = useState<ShieldStart>(DEFAULT_SHIELD_START);
-  const [squadFormat, setSquadFormat] = useState<SquadFormat>(STANDARD_SQUAD);
-  const [customRules, setCustomRules] = useState<ScoringRules>(STANDARD_SCORING);
-  const [error, setError] = useState<string | null>(null);
-
-  return (
-    <ModalOverlay onClose={() => setModal(null)}>
-      <div
-        style={{
-          borderRadius: 14,
-          background: "#ffffff",
-          padding: 14,
-          color: "#0f172a",
-          boxShadow: "0 20px 50px rgba(15,23,42,0.35)",
-          position: "relative",
-        }}
-      >
-        <button
-          onClick={() => setModal(null)}
-          aria-label="Close"
-          style={{
-            position: "absolute",
-            right: 10,
-            top: 10,
-            background: "transparent",
-            border: "none",
-            color: "#64748b",
-            fontSize: 20,
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          ×
-        </button>
-
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Create League</div>
-
-        <div style={{ display: "grid", gap: 10 }}>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            style={inputStyle()}
-            placeholder="League Name"
-          />
-
-          <input
-            value={teamName}
-            onChange={(e) => setTeamName(e.target.value)}
-            style={inputStyle()}
-            placeholder="Your Team Name"
-          />
-
-          <select
-            value={playoffs}
-            onChange={(e) => setPlayoffs(e.target.value as PlayoffFormat)}
-            style={selectStyle()}
-          >
-            <option value="none">None</option>
-            <option value="final2">2 Teams (Final only)</option>
-            <option value="final3">3 Teams (Qualifying Final)</option>
-            <option value="final4">4 Teams (Semi + Final)</option>
-            <option value="final6">6 Teams (Top 2 get a bye)</option>
-          </select>
-
-          <select
-            value={scoringSystem}
-            onChange={(e) => setScoringSystem(e.target.value as "standard" | "alternate" | "custom")}
-            style={selectStyle()}
-          >
-            <option value="standard">Scoring: Standard</option>
-            <option value="alternate">Scoring: Alternate</option>
-            <option value="custom">Scoring: Custom</option>
-          </select>
-
-          {scoringSystem === "custom" ? (
-            <div style={{ background: "#f6f8fa", border: "1px solid #e5e9ef", color: "#0f172a", borderRadius: 12, padding: 10 }}>
-              <ScoringEditor value={customRules} onChange={setCustomRules} />
-            </div>
-          ) : null}
-
-          <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.9 }}>Squad</div>
-          <SquadFormatFields value={squadFormat} onChange={setSquadFormat} />
-
-          <BonusPointsFields value={bonusRules} onChange={setBonusRules} />
-
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600 }}>
-            <input type="checkbox" checked={shieldEnabled} onChange={(e) => setShieldEnabled(e.target.checked)} />
-            The Shield (won by beating the holder away; defended at home)
-          </label>
-          {shieldEnabled ? (
-            <input
-              aria-label="Shield name"
-              value={shieldName}
-              onChange={(e) => setShieldName(e.target.value)}
-              placeholder="The Shield"
-              style={inputStyle()}
-            />
-          ) : null}
-          {shieldEnabled ? <ShieldStartFields value={shieldStart} onChange={setShieldStart} /> : null}
-          {shieldEnabled ? <ShieldRewardsFields value={shieldRewards} onChange={setShieldRewards} /> : null}
-
-          <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.9 }}>Draft date &amp; time</div>
-          <input
-  type="datetime-local"
-  aria-label="Draft date and time"
-  value={draftLocal}
-  onChange={(e) => setDraftLocal(e.target.value)}
-  style={inputStyle()}
-/>
-
-          <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.85, lineHeight: "14px" }}>
-            League Commissioner can change/set draft order in league settings prior to the draft
-          </div>
-
-          {error && <div style={{ color: "#FCA5A5", fontSize: 12, fontWeight: 600 }}>{error}</div>}
-
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
-            <button
-              onClick={async () => {
-  const draftAt = parseDatetimeLocal(draftLocal);
-
-  const res = await createLeague({
-    name,
-    teamName,
-    playoffFormat: playoffs,
-    draftDateTimeText: draftLocal,
-    draftAt,
-    scoringSystem,
-    bonusRules,
-    shieldEnabled,
-    shieldName,
-    shieldRewards,
-    shieldStart,
-    squadFormat,
-    ...(scoringSystem === "custom" ? { scoringCustom: customRules } : {}),
-  });
-
-  if (!res.ok) setError(res.error);
-  else setModal(null);
-}}
-              style={{ ...saveButton(), height: 36, padding: "0 18px" }}
-            >
-              Create
-            </button>
-          </div>
-        </div>
-      </div>
-    </ModalOverlay>
-  );
-}
-const CreateLeagueModal = useStableComponent(CreateLeagueModal__render);
-
-  function pillButton(bg: string): React.CSSProperties {
-    return {
-      height: 40,
-      width: "100%",
-      borderRadius: 999,
-      background: bg,
-      color: "white",
-      fontSize: 13,
-      fontWeight: 600,
-      border: "2px solid rgba(255,255,255,0.85)",
-      boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)",
-      cursor: "pointer",
-    };
-  }
-
-  function outlinePillButton(): React.CSSProperties {
-    return {
-      height: 36,
-      width: "100%",
-      borderRadius: 999,
-      background: "rgba(255,255,255,0.12)",
-      color: "white",
-      fontSize: 12,
-      fontWeight: 600,
-      border: "2px solid rgba(255,255,255,0.85)",
-      cursor: "pointer",
-    };
-  }
 
   // Still booting → show loading
 if (!mounted || !leagueHydrated) {
@@ -1776,8 +750,8 @@ if (!league) {
         activeItem="League"
       />
 
-      {modal?.type === "join" && <JoinLeagueModal />}
-      {modal?.type === "create" && <CreateLeagueModal />}
+      {modal?.type === "join" && <JoinLeagueModal onClose={() => setModal(null)} />}
+      {modal?.type === "create" && <CreateLeagueModal onClose={() => setModal(null)} />}
     </main>
   );
 }
@@ -1797,9 +771,29 @@ if (!league) {
         <Header />
         <Tabs />
 
-        {tab === "Standings" && <StandingsTab />}
-        {tab === "Fixtures" && <FixturesTab />}
-        {tab === "Results" && <ResultsTab />}
+        {tab === "Standings" && (
+          <StandingsTab
+            league={league}
+            leagueName={leagueName}
+            leagueCode={leagueCode}
+            standings={standings}
+            latestAward={latestAward}
+            showOdds={showOdds}
+            playoffOdds={playoffOdds}
+            openTeam={openTeam}
+            isCreator={isCreator}
+            onOpenModal={(type) => setModal({ type })}
+            restartLeague={restartLeague}
+            restarting={restarting}
+            restartMsg={restartMsg}
+          />
+        )}
+        {tab === "Fixtures" && (
+          <FixturesTab league={league} fixtures={fixtures} regularWeeks={regularWeeks} isFantasyWeekComplete={isFantasyWeekComplete} rowPlayed={rowPlayed} />
+        )}
+        {tab === "Results" && (
+          <ResultsTab fixtures={fixtures} isFantasyWeekComplete={isFantasyWeekComplete} rowPlayed={rowPlayed} scoreFromSheet={scoreFromSheet} />
+        )}
         {tab === "Power" && league ? <PowerTab leagueId={league.id} teams={(league.teams ?? []) as never} /> : null}
         {tab === "Shield" && league ? <ShieldTab leagueId={league.id} teams={(league.teams ?? []) as never} /> : null}
       </div>
@@ -1813,8 +807,8 @@ if (!league) {
   activeItem="League"
 />
 
-      {modal?.type === "join" && <JoinLeagueModal />}
-      {modal?.type === "create" && <CreateLeagueModal />}
+      {modal?.type === "join" && <JoinLeagueModal onClose={() => setModal(null)} />}
+      {modal?.type === "create" && <CreateLeagueModal onClose={() => setModal(null)} />}
       {modal?.type === "settings" && league && (
         <LeagueSettingsModal
           league={league}
