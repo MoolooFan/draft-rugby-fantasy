@@ -23,6 +23,7 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `962e00a` | Split the Transactions page again (1,912 -> 1,461 lines): header and tabs, player list, player card buttons and watchlist handling moved to components/transactions; unused example data removed. No visible change |  |
 | `a86ef5f` | Split the Team of the Week page (1,028 -> 529 lines): top card, field and player tiles, and helpers moved to their own files in app/team-of-the-week. No visible change |  |
 | `7dbc863` | Split the Admin page (1,077 -> 101 lines): each tab (Players, Status, Difficulty, Rounds, Scoring, History, Coach) moved to its own file in components/admin. No visible change |  |
 | `590787f` | Split the player card (1,163 -> 412 lines): status strip and header, numbers and button bars, round points pop-up and data helpers moved to their own files in components/playerCard. No visible change |  |

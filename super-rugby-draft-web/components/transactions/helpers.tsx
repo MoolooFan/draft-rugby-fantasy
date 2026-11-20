@@ -220,3 +220,19 @@ export const listBox: React.CSSProperties = {
   overflow: "hidden",
   color: "#0f172a",
 };
+
+// Moved out of app/transactions/page.tsx (20 Nov 2026)
+export function pickFirstTruthy<T>(...vals: Array<T | null | undefined>): T | null {
+  for (const v of vals) if (v != null && String(v).trim() !== "") return v as T;
+  return null;
+}
+
+export function normStr(x: any) {
+  return String(x ?? "").trim().toLowerCase();
+}
+
+export function nextWeekFrom(weeksSorted: number[], week: number) {
+  const idx = weeksSorted.indexOf(week);
+  if (idx >= 0 && idx < weeksSorted.length - 1) return weeksSorted[idx + 1];
+  return week + 1;
+}
