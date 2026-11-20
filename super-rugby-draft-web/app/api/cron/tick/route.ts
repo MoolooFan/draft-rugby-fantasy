@@ -3,7 +3,9 @@
 // - While a game is on (kickoff to 3h after): pulls fresh player stats every call (5 min).
 // - After a game until its stats are final (13.5h after kickoff): pulls them once an hour.
 // - Reads each round's official team-list and injury articles once, from Wednesday 4:30pm NZT
-//   (retrying every call until they're out); clears Starting/Benched once a game has finished.
+//   (retrying every call until they're out); then, until each game kicks off, late changes from the
+//   official fantasy game (lib/status/fantasyFeed.ts); clears Starting/Benched once a game has
+//   finished (saving who started in player_round_roles first).
 // - Locks lineups at each deadline and finalises each round when it's due (lib/results/engine).
 // - Keeps live drafts moving (auto-picks) even with nobody in the draft room.
 // - Nightly backup of the database at about 3am NZ time (lib/backup/run.ts).
@@ -13,7 +15,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { syncExternalStats } from "@/lib/players/syncStats";
 import { runResultsTick } from "@/lib/results/engine";
 import { currentSeasonYear, getSeason, liveRealRounds, realRoundsAwaitingFinalStats, realRoundsAwaitingTeamLists } from "@/lib/season";
-import { applyQuestionable, clearFinishedGameStatuses, importRoundStatus, type ImportReport } from "@/lib/status/import";
+import { applyFantasyFeed, applyQuestionable, clearFinishedGameStatuses, importRoundStatus, type ImportReport } from "@/lib/status/import";
 import { runDueWaivers } from "@/lib/waivers/process";
 import { advanceDraft } from "@/lib/draft/engine";
 import { coachTick } from "@/lib/coach/run";
@@ -56,7 +58,9 @@ async function tick() {
       statusImports.push({ realRound: r, error: e instanceof Error ? e.message : String(e) });
     }
   }
-  // Once a game has finished, its players' Starting / Benched statuses are cleared.
+  // Late changes (after the team lists, until kickoff) from the official fantasy game.
+  const lateChanges = await applyFantasyFeed(supabaseAdmin, seasonYear, now).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
+  // Once a game has finished, its players' Starting / Benched statuses are saved, then cleared.
   const statusesCleared = await clearFinishedGameStatuses(supabaseAdmin, seasonYear, now).catch(() => -1);
   // Waivers run at their deadline (24 hours before the lineup deadline) even if nobody opens
   // the Transactions page.
@@ -93,7 +97,7 @@ async function tick() {
   // Nightly backup (3am NZ time, once a day)
   const backup = await backupIfDue(supabaseAdmin, now).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
 
-  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, statusImports, statusesCleared, questionable, waivers, drafts, coach, backup, ...results };
+  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, statusImports, lateChanges, statusesCleared, questionable, waivers, drafts, coach, backup, ...results };
 }
 
 async function handle(req: Request) {

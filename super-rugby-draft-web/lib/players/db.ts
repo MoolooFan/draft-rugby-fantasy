@@ -3,6 +3,8 @@
 // fields the old players.json file and players Google Sheet had), plus weekly status.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { POS_NAME } from "@/lib/draft/constants";
+import { getSeason, SEASONS, weekFinaliseAtMs } from "@/lib/season";
+import { loadSavedRoles, savedRoleStatus } from "@/lib/status/roles";
 
 const TEAM_NAME: Record<string, string> = {
   BLU: "Blues", BRU: "Brumbies", CHI: "Chiefs", CRU: "Crusaders", DRU: "Drua", FOR: "Force",
@@ -109,6 +111,20 @@ export async function loadSeasonPlayers(db: SupabaseClient, season: number, opts
     const m = weekly.get(s.player_id) ?? {};
     m[`W${s.week}`] = s.status.trim();
     weekly.set(s.player_id, m);
+  }
+  // Finished weeks: the Starting / Bench statuses are cleared after each game, so they come back
+  // from the saved record (lib/status/roles.ts) for the projections and AI coach. Only once the
+  // week is finalised, so the XV / SUB badges don't come back while the week is still on.
+  if (SEASONS[season]) {
+    const s = getSeason(season);
+    const now = Date.now();
+    for (const r of await loadSavedRoles(db, season)) {
+      const done = weekFinaliseAtMs(s, r.week);
+      if (done == null || now < done) continue;
+      const m = weekly.get(r.player_id) ?? {};
+      if (!m[`W${r.week}`]) m[`W${r.week}`] = savedRoleStatus(r);
+      weekly.set(r.player_id, m);
+    }
   }
   return rows.map((p) => toSitePlayer(p, weekly.get(p.id)));
 }
