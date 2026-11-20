@@ -23,6 +23,7 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `3195ef6` | Split the Matchup page (2,410 -> 1,202 lines): header, scoreboard, lineup rows and helpers moved to components/matchup. No visible change |  |
 | `365d736` | Split the Transactions page (3,753 -> 1,927 lines): the Transactions tab, Pending Claims tab, add/drop pop-up, accept-trade pop-up, player row and … |  |
 | `e0a5be9` | League Table Updated shows Pending until done; first and last names are required to create an account |  |
 | `e65b856` | Ethan's list (20 Nov, 3): dashboard games box (Not started / Live / Complete / Finalised per game, League Table Updated) with player stats now pulled … | Yes |
