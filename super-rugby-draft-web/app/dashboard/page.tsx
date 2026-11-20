@@ -241,11 +241,13 @@ async function toggleWatchlistForDashboard(playerId: string) {
   if (!activeLeagueId) return;
 
   const pid = String(playerId);
-  let wasWatchedSnapshot = false;
+  // Add or remove depends on the list as shown when tapped. (It used to be read inside the
+  // update below, which React runs later, so a second tap added the player again instead of
+  // removing him: fixed 20 Nov 2026.)
+  const wasWatchedSnapshot = watchlistSet.has(pid);
 
-  // optimistic UI + snapshot
+  // optimistic UI
   setWatchlistSet((prev) => {
-    wasWatchedSnapshot = prev.has(pid);
     const next = new Set(prev);
     if (next.has(pid)) next.delete(pid);
     else next.add(pid);
