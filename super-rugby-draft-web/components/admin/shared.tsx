@@ -56,3 +56,27 @@ export async function api<T>(url: string, body?: unknown): Promise<T> {
   if (!res.ok || !j?.ok) throw new Error(j?.error === "FORBIDDEN" ? "This page is for the site admin only." : j?.error ?? "Something went wrong");
   return j as T;
 }
+
+// Positions, teams and a player as the admin page edits them
+export const POSITIONS = ["PR", "HO", "LK", "LF", "HB", "FH", "CE", "OB"];
+export const TEAMS: Array<[string, string]> = [
+  ["BLU", "Blues"], ["BRU", "Brumbies"], ["CHI", "Chiefs"], ["CRU", "Crusaders"], ["DRU", "Drua"], ["FOR", "Force"],
+  ["HIG", "Highlanders"], ["HUR", "Hurricanes"], ["MOA", "Moana"], ["RED", "Reds"], ["WAR", "Waratahs"],
+];
+
+export type AdminPlayer = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  teamCode: string;
+  posAbbrev: string;
+  secondaryPosAbbrev?: string;
+  thirdPosAbbrev?: string;
+  draftRank: number;
+  externalId: number | null;
+  expectedRole?: "starter" | "bench" | "squad" | null;
+  kickOrder?: number | null;
+  status: string | null;
+  active: boolean;
+  weeklyStatus: Record<string, string>;
+};
