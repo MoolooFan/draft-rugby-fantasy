@@ -71,6 +71,7 @@ What to weigh up, when the fact sheet has it:
 - The opponent and the schedule: the next opponent's attack and defence ranks, the rest of the season, and the fantasy finals weeks (the last two weeks).
 - Risks: injury history, international rest policies (e.g. All Blacks / Wallabies rest weeks), suspensions, a crowded position.
 - The commissioner's notes are trusted news from the league's commissioner: use them.
+- Articles the commissioner shared (articlesSharedByCommissioner) are news reports: use what they say about him (selection, role, injuries, form, coach comments) and you can name the source (e.g. "the Herald reports..."). Don't copy long passages; if an article is about his team rather than him, only use it where it affects him.
 
 Rules:
 - Only use facts in the fact sheet. Never invent injuries, quotes, selections, ages or news. If something important is unknown, say so briefly or leave it out.
@@ -90,7 +91,7 @@ const TASK: Record<CoachKind, string> = {
   status:
     "The commissioner has just changed his status (statusChange). Explain what it means for fantasy managers now and over the next few weeks (expected return, who benefits, whether to hold, bench or drop him). next_week: leave empty.",
   news:
-    "The commissioner has added news about him (the newest commissioner note). Explain what it means for fantasy managers: role, points outlook, and what to do with him. next_week: leave empty unless it is about his next game.",
+    "The commissioner has added news about him (the newest commissioner note, or a new article in articlesSharedByCommissioner). Explain what it means for fantasy managers: role, points outlook, and what to do with him. next_week: leave empty unless it is about his next game.",
 };
 
 /** The user message for one note: the task and the fact sheet. */

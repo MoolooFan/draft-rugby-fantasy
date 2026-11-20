@@ -13,6 +13,7 @@ import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { teamCodeFromName } from "@/lib/status/articles";
 import { canPlayPosition, positionsLabel } from "@/lib/players/positions";
 import type { CoachFactsInput, CoachGame, CoachKind, FixtureInfo, TeamInfo } from "@/lib/coach/facts";
+import { articleExcerpt, TEAM_NAMES } from "@/lib/coach/articles";
 
 const TEAM_NAME: Record<string, string> = {
   BLU: "Blues", BRU: "Brumbies", CHI: "Chiefs", CRU: "Crusaders", DRU: "Drua", FOR: "Force",
@@ -42,6 +43,8 @@ export type CoachCtx = {
   proj: WeekProjections | null;
   profiles: Map<string, { birth_date: string | null; international: string | null; rest_notes: string | null; injury_notes: string | null }>;
   notes: { player: Map<string, string[]>; team: Map<string, string[]>; general: string[] };
+  /** active articles Ethan shared (newest first) */
+  articles: Array<{ title: string; source: string; date: string; text: string; players: Set<string>; teams: Set<string> }>;
   previous: Map<string, Array<{ kind: string; label: string; headline: string }>>;
 };
 
@@ -81,13 +84,14 @@ export async function loadCoachCtx(db: SupabaseClient, season: number, week: num
   const s = getSeason(season);
   const lastSeason = SEASONS[season - 1] ? season - 1 : null;
   const rules = STANDARD_SCORING;
-  const [players, lastPlayers, rows, lastRows, profiles, ctxRows] = await Promise.all([
+  const [players, lastPlayers, rows, lastRows, profiles, ctxRows, articleRows] = await Promise.all([
     loadSeasonPlayers(db, season, { includeInactive: true }),
     lastSeason ? loadSeasonPlayers(db, lastSeason, { includeInactive: true }) : Promise.resolve([] as SitePlayer[]),
     loadStats(db, season, 999),
     lastSeason ? loadStats(db, lastSeason, 999) : Promise.resolve([] as StatRow[]),
     db.from("player_profiles").select("player_id, birth_date, international, rest_notes, injury_notes"),
     db.from("coach_context").select("scope, player_id, team_code, text, created_at").eq("active", true).order("created_at"),
+    db.from("coach_articles").select("title, source, text, player_ids, team_codes, created_at").eq("active", true).order("created_at", { ascending: false }).limit(60),
   ]);
   const byId = new Map(players.map((p) => [p.id, p]));
   const lastById = new Map(lastPlayers.map((p) => [p.id, p]));
@@ -131,6 +135,15 @@ export async function loadCoachCtx(db: SupabaseClient, season: number, week: num
     proj,
     profiles: new Map((profiles.data ?? []).map((p) => [String(p.player_id), p])),
     notes,
+    // (no table yet = no articles)
+    articles: (articleRows.data ?? []).map((a) => ({
+      title: String(a.title || "Article"),
+      source: String(a.source || ""),
+      date: String(a.created_at).slice(0, 10),
+      text: String(a.text || ""),
+      players: new Set((a.player_ids ?? []).map(String)),
+      teams: new Set((a.team_codes ?? []).map((c: string) => team(c))),
+    })),
     previous: new Map(),
   };
 }
@@ -249,6 +262,15 @@ export function coachInput(
     thisGame,
     statusChange: extra.statusChange ?? null,
     notes: [...ctx.notes.general, ...(ctx.notes.team.get(t) ?? []), ...(ctx.notes.player.get(playerId) ?? [])],
+    // the 3 newest articles about him (or, failing that, his team): the paragraphs that mention him
+    articles: [...(ctx.articles ?? []).filter((a) => a.players.has(playerId)), ...(ctx.articles ?? []).filter((a) => !a.players.has(playerId) && a.teams.has(t))]
+      .slice(0, 3)
+      .map((a) => ({
+        title: a.title,
+        source: a.source,
+        date: a.date,
+        excerpt: articleExcerpt(a.text, a.players.has(playerId) ? [`${p.firstName} ${p.lastName}`, p.lastName] : TEAM_NAMES[t] ?? [teamName(t)], a.players.has(playerId) ? 1500 : 700),
+      })),
     previous: ctx.previous.get(playerId) ?? [],
   };
 }

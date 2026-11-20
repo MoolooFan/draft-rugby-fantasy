@@ -58,6 +58,8 @@ export type CoachFactsInput = {
   thisGame?: (CoachGame & { teamScore: number | null; oppScore: number | null; projected: number | null }) | null;
   statusChange?: { from: string | null; to: string | null } | null;
   notes: string[];
+  /** articles Ethan shared that mention him or his team (lib/coach/articles.ts): the relevant paragraphs */
+  articles?: Array<{ title: string; source: string; date: string; excerpt: string }>;
   previous: Array<{ kind: string; label: string; headline: string }>;
 };
 
@@ -216,6 +218,7 @@ export function buildFacts(input: CoachFactsInput): Record<string, unknown> {
     fantasyFinalsWeeks: input.finalsWeeks.map((f) => fixtureText(f, teams)),
     teammatesSamePositionWithNews: input.teammates.map((t) => `${t.name} (${t.positions}): ${t.status}`),
     commissionerNotes: input.notes,
+    articlesSharedByCommissioner: (input.articles ?? []).map((a) => ({ article: `${a.title} (${a.source}, ${a.date})`, relevantText: a.excerpt })),
     previousCoachNotes: input.previous.map((n) => `${n.label} (${n.kind}): ${n.headline}`),
   };
   if (input.thisGame) {
