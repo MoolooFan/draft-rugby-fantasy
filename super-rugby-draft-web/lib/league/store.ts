@@ -78,6 +78,8 @@ joinLeagueByCode: (params: {
         | "shieldRewards"
         | "shieldStart"
         | "squadFormat"
+        | "playoffWaiverFlip"
+        | "blockEliminatedTrades"
       >
     >
   ) => void;

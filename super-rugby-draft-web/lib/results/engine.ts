@@ -25,6 +25,7 @@ import { bonusRulesFromRow } from "@/lib/league/bonus";
 import {
   buildLeagueSchedule,
   pickRoundForWeek,
+  homeShouldSwap,
   resolveSource,
   type FinalsSize,
   type PlayoffResult,
@@ -446,9 +447,16 @@ export async function prepareUpcoming(db: Db, leagueId: string) {
   }
   for (const m of matchups) {
     if (!m.playoff_key || m.status === "final") continue;
-    const patch: Record<string, string> = {};
+    const patch: Record<string, unknown> = {};
     if (!m.home_team_id && m.home_source) { const t = resolveSource(m.home_source, seedToTeam, results); if (t) patch.home_team_id = t; }
     if (!m.away_team_id && m.away_source) { const t = resolveSource(m.away_source, seedToTeam, results); if (t) patch.away_team_id = t; }
+    // The better regular-season seed is always the home team (Ethan, 23 Nov 2026), in every
+    // finals, consolation and fill-in game: swap once both teams are known, before it's played.
+    const home = (patch.home_team_id as string | undefined) ?? m.home_team_id;
+    const away = (patch.away_team_id as string | undefined) ?? m.away_team_id;
+    if (home && away && m.home_score == null && m.away_score == null && homeShouldSwap(home, away, seeds)) {
+      Object.assign(patch, { home_team_id: away, away_team_id: home, home_source: m.away_source, away_source: m.home_source });
+    }
     if (Object.keys(patch).length) await q(db.from("league_matchups").update(patch).eq("id", m.id));
   }
 }

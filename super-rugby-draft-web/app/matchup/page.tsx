@@ -403,19 +403,9 @@ useEffect(() => {
 
   const matchup = matchupsThisWeek[matchupIdx] ?? null;
 
-// Default from schedule (home vs away)
-let leftTeamId = matchup?.homeTeamId ?? null;
-let rightTeamId = matchup?.awayTeamId ?? null;
-
-// ✅ If this matchup includes YOUR team, force YOUR team to be on the left
-if (yourLeagueTeamId && (leftTeamId === yourLeagueTeamId || rightTeamId === yourLeagueTeamId)) {
-  if (rightTeamId === yourLeagueTeamId) {
-    // swap
-    const tmp = leftTeamId;
-    leftTeamId = rightTeamId;
-    rightTeamId = tmp;
-  }
-}
+// Home team on the left, away team on the right, always (Ethan, 23 Nov 2026), even when you're away
+const leftTeamId = matchup?.homeTeamId ?? null;
+const rightTeamId = matchup?.awayTeamId ?? null;
 
 // the league's squad (lib/league/squad.ts): its starting slots, bench and IR spots
 const squad = activeLeague?.squadFormat ?? STANDARD_SQUAD;

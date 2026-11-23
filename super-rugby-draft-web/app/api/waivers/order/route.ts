@@ -1,7 +1,8 @@
 // app/api/waivers/order/route.ts
 // GET /api/waivers/order?leagueId&week -> the waiver order for that week (lib/waivers/order.ts):
 // { data: [{ teamId, rank }] (the usual order), firstRound: [teamId...] (round 1, which starts
-// with the Shield holder when the league has that reward), shieldTeamId }.
+// with the Shield holder when the league has that reward), shieldTeamId, flipped (a finals week
+// with the order flipped: 1st seed first) }.
 // Worked out fresh from the league's results every time (it used to be saved the first time
 // anyone looked, which could be before the last round was finalised). League members only.
 import { NextResponse } from "next/server";
@@ -20,6 +21,7 @@ async function answer(leagueId: string, week: number) {
     data: o.order.map((teamId, i) => ({ teamId, rank: i + 1 })),
     firstRound: o.firstRound,
     shieldTeamId: o.shieldTeamId,
+    flipped: !!o.flipped,
   });
 }
 

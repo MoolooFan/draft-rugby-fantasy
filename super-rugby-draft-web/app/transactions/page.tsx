@@ -345,6 +345,8 @@ const [waiverOrderLoaded, setWaiverOrderLoaded] = useState(false);
 const [waiverOrderRows, setWaiverOrderRows] = useState<Array<{ teamId: string; rank: number }>>([]);
 // Shield reward: the holder picks first in round 1 of the claims (lib/waivers/order.ts)
 const [waiverShieldTeamId, setWaiverShieldTeamId] = useState<string | null>(null);
+// a finals week with the waiver order flipped (1st seed first; League Settings)
+const [waiverFlipped, setWaiverFlipped] = useState(false);
 
 // ✅ single source of truth for ownership checks
 const rostersForOwnership = useMemo(() => {
@@ -492,6 +494,7 @@ useEffect(() => {
 
       if (res.ok && json?.ok && Array.isArray(json.data)) {
         setWaiverShieldTeamId(json.shieldTeamId ? String(json.shieldTeamId) : null);
+        setWaiverFlipped(!!json.flipped);
         // json.data is [{ teamId, rank }, ...] sorted by rank ASC
         setWaiverOrderRows(
           (json.data ?? []).map((r: any) => ({
@@ -944,6 +947,30 @@ async function apiDeclineTrade(tradeId: string) {
   await refreshTransactionsForLeague(activeLeague.id);
 }
 
+// The commissioner reverses a trade / waiver claim / free agent move (lib/league/reverse.ts).
+// Resolves to an error message, or null when it worked.
+async function apiReverse(kind: "trade" | "claim" | "transfer", id: string): Promise<string | null> {
+  if (!activeLeague?.id) return "No league";
+  const r = await fetch(`/api/leagues/reverse`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ leagueId: activeLeague.id, kind, id }),
+  });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j?.ok) return j?.error ?? "That couldn't be reversed";
+  await refreshTransactionsForLeague(activeLeague.id);
+  const res = await fetch(`/api/rosters?leagueId=${encodeURIComponent(activeLeague.id)}`, { cache: "no-store" });
+  const json = await res.json().catch(() => null);
+  if (res.ok && json?.ok) {
+    const next: Record<string, any> = {};
+    for (const row of json.data ?? []) if (row?.team_id) next[row.team_id] = row.data ?? {};
+    setLeagueRosters(next);
+    setLeagueRostersLoaded(true);
+  }
+  return null;
+}
+const isCommissioner = !!activeLeague?.createdByUserId && normUser(String(activeLeague.createdByUserId)) === userId;
+
 async function apiCancelTrade(tradeId: string) {
   if (!activeLeague?.id) return;
 
@@ -1354,6 +1381,7 @@ const modalActions = useMemo(
             txWeek={txWeek}
             setTxWeek={setTxWeek}
             waiverShieldTeamId={waiverShieldTeamId}
+            waiverFlipped={waiverFlipped}
             waiverOrderRows={waiverOrderRows}
             waiverOrderLoaded={waiverOrderLoaded}
             waiverOrderIndexByTeamId={waiverOrderIndexByTeamId}
@@ -1362,6 +1390,8 @@ const modalActions = useMemo(
             freeForUi={freeForUi}
             setReviewTrade={setReviewTrade}
             apiCancelTrade={apiCancelTrade}
+            isCommissioner={isCommissioner}
+            onReverse={apiReverse}
           />
         )}
       </div>

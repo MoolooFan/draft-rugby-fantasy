@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { isPastWeekDeadline, cancelExpiredPendingTrades } from "@/lib/trades/deadlines";
 import { healthyIrBlock, irIdsOf } from "@/lib/league/ir";
+import { loadTradeBlock, tradeBlockedMessage } from "@/lib/league/eliminated";
 
 // Team selection deadline = 1 hour before first kickoff
 
@@ -74,6 +75,10 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+
+    // League rule: eliminated teams can't trade (lib/league/eliminated.ts)
+    const blocked = tradeBlockedMessage(await loadTradeBlock(supabaseAdmin, leagueId), fromTeamId, toTeamId);
+    if (blocked) return NextResponse.json({ ok: false, error: blocked }, { status: 400 });
 
     const now = Date.now();
 

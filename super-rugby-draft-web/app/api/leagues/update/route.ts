@@ -138,6 +138,10 @@ export async function POST(req: Request) {
     dbPatch.squad_format = isStandardSquad(squad.format) ? null : squad.format;
   }
 
+  // Trades & waivers (Ethan, 23 Nov 2026): any time
+  if ("playoffWaiverFlip" in patch) dbPatch.playoff_waiver_flip = patch.playoffWaiverFlip !== false;
+  if ("blockEliminatedTrades" in patch) dbPatch.block_eliminated_trades = patch.blockEliminatedTrades === true;
+
   if ("startRound" in patch) dbPatch.start_round = patch.startRound ?? null;
   if ("totalWeeks" in patch) dbPatch.total_weeks = patch.totalWeeks ?? null;
 

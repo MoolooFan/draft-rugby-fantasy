@@ -7,6 +7,10 @@
 // holds the Shield going into the week picks first in the FIRST round of claims; the rest of that
 // round goes in the usual order without him. From the second round on, the usual order (him in
 // his normal place).
+//
+// Finals (Ethan, 23 Nov 2026; League Settings, on by default): from the first finals week the order
+// flips to the final regular-season ladder, so the 1st seed picks first, the 2nd seed second, and
+// so on, for the rest of the finals. Off = the usual reverse ladder all season.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildLadder, type LadderMatchup } from "@/lib/league/ladder";
 import { holderAfter, loadShield } from "@/lib/league/shieldServer";
@@ -18,6 +22,8 @@ export type WaiverOrder = {
   firstRound: string[];
   /** the team picking first in round 1 because it holds the Shield (null = no shield pick) */
   shieldTeamId: string | null;
+  /** a finals week with the order flipped (1st seed first) */
+  flipped?: boolean;
 };
 
 /** Pure: the two orders from the usual one and the shield holder (if he gets the first pick). */
@@ -26,24 +32,36 @@ export function waiverRounds(order: string[], shieldTeamId: string | null): Waiv
   return { order, firstRound: holder ? [holder, ...order.filter((t) => t !== holder)] : order, shieldTeamId: holder };
 }
 
-/** Pure: reverse ladder from games finished before this week; no games yet = the given team order. */
-export function waiverOrderFromResults(teamIds: string[], matchups: Array<LadderMatchup & { weeks: number[] }>, week: number): string[] {
+/**
+ * Pure: reverse ladder from games finished before this week; no games yet = the given team order.
+ * flipped (a finals week with "flip the waiver order in the finals" on): the ladder itself, top first.
+ */
+export function waiverOrderFromResults(teamIds: string[], matchups: Array<LadderMatchup & { weeks: number[] }>, week: number, flipped = false): string[] {
   const before = matchups.filter((m) => m.kind === "regular" && m.status === "final" && Math.max(...m.weeks.map(Number)) < week);
   if (!before.length) return [...teamIds];
-  return buildLadder(teamIds, before).map((r) => r.teamId).reverse();
+  const ladder = buildLadder(teamIds, before).map((r) => r.teamId);
+  return flipped ? ladder : ladder.reverse();
+}
+
+/** Pure: is this a finals week with the flip on (League Settings; missing = on)? */
+export function flipsInWeek(league: { playoff_waiver_flip?: boolean | null; schedule_plan?: { playoffWeeks?: number[] } | null } | null, week: number): boolean {
+  if (!league || league.playoff_waiver_flip === false) return false;
+  return (league.schedule_plan?.playoffWeeks ?? []).map(Number).includes(Number(week));
 }
 
 export async function buildWaiverOrder(db: SupabaseClient, leagueId: string, week: number): Promise<WaiverOrder> {
-  const [{ data: teams, error: tErr }, { data: matchups, error: mErr }] = await Promise.all([
+  const [{ data: teams, error: tErr }, { data: matchups, error: mErr }, { data: league }] = await Promise.all([
     db.from("teams").select("id").eq("league_id", leagueId).order("id"),
     db.from("league_matchups")
       .select("kind, status, weeks, home_team_id, away_team_id, home_score, away_score, home_bonus, away_bonus, home_shield_pts, away_shield_pts, shield_holder_after")
       .eq("league_id", leagueId)
       .eq("kind", "regular"),
+    db.from("leagues").select("playoff_waiver_flip, schedule_plan").eq("id", leagueId).maybeSingle(),
   ]);
   if (tErr) throw tErr;
   if (mErr) throw mErr;
-  const order = waiverOrderFromResults((teams ?? []).map((t) => String(t.id)), (matchups ?? []) as Array<LadderMatchup & { weeks: number[] }>, week);
+  const flipped = flipsInWeek(league, week);
+  const order = waiverOrderFromResults((teams ?? []).map((t) => String(t.id)), (matchups ?? []) as Array<LadderMatchup & { weeks: number[] }>, week, flipped);
 
   // the Shield's first pick: whoever holds it going into this week (kept while it's off / in the finals)
   let shieldTeamId: string | null = null;
@@ -53,7 +71,7 @@ export async function buildWaiverOrder(db: SupabaseClient, leagueId: string, wee
   } catch (e) {
     console.error("[waivers] shield holder not found:", e);
   }
-  return waiverRounds(order, shieldTeamId);
+  return { ...waiverRounds(order, shieldTeamId), flipped };
 }
 
 /** Save the usual order (waiver_order table) so it can be looked back on. */

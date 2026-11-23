@@ -266,6 +266,14 @@ useEffect(() => {
 
   const hardTradeDeadlineMs = useMemo(() => getWeekDeadlineMs(normalizedFixtures as any, hardTradeDeadlineWeek), [normalizedFixtures, hardTradeDeadlineWeek]);
 
+  // League rule: eliminated teams can't trade (lib/league/eliminated.ts); the server checks it too
+  const tradeBlockMsg = useMemo(() => {
+    const blocked: string[] = (activeLeague as any)?.tradeBlockedTeamIds ?? [];
+    if (yourDraftTeamId && blocked.includes(String(yourDraftTeamId))) return "Your team has been eliminated, so it can't trade any more (league rule). Waiver claims and free agents are still open.";
+    if (partnerTeamId && blocked.includes(String(partnerTeamId))) return "That team has been eliminated, so it can't trade any more (league rule).";
+    return null;
+  }, [activeLeague, yourDraftTeamId, partnerTeamId]);
+
   const tradeWindowClosed = useMemo(() => {
     if (!hardTradeDeadlineMs) return false;
     return nowMs >= hardTradeDeadlineMs;
@@ -607,6 +615,8 @@ const reviewOfferPlayers = offeringIds
       <span style={{ color: "rgba(239,68,68,0.95)" }}>
         Trade window closed (regular season deadline passed)
       </span>
+    ) : tradeBlockMsg ? (
+      <span style={{ color: "rgba(239,68,68,0.95)" }}>{tradeBlockMsg}</span>
     ) : validity.ok ? (
       <span style={{ color: "rgba(34,197,94,0.95)" }}>{validity.msg}</span>
     ) : (
@@ -622,7 +632,7 @@ const reviewOfferPlayers = offeringIds
 
   {/* Cancel / Propose buttons */}
   <div style={{ marginTop: 10 }}>
-    <ReviewButtons canPropose={validity.ok && !tradeWindowClosed} isProposing={isProposing} onCancel={goBackToReturnTo} onPropose={proposeTrade} />
+    <ReviewButtons canPropose={validity.ok && !tradeWindowClosed && !tradeBlockMsg} isProposing={isProposing} onCancel={goBackToReturnTo} onPropose={proposeTrade} />
   </div>
 </div>
 
