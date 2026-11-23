@@ -19,6 +19,12 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 ## Changes
 
+### 23 Nov 2026
+
+| Code | What changed | Database |
+|---|---|---|
+| `48a1f24` | League Settings → Trades & Waivers: flip the waiver order in the finals (on by default) and eliminated teams can't trade (off by default). Commissioner can reverse a trade, waiver claim or free agent move on the Transactions tab. Matchup page: home team always on the left. Finals: the better seed is always at home | Yes |
+
 ### 21 Nov 2026
 
 | Code | What changed | Database |
