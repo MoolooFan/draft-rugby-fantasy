@@ -10,9 +10,13 @@
 // Both teams must still keep the position rules. Weeks already locked keep their lineups and
 // points (only weeks not locked yet change, like any roster change). Drops made to bring a player
 // back from IR can't be reversed.
+// Time limit (Ethan, 23 Nov 2026): 24 hours after the move, or until the first game of the next
+// round kicks off, whichever comes first. The commissioner does it from the Commissioner section at
+// the bottom of the Transactions tab (listReversible), so the page looks normal for everyone else.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { activeIdsOf, irIdsOf, ownedIdsOf } from "@/lib/league/ir";
-import { planMoveReversal, planTradeReversal, REVERSE_LOCK_MS } from "@/lib/league/reversePlan";
+import { planMoveReversal, planTradeReversal, reversibleUntilMs, REVERSE_LOCK_MS, REVERSE_WINDOW_MS } from "@/lib/league/reversePlan";
+import { getSeason, SEASONS, totalFantasyWeeks, weekFirstKickoffMs } from "@/lib/season";
 import { loadRosterPlayers, rosterProblem, updateLineupsAfterRosterChange } from "@/lib/league/rosterChange";
 import { loadSquadFormat } from "@/lib/league/squadServer";
 import { cancelInvalidPendingTradesForTeams, cancelPendingTradesTouchingPlayers } from "@/lib/trades/cancelPendingTrades";
@@ -29,6 +33,88 @@ async function q<T>(p: PromiseLike<{ data: T | null; error: unknown }>): Promise
   const { data, error } = await p;
   if (error) throw error;
   return data as T;
+}
+
+/** Every round's first kickoff in a season (ms). */
+function roundKickoffs(season: number): number[] {
+  if (!SEASONS[season]) return [];
+  const s = getSeason(season);
+  return Array.from({ length: totalFantasyWeeks(s) }, (_, i) => weekFirstKickoffMs(s, i + 1)).filter(Number.isFinite);
+}
+
+type MoveRow = { status: string; accepted_at?: string | null; updated_at?: string | null; processed_at_ms?: number | null; updated_at_ms?: number | null; created_at_ms?: number | null };
+
+/** When a move went through (ms). */
+function madeAtMs(kind: ReverseKind, r: MoveRow): number {
+  if (kind === "trade") return Date.parse(String(r.accepted_at ?? r.updated_at ?? "")) || 0;
+  if (kind === "claim") return Number(r.processed_at_ms ?? r.updated_at_ms) || 0;
+  return Number(r.created_at_ms) || 0;
+}
+
+const TOO_LATE = "Too late to reverse: moves can only be reversed for 24 hours, and not once the next round has kicked off.";
+
+export type ReversibleMove = {
+  kind: ReverseKind;
+  id: string;
+  atMs: number;
+  untilMs: number;
+  teamIds: string[];
+  /** e.g. "Josh's Team ⇄ Will's Team" or "Josh's Team" */
+  title: string;
+  /** e.g. "Josh's Team gets D. McKenzie; Will's Team gets B. Donaldson" or "+ D. McKenzie, − B. Donaldson" */
+  detail: string;
+};
+
+/** The moves the commissioner can still reverse, newest first (commissioner only). */
+export async function listReversible(db: Db, p: { leagueId: string; username: string; nowMs?: number }): Promise<{ ok: true; moves: ReversibleMove[] } | { ok: false; error: string; status: number }> {
+  const now = p.nowMs ?? Date.now();
+  const league = await q<{ created_by: string | null; season: number } | null>(db.from("leagues").select("created_by, season").eq("id", p.leagueId).maybeSingle());
+  if (!league) return { ok: false, error: "League not found", status: 404 };
+  if (String(league.created_by ?? "").trim().toLowerCase() !== p.username.trim().toLowerCase()) return { ok: false, error: "Only the commissioner can reverse moves", status: 403 };
+  const kickoffs = roundKickoffs(Number(league.season));
+  const since = now - REVERSE_WINDOW_MS;
+  const [trades, claims, transfers, teams] = await Promise.all([
+    q<Array<MoveRow & { id: string; from_team_id: string; to_team_id: string; offer_player_ids: string[]; request_player_ids: string[] }>>(
+      db.from("trade_offers").select("id, status, accepted_at, updated_at, from_team_id, to_team_id, offer_player_ids, request_player_ids").eq("league_id", p.leagueId).eq("status", "accepted").gte("updated_at", new Date(since).toISOString())
+    ),
+    q<Array<MoveRow & { id: string; team_id: string; add_player_id: string; drop_player_id: string | null }>>(
+      db.from("waiver_claims").select("id, status, processed_at_ms, updated_at_ms, team_id, add_player_id, drop_player_id").eq("league_id", p.leagueId).eq("status", "PROCESSED").gte("updated_at_ms", since)
+    ),
+    q<Array<MoveRow & { id: string; team_id: string; add_player_id: string | null; drop_player_id: string | null }>>(
+      db.from("free_agent_transfers").select("id, status, created_at_ms, team_id, add_player_id, drop_player_id").eq("league_id", p.leagueId).eq("status", "PROCESSED").gte("created_at_ms", since).not("add_player_id", "is", null)
+    ),
+    q<Array<{ id: string; name: string }>>(db.from("teams").select("id, name").eq("league_id", p.leagueId)),
+  ]);
+  const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? "A team";
+  const ids = [...trades.flatMap((t) => [...(t.offer_player_ids ?? []), ...(t.request_player_ids ?? [])]), ...[...claims, ...transfers].flatMap((m) => [m.add_player_id, m.drop_player_id])].filter((x): x is string => !!x);
+  const players = await loadRosterPlayers(db, Number(league.season), ids);
+  const short = (id: string) => {
+    const pl = players.get(id);
+    return pl ? `${String(pl.firstName ?? "").slice(0, 1)}. ${pl.lastName}` : id;
+  };
+  const out: ReversibleMove[] = [];
+  const add = (kind: ReverseKind, r: MoveRow & { id: string }, m: Omit<ReversibleMove, "kind" | "id" | "atMs" | "untilMs">) => {
+    const atMs = madeAtMs(kind, r);
+    const untilMs = reversibleUntilMs(atMs, kickoffs);
+    if (atMs && atMs <= now && now < untilMs) out.push({ kind, id: r.id, atMs, untilMs, ...m });
+  };
+  for (const t of trades) {
+    add("trade", t, {
+      teamIds: [t.from_team_id, t.to_team_id],
+      title: `${teamName(t.from_team_id)} ⇄ ${teamName(t.to_team_id)}`,
+      detail: `${teamName(t.from_team_id)} got ${(t.request_player_ids ?? []).map(short).join(", ")}; ${teamName(t.to_team_id)} got ${(t.offer_player_ids ?? []).map(short).join(", ")}`,
+    });
+  }
+  for (const [kind, rows] of [["claim", claims], ["transfer", transfers]] as const) {
+    for (const m of rows) {
+      add(kind, m, {
+        teamIds: [m.team_id],
+        title: `${teamName(m.team_id)} · ${kind === "claim" ? "Waiver claim" : "Free agent"}`,
+        detail: `IN: ${short(m.add_player_id!)}${m.drop_player_id ? ` · OUT: ${short(m.drop_player_id)}` : ""}`,
+      });
+    }
+  }
+  return { ok: true, moves: out.sort((a, b) => b.atMs - a.atMs) };
 }
 
 /** Reverse one move. Checks the commissioner first. Returns a message for the league chat / page. */
@@ -49,6 +135,7 @@ export async function reverseMove(db: Db, p: { leagueId: string; username: strin
   const status = String(row.status).toLowerCase();
   if (status === "reversed") return { ok: false, error: "That's already been reversed", status: 400 };
   if (status !== (p.kind === "trade" ? "accepted" : "processed")) return { ok: false, error: "Only moves that went through can be reversed", status: 400 };
+  if (now >= reversibleUntilMs(madeAtMs(p.kind, row as MoveRow), roundKickoffs(Number(league.season)))) return { ok: false, error: TOO_LATE, status: 400 };
 
   // everyone's rosters (a dropped player may have been signed by anyone), names for messages
   const rosterRows = await q<Array<{ team_id: string; data: RosterData }>>(db.from("rosters").select("team_id, data").eq("league_id", p.leagueId));

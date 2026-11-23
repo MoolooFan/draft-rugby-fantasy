@@ -66,3 +66,15 @@ export function planMoveReversal(
   return { ok: true, next, moved: [m.addId, ...(m.dropId ? [m.dropId] : [])], unlock: m.dropId ? [m.dropId] : [], lock: [m.addId] };
 }
 
+
+/** How long after a move the commissioner can reverse it (Ethan, 23 Nov 2026). */
+export const REVERSE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Pure: until when a move made at atMs can be reversed: 24 hours, or until the first game of the
+ * next round kicks off, whichever comes first. kickoffs: each round's first kickoff (ms).
+ */
+export function reversibleUntilMs(atMs: number, kickoffs: number[]): number {
+  const next = kickoffs.filter((k) => Number.isFinite(k) && k > atMs).sort((a, b) => a - b)[0];
+  return Math.min(atMs + REVERSE_WINDOW_MS, next ?? Infinity);
+}

@@ -4,7 +4,7 @@
 import { flipsInWeek, waiverOrderFromResults } from "../../lib/waivers/order";
 import { eliminatedTeams } from "../../lib/league/eliminated";
 import { homeShouldSwap } from "../../lib/league/schedule";
-import { planMoveReversal, planTradeReversal } from "../../lib/league/reversePlan";
+import { planMoveReversal, planTradeReversal, reversibleUntilMs } from "../../lib/league/reversePlan";
 
 let failures = 0;
 const check = (name: string, ok: boolean, extra = "") => {
@@ -71,6 +71,14 @@ check("reverse move: a player in someone's IR counts as signed", !signedIr.ok);
 check("reverse move: an IR-activation drop can't be reversed", !planMoveReversal({ teamId: "A", addId: null, dropId: "z1" }, rosters, nm, tn).ok);
 const noDrop = planMoveReversal({ teamId: "A", addId: "b1", dropId: null }, rosters, nm, tn);
 check("reverse move: an add with no drop just removes him", noDrop.ok && noDrop.next.get("A")!.length === 2);
+
+// --- the time limit: 24 hours, or the next round's first kickoff if that's sooner
+const H = 3600_000;
+const kick = [100 * H, 268 * H];
+check("window: 24 hours when the next round is further away", reversibleUntilMs(10 * H, kick) === 34 * H);
+check("window: ends at the next round's first kickoff if sooner", reversibleUntilMs(90 * H, kick) === 100 * H);
+check("window: a move after a round kicked off waits for the next round's", reversibleUntilMs(101 * H, kick) === 125 * H);
+check("window: no rounds left = 24 hours", reversibleUntilMs(300 * H, kick) === 324 * H);
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll passed");
 if (failures) process.exit(1);

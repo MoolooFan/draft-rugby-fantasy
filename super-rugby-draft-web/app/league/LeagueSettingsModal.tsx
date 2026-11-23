@@ -7,6 +7,7 @@ import { LeagueStakesSection } from "@/components/LeagueStakes";
 import { ShieldRewardsFields } from "@/components/ShieldRewardsFields";
 import { ShieldStartFields } from "@/components/ShieldStartFields";
 import { BonusPointsFields } from "@/components/BonusPointsFields";
+import { CommissionerHandover } from "@/components/CommissionerHandover";
 import { cleanBonusRules, type BonusRules } from "@/lib/league/bonus";
 import { DEFAULT_SHIELD_START, NO_SHIELD_REWARDS, type ShieldRewards, type ShieldStart } from "@/lib/league/shield";
 import React, { useEffect, useState } from "react";
@@ -338,6 +339,13 @@ return (
 })}
 
         </div>
+
+        {/* hand the commissioner job to another member (Ethan, 23 Nov 2026) */}
+        {!readOnly ? (
+          <Field label="Commissioner">
+            <CommissionerHandover leagueId={league.id} teams={league.teams} myUsername={String(league.createdByUserId ?? "")} onDone={onClose} />
+          </Field>
+        ) : null}
 
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
           <button

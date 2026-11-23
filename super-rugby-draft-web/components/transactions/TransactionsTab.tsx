@@ -11,7 +11,8 @@ import { StatusPill } from "@/components/transactions/bits";
 import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { getWeekDeadlineMs } from "@/lib/league/weekHelpers";
 import { TeamAvatar } from "@/components/TeamAvatar";
-import { ReverseControl, type ReverseKind } from "@/components/transactions/ReverseControl";
+import type { ReverseKind } from "@/components/transactions/ReverseControl";
+import { CommissionerPanel } from "@/components/transactions/CommissionerPanel";
 
 export type TransactionsTabProps = {
   activeLeague: League | null;
@@ -42,7 +43,7 @@ export type TransactionsTabProps = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setReviewTrade: (trade: any | null) => void;
   apiCancelTrade: (tradeId: string) => Promise<void>;
-  /** the commissioner sees Reverse under trades, waiver claims and free agent moves */
+  /** the commissioner gets a Commissioner section at the bottom (reverse recent moves) */
   isCommissioner?: boolean;
   /** reverses one; resolves to an error message, or null when it worked */
   onReverse?: (kind: ReverseKind, id: string) => Promise<string | null>;
@@ -55,12 +56,10 @@ export function TransactionsTab({
   waiverOrderLoaded, waiverOrderIndexByTeamId, tradesForUi, claimsForUi, freeForUi, setReviewTrade, apiCancelTrade,
   isCommissioner = false, onReverse,
 }: TransactionsTabProps) {
-    // the commissioner's Reverse (lib/league/reverse.ts), under moves that went through
-    const reverseFor = (kind: ReverseKind, id: string | undefined, status: string, explain: string) => {
-      const s = String(status ?? "").toUpperCase();
-      if (s === "REVERSED") return <div style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: "#b45309", textAlign: "right" }}>Reversed by the commissioner</div>;
-      if (!isCommissioner || !onReverse || !id || (s !== "ACCEPTED" && s !== "PROCESSED")) return null;
-      return <ReverseControl kind={kind} explain={explain} onReverse={() => onReverse(kind, id)} />;
+    // a move the commissioner reversed (lib/league/reverse.ts; done from the Commissioner section)
+    const reverseFor = (_kind: ReverseKind, _id: string | undefined, status: string) => {
+      if (String(status ?? "").toUpperCase() !== "REVERSED") return null;
+      return <div style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: "#b45309", textAlign: "right" }}>Reversed by the commissioner</div>;
     };
     const leagueId = activeLeague?.id ?? "";
     const yourId = yourDraftTeamId;
@@ -189,7 +188,7 @@ function LeagueTradeRow__render({ t }: { t: any }) {
             )}
           </div>
         </div>
-        {reverseFor("trade", t.id, t.status, "Every player goes back to the team he came from.")}
+        {reverseFor("trade", t.id, t.status)}
       </div>
     </div>
   );
@@ -670,9 +669,6 @@ const InitialBadge = useStableComponent(InitialBadge__render);
                   </div>
 
                   <StatusPill status={c.status ?? c.result ?? "Processed"} />
-                  <div style={{ gridColumn: "1 / -1" }}>
-                    {reverseFor("claim", c.id, c.status, `${addP ? shortName(addP) : "The player added"} goes back to the player pool (locked for 24 hours)${c.dropPlayerId ? ` and ${dropP ? shortName(dropP) : "the player dropped"} comes back` : ""}.`)}
-                  </div>
                 </div>
               );
             })
@@ -728,17 +724,14 @@ const InitialBadge = useStableComponent(InitialBadge__render);
                   )}
 
                   <StatusPill status={x.status ?? "Processed"} />
-                  {x.addPlayerId ? (
-                    <div style={{ gridColumn: "1 / -1" }}>
-                      {reverseFor("transfer", x.id, x.status, `${addP ? shortName(addP) : "The player added"} goes back to the player pool (locked for 24 hours)${x.dropPlayerId ? ` and ${dropP ? shortName(dropP) : "the player dropped"} comes back` : ""}.`)}
-                    </div>
-                  ) : null}
                 </div>
               );
             })
           )}
         </div>
 
+        {/* Commissioner only, at the very bottom: reverse recent moves (Ethan, 23 Nov 2026) */}
+        {isCommissioner && onReverse && leagueId ? <CommissionerPanel leagueId={leagueId} onReverse={onReverse} /> : null}
       </>
     );
   }
