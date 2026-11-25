@@ -101,6 +101,9 @@ if (
   }
 // each owner's name as "Ethan S." (shown under the team name on the ladder)
 const ownerNames = new Map<string, string>();
+// each owner's initials from their first and last name ("ES"); the draft results show them on
+// every pick (Ethan, 25 Nov 2026: they were blank, as new teams have no initials saved)
+const ownerInitials = new Map<string, string>();
 {
   const owners = [...new Set((teamRows ?? []).map((t: any) => String(t.owner_username ?? "")).filter(Boolean))];
   if (owners.length) {
@@ -111,6 +114,8 @@ const ownerNames = new Map<string, string>();
       // no name set: their username, with a capital first letter
       const uname = String(u.username ?? "");
       ownerNames.set(u.username_norm, first ? `${first}${last ? ` ${last[0].toUpperCase()}.` : ""}` : uname.charAt(0).toUpperCase() + uname.slice(1));
+      const ini = first ? `${first[0]}${last[0] ?? ""}` : uname.slice(0, 2);
+      if (ini) ownerInitials.set(u.username_norm, ini.toUpperCase());
     }
   }
 }
@@ -134,7 +139,11 @@ const teamsRaw = (teamRows ?? []).map((t: any) => {
       ? t.initials.trim().toUpperCase()
       : null;
 
-  const computed = dbInitials ?? initialsFromOwnerName(t.owner_name);
+  const computed =
+    dbInitials ??
+    ownerInitials.get(String(t.owner_username ?? "")) ??
+    initialsFromOwnerName(t.owner_name) ??
+    initialsFromOwnerName(String(t.name ?? "").replace(/[^A-Za-z0-9\s]/g, " ")); // no owner name: the team's
 
   return {
     id: t.id,

@@ -171,7 +171,7 @@ export const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "DRAFT_RANK", label: "Draft Rank" },
   { value: "PROJECTED", label: "Projected (this round)" },
   { value: "MATCH_AVG", label: "Match Average" },
-  { value: "TOTAL_PTS", label: "Points" },
+  { value: "TOTAL_PTS", label: "Fantasy Points" },
   { value: "FORM_3", label: "Form" },
   { value: "LAST_SCORE", label: "Last Fixture" },
   { value: "GAMES_PLAYED", label: "Games Played" },

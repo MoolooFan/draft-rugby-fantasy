@@ -1,13 +1,16 @@
 "use client";
 
-// The Per game / Total / Per 80 switch (plan item C1) and the season switch. Changing either changes every page.
+// The Per game / Total / Per 80 switch (plan item C1) and the season switch. Changing either changes every page,
+// unless a value and onChange are given (the player card keeps its own: Ethan, 25 Nov 2026).
 
 import React from "react";
-import { STAT_VIEWS, STAT_VIEW_LABEL, useStatView } from "@/lib/players/statView";
+import { STAT_VIEWS, STAT_VIEW_LABEL, useStatView, type StatView } from "@/lib/players/statView";
 import { useStatSeason } from "@/lib/players/useStatSeason";
 
-export function StatViewToggle({ dark = false, style }: { dark?: boolean; style?: React.CSSProperties }) {
-  const [view, setView] = useStatView();
+export function StatViewToggle({ dark = false, style, value, onChange }: { dark?: boolean; style?: React.CSSProperties; value?: StatView; onChange?: (v: StatView) => void }) {
+  const [shared, setShared] = useStatView();
+  const view = value ?? shared;
+  const setView = onChange ?? setShared;
   return (
     <div
       role="radiogroup"
@@ -52,8 +55,11 @@ export function StatViewToggle({ dark = false, style }: { dark?: boolean; style?
 }
 
 /** The 2026 / 2027 switch (lib/players/useStatSeason): which season's stats are shown. Hidden with one season. */
-export function SeasonToggle({ dark = false, style }: { dark?: boolean; style?: React.CSSProperties }) {
-  const { season, setSeason, seasons } = useStatSeason();
+export function SeasonToggle({ dark = false, style, value, onChange }: { dark?: boolean; style?: React.CSSProperties; value?: number; onChange?: (s: number) => void }) {
+  const shared = useStatSeason();
+  const seasons = shared.seasons;
+  const season = value ?? shared.season;
+  const setSeason = onChange ?? shared.setSeason;
   if (seasons.length < 2) return null;
   return (
     <div

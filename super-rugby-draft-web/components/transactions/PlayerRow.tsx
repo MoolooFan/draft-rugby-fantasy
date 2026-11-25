@@ -79,7 +79,7 @@ if (isOwned && !isOwnedByYou) {
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "1fr 132px",
+        gridTemplateColumns: "1fr 140px",
         gap: 10,
         alignItems: "center",
         padding: "10px 10px",
@@ -116,7 +116,7 @@ if (isOwned && !isOwnedByYou) {
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, width: 34, textAlign: "right" }}>
+        <div style={{ fontSize: 12, fontWeight: 700, width: 40, textAlign: "center" }}>
           {metricValue(p, infoMode)}
         </div>
 

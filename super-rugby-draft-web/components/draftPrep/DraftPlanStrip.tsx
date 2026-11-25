@@ -13,12 +13,15 @@ export function DraftPlanStrip({
   round,
   roster,
   leagueId,
+  hideMockDraft = false,
 }: {
   strategy: DraftStrategy | null;
   /** the round of your next pick */
   round: number;
   roster: Array<{ posAbbrev?: string | null }>;
   leagueId: string | null;
+  /** no Mock Draft link while the draft is on (Ethan, 25 Nov 2026) */
+  hideMockDraft?: boolean;
 }) {
   const empty = isEmptyStrategy(strategy);
   const plan = planForRound(strategy, round);
@@ -36,7 +39,7 @@ export function DraftPlanStrip({
           </span>
         )}
         <Link href="/draft-strategy" style={link}>{empty ? "Set Up Strategy" : "Edit Strategy"}</Link>
-        <Link href={leagueId ? `/mock-draft?leagueId=${encodeURIComponent(leagueId)}` : "/mock-draft"} style={link}>Mock Draft</Link>
+        {hideMockDraft ? null : <Link href={leagueId ? `/mock-draft?leagueId=${encodeURIComponent(leagueId)}` : "/mock-draft"} style={link}>Mock Draft</Link>}
       </div>
       {targets.length ? (
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>

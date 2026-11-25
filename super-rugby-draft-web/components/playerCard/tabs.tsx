@@ -4,7 +4,7 @@
 import { useMemo } from "react";
 
 import { FixtureRow, TabCard, computeGames, totalDerived, playerGetsScrumPointsForCard, StatRow, teamLogoSrc, formatKickoffLocal, fdrTheme } from "./helpers";
-import { applyStatView, formatStatView, STAT_VIEW_LABEL, useStatView } from "@/lib/players/statView";
+import { applyStatView, formatStatView, STAT_VIEW_LABEL, useStatView, type StatView } from "@/lib/players/statView";
 import { SeasonToggle, StatViewToggle } from "@/components/StatViewToggle";
 
 export function StatsTab({
@@ -13,7 +13,16 @@ export function StatsTab({
   gamesPlayed,
   starts,
   onCompare,
+  view: viewProp,
+  onView,
+  season,
+  onSeason,
 }: {
+  /** the card's own Per game / Total / Per 80 and season (they don't change the page's filters) */
+  view?: StatView;
+  onView?: (v: StatView) => void;
+  season?: number;
+  onSeason?: (s: number) => void;
   /** the Compare button under the stats (left out: no button) */
   onCompare?: () => void;
   player: {
@@ -110,7 +119,8 @@ export function StatsTab({
   ];
 
   // Per game / Total / Per 80 (C1): every stat below follows the switch at the top
-  const [view] = useStatView();
+  const [sharedView] = useStatView();
+  const view = viewProp ?? sharedView;
   const minutes = (rounds ?? []).reduce((a, r) => a + (Number(r?.minutes ?? r?.breakdown?.minutesPlayed) || 0), 0);
   const shown = (total: number) => formatStatView(applyStatView(gp ? total : null, gp, minutes, view), view);
   const pointsTotal = (rounds ?? []).reduce((a, r) => a + (Number(r?.points) || 0), 0);
@@ -133,8 +143,8 @@ export function StatsTab({
         />
 
         <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 6, padding: "10px 0 2px" }}>
-          <StatViewToggle dark />
-          <SeasonToggle dark />
+          <StatViewToggle dark value={viewProp} onChange={onView} />
+          <SeasonToggle dark value={season} onChange={onSeason} />
         </div>
 
         {/* Per Game header row */}
@@ -153,7 +163,7 @@ export function StatsTab({
           </div>
         </div>
 
-        <StatRow label="Points" right={shown(pointsTotal)} />
+        <StatRow label="Fantasy Points" right={shown(pointsTotal)} />
         <StatRow label="Minutes Played" right={view === "per80" ? "–" : shown(minutes)} />
         <StatRow label="Tries Scored" right={shown(triesTotal)} />
         <StatRow label="Try Assists" right={shown(tryAssistsTotal)} />

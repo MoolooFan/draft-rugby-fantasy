@@ -250,7 +250,7 @@ export function TradeTopBar({
             >
               <option value="DRAFT_RANK">Draft Rank</option>
 <option value="AVG_PPG">Match Average</option>
-<option value="TOTAL_PTS">Points</option>
+<option value="TOTAL_PTS">Fantasy Points</option>
 <option value="FORM">Form</option>
 <option value="PROJ">{projLabel}</option>
 

@@ -23,10 +23,10 @@ export function PlayerListBox({
   return (
             <div style={listBox}>
               {/* the column's name, right above the numbers (same layout as the rows below) */}
-              <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: "1fr 132px", gap: 10, alignItems: "center" }}>
+              <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: "1fr 140px", gap: 10, alignItems: "center" }}>
                 <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.7 }}>{viewLabel}</div>
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                  <div style={{ width: 34, display: "flex", justifyContent: "flex-end", whiteSpace: "nowrap", fontSize: 10, fontWeight: 600, opacity: 0.7 }}>{metricHeading}</div>
+                  <div style={{ width: 40, display: "flex", justifyContent: "center", whiteSpace: "nowrap", fontSize: 10, fontWeight: 600, opacity: 0.7 }}>{metricHeading}</div>
                   <div style={{ width: 28 }} />
                   <div style={{ width: 28 }} />
                 </div>

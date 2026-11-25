@@ -19,6 +19,7 @@ import { applyFantasyFeed, applyQuestionable, clearFinishedGameStatuses, importR
 import { runDueWaivers } from "@/lib/waivers/process";
 import { advanceDraft } from "@/lib/draft/engine";
 import { coachTick } from "@/lib/coach/run";
+import { coachDraftGrades } from "@/lib/coach/draftGrades";
 import { backupIfDue } from "@/lib/backup/run";
 
 export const maxDuration = 60; // seconds (Vercel)
@@ -82,6 +83,9 @@ async function tick() {
     }
   }
 
+  // Draft grades: the coach writes the bullet points for drafts that have just finished
+  const draftGrades = await coachDraftGrades(supabaseAdmin, now).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
+
   // Before finalising a week, pull its final stats (all of its real rounds).
   const results = await runResultsTick(supabaseAdmin, seasonYear, now, {
     // any of the week's games still waiting get their last stats run first
@@ -93,7 +97,7 @@ async function tick() {
   // Nightly backup (3am NZ time, once a day)
   const backup = await backupIfDue(supabaseAdmin, now).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
 
-  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, finishedBeforeFinalise, statusImports, lateChanges, statusesCleared, questionable, waivers, drafts, coach, backup, ...results };
+  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, finishedBeforeFinalise, statusImports, lateChanges, statusesCleared, questionable, waivers, drafts, coach, draftGrades, backup, ...results };
 }
 
 async function handle(req: Request) {
