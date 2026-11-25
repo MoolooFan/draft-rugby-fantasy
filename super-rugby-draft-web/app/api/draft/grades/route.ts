@@ -7,10 +7,19 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireLeagueTeam, toHttpError } from "@/lib/league/serverAuth";
 import { getDraftState } from "@/lib/draft/engine";
 import { writeDraftGrades } from "@/lib/draft/gradesServer";
+import { plainBullets, type TeamGradeFacts } from "@/lib/draft/grades";
 
 export const dynamic = "force-dynamic";
 
-type Row = { team_id: string; grade: string; rank: number; bullets: unknown; written_by: string; facts: { teamName?: string } | null };
+function safePlain(facts: TeamGradeFacts, saved: unknown): string[] {
+  try {
+    return plainBullets(facts);
+  } catch {
+    return Array.isArray(saved) ? saved.map(String) : [];
+  }
+}
+
+type Row = { team_id: string; grade: string; rank: number; bullets: unknown; written_by: string; facts: ({ teamName?: string } & Partial<TeamGradeFacts>) | null };
 
 export async function GET(req: Request) {
   try {
@@ -41,7 +50,9 @@ export async function GET(req: Request) {
         teamName: r.facts?.teamName ?? "",
         grade: r.grade,
         rank: r.rank,
-        bullets: Array.isArray(r.bullets) ? r.bullets.map(String) : [],
+        // plain bullet points are written from the facts each time (so wording changes reach
+        // them); the coach's are kept as written
+        bullets: r.written_by !== "coach" && r.facts ? safePlain(r.facts as TeamGradeFacts, r.bullets) : Array.isArray(r.bullets) ? r.bullets.map(String) : [],
         byCoach: r.written_by === "coach",
       })),
     });

@@ -32,7 +32,7 @@ import { positionsLabel } from "@/lib/players/positions";
 import { StatusTag } from "@/components/StatusTag";
 import { PlusMinusIcon } from "@/components/PlusMinusIcon";
 import { DraftPlanStrip } from "@/components/draftPrep/DraftPlanStrip";
-import { DraftGrades } from "@/components/draftPrep/DraftGrades";
+import { TeamDraftGrade, useDraftGrades } from "@/components/draftPrep/DraftGrades";
 import { useDraftStrategy } from "@/lib/draft/useStrategy";
 import { isEmptyStrategy, myRanks, planForRound, planMatches } from "@/lib/draft/strategy";
 import { roundForPick } from "@/lib/draft/rules";
@@ -301,6 +301,8 @@ const preDraftDeadlineMs = useMemo(() => {
     phase === "complete" || storeDraftComplete || (totalPicks > 0 && picks.length === totalPicks && picks[totalPicks - 1] !== null);
 
   const currentPick = Math.min(pickIndex, totalPicks);
+  // draft grades (shown at the bottom of the Teams tab, under each team)
+  const draftGrades = useDraftGrades(activeLeagueId ?? null, draftComplete && phase !== "preDraft");
 
   // (also when the teams / order arrive: it used to be worked out before the order had loaded
   // and stay blank, "On the Clock: TBC", until the first pick; found in the 25 Nov practice draft)
@@ -692,8 +694,9 @@ const PreDraftHeader = useStableComponent(PreDraftHeader__render);
           <Hamburger />
         </div>
         <div style={{ marginTop: 8, fontSize: 22, fontWeight: 700 }}>Draft Complete</div>
-        <div style={{ marginTop: 6, fontSize: 13, fontWeight: 500, opacity: 0.8, lineHeight: 1.4 }}>
-          All {totalPicks} picks are in. Your squad is on your Team page, and anyone left on your draft watchlist has moved to your Transactions watchlist. Your draft grade is below.
+        {/* the last pick, as it shows during the draft (Ethan, 25 Nov 2026) */}
+        <div style={{ marginTop: 10, background: "#FACC15", color: "#0f172a", borderRadius: 999, padding: "7px 12px", fontSize: 11, fontWeight: 500, boxShadow: "0 10px 18px rgba(0,0,0,0.16)", textAlign: "center" }}>
+          {latestPickText}
         </div>
       </div>
     );
@@ -1092,6 +1095,10 @@ const entry = resolvePlayer(rawEntry as never);
             </div>
           ))}
         </div>
+        {(() => {
+          const g = draftGrades.find((x) => x.teamId === selectedTeamId);
+          return g ? <TeamDraftGrade grade={g} /> : null;
+        })()}
       </>
     );
   }
@@ -1325,7 +1332,6 @@ const ModalOverlay = useStableComponent(ModalOverlay__render);
       <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px", paddingBottom: "calc(18px + env(safe-area-inset-bottom))" }}>
         
         {phase === "preDraft" ? <PreDraftHeader /> : draftComplete ? <CompleteHeader /> : <LiveHeader />}
-        {draftComplete && phase !== "preDraft" && activeLeagueId ? <DraftGrades leagueId={activeLeagueId} yourTeamId={yourTeamId} /> : null}
 
         <Tabs />
 

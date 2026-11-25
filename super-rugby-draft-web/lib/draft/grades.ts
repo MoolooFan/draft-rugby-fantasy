@@ -302,19 +302,26 @@ export function gradeDraft(args: {
 
 const KIND_NAME: Record<string, string> = { PR: "prop", HO: "hooker", LK: "lock", LF: "loose forward", HB: "halfback", FH: "first five", CE: "centre", OB: "outside back", TF: "tight five", HV: "halves" };
 
-/** Two or three plain bullet points from the facts (until the coach writes better ones). */
+const plural = (group: string) => /s$/.test(group) && group !== "back three";
+const both = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}` : xs[0] ?? "");
+
+/**
+ * Two or three plain bullet points from the facts, as full sentences (Ethan, 25 Nov 2026: no
+ * "Label:" style), until the coach writes better ones.
+ */
 export function plainBullets(f: TeamGradeFacts): string[] {
   const out: string[] = [];
-  if (f.bestValue) out.push(`Best value: ${f.bestValue.name} at pick ${f.bestValue.pick} (Draft Rank ${f.bestValue.draftRank}).`);
-  if (f.strongest) out.push(`Strongest area: the ${f.strongest}.`);
-  if (f.emptyStarters) out.push(`${f.emptyStarters} starting spot${f.emptyStarters === 1 ? "" : "s"} still empty.`);
-  else if (f.stacked.length) out.push(`Heavy on ${KIND_NAME[f.stacked[0].pos] ?? f.stacked[0].pos}s: ${f.stacked[0].count} on the bench.`);
-  else if (f.uncovered.length) out.push(`No cover at ${f.uncovered.slice(0, 2).map((k) => KIND_NAME[k] ?? k).join(" or ")}: one injury there leaves a hole.`);
-  else if (f.weakest) out.push(`Weakest area: the ${f.weakest}.`);
-  if (f.risks.length) out.push(`Risk: ${f.risks[0]}.`);
-  else if (f.boom.length) out.push(`Boom or bust: ${f.boom.join(" and ")} can win or lose a round.`);
-  if (out.length < 2 && f.biggestReach) out.push(`Reach: ${f.biggestReach.name} at pick ${f.biggestReach.pick} (Draft Rank ${f.biggestReach.draftRank}).`);
-  if (out.length < 2) out.push(`Expected about ${f.expectedPerRound} points a round (${f.floor} on a bad day, ${f.ceiling} on a good one).`);
+  if (f.bestValue) out.push(`${f.bestValue.name} was the best value, taken at pick ${f.bestValue.pick} with a Draft Rank of ${f.bestValue.draftRank}.`);
+  if (f.strongest) out.push(`The ${f.strongest} ${plural(f.strongest) ? "are" : "is"} the strongest part of this squad.`);
+  if (f.emptyStarters) out.push(`${f.emptyStarters === 1 ? "One starting spot is" : `${f.emptyStarters} starting spots are`} still empty, which costs points every round.`);
+  else if (f.stacked.length) out.push(`With ${f.stacked[0].count} ${KIND_NAME[f.stacked[0].pos] ?? f.stacked[0].pos}s on the bench, the squad leans heavily one way.`);
+  else if (f.uncovered.length) out.push(`There's no bench cover at ${f.uncovered.slice(0, 2).map((k) => KIND_NAME[k] ?? k).join(" or ")}, so one injury there leaves a hole.`);
+  else if (f.weakest) out.push(`The ${f.weakest} ${plural(f.weakest) ? "look" : "looks"} like the weakest part of this squad.`);
+  const risk = f.risks[0] ? /^(.*) \((injured \/ out now|few games last season)\)$/.exec(f.risks[0]) : null;
+  if (risk) out.push(risk[2] === "injured / out now" ? `${risk[1]} is a risk early on, as he's injured or out right now.` : `${risk[1]} is a gamble, with only a few games last season to go on.`);
+  else if (f.boom.length) out.push(`${both(f.boom)} ${f.boom.length > 1 ? "are" : "is"} boom or bust, capable of winning or losing a round on ${f.boom.length > 1 ? "their" : "his"} own.`);
+  if (out.length < 2 && f.biggestReach) out.push(`${f.biggestReach.name} was a reach at pick ${f.biggestReach.pick}, with a Draft Rank of ${f.biggestReach.draftRank}.`);
+  if (out.length < 2) out.push(`Expect about ${f.expectedPerRound} points a round: around ${f.floor} on a bad day and ${f.ceiling} on a good one.`);
   return out.slice(0, 3);
 }
 
