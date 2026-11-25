@@ -419,36 +419,9 @@ const activeMatchup = useMemo(() => {
   return matchupsThisWeek[idx >= 0 ? idx : 0];
 }, [matchupsThisWeek, yourLeagueTeamId]);
 
-// force your team to be left side
-// ✅ Always: YOUR team on left, opponent on right
-const leftTeamId = useMemo(() => {
-  if (!activeMatchup) return null;
-
-  const h = activeMatchup.homeTeamId ?? null;
-  const a = activeMatchup.awayTeamId ?? null;
-
-  // only force "you left" if you're actually in this matchup row
-  if (yourLeagueTeamId && (h === yourLeagueTeamId || a === yourLeagueTeamId)) {
-    return yourLeagueTeamId;
-  }
-
-  // fallback: home on left
-  return h;
-}, [activeMatchup, yourLeagueTeamId]);
-
-const rightTeamId = useMemo(() => {
-  if (!activeMatchup) return null;
-
-  const h = activeMatchup.homeTeamId ?? null;
-  const a = activeMatchup.awayTeamId ?? null;
-
-  if (yourLeagueTeamId && (h === yourLeagueTeamId || a === yourLeagueTeamId)) {
-    return h === yourLeagueTeamId ? a : h;
-  }
-
-  // fallback: away on right
-  return a;
-}, [activeMatchup, yourLeagueTeamId]);
+// Home team on the left, away on the right, always (Ethan, 23 Nov 2026), even when you're away
+const leftTeamId = activeMatchup?.homeTeamId ?? null;
+const rightTeamId = activeMatchup?.awayTeamId ?? null;
 
 const leftName = nameByTeamId(leftTeamId);
 const rightName = nameByTeamId(rightTeamId);
@@ -873,14 +846,9 @@ const upcomingMatch = useMemo(() => {
   const homeId = hit.homeTeamId ?? null;
   const awayId = hit.awayTeamId ?? null;
 
-  // Force "you" on the left if possible
-  let leftId = homeId;
-  let rightId = awayId;
-
-  if (yourLeagueTeamId && (homeId === yourLeagueTeamId || awayId === yourLeagueTeamId)) {
-    leftId = yourLeagueTeamId;
-    rightId = homeId === yourLeagueTeamId ? awayId : homeId;
-  }
+  // home on the left, away on the right (Ethan, 23 Nov 2026)
+  const leftId = homeId;
+  const rightId = awayId;
 
   return {
     weekNo: upcomingWeekNo,

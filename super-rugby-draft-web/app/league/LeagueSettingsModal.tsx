@@ -7,6 +7,7 @@ import { LeagueStakesSection } from "@/components/LeagueStakes";
 import { ShieldRewardsFields } from "@/components/ShieldRewardsFields";
 import { ShieldStartFields } from "@/components/ShieldStartFields";
 import { BonusPointsFields } from "@/components/BonusPointsFields";
+import { CommissionerHandover } from "@/components/CommissionerHandover";
 import { cleanBonusRules, type BonusRules } from "@/lib/league/bonus";
 import { DEFAULT_SHIELD_START, NO_SHIELD_REWARDS, type ShieldRewards, type ShieldStart } from "@/lib/league/shield";
 import React, { useEffect, useState } from "react";
@@ -65,6 +66,9 @@ const computedSeasonWeeks = computedRegularWeeks + selectedPlayoffWeeks;
   const [shieldRewards, setShieldRewards] = useState<ShieldRewards>(league.shieldRewards ?? NO_SHIELD_REWARDS);
   const [shieldStart, setShieldStart] = useState<ShieldStart>(league.shield?.start ?? DEFAULT_SHIELD_START);
   const shieldStartLocked = !!league.shield?.startLocked;
+  // trades & waivers (can change any time)
+  const [playoffWaiverFlip, setPlayoffWaiverFlip] = useState<boolean>(league.playoffWaiverFlip !== false);
+  const [blockEliminatedTrades, setBlockEliminatedTrades] = useState<boolean>(league.blockEliminatedTrades === true);
   const [customRules, setCustomRules] = useState<ScoringRules>(() =>
     // Custom starts from the league's current values (e.g. Alternate), so switching keeps them
     completeRules((league.scoringCustom as Partial<ScoringRules> | null) ?? (league.scoringRules as Partial<ScoringRules> | undefined) ?? STANDARD_SCORING)
@@ -201,6 +205,20 @@ setDraftOrderIds((prev) => {
 </div>
 </Field>
 
+<Field label="Trades & Waivers">
+<label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, fontWeight: 600 }}>
+  <input type="checkbox" disabled={readOnly} checked={playoffWaiverFlip} onChange={(e) => setPlayoffWaiverFlip(e.target.checked)} style={{ marginTop: 3 }} />
+  <span>Flip the waiver order in the finals: the 1st seed gets first pick, the 2nd seed second, and so on.</span>
+</label>
+<label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, fontWeight: 600, marginTop: 8 }}>
+  <input type="checkbox" disabled={readOnly} checked={blockEliminatedTrades} onChange={(e) => setBlockEliminatedTrades(e.target.checked)} style={{ marginTop: 3 }} />
+  <span>Eliminated teams can&apos;t trade. They can still make waiver claims and sign free agents.</span>
+</label>
+<div style={{ fontSize: 11, fontWeight: 500, opacity: 0.75, marginTop: 4 }}>
+  Eliminated = missed the finals, or lost a finals game. Both can be changed any time.
+</div>
+</Field>
+
 <Field label="Rewards & Punishments">
   <LeagueStakesSection leagueId={league.id} />
 </Field>
@@ -322,6 +340,13 @@ return (
 
         </div>
 
+        {/* hand the commissioner job to another member (Ethan, 23 Nov 2026) */}
+        {!readOnly ? (
+          <Field label="Commissioner">
+            <CommissionerHandover leagueId={league.id} teams={league.teams} myUsername={String(league.createdByUserId ?? "")} onDone={onClose} />
+          </Field>
+        ) : null}
+
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
           <button
             disabled={readOnly}
@@ -341,6 +366,8 @@ scoringSystem,
 ...(!draftStarted && starterCount(squadFormat) >= 5 ? { squadFormat } : {}),
 shieldEnabled,
 shieldName,
+playoffWaiverFlip,
+blockEliminatedTrades,
 ...(!draftStarted ? { shieldRewards } : {}),
 ...(!shieldStartLocked ? { shieldStart } : {}),
 ...(scoringSystem === "custom" ? { scoringCustom: customRules } : {}),

@@ -11,6 +11,8 @@ import { StatusPill } from "@/components/transactions/bits";
 import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { getWeekDeadlineMs } from "@/lib/league/weekHelpers";
 import { TeamAvatar } from "@/components/TeamAvatar";
+import type { ReverseKind } from "@/components/transactions/ReverseControl";
+import { CommissionerPanel } from "@/components/transactions/CommissionerPanel";
 
 export type TransactionsTabProps = {
   activeLeague: League | null;
@@ -27,6 +29,8 @@ export type TransactionsTabProps = {
   txWeek: number | null;
   setTxWeek: (week: number | null) => void;
   waiverShieldTeamId: string | null;
+  /** a finals week with the waiver order flipped (1st seed first) */
+  waiverFlipped?: boolean;
   waiverOrderRows: Array<{ teamId: string; rank: number }>;
   waiverOrderLoaded: boolean;
   waiverOrderIndexByTeamId: Map<string, number>;
@@ -39,14 +43,24 @@ export type TransactionsTabProps = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setReviewTrade: (trade: any | null) => void;
   apiCancelTrade: (tradeId: string) => Promise<void>;
+  /** the commissioner gets a Commissioner section at the bottom (reverse recent moves) */
+  isCommissioner?: boolean;
+  /** reverses one; resolves to an error message, or null when it worked */
+  onReverse?: (kind: ReverseKind, id: string) => Promise<string | null>;
 };
 
 /** The Transactions tab: pending trades, league trades, waiver claims and free agent transfers. */
 export function TransactionsTab({
   activeLeague, yourDraftTeamId, allPlayers, nowMs, weeksSorted, normalizedFixtures, liveWeek, liveWeekDeadlineMs,
-  selectionWeek, waiverDeadlineMs, tradeWindowOpen, txWeek, setTxWeek, waiverShieldTeamId, waiverOrderRows,
+  selectionWeek, waiverDeadlineMs, tradeWindowOpen, txWeek, setTxWeek, waiverShieldTeamId, waiverFlipped, waiverOrderRows,
   waiverOrderLoaded, waiverOrderIndexByTeamId, tradesForUi, claimsForUi, freeForUi, setReviewTrade, apiCancelTrade,
+  isCommissioner = false, onReverse,
 }: TransactionsTabProps) {
+    // a move the commissioner reversed (lib/league/reverse.ts; done from the Commissioner section)
+    const reverseFor = (_kind: ReverseKind, _id: string | undefined, status: string) => {
+      if (String(status ?? "").toUpperCase() !== "REVERSED") return null;
+      return <div style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: "#b45309", textAlign: "right" }}>Reversed by the commissioner</div>;
+    };
     const leagueId = activeLeague?.id ?? "";
     const yourId = yourDraftTeamId;
 
@@ -174,6 +188,7 @@ function LeagueTradeRow__render({ t }: { t: any }) {
             )}
           </div>
         </div>
+        {reverseFor("trade", t.id, t.status)}
       </div>
     </div>
   );
@@ -256,7 +271,7 @@ const LeagueTradeRow = useStableComponent(LeagueTradeRow__render);
     // ---------- League Trades (accepted since last team selection deadline) ----------
     const leagueTradesSinceDeadline = (tradesForUi as any[])
   .filter((t) => t.leagueId === leagueId)
-  .filter((t) => String(t.status ?? "").toLowerCase() === "accepted")
+  .filter((t) => ["accepted", "reversed"].includes(String(t.status ?? "").toLowerCase()))
       .filter((t) => inView(t.acceptedAtMs ?? t.decidedAtMs ?? t.updatedAtMs ?? t.createdAtMs ?? 0, lastSelectionDeadlineMs))
       .slice()
       .sort(
@@ -275,7 +290,7 @@ const waiverClaimsFeed = useMemo(() => {
     .filter((c) => c.leagueId === leagueId)
     .filter((c) => {
       const s = String(c.status ?? "").toUpperCase();
-      return s === "PROCESSED" || s === "FAILED";
+      return s === "PROCESSED" || s === "FAILED" || s === "REVERSED";
     })
     .filter((c) => {
       const ms = c.processedAtMs ?? c.decidedAtMs ?? c.updatedAtMs ?? 0;
@@ -356,7 +371,7 @@ const waiverClaimsFeed = useMemo(() => {
         result.push(claim);
 
         const status = String(claim.status ?? "").toUpperCase();
-        if (status === "PROCESSED") {
+        if (status === "PROCESSED" || status === "REVERSED") {
           break;
         }
       }
@@ -617,6 +632,7 @@ const InitialBadge = useStableComponent(InitialBadge__render);
           <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 700 }}>Waiver Claims</div>
           <div style={{ padding: "0 10px 10px", fontSize: 10, fontWeight: 700, opacity: 0.7 }}>
   Your waiver priority: {waiverOrderLoaded ? yourWaiverRankText : "Loading…"}
+  {waiverOrderLoaded && waiverFlipped ? <div style={{ marginTop: 2 }}>Finals: the order is flipped, so the top seed picks first.</div> : null}
   {waiverOrderLoaded && shieldPickText ? <div style={{ marginTop: 2 }}>{shieldPickText}</div> : null}
 </div>
 
@@ -714,6 +730,8 @@ const InitialBadge = useStableComponent(InitialBadge__render);
           )}
         </div>
 
+        {/* Commissioner only, at the very bottom: reverse recent moves (Ethan, 23 Nov 2026) */}
+        {isCommissioner && onReverse && leagueId ? <CommissionerPanel leagueId={leagueId} onReverse={onReverse} /> : null}
       </>
     );
   }

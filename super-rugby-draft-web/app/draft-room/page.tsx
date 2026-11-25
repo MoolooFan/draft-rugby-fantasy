@@ -31,6 +31,10 @@ import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { positionsLabel } from "@/lib/players/positions";
 import { StatusTag } from "@/components/StatusTag";
 import { PlusMinusIcon } from "@/components/PlusMinusIcon";
+import { DraftPlanStrip } from "@/components/draftPrep/DraftPlanStrip";
+import { useDraftStrategy } from "@/lib/draft/useStrategy";
+import { isEmptyStrategy, myRanks, planForRound, planMatches } from "@/lib/draft/strategy";
+import { roundForPick } from "@/lib/draft/rules";
 
 type DraftTab = "Player Pool" | "Watchlist" | "Teams" | "Draft Results";
 type DraftPhase = "preDraft" | "liveDraft";
@@ -365,23 +369,32 @@ function resolvePlayer(x: any): Player | null {
   // What the number column shows / sorts by (Filters): draft rank, or the chosen season's points
   // or a stat, per game / total / per 80 (lib/players/statView)
   const [sortMode, setSortMode] = useState<string>("DRAFT_RANK");
+  // your draft strategy (Draft Strategy page): plan for each round, targets, do-not-draft, rankings
+  const { strategy: draftStrategyRaw } = useDraftStrategy(activeLeagueId ?? null);
+  const draftStrategy = isEmptyStrategy(draftStrategyRaw) ? null : draftStrategyRaw;
+  const avoidIds = useMemo(() => new Set(draftStrategy?.avoid ?? []), [draftStrategy]);
+  const hasMyRanks = (draftStrategy?.ranking.length ?? 0) > 0;
+  const myRankById = useMemo(() => myRanks(allPlayers, draftStrategy), [allPlayers, draftStrategy]);
+  const sortOptions = useMemo(() => (hasMyRanks ? [DRAFT_SORT_OPTIONS[0], { value: "MY_RANK", label: "My Rank" }, ...DRAFT_SORT_OPTIONS.slice(1)] : DRAFT_SORT_OPTIONS), [hasMyRanks]);
+  const rankMode = sortMode === "DRAFT_RANK" || sortMode === "MY_RANK";
   const [statView] = useStatView();
   const { rows: statRows, season: statSeasonShown } = useStatSeasonRows();
   const totalsById = useMemo(() => {
     const m = new Map<string, SeasonTotals>();
-    if (sortMode === "DRAFT_RANK") return m;
+    if (sortMode === "DRAFT_RANK" || sortMode === "MY_RANK") return m;
     for (const p of allPlayers) m.set(p.id, seasonTotals(statRows, p));
     return m;
   }, [allPlayers, statRows, sortMode]);
   const metricOf = (p: Player): number | null => {
     if (sortMode === "DRAFT_RANK") return p.draftRank;
+    if (sortMode === "MY_RANK") return myRankById.get(p.id) ?? null;
     const t = totalsById.get(p.id);
     if (!t) return null;
     const total = sortMode === "points" ? t.points : t.counts[sortMode as StatKey];
     return applyStatView(total, t.games, t.minutes, statView);
   };
-  const metricText = (p: Player) => (sortMode === "DRAFT_RANK" ? String(p.draftRank) : formatStatView(metricOf(p), statView));
-  const sortLabel = DRAFT_SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? "Draft Rank";
+  const metricText = (p: Player) => (rankMode ? String(metricOf(p) ?? "") : formatStatView(metricOf(p), statView));
+  const sortLabel = sortOptions.find((o) => o.value === sortMode)?.label ?? "Draft Rank";
 
   const filteredPlayers = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -390,9 +403,17 @@ function resolvePlayer(x: any): Player | null {
       .filter((p) => (draftedIds.has(p.id) ? false : true))
       .filter((p) => (q ? `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) : true))
       .filter((p) => matchesPoolFilters(p as any, poolFilters, getLivePlayerById?.(p.id) as any))
-      .sort((a, b) => (sortMode === "DRAFT_RANK" ? a.draftRank - b.draftRank : val(b) - val(a) || a.draftRank - b.draftRank));
+      .sort((a, b) => (sortMode === "DRAFT_RANK" ? a.draftRank - b.draftRank : rankMode ? -val(b) + val(a) || a.draftRank - b.draftRank : val(b) - val(a) || a.draftRank - b.draftRank));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allPlayers, draftedIds, search, poolFilters, getLivePlayerById, sortMode, totalsById, statView]);
+  }, [allPlayers, draftedIds, search, poolFilters, getLivePlayerById, sortMode, totalsById, statView, myRankById]);
+
+  // your next pick's round (for the plan) and your players so far (for the targets)
+  const yourPlanRound = draftComplete ? 0 : roundForPick(teams.length || 1, phase === "liveDraft" ? pickIndex + nextPickInTurns : 1);
+  const plan = planForRound(draftStrategy, yourPlanRound);
+  const yourRoster = useMemo(
+    () => picks.map((p, i) => (p && ownerForPickSnake(i + 1)?.id === yourTeamId ? (p as Player) : null)).filter((p): p is Player => !!p),
+    [picks, ownerForPickSnake, yourTeamId]
+  );
 
   const playerPoolPlayers = useMemo(() => {
     return filteredPlayers.filter((p) => canTeamDraftPlayer(yourTeamId, p, activeLeague?.squadFormat));
@@ -727,7 +748,7 @@ const Tabs = useStableComponent(Tabs__render);
         setFilters={setPoolFilters}
         sort={sortMode}
         setSort={setSortMode}
-        sortOptions={DRAFT_SORT_OPTIONS}
+        sortOptions={sortOptions}
         statOptions
       />
     );
@@ -736,6 +757,8 @@ const Filters = useStableComponent(Filters__render);
 
   function PlayerRow__render({ p, draftEnabled, reorder }: { p: Player; draftEnabled: boolean; reorder?: { index: number; count: number } }) {
     const isStar = !!watchlist[p.id];
+    const isAvoid = avoidIds.has(p.id);
+    const isPlan = !isAvoid && !!plan && planMatches(p, plan);
     const arrow: React.CSSProperties = { border: "none", background: "transparent", fontSize: 12, fontWeight: 700, padding: "0 2px", cursor: "pointer", lineHeight: "12px" };
 
     return (
@@ -747,9 +770,10 @@ const Filters = useStableComponent(Filters__render);
           alignItems: "center",
           padding: "10px 10px",
           borderBottom: "1px solid rgba(0,0,0,0.08)",
+          borderLeft: isPlan ? "3px solid #0d9488" : "3px solid transparent",
         }}
       >
-        <div onClick={() => openPlayerCard(p)} style={{ cursor: "pointer", userSelect: "none" }}>
+        <div onClick={() => openPlayerCard(p)} style={{ cursor: "pointer", userSelect: "none", opacity: isAvoid ? 0.5 : 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {reorder ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 18 }} onClick={(e) => e.stopPropagation()}>
@@ -763,6 +787,8 @@ const Filters = useStableComponent(Filters__render);
             <div>
               <div style={{ fontWeight: 500, fontSize: 12 }}>
                 {p.firstName[0]}. {p.lastName} <StatusTag player={p} />
+                {isPlan ? <span style={{ marginLeft: 4, padding: "0 5px", borderRadius: 999, background: "rgba(13,148,136,0.14)", color: "#0d9488", fontSize: 9, fontWeight: 700 }}>Plan</span> : null}
+                {isAvoid ? <span style={{ marginLeft: 4, padding: "0 5px", borderRadius: 999, background: "rgba(239,68,68,0.14)", color: "#dc2626", fontSize: 9, fontWeight: 700 }}>Avoid</span> : null}
               </div>
               <div style={{ fontSize: 10, opacity: 0.7 }}>
                 {TEAM_OPTIONS.find((t) => t.value === p.teamCode)?.label ?? p.teamCode}
@@ -789,11 +815,12 @@ const PlayerRow = useStableComponent(PlayerRow__render);
 
     return (
       <>
+        {!draftComplete ? <DraftPlanStrip strategy={draftStrategy} round={yourPlanRound} roster={yourRoster} leagueId={activeLeagueId ?? null} /> : null}
         <Filters />
         <div style={listBox}>
           {/* the column's name, right above the numbers (same layout as the rows) */}
           <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: "1fr 132px", gap: 10, alignItems: "center", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
-            <div>{sortMode === "DRAFT_RANK" ? "" : `${STAT_VIEW_LABEL[statView]} · ${statSeasonShown}`}</div>
+            <div>{rankMode ? "" : `${STAT_VIEW_LABEL[statView]} · ${statSeasonShown}`}</div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <div style={{ width: 34, display: "flex", justifyContent: "flex-end", whiteSpace: "nowrap", fontWeight: 600 }}>{sortLabel}</div>
               <div style={{ width: 28 }} />
@@ -824,7 +851,7 @@ const PlayerPoolTab = useStableComponent(PlayerPoolTab__render);
         <div style={listBox}>
           {/* the column's name, right above the numbers (same layout as the rows) */}
           <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: "1fr 132px", gap: 10, alignItems: "center", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
-            <div>{sortMode === "DRAFT_RANK" ? "" : `${STAT_VIEW_LABEL[statView]} · ${statSeasonShown}`}</div>
+            <div>{rankMode ? "" : `${STAT_VIEW_LABEL[statView]} · ${statSeasonShown}`}</div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <div style={{ width: 34, display: "flex", justifyContent: "flex-end", whiteSpace: "nowrap", fontWeight: 600 }}>{sortLabel}</div>
               <div style={{ width: 28 }} />

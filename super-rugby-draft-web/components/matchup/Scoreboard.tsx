@@ -41,6 +41,10 @@ function TeamSide({ side, align, mounted, shieldName }: { side: ScoreboardSide; 
           {right ? avatar : shield}
         </div>
       ) : null}
+      {/* home is always on the left, away on the right (Ethan, 23 Nov 2026) */}
+      {side.teamId ? (
+        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.8, opacity: 0.6 }}>{right ? "AWAY" : "HOME"}</div>
+      ) : null}
       <div style={{ fontSize: 18, fontWeight: 700 }}>{side.name}</div>
 
       <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.75 }}>

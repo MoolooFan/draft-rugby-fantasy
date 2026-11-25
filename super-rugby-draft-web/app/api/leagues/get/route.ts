@@ -9,6 +9,7 @@ import { championshipStars } from "@/lib/league/honours";
 import { loadShield } from "@/lib/league/shieldServer";
 import { cleanShieldName, cleanShieldRewards, cleanShieldStart } from "@/lib/league/shield";
 import { bonusRulesFromRow } from "@/lib/league/bonus";
+import { loadTradeBlock } from "@/lib/league/eliminated";
 import { currentSeasonYear, getSeason, restartWindow, SEASONS, weekFirstKickoffMs } from "@/lib/season";
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -185,6 +186,10 @@ if (computedOrder.length) {
     shieldEnabled: leagueRow.shield_enabled !== false,
     shieldName: cleanShieldName(leagueRow.shield_name),
     shieldRewards: cleanShieldRewards(leagueRow.shield_rewards),
+    // trades & waivers rules (lib/waivers/order.ts, lib/league/eliminated.ts)
+    playoffWaiverFlip: leagueRow.playoff_waiver_flip !== false,
+    blockEliminatedTrades: leagueRow.block_eliminated_trades === true,
+    tradeBlockedTeamIds: leagueRow.block_eliminated_trades ? [...(await loadTradeBlock(supabaseAdmin, leagueRow.id).catch(() => ({ eliminated: new Set<string>() }))).eliminated] : [],
     // the squad: starting slots, bench, IR (lib/league/squad.ts)
     squadFormat: squadFormatOf(leagueRow.squad_format),
     // E8: a league from an earlier season can be restarted for this season by its commissioner,

@@ -7,6 +7,7 @@ import { cancelPendingTradesTouchingPlayers, cancelInvalidPendingTradesForTeams 
 import { isPastWeekDeadline } from "@/lib/trades/deadlines";
 import { loadRosterPlayers, rosterProblem, updateLineupsAfterRosterChange } from "@/lib/league/rosterChange";
 import { healthyIrBlock, irIdsOf } from "@/lib/league/ir";
+import { loadTradeBlock, tradeBlockedMessage } from "@/lib/league/eliminated";
 
 type TradeOfferRow = {
   id: string;
@@ -221,6 +222,10 @@ const requested = uniq((offer.request_player_ids ?? []) as any);
     const theirIrBlock = await healthyIrBlock(supabaseAdmin, season, fromRoster.data, { mine: false, nowMs: now });
     if (theirIrBlock) throw new Error(theirIrBlock);
 
+    // 8c) League rule: eliminated teams can't trade (a team knocked out since the offer was made)
+    const blocked = tradeBlockedMessage(await loadTradeBlock(supabaseAdmin, offer.league_id), offer.to_team_id, offer.from_team_id);
+    if (blocked) throw new Error(blocked);
+
     // 9) Swap
     const nextFrom = fromExtract.ids.filter((id) => !offered.includes(id)).concat(requested);
     const nextTo = toExtract.ids.filter((id) => !requested.includes(id)).concat(offered);
@@ -256,7 +261,7 @@ const requested = uniq((offer.request_player_ids ?? []) as any);
     // 11) Mark accepted
     const { error: acceptErr } = await supabaseAdmin
   .from("trade_offers")
-  .update({ status: "accepted", updated_at: new Date().toISOString() })
+  .update({ status: "accepted", accepted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
   .eq("id", offer.id);
 
 if (acceptErr) throw new Error("Failed to finalize trade status");

@@ -47,6 +47,12 @@ export type League = {
   shieldRewards?: ShieldRewards;
   /** how the Shield is first given out (sent when saving League Settings; read from shield.start) */
   shieldStart?: ShieldStart;
+  /** finals: the waiver order flips so the 1st seed picks first (lib/waivers/order.ts); default on */
+  playoffWaiverFlip?: boolean;
+  /** eliminated teams can't trade (lib/league/eliminated.ts); default off */
+  blockEliminatedTrades?: boolean;
+  /** teams that can't trade because they've been eliminated (only when that rule is on) */
+  tradeBlockedTeamIds?: string[];
   /** starting slots, bench and IR (lib/league/squad.ts); missing = Standard */
   squadFormat?: SquadFormat;
   /** E8: the commissioner can restart this (earlier-season) league for the current season */

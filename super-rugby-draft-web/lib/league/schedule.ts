@@ -372,3 +372,15 @@ export function resolveSource(
   const sorted = (teams as string[]).slice().sort((a, b) => seedOf(a) - seedOf(b));
   return src.pick === "best" ? sorted[0] : sorted[sorted.length - 1];
 }
+
+/**
+ * Pure: should a playoff game's sides swap so the better regular-season seed is at home?
+ * seeds: the final regular-season ladder, top first. A team not in it counts as the lowest seed.
+ */
+export function homeShouldSwap(homeTeamId: string, awayTeamId: string, seeds: string[]): boolean {
+  const seed = (t: string) => {
+    const i = seeds.indexOf(t);
+    return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+  };
+  return seed(awayTeamId) < seed(homeTeamId);
+}

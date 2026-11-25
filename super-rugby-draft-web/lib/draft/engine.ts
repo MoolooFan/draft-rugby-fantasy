@@ -4,8 +4,9 @@
 // - Order: snake. Shuffled each time a team joins; the commissioner can rearrange it until
 //   the draft starts.
 // - The draft starts at the league's draft time. 90 seconds a pick; when time runs out the
-//   server picks from the team's draft watchlist (in order), then the best draft rank in the
-//   pool — never breaking the roster's position rules. After 3 missed picks in a row, that team
+//   server picks from the team's draft watchlist (in order), then by their draft strategy
+//   (lib/draft/strategy.ts; with none, the best draft rank) — never breaking the roster's position
+//   rules, never a do-not-draft player unless nobody else fits. After 3 missed picks in a row, that team
 //   is auto-picked after 10 seconds, until it picks for itself again.
 // - The last pick finishes the draft and builds the season schedule.
 // Everything is checked here; pages only show the draft and send picks. The database client is
@@ -16,6 +17,8 @@ import { buildScheduleForLeague } from "@/lib/results/engine";
 import { rosterFits, roundForPick, secondsForTeam, shuffled, teamForPick } from "@/lib/draft/rules";
 import { rosterSize, squadFormatOf, type SquadFormat } from "@/lib/league/squad";
 import { lockLeagueScoring } from "@/lib/scoring/leagueRules";
+import { strategyChoice } from "@/lib/draft/strategy";
+import { strategyForTeam } from "@/lib/draft/strategyServer";
 
 type Db = SupabaseClient;
 
@@ -194,15 +197,23 @@ export async function makePick(db: Db, leagueId: string, teamId: string, playerI
   await recordPick(db, leagueId, ctx, teamId, playerId, nowMs, false);
 }
 
-/** The player auto-pick would take: the team's watchlist first, then the best draft rank. */
+/**
+ * The player auto-pick would take: the team's draft watchlist first (in order), then their draft
+ * strategy (lib/draft/strategy.ts: this round's plan, position targets, their own rankings),
+ * which with nothing set is the best draft rank. Never a do-not-draft player unless nobody
+ * else fits.
+ */
 export async function autoPickChoice(db: Db, leagueId: string, ctx: Ctx, teamId: string): Promise<string | null> {
-  const queue = await q<Array<{ player_id: string }>>(
-    db.from("draft_queue").select("player_id").eq("league_id", leagueId).eq("team_id", teamId).order("position")
-  );
-  for (const { player_id } of queue) if (!pickProblem(ctx, teamId, player_id)) return player_id;
-  const pool = [...ctx.players.values()].filter((p) => !ctx.drafted.has(p.id)).sort((a, b) => a.draftRank - b.draftRank || a.id.localeCompare(b.id));
-  for (const p of pool) if (!pickProblem(ctx, teamId, p.id)) return p.id;
-  return null;
+  const [queue, strategy] = await Promise.all([
+    q<Array<{ player_id: string }>>(db.from("draft_queue").select("player_id").eq("league_id", leagueId).eq("team_id", teamId).order("position")),
+    strategyForTeam(db, leagueId, teamId).catch(() => null),
+  ]);
+  const avoid = new Set(strategy?.avoid ?? []);
+  for (const { player_id } of queue) if (!avoid.has(player_id) && !pickProblem(ctx, teamId, player_id)) return player_id;
+  const available = [...ctx.players.values()].filter((p) => !pickProblem(ctx, teamId, p.id));
+  const roster = (ctx.rosters.get(teamId) ?? []).map((id) => ctx.players.get(id)).filter((p): p is SitePlayer => !!p);
+  const choice = strategyChoice({ available, roster, round: roundForPick(ctx.order.length, ctx.state.pick_index), strategy });
+  return choice?.id ?? null;
 }
 
 /**

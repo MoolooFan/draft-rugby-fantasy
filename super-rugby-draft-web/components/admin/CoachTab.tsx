@@ -7,6 +7,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api, inputStyle, labelStyle, primaryButton, tabButton, whiteBox } from "./shared";
 import { TEAMS, type AdminPlayer } from "./shared";
+import { CoachArticles, type CoachArticle } from "./CoachArticles";
 
 export type CoachAdmin = {
   settings: { enabled: boolean; model: string };
@@ -16,6 +17,7 @@ export type CoachAdmin = {
   notes: Array<{ id: string; player_id: string; kind: string; week: number | null; headline: string; body: string; next_week: string; verdict: string | null; hidden: boolean; edited: boolean; created_at: string }>;
   context: Array<{ id: string; scope: string; player_id: string | null; team_code: string | null; text: string; active: boolean; created_at: string }>;
   profile: { birth_date: string | null; international: string | null; rest_notes: string | null; injury_notes: string | null } | null;
+  articles?: CoachArticle[];
 };
 
 export const MODEL_LABEL: Record<string, string> = {
@@ -49,7 +51,7 @@ export function CoachNoteRow({ n, name, onChange, setMsg }: { n: CoachAdmin["not
         <>
           <input style={inputStyle} value={f.headline} maxLength={120} onChange={(e) => setF((x) => ({ ...x, headline: e.target.value }))} aria-label="Headline" />
           <textarea style={{ ...inputStyle, height: 90, padding: 8 }} value={f.body} maxLength={1200} onChange={(e) => setF((x) => ({ ...x, body: e.target.value }))} aria-label="Note" />
-          <textarea style={{ ...inputStyle, height: 60, padding: 8 }} value={f.next_week} maxLength={600} onChange={(e) => setF((x) => ({ ...x, next_week: e.target.value }))} aria-label="Next week" placeholder="Next week (optional)" />
+          <textarea style={{ ...inputStyle, height: 60, padding: 8 }} value={f.next_week} maxLength={1500} onChange={(e) => setF((x) => ({ ...x, next_week: e.target.value }))} aria-label="Next week" placeholder="Next week (optional)" />
           <div style={{ display: "flex", gap: 6 }}>
             <button style={{ ...primaryButton, height: 30 }} onClick={() => act({ action: "note_edit", id: n.id, ...f }, "Note saved")}>Save</button>
             <button style={{ ...primaryButton, height: 30, background: "rgba(15,23,42,0.35)" }} onClick={() => setEditing(false)}>Cancel</button>
@@ -145,6 +147,8 @@ export function CoachTab({ season, setMsg }: { season: number; setMsg: (m: strin
           </div>
         ) : null}
       </div>
+
+      <CoachArticles articles={data.articles ?? []} players={players} nameOf={(id) => nameOf(id)} onSaved={load} setMsg={setMsg} />
 
       <div style={{ ...whiteBox, display: "grid", gap: 8 }}>
         <div style={{ fontSize: 13, fontWeight: 700 }}>Tell the coach something</div>
