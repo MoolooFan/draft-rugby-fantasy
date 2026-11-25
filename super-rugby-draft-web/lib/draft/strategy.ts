@@ -4,7 +4,7 @@
 // player rankings. Kept on the server per account (one default, plus one per league). The draft
 // watchlist is separate and still comes first.
 //
-// Used by the Draft Strategy page, the draft room (this round's plan, targets, greyed-out
+// Used by the Draft Strategy panel in the draft room, the draft room (this round's plan, targets, greyed-out
 // players), mock drafts, and auto-pick when the clock runs out: watchlist first, then the best
 // player (by their own rankings) who fits this round's plan, never a do-not-draft player unless
 // nobody else fits. Pure code (browser + server).

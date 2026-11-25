@@ -1,8 +1,8 @@
 "use client";
 // components/draftPrep/DraftPlanStrip.tsx
 // In the draft room, above the Player Pool: your draft strategy's plan for your next pick's
-// round, how you're tracking against your position targets, and links to Draft Strategy and
-// Mock Draft.
+// round, how you're tracking against your position targets, a button that opens the Draft
+// Strategy panel (components/draftPrep/DraftStrategyPanel.tsx) and a link to Mock Draft.
 import React from "react";
 import Link from "next/link";
 import { isEmptyStrategy, planForRound, planLabel, targetProgress, type DraftStrategy } from "@/lib/draft/strategy";
@@ -14,6 +14,7 @@ export function DraftPlanStrip({
   roster,
   leagueId,
   hideMockDraft = false,
+  onEditStrategy,
 }: {
   strategy: DraftStrategy | null;
   /** the round of your next pick */
@@ -22,6 +23,8 @@ export function DraftPlanStrip({
   leagueId: string | null;
   /** no Mock Draft link while the draft is on (Ethan, 25 Nov 2026) */
   hideMockDraft?: boolean;
+  /** opens the Draft Strategy panel */
+  onEditStrategy: () => void;
 }) {
   const empty = isEmptyStrategy(strategy);
   const plan = planForRound(strategy, round);
@@ -38,7 +41,7 @@ export function DraftPlanStrip({
             <span style={{ padding: "1px 8px", borderRadius: 999, background: plan ? "rgba(13,148,136,0.12)" : "#eef2f6", color: plan ? teal : muted, fontWeight: 700 }}>{planLabel(plan)}</span>
           </span>
         )}
-        <Link href="/draft-strategy" style={link}>{empty ? "Set Up Strategy" : "Edit Strategy"}</Link>
+        <button onClick={onEditStrategy} style={{ ...link, background: "transparent", border: "none", padding: 0, cursor: "pointer" }}>{empty ? "Set Up Strategy" : "Edit Strategy"}</button>
         {hideMockDraft ? null : <Link href={leagueId ? `/mock-draft?leagueId=${encodeURIComponent(leagueId)}` : "/mock-draft"} style={link}>Mock Draft</Link>}
       </div>
       {targets.length ? (
