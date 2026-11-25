@@ -52,11 +52,12 @@ export default function MockDraftPage() {
   const router = useRouter();
   const leagues = useLeagueStore((s) => s.leagues);
   const activeLeagueId = useLeagueStore((s) => s.activeLeagueId);
+  const setActiveLeague = useLeagueStore((s) => s.setActiveLeague);
   useEffect(() => {
     void loadMyLeagues();
   }, []);
 
-  // the league it's for: ?leagueId= (from Draft Strategy / the draft room), else the active league
+  // the league it's for: ?leagueId= (from the draft room), else the active league
   const [queryLeague, setQueryLeague] = useState<string | null>(null);
   useEffect(() => {
     setQueryLeague(new URLSearchParams(window.location.search).get("leagueId"));
@@ -264,7 +265,15 @@ export default function MockDraftPage() {
             setMock(m);
             setView("results");
           }}
-          onEditStrategy={() => router.push("/draft-strategy")}
+          // Draft Strategy lives in the draft room (since 25 Nov 2026): open it there for this league
+          onEditStrategy={
+            league && league.draftStatus !== "complete"
+              ? () => {
+                  setActiveLeague(league.id);
+                  router.push("/draft-room#strategy");
+                }
+              : undefined
+          }
         />
       )}
 

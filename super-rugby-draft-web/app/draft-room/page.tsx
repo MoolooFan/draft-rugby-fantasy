@@ -32,7 +32,7 @@ import { positionsLabel } from "@/lib/players/positions";
 import { StatusTag } from "@/components/StatusTag";
 import { PlusMinusIcon } from "@/components/PlusMinusIcon";
 import { DraftPlanStrip } from "@/components/draftPrep/DraftPlanStrip";
-import { TeamDraftGrade, useDraftGrades } from "@/components/draftPrep/DraftGrades";
+import { DraftStrategyPanel } from "@/components/draftPrep/DraftStrategyPanel";
 import { useDraftStrategy } from "@/lib/draft/useStrategy";
 import { isEmptyStrategy, myRanks, planForRound, planMatches } from "@/lib/draft/strategy";
 import { roundForPick } from "@/lib/draft/rules";
@@ -301,9 +301,6 @@ const preDraftDeadlineMs = useMemo(() => {
     phase === "complete" || storeDraftComplete || (totalPicks > 0 && picks.length === totalPicks && picks[totalPicks - 1] !== null);
 
   const currentPick = Math.min(pickIndex, totalPicks);
-  // draft grades (shown at the bottom of the Teams tab, under each team)
-  const draftGrades = useDraftGrades(activeLeagueId ?? null, draftComplete && phase !== "preDraft");
-
   // (also when the teams / order arrive: it used to be worked out before the order had loaded
   // and stay blank, "On the Clock: TBC", until the first pick; found in the 25 Nov practice draft)
   const onTheClockTeamId = useMemo(() => {
@@ -377,8 +374,37 @@ function resolvePlayer(x: any): Player | null {
   // What the number column shows / sorts by (Filters): draft rank, or the chosen season's points
   // or a stat, per game / total / per 80 (lib/players/statView)
   const [sortMode, setSortMode] = useState<string>("DRAFT_RANK");
-  // your draft strategy (Draft Strategy page): plan for each round, targets, do-not-draft, rankings
-  const { strategy: draftStrategyRaw } = useDraftStrategy(activeLeagueId ?? null);
+  // your draft strategy: plan for each round, targets, do-not-draft, rankings. Edited in the
+  // Draft Strategy panel, which opens over this page (Ethan, 25 Nov 2026: no longer its own page).
+  const strat = useDraftStrategy(activeLeagueId ?? null);
+  const draftStrategyRaw = strat.strategy;
+  // the panel adds "#strategy" to the address so the phone's back button / swipe closes it.
+  // Coming from the Mock Draft page it opens straight away (/draft-room#strategy).
+  const [strategyOpen, setStrategyOpen] = useState(false);
+  const strategyPushed = useRef(false);
+  useEffect(() => {
+    if (window.location.hash === "#strategy") setStrategyOpen(true);
+    const onPop = () => {
+      const open = window.location.hash === "#strategy";
+      if (!open) strategyPushed.current = false;
+      setStrategyOpen(open);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const openStrategy = () => {
+    window.history.pushState(null, "", `${window.location.pathname}${window.location.search}#strategy`);
+    strategyPushed.current = true;
+    setStrategyOpen(true);
+  };
+  const closeStrategy = () => {
+    if (strategyPushed.current) {
+      window.history.back(); // closes it (popstate above)
+      return;
+    }
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    setStrategyOpen(false);
+  };
   const draftStrategy = isEmptyStrategy(draftStrategyRaw) ? null : draftStrategyRaw;
   const avoidIds = useMemo(() => new Set(draftStrategy?.avoid ?? []), [draftStrategy]);
   const hasMyRanks = (draftStrategy?.ranking.length ?? 0) > 0;
@@ -863,7 +889,7 @@ const PlayerRow = useStableComponent(PlayerRow__render);
 
     return (
       <>
-        {!draftComplete ? <DraftPlanStrip strategy={draftStrategy} round={yourPlanRound} roster={yourRoster} leagueId={activeLeagueId ?? null} hideMockDraft={phase === "liveDraft"} /> : null}
+        {!draftComplete ? <DraftPlanStrip strategy={draftStrategy} round={yourPlanRound} roster={yourRoster} leagueId={activeLeagueId ?? null} hideMockDraft={phase === "liveDraft"} onEditStrategy={openStrategy} /> : null}
         <Filters />
         <div style={listBox}>
           {/* the column's name, right above the numbers (same layout as the rows) */}
@@ -1095,10 +1121,6 @@ const entry = resolvePlayer(rawEntry as never);
             </div>
           ))}
         </div>
-        {(() => {
-          const g = draftGrades.find((x) => x.teamId === selectedTeamId);
-          return g ? <TeamDraftGrade grade={g} /> : null;
-        })()}
       </>
     );
   }
@@ -1349,6 +1371,16 @@ const ModalOverlay = useStableComponent(ModalOverlay__render);
         setActiveLeague={setActiveLeague}
         activeItem="Draft Room"
       />
+
+      {strategyOpen && activeLeague ? (
+        <DraftStrategyPanel
+          leagueName={activeLeague.name}
+          format={activeLeague.squadFormat}
+          strat={strat}
+          onClose={closeStrategy}
+          onMockDraft={phase === "preDraft" ? () => router.push(`/mock-draft?leagueId=${encodeURIComponent(activeLeague.id)}`) : undefined}
+        />
+      ) : null}
 
       {modal?.type === "draftConfirm" && <DraftConfirmModal player={modal.player} />}
 

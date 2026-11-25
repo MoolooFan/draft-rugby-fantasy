@@ -36,7 +36,8 @@ export function MockSetup({
   onResume: () => void;
   onDiscardLive: () => void;
   onOpenHistory: (m: MockDraft) => void;
-  onEditStrategy: () => void;
+  /** opens Draft Strategy in the league's draft room (left out when there's no league still to draft) */
+  onEditStrategy?: () => void;
 }) {
   const set = (patch: Partial<MockSettings>) => setSettings({ ...settings, ...patch });
   const squads: Array<{ key: MockSettings["squad"]; text: string; format: SquadFormat }> = [
@@ -125,9 +126,11 @@ export function MockSetup({
           <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: muted }}>
             {hasStrategy ? "Your draft strategy is used: your plan for each round, targets, players to avoid and your rankings." : "No draft strategy yet. Set one up to practise it here."}
           </div>
-          <button onClick={onEditStrategy} style={{ background: "transparent", border: "none", color: teal, fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
-            {hasStrategy ? "Edit" : "Set Up"}
-          </button>
+          {onEditStrategy ? (
+            <button onClick={onEditStrategy} style={{ background: "transparent", border: "none", color: teal, fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+              {hasStrategy ? "Edit" : "Set Up"}
+            </button>
+          ) : null}
         </div>
 
         <button style={primaryButton} onClick={onStart}>Start Mock Draft</button>

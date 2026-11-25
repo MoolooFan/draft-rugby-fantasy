@@ -1,6 +1,6 @@
 "use client";
 // components/draftPrep/StrategyTabs.tsx
-// The Draft Strategy page's four tabs (lib/draft/strategy.ts): Round Plan (a position to aim
+// The Draft Strategy panel's four tabs (lib/draft/strategy.ts): Round Plan (a position to aim
 // for each round), Targets (how many of each position by the end), Do Not Draft, and My
 // Rankings (their own order of the whole pool).
 import React, { useMemo, useState } from "react";

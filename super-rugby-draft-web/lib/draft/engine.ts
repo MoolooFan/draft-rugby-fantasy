@@ -19,7 +19,6 @@ import { rosterSize, squadFormatOf, type SquadFormat } from "@/lib/league/squad"
 import { lockLeagueScoring } from "@/lib/scoring/leagueRules";
 import { strategyChoice } from "@/lib/draft/strategy";
 import { strategyForTeam } from "@/lib/draft/strategyServer";
-import { writeDraftGrades } from "@/lib/draft/gradesServer";
 
 type Db = SupabaseClient;
 
@@ -187,12 +186,6 @@ async function recordPick(db: Db, leagueId: string, ctx: Ctx, teamId: string, pl
       await moveDraftWatchlists(db, leagueId, ctx.drafted);
     } catch (e) {
       console.error("Draft finished but the watchlists couldn't be moved", leagueId, e);
-    }
-    // Draft grades (fixed from now on; the coach writes the bullet points on its next run)
-    try {
-      await writeDraftGrades(db, leagueId, nowMs);
-    } catch (e) {
-      console.error("Draft finished but the grades couldn't be worked out", leagueId, e);
     }
     // A schedule problem (e.g. too few weeks left in the season) must not break the draft.
     try {

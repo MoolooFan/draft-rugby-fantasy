@@ -15,7 +15,6 @@ type ActiveMenu =
   | "Transactions"
   | "League"
   | "Draft Room"
-  | "Draft Strategy"
   | "Mock Draft"
   | "Fixtures"
   | "Team Details"
@@ -48,7 +47,6 @@ export function AppMenu({
     if (item === "Dashboard") router.replace("/dashboard");
     if (item === "League") router.push("/league");
     if (item === "Draft Room") router.push("/draft-room");
-    if (item === "Draft Strategy") router.push("/draft-strategy");
     if (item === "Mock Draft") router.push("/mock-draft");
 
         // Pages
@@ -64,13 +62,13 @@ export function AppMenu({
   }
 
   // No league joined yet: only the pages that work without one (plan item E2). The Stats Hub
-  // (was the no-league Player Pool) is for everyone (16 Nov 2026). Draft Strategy and Mock Draft
+  // (was the no-league Player Pool) is for everyone (16 Nov 2026). Mock Draft
   // work with or without a league (21 Nov 2026).
   const hasLeague = (leagues ?? []).length > 0;
   const items: ActiveMenu[] = [
     ...((hasLeague
-      ? ["Dashboard", "Matchup", "Team Selection", "Transactions", "Stats Hub", "League", "Draft Room", "Draft Strategy", "Mock Draft", "Fixtures", "Team Details", "Account"]
-      : ["Dashboard", "League", "Draft Strategy", "Mock Draft", "Fixtures", "Stats Hub", "Account"]) as ActiveMenu[]),
+      ? ["Dashboard", "Matchup", "Team Selection", "Transactions", "Stats Hub", "League", "Draft Room", "Mock Draft", "Fixtures", "Team Details", "Account"]
+      : ["Dashboard", "League", "Mock Draft", "Fixtures", "Stats Hub", "Account"]) as ActiveMenu[]),
     // only for the site admin (the server checks again on the admin page)
     ...(getActiveUserProfile()?.isSiteAdmin ? (["Admin"] as ActiveMenu[]) : []),
   ];

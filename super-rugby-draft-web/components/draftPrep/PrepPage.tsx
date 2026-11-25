@@ -1,6 +1,6 @@
 "use client";
 // components/draftPrep/PrepPage.tsx
-// The frame for the draft prep pages (Draft Strategy, Mock Draft): the site's background, the
+// The frame for the Mock Draft page: the site's background, the
 // white header card with the menu button and title, and the menu.
 import React, { useState } from "react";
 import { AppMenu } from "@/components/AppMenu";
@@ -16,7 +16,7 @@ export function PrepPage({
 }: {
   title: string;
   subtitle?: string;
-  activeItem: "Draft Strategy" | "Mock Draft";
+  activeItem: "Mock Draft";
   headerExtra?: React.ReactNode;
   children: React.ReactNode;
 }) {

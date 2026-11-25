@@ -22,7 +22,7 @@ const TEAMS = ["dt_a", "dt_b", "dt_c", "dt_d"];
 async function cleanup() {
   await db.from("draft_strategies").delete().in("username", TEAMS);
   await db.from("chat_messages").delete().eq("league_id", L);
-  for (const t of ["draft_grades", "watchlist", "draft_queue", "draft_picks", "rosters", "draft_state", "league_matchups", "league_week_finalisations"]) await db.from(t).delete().eq("league_id", L);
+  for (const t of ["watchlist", "draft_queue", "draft_picks", "rosters", "draft_state", "league_matchups", "league_week_finalisations"]) await db.from(t).delete().eq("league_id", L);
   await db.from("teams").delete().eq("league_id", L);
   await db.from("leagues").delete().eq("id", L);
 }
@@ -136,12 +136,6 @@ async function main() {
   threw = "";
   try { await setDraftQueue(db, L, "dt_b", [avoidB]); } catch (e) { threw = (e as Error).message; }
   check("the draft watchlist can't change after the draft", /draft is over/.test(threw));
-
-  // draft grades are saved when the draft ends, and the league chat is told
-  const grades = (await db.from("draft_grades").select("team_id, grade, rank, bullets").eq("league_id", L)).data ?? [];
-  check("draft grades saved for every team when the draft ends", grades.length === 4 && grades.every((g) => /^[A-DF][+-]?$/.test(g.grade) && (g.bullets as string[]).length >= 2), grades.map((g) => g.grade).join(" "));
-  const posted = (await db.from("chat_messages").select("body").eq("league_id", L).eq("dedupe_key", "draft-grades")).data ?? [];
-  check("the league chat gets the draft grades", posted.length === 1 && /Draft grades/.test(String(posted[0].body)));
 
   const fast = st.missed_in_row["dt_c"] >= 3;
   check(`after 3 misses a team is on the ${FAST_PICK_SECONDS}s clock`, fast, `dt_c missed ${st.missed_in_row["dt_c"]}`);
