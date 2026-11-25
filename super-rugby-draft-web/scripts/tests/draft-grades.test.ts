@@ -58,6 +58,8 @@ check("sensible drafts: the best team gets a B+ or better", sensible.some((g) =>
 check("ranks 1..6, best score first", sensible.map((g) => g.rank).sort().join() === "1,2,3,4,5,6" && sensible.find((g) => g.rank === 1)!.score >= Math.max(...sensible.map((g) => g.score)) - 1e-9);
 check("every team has 2-3 bullet points", sensible.every((g) => g.bullets.length >= 2 && g.bullets.length <= 3), sensible[0].bullets.join(" | "));
 
+check("bullet points are full sentences, not \"Label: ...\"", [...sensible].every((g) => g.bullets.every((b) => !/^[A-Z][a-z ]+:/.test(b) && /[.]$/.test(b))), sensible.flatMap((g) => g.bullets).find((b) => /^[A-Z][a-z ]+:/.test(b)) ?? "");
+
 // team F drafts the worst players on purpose
 const tank = run(draft({ default: byRank, F: worst }));
 const f = tank.find((g) => g.teamId === "F")!;

@@ -44,7 +44,8 @@ Rules:
 - Name players. Use numbers where they help (pick 47, Draft Rank 18, 14.2 points a game).
 - Vary the wording and the angle between teams: don't start every team's bullets the same way.
 - Match the tone to the grade: upbeat for A grades, fair and constructive for C grades, honest but not mean for anything lower.
-- No emojis, no headings, no grade letters at the start of bullets. Plain sentences.`;
+- Every bullet is a full, natural sentence. Never start with a label and a colon ("Best value:", "Risk:", "Strongest area:").
+- No emojis, no headings, no grade letters at the start of bullets.`;
 
 type GradeRow = { team_id: string; grade: string; rank: number; facts: Record<string, unknown> };
 

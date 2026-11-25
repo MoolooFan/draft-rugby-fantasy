@@ -88,7 +88,7 @@ export async function writeDraftGrades(db: SupabaseClient, leagueId: string, now
       channel: LEAGUE_CHANNEL,
       senderTeamId: null,
       kind: "system",
-      body: `The draft is done! Draft grades:\n${lines.join("\n")}\nSee why in the Draft Room.`,
+      body: `The draft is done! Draft grades:\n${lines.join("\n")}\nSee why on the Teams tab in the Draft Room.`,
       dedupeKey: "draft-grades",
     });
   } catch (e) {

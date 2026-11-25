@@ -23,6 +23,7 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `8b0ac60` | Draft grades moved to the bottom of the Teams tab (under each team), written as full sentences; Draft Complete keeps the last-pick banner | |
 | `2f95814` | Draft room after the practice draft: pick clock always shows, "On the clock", Draft Complete screen with **draft grades** (A+ to F, written up by the AI coach, posted in chat), First Pick opens the draft order, Teams tab opens on your team and keeps positions together, owner initials on Draft Results, no Mock Draft link during the draft, draft watchlist moves to Transactions at the end. Fixed: a late auto-pick eating the next team's turn, "On the Clock: TBC", empty Teams tab after the draft. Player card switches only change the card; "Fantasy Points"; filters Reset; mock draft computer picks about 5 s | Yes |
 
 ### 23 Nov 2026
