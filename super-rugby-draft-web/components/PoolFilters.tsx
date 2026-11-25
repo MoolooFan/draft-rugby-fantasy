@@ -2,14 +2,14 @@
 
 // Player pool filters (plan item C2, agreed with Ethan Nov 2026): the search box, and one
 // Filters button that opens a pop-up with Players (Available / All / a fantasy team), Team,
-// Position, Status, Sort by and Clear. Several options can be picked in each (e.g. 3 teams).
+// Position, Status, Sort by and Reset. Several options can be picked in each (e.g. 3 teams).
 // Used on the Transactions page and in the draft room.
 
 import React, { useState } from "react";
 import { TEAM_OPTIONS, POSITION_OPTIONS } from "@/lib/constants";
 import { canPlayPosition } from "@/lib/players/positions";
 import { currentStatusKind } from "@/lib/status/kind";
-import { STAT_VIEWS, STAT_VIEW_LABEL, useStatView } from "@/lib/players/statView";
+import { STAT_VIEWS, STAT_VIEW_LABEL, useStatSeasonStore, useStatView } from "@/lib/players/statView";
 import { useStatSeason } from "@/lib/players/useStatSeason";
 
 export type StatusFilter = "available" | "starting" | "sub" | "injured" | "suspended";
@@ -95,6 +95,7 @@ export function PoolFilterBar({
   sort,
   setSort,
   sortOptions,
+  defaultSort,
   statOptions,
 }: {
   search: string;
@@ -108,12 +109,27 @@ export function PoolFilterBar({
   sort?: string;
   setSort?: (v: string) => void;
   sortOptions?: Array<{ label: string; value: string }>;
+  /** what Reset goes back to (default: Draft Rank if it's an option, else the first option) */
+  defaultSort?: string;
   /** also show Per game / Total / Per 80 and the season (2026 / 2027) in the pop-up */
   statOptions?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [statView, setStatView] = useStatView();
   const { season, setSeason, seasons } = useStatSeason();
+  const resetSeason = useStatSeasonStore((s) => s.setSeason);
+  // Reset (Ethan, 25 Nov 2026): back to per game, the default season (2026 until 2027 starts),
+  // no team / position, all statuses, sorted by Draft Rank
+  const reset = () => {
+    setFilters(EMPTY_FILTERS);
+    setOwners?.(["available"]);
+    if (statOptions) {
+      setStatView("game");
+      resetSeason(null);
+    }
+    const sortTo = defaultSort ?? (sortOptions?.some((o) => o.value === "DRAFT_RANK") ? "DRAFT_RANK" : sortOptions?.[0]?.value);
+    if (setSort && sortTo) setSort(sortTo);
+  };
   const active =
     filters.teams.length +
     filters.positions.length +
@@ -192,13 +208,10 @@ export function PoolFilterBar({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ fontSize: 16, fontWeight: 700 }}>Filters</div>
               <button
-                onClick={() => {
-                  setFilters(EMPTY_FILTERS);
-                  setOwners?.(["available"]);
-                }}
+                onClick={reset}
                 style={{ background: "transparent", border: "none", color: "#dc2626", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
               >
-                Clear
+                Reset
               </button>
             </div>
 

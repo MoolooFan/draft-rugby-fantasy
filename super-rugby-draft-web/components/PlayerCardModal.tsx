@@ -1,6 +1,7 @@
 "use client";
 
 import { useStatSeason } from "@/lib/players/useStatSeason";
+import { useStatViewStore, type StatView } from "@/lib/players/statView";
 import { useCoachName } from "@/lib/coach/name";
 import { useEffect, useMemo, useState } from "react";
 
@@ -101,6 +102,12 @@ const [lastCompletedWeek, setLastCompletedWeek] = useState<number>(0);
 // Fixtures tab always shows this season's draw.
 const [statSeason, setStatSeason] = useState<number>(() => statsSeasonYear());
 const { season: chosenStatSeason } = useStatSeason();
+// The Stats tab's Per game / Total / Per 80 and 2026 / 2027 switches belong to this card: they
+// start as the page has them, change only the Stats tab, and don't change the page's filters or
+// the four numbers above the tabs (Ethan, 25 Nov 2026).
+const [cardView, setCardView] = useState<StatView>(() => useStatViewStore.getState().view);
+const [cardSeason, setCardSeason] = useState<number>(chosenStatSeason);
+const [cardSeasonRounds, setCardSeasonRounds] = useState<PlayerRound[] | null>(null);
 const [upcomingFixtures, setUpcomingFixtures] = useState<FixtureRow[]>([]);
 const [upcomingWeeks, setUpcomingWeeks] = useState<number[]>([]);
 const [upcomingLastCompleted, setUpcomingLastCompleted] = useState<number>(0);
@@ -139,17 +146,38 @@ const statusText = useMemo<string | null>(() => {
 }, [status, statusFromSheet, weeklyFromSheet, p.weeklyStatus]);
 const statusK = statusKind(statusText);
 
-// Games Played / Starts for the season shown (Ethan, 20 Nov 2026): a game is a round he played
-// in (minutes in the stats); a start is one of those where the team list (or a late change) had
-// him in the starting XV. A player named to start who pulled out doesn't get either.
-const computed = useMemo(() => {
-  const played = rounds.filter((r) => Number(r.minutes) > 0);
-  return { gamesPlayed: played.length, starts: played.filter((r) => r.role === "starting").length };
-}, [rounds]);
 
 useEffect(() => {
   setTab(initialTab);
 }, [initialTab, open, p.id]);
+
+// the Stats tab's own season, when it's not the one the rest of the card shows
+useEffect(() => {
+  if (!open || cardSeason === chosenStatSeason) {
+    setCardSeasonRounds(null);
+    return;
+  }
+  let cancelled = false;
+  cachedJson<{ rows?: Record<string, unknown>[] }>(`/api/players/round-stats?season=${cardSeason}`)
+    .then((j) => {
+      if (!cancelled) setCardSeasonRounds(buildRoundsFromSheetRows(Array.isArray(j?.rows) ? (j.rows as never) : [], p));
+    })
+    .catch(() => {
+      if (!cancelled) setCardSeasonRounds([]);
+    });
+  return () => {
+    cancelled = true;
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [open, p.id, cardSeason, chosenStatSeason]);
+const statsTabRounds = useMemo(() => (cardSeason === chosenStatSeason ? rounds : cardSeasonRounds ?? []), [cardSeason, chosenStatSeason, rounds, cardSeasonRounds]);
+// Games Played / Starts for the season shown (Ethan, 20 Nov 2026): a game is a round he played
+// in (minutes in the stats); a start is one of those where the team list (or a late change) had
+// him in the starting XV. A player named to start who pulled out doesn't get either.
+const statsTabCounts = useMemo(() => {
+  const played = statsTabRounds.filter((r) => Number(r.minutes) > 0);
+  return { gamesPlayed: played.length, starts: played.filter((r) => r.role === "starting").length };
+}, [statsTabRounds]);
 
 useEffect(() => {
   if (!open) return;
@@ -373,10 +401,14 @@ const statusStyle = !statusK
 ) : tab === "Stats" ? (
   <StatsTab
     player={p}
-    rounds={rounds}
-    gamesPlayed={computed.gamesPlayed}
-    starts={computed.starts}
+    rounds={statsTabRounds}
+    gamesPlayed={statsTabCounts.gamesPlayed}
+    starts={statsTabCounts.starts}
     onCompare={() => openCompare(p.id)}
+    view={cardView}
+    onView={setCardView}
+    season={cardSeason}
+    onSeason={setCardSeason}
   />
 
 ) : tab === "Fixtures" ? (

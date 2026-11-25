@@ -10,8 +10,9 @@ import { CPU_TEAM_NAMES, cpuPick, draftGrade, makePersonality, teamStrength, typ
 import { strategyChoice, type DraftStrategy } from "@/lib/draft/strategy";
 
 export type MockSpeed = "quick" | "normal" | "slow";
-export const SPEED_MS: Record<MockSpeed, number> = { quick: 350, normal: 1200, slow: 2600 };
-export const SPEED_LABEL: Record<MockSpeed, string> = { quick: "Quick", normal: "Normal", slow: "Slow" };
+// how long a computer team takes to pick: about 5 seconds as standard (Ethan, 25 Nov 2026)
+export const SPEED_MS: Record<MockSpeed, number> = { quick: 2000, normal: 5000, slow: 10000 };
+export const SPEED_LABEL: Record<MockSpeed, string> = { quick: "Quick (2 s)", normal: "Normal (5 s)", slow: "Slow (10 s)" };
 export const TIMER_OPTIONS = [0, 30, 60, 90] as const;
 
 export type MockSettings = {

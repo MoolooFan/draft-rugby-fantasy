@@ -32,12 +32,13 @@ import { positionsLabel } from "@/lib/players/positions";
 import { StatusTag } from "@/components/StatusTag";
 import { PlusMinusIcon } from "@/components/PlusMinusIcon";
 import { DraftPlanStrip } from "@/components/draftPrep/DraftPlanStrip";
+import { DraftGrades } from "@/components/draftPrep/DraftGrades";
 import { useDraftStrategy } from "@/lib/draft/useStrategy";
 import { isEmptyStrategy, myRanks, planForRound, planMatches } from "@/lib/draft/strategy";
 import { roundForPick } from "@/lib/draft/rules";
 
 type DraftTab = "Player Pool" | "Watchlist" | "Teams" | "Draft Results";
-type DraftPhase = "preDraft" | "liveDraft";
+type DraftPhase = "preDraft" | "liveDraft" | "complete";
 
 type Pick = {
   pickNumber: number;
@@ -49,7 +50,8 @@ type Pick = {
 type Modal =
   | null
   | { type: "draftConfirm"; player: Player }
-  | { type: "playerCard"; player: Player };
+  | { type: "playerCard"; player: Player }
+  | { type: "draftOrder" };
 
 function useNowTick(ms = 250) {
   const [, force] = useState(0);
@@ -96,8 +98,9 @@ const draftStoreHydrated = useDraftStore((s) => s.hasHydrated);
 const setActiveLeague = useLeagueStore((s) => s.setActiveLeague);
 const completeDraft = useLeagueStore((s) => s.completeDraft);
 
+// (a finished draft used to fall back to "Draft Starts In"; Ethan, 25 Nov 2026)
 const phase: DraftPhase =
-  activeLeague?.draftStatus === "live" ? "liveDraft" : "preDraft";
+  activeLeague?.draftStatus === "live" ? "liveDraft" : activeLeague?.draftStatus === "complete" ? "complete" : "preDraft";
 
 const refreshLeague = useLeagueStore((s) => s.refreshLeague);
 
@@ -295,15 +298,18 @@ const preDraftDeadlineMs = useMemo(() => {
   }, [ensurePicksLength, teams.length]);
 
   const draftComplete =
-    storeDraftComplete || (totalPicks > 0 && picks.length === totalPicks && picks[totalPicks - 1] !== null);
+    phase === "complete" || storeDraftComplete || (totalPicks > 0 && picks.length === totalPicks && picks[totalPicks - 1] !== null);
 
   const currentPick = Math.min(pickIndex, totalPicks);
 
+  // (also when the teams / order arrive: it used to be worked out before the order had loaded
+  // and stay blank, "On the Clock: TBC", until the first pick; found in the 25 Nov practice draft)
   const onTheClockTeamId = useMemo(() => {
     if (draftComplete) return "";
     const owner = ownerForPickSnake(pickIndex);
     return owner?.id ?? "";
-  }, [pickIndex, ownerForPickSnake, draftComplete]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickIndex, ownerForPickSnake, draftComplete, teams, totalPicks]);
 
   const isYouOnClock =
     phase === "liveDraft" && !draftComplete && onTheClockTeamId === yourTeamId;
@@ -456,16 +462,25 @@ function resolvePlayer(x: any): Player | null {
       const player = picks[idx] ?? null;
 
       const ownerTeamId = owner?.id;
-      const ownerInitials = owner?.userInitials ?? owner?.initials;
+      const ownerInitials = owner?.userInitials || owner?.initials || (owner?.name ?? "").split(/\s+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 
       return { pickNumber, player, ownerInitials, ownerTeamId };
     });
   }, [totalPicks, picks, ownerForPickSnake, teams]);
 
-const firstPickTeamName = useMemo(() => {
-  const t0 = activeLeague?.teams?.[0];
-  return t0?.name ?? "TBC";
-}, [activeLeague?.teams]);
+// the draft order (round 1), for "First Pick" and its pop-up (Ethan, 25 Nov 2026)
+const draftOrderTeams = useMemo(() => {
+  const n = teams.length;
+  const out: Array<{ id: string; name: string; ownerName: string | null }> = [];
+  for (let i = 1; i <= n; i++) {
+    const t = ownerForPickSnake(i);
+    if (!t) continue;
+    const lt = activeLeague?.teams?.find((x) => x.id === t.id) as { ownerName?: string | null } | undefined;
+    out.push({ id: t.id, name: t.name, ownerName: lt?.ownerName ?? null });
+  }
+  return out;
+}, [teams.length, ownerForPickSnake, activeLeague?.teams]);
+const firstPickTeamName = draftOrderTeams[0]?.name ?? activeLeague?.teams?.[0]?.name ?? "TBC";
   // -----------------------
   // Styles
   // -----------------------
@@ -652,12 +667,38 @@ const isTbd = !deadline;
         </div>
 
         <div style={{ marginTop: 10, fontSize: 13, fontWeight: 700, opacity: 0.95 }}>
-          First Pick: <span style={{ fontWeight: 600 }}>{firstPickTeamName || "TBC"}</span>
+          First Pick:{" "}
+          {draftOrderTeams.length ? (
+            <button
+              onClick={() => setModal({ type: "draftOrder" })}
+              style={{ border: "none", background: "transparent", padding: 0, font: "inherit", fontWeight: 600, color: "#0d9488", textDecoration: "underline", cursor: "pointer" }}
+            >
+              {firstPickTeamName}
+            </button>
+          ) : (
+            <span style={{ fontWeight: 600 }}>{firstPickTeamName || "TBC"}</span>
+          )}
         </div>
       </div>
     );
   }
 const PreDraftHeader = useStableComponent(PreDraftHeader__render);
+
+  // after the draft (Ethan, 25 Nov 2026: it used to go back to "Draft Starts In")
+  function CompleteHeader__render() {
+    return (
+      <div style={{ ...card35, padding: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Hamburger />
+        </div>
+        <div style={{ marginTop: 8, fontSize: 22, fontWeight: 700 }}>Draft Complete</div>
+        <div style={{ marginTop: 6, fontSize: 13, fontWeight: 500, opacity: 0.8, lineHeight: 1.4 }}>
+          All {totalPicks} picks are in. Your squad is on your Team page, and anyone left on your draft watchlist has moved to your Transactions watchlist. Your draft grade is below.
+        </div>
+      </div>
+    );
+  }
+const CompleteHeader = useStableComponent(CompleteHeader__render);
 
   function LiveHeader__render() {
   const now = useNowTick(250);
@@ -666,8 +707,9 @@ const PreDraftHeader = useStableComponent(PreDraftHeader__render);
 
     const secondsLeft = mounted ? Math.max(0, Math.floor((deadline - now) / 1000)) : 0;
 
+    // (it used to be white on the white card, so it only showed once it turned red; Ethan, 25 Nov 2026)
     const isLow = secondsLeft <= 20;
-    const timeColor = draftComplete ? "white" : isLow ? "#EF4444" : "white";
+    const timeColor = !draftComplete && isLow ? "#EF4444" : "inherit";
 
     return (
       <div style={{ ...card35, padding: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
@@ -708,7 +750,9 @@ const PreDraftHeader = useStableComponent(PreDraftHeader__render);
         <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div style={{ display: "grid", gap: 2 }}>
             <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.95 }}>Your Next Pick in:</div>
-            <div style={{ fontSize: 12, fontWeight: 600 }}>{draftComplete ? "—" : `${nextPickInTurns} turns`}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: isYouOnClock ? "#0d9488" : undefined }}>
+              {draftComplete ? "—" : isYouOnClock ? "On the clock" : nextPickInTurns ? `${nextPickInTurns} ${nextPickInTurns === 1 ? "turn" : "turns"}` : "No picks left"}
+            </div>
           </div>
 
           <div style={{ display: "grid", gap: 2, textAlign: "right" }}>
@@ -765,7 +809,7 @@ const Filters = useStableComponent(Filters__render);
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 132px",
+          gridTemplateColumns: "1fr 160px",
           gap: 10,
           alignItems: "center",
           padding: "10px 10px",
@@ -800,8 +844,9 @@ const Filters = useStableComponent(Filters__render);
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, width: 34, textAlign: "right" }}>{metricText(p)}</div>
-          <StarButton active={isStar} onClick={() => toggleWatchlist(p.id)} />
+          <div style={{ fontSize: 12, fontWeight: 700, width: 40, textAlign: "center" }}>{metricText(p)}</div>
+          {/* the draft watchlist is fixed once the draft is over (it moves to the Transactions watchlist) */}
+          {draftComplete ? <div style={{ width: 32 }} /> : <StarButton active={isStar} onClick={() => toggleWatchlist(p.id)} />}
           <DraftButton enabled={draftEnabled} onClick={() => onDraftClick(p)} />
         </div>
       </div>
@@ -815,16 +860,16 @@ const PlayerRow = useStableComponent(PlayerRow__render);
 
     return (
       <>
-        {!draftComplete ? <DraftPlanStrip strategy={draftStrategy} round={yourPlanRound} roster={yourRoster} leagueId={activeLeagueId ?? null} /> : null}
+        {!draftComplete ? <DraftPlanStrip strategy={draftStrategy} round={yourPlanRound} roster={yourRoster} leagueId={activeLeagueId ?? null} hideMockDraft={phase === "liveDraft"} /> : null}
         <Filters />
         <div style={listBox}>
           {/* the column's name, right above the numbers (same layout as the rows) */}
-          <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: "1fr 132px", gap: 10, alignItems: "center", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
+          <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: "1fr 160px", gap: 10, alignItems: "center", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
             <div>{rankMode ? "" : `${STAT_VIEW_LABEL[statView]} · ${statSeasonShown}`}</div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <div style={{ width: 34, display: "flex", justifyContent: "flex-end", whiteSpace: "nowrap", fontWeight: 600 }}>{sortLabel}</div>
-              <div style={{ width: 28 }} />
-              <div style={{ width: 28 }} />
+              <div style={{ width: 40, display: "flex", justifyContent: "center", whiteSpace: "nowrap", fontWeight: 600 }}>{sortLabel}</div>
+              <div style={{ width: 32 }} />
+              <div style={{ width: 64 }} />
             </div>
           </div>
 
@@ -850,12 +895,12 @@ const PlayerPoolTab = useStableComponent(PlayerPoolTab__render);
         <Filters />
         <div style={listBox}>
           {/* the column's name, right above the numbers (same layout as the rows) */}
-          <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: "1fr 132px", gap: 10, alignItems: "center", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
+          <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: "1fr 160px", gap: 10, alignItems: "center", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
             <div>{rankMode ? "" : `${STAT_VIEW_LABEL[statView]} · ${statSeasonShown}`}</div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <div style={{ width: 34, display: "flex", justifyContent: "flex-end", whiteSpace: "nowrap", fontWeight: 600 }}>{sortLabel}</div>
-              <div style={{ width: 28 }} />
-              <div style={{ width: 28 }} />
+              <div style={{ width: 40, display: "flex", justifyContent: "center", whiteSpace: "nowrap", fontWeight: 600 }}>{sortLabel}</div>
+              <div style={{ width: 32 }} />
+              <div style={{ width: 64 }} />
             </div>
           </div>
 
@@ -865,7 +910,7 @@ const PlayerPoolTab = useStableComponent(PlayerPoolTab__render);
             </div>
           ) : (
             watchlistPlayers.map((p, i) => (
-              <PlayerRow key={p.id} p={p} draftEnabled={draftEnabledFor(p)} reorder={{ index: i, count: watchlistPlayers.length }} />
+              <PlayerRow key={p.id} p={p} draftEnabled={draftEnabledFor(p)} reorder={draftComplete ? undefined : { index: i, count: watchlistPlayers.length }} />
             ))
           )}
         </div>
@@ -874,47 +919,71 @@ const PlayerPoolTab = useStableComponent(PlayerPoolTab__render);
   }
 const WatchlistTab = useStableComponent(WatchlistTab__render);
 
-  // ✅ IMPORTANT: this MUST be inside DraftRoomPage (it’s a hook)
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
 useEffect(() => {
   // if nothing selected yet, or selected team no longer exists, pick the first team
   if (!teams.length) return;
+  // your own team until you pick another (Ethan, 25 Nov 2026)
   if (!selectedTeamId || !teams.some((t) => t.id === selectedTeamId)) {
-    setSelectedTeamId(teams[0].id);
+    setSelectedTeamId(teams.some((t) => t.id === yourTeamId) ? yourTeamId : teams[0].id);
   }
-}, [teams, selectedTeamId]);
+}, [teams, selectedTeamId, yourTeamId]);
 
   function TeamsTab__render() {
     const roster = rosters[selectedTeamId] ?? null;
-    // the roster's groups: Standard as before (positions + wildcards); a custom squad
-    // (lib/league/squad.ts): each kind of starting slot, then the bench
+    // the roster's groups: each kind of starting spot (Props, Hookers, ...), then the wildcards
+    // (a custom squad, lib/league/squad.ts: its own kinds, then the bench)
     const squad = activeLeague?.squadFormat ?? STANDARD_SQUAD;
     type Group = { key: string; label: string; emptyLabel: string; entries: unknown[] };
-    let groups: Group[] = [];
-    if (roster && isStandardSquad(squad)) {
-      groups = rosterSlots.map((slot) => ({
-        key: slot.slotId,
-        label: slot.label,
-        emptyLabel: slot.posAbbrev === "WC" ? "Wildcard" : slot.label.slice(0, -1),
-        entries: Array.from({ length: slot.count }, (_, i) =>
-          slot.posAbbrev === "WC" ? roster?.wildcards?.[i] ?? null : (roster?.slots as Record<string, unknown[]> | undefined)?.[slot.posAbbrev]?.[i] ?? null
-        ),
-      }));
-    } else if (roster) {
-      const all = [...Object.values((roster.slots ?? {}) as Record<string, unknown[]>).flat(), ...(roster.wildcards ?? [])]
-        .map((raw) => resolvePlayer(raw))
-        .filter((x): x is NonNullable<ReturnType<typeof resolvePlayer>> => !!x)
-        .sort((a, b) => (getPlayerPickNumber(a.id) ?? 9999) - (getPlayerPickNumber(b.id) ?? 9999));
-      const placed = assignToSlots(all, squad);
-      const { starters, bench } = squadSlots(squad);
-      for (const k of SLOT_KINDS) {
-        const ids = starters.filter((x) => x.kind === k.kind).map((x) => x.id);
-        if (ids.length) groups.push({ key: k.kind, label: k.label, emptyLabel: k.label, entries: ids.map((id) => placed.get(id) ?? null) });
+    const groups: Group[] = [];
+    // Players sit with their position even when they fill a wildcard / bench spot (a 2nd hooker
+    // goes straight under the 1st, with one fewer empty wildcard), in the order they were
+    // drafted (Ethan, 25 Nov 2026).
+    const byPick = (a: unknown, b: unknown) => {
+      const id = (x: unknown) => String((x as { id?: string } | null)?.id ?? x ?? "");
+      return (getPlayerPickNumber(id(a)) ?? 9999) - (getPlayerPickNumber(id(b)) ?? 9999);
+    };
+    const mainPos = (x: unknown) => String(resolvePlayer(x as never)?.posAbbrev ?? "").toUpperCase();
+    // The team's players: from the picks (the saved roster after the draft is only a list of ids,
+    // which showed an empty team; found 25 Nov 2026), else whatever the roster has.
+    const fromPicks = draftResults.filter((r) => r.ownerTeamId === selectedTeamId && r.player).map((r) => r.player as unknown);
+    const fromRoster = roster
+      ? [
+          ...Object.values((roster.slots ?? {}) as Record<string, unknown[]>).flat(),
+          ...((roster.wildcards ?? []) as unknown[]),
+          ...(((roster as { playerIds?: string[] }).playerIds ?? []) as unknown[]),
+        ]
+      : [];
+    const seen = new Set<string>();
+    const all = (fromPicks.length ? fromPicks : fromRoster)
+      .map((raw) => resolvePlayer(raw as never))
+      .filter((x): x is NonNullable<ReturnType<typeof resolvePlayer>> => !!x && !seen.has(x.id) && !!seen.add(x.id))
+      .sort(byPick);
+    const placed = assignToSlots(all, squad);
+    const { starters, bench } = squadSlots(squad);
+    const standard = isStandardSquad(squad);
+    const benchPlayers = bench.map((id) => placed.get(id) ?? null).filter(Boolean) as unknown[];
+    for (const k of SLOT_KINDS) {
+      const ids = starters.filter((x) => x.kind === k.kind).map((x) => x.id);
+      if (!ids.length) continue;
+      const filled = ids.map((id) => placed.get(id) ?? null).filter(Boolean) as unknown[];
+      // wildcard / bench players whose main position goes in this group
+      for (let i = benchPlayers.length - 1; i >= 0; i--) {
+        if (k.positions.includes(mainPos(benchPlayers[i]))) filled.push(...benchPlayers.splice(i, 1));
       }
-      if (bench.length) groups.push({ key: "bench", label: "Bench", emptyLabel: "Bench", entries: bench.map((id) => placed.get(id) ?? null) });
+      filled.sort(byPick);
+      const empty = ids.filter((id) => !placed.get(id)).length;
+      const std = standard ? rosterSlots.find((r) => r.posAbbrev === k.kind) : undefined;
+      groups.push({ key: k.kind, label: std?.label ?? k.label, emptyLabel: std ? std.label.slice(0, -1) : k.label, entries: [...filled, ...Array(empty).fill(null)] });
+    }
+    if (bench.length) {
+      benchPlayers.sort(byPick);
+      const emptyBench = bench.filter((id) => !placed.get(id)).length;
+      const entries = [...benchPlayers, ...Array(emptyBench).fill(null)];
+      if (entries.length) groups.push({ key: "bench", label: standard ? "Wildcards" : "Bench", emptyLabel: standard ? "Wildcard" : "Bench", entries });
     }
 
-    if (!roster) {
+    if (!roster && !all.length) {
     return (
       <div style={{ ...listBox, marginTop: 10, padding: 14 }}>
         <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>
@@ -1255,7 +1324,8 @@ const ModalOverlay = useStableComponent(ModalOverlay__render);
 
       <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px", paddingBottom: "calc(18px + env(safe-area-inset-bottom))" }}>
         
-        {phase === "preDraft" ? <PreDraftHeader /> : <LiveHeader />}
+        {phase === "preDraft" ? <PreDraftHeader /> : draftComplete ? <CompleteHeader /> : <LiveHeader />}
+        {draftComplete && phase !== "preDraft" && activeLeagueId ? <DraftGrades leagueId={activeLeagueId} yourTeamId={yourTeamId} /> : null}
 
         <Tabs />
 
@@ -1276,6 +1346,37 @@ const ModalOverlay = useStableComponent(ModalOverlay__render);
 
       {modal?.type === "draftConfirm" && <DraftConfirmModal player={modal.player} />}
 
+      {modal?.type === "draftOrder" && (
+        <ModalOverlay onClose={() => setModal(null)}>
+          <div style={{ borderRadius: 14, background: "#ffffff", color: "#0f172a", boxShadow: "0 20px 60px rgba(0,0,0,0.35)", padding: 14, maxHeight: "80svh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>Draft Order</div>
+              <button onClick={() => setModal(null)} style={{ border: "none", background: "transparent", fontSize: 13, fontWeight: 700, cursor: "pointer", textDecoration: "underline", color: "#0f172a" }}>
+                Close
+              </button>
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.7, marginTop: 4, lineHeight: 1.4 }}>
+              Round 1. The order snakes: the last team picks first in round 2, and so on.
+              {phase === "preDraft" ? " It's shuffled again when a team joins, until the commissioner sets it." : ""}
+            </div>
+            <div style={{ marginTop: 10, display: "grid" }}>
+              {draftOrderTeams.map((t, i) => (
+                <div key={t.id} style={{ display: "grid", gridTemplateColumns: "28px 1fr", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid rgba(0,0,0,0.08)" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>{i + 1}</div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: t.id === yourTeamId ? 700 : 600 }}>
+                      {t.name}
+                      {t.id === yourTeamId ? <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: "#0d9488" }}>You</span> : null}
+                    </div>
+                    {t.ownerName ? <div style={{ fontSize: 11, opacity: 0.65 }}>{t.ownerName}</div> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </ModalOverlay>
+      )}
+
       {modal?.type === "playerCard" && (
         <PlayerCardModal
           onClose={() => setModal(null)}
@@ -1288,7 +1389,7 @@ const ModalOverlay = useStableComponent(ModalOverlay__render);
           teamLabel={getPlayerTeamName(modal.player.id) ?? "Available"}
           initialTab="Stats"
           actions={
-            isDrafted(modal.player.id)
+            isDrafted(modal.player.id) || draftComplete
               ? []
               : phase === "preDraft"
               ? [{ label: !!watchlist[modal.player.id] ? "Remove Watchlist" : "Add Watchlist", onClick: () => toggleWatchlist(modal.player.id), variant: "primary" }]

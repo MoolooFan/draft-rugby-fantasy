@@ -224,7 +224,7 @@ function getStatTotalCount(p: Player, header: string): number | null {
     case "DRAFT_RANK": return "Draft Rk";
     case "PROJECTED": return "Proj";
     case "MATCH_AVG": return "Match Avg";
-    case "TOTAL_PTS": return "Points";
+    case "TOTAL_PTS": return "Fantasy Points";
     case "FORM_3": return "Form";
     case "LAST_SCORE": return "Last";
     case "GAMES_PLAYED": return "Games";

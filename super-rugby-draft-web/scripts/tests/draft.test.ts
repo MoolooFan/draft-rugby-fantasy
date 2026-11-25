@@ -21,7 +21,8 @@ const TEAMS = ["dt_a", "dt_b", "dt_c", "dt_d"];
 
 async function cleanup() {
   await db.from("draft_strategies").delete().in("username", TEAMS);
-  for (const t of ["draft_queue", "draft_picks", "rosters", "draft_state", "league_matchups", "league_week_finalisations"]) await db.from(t).delete().eq("league_id", L);
+  await db.from("chat_messages").delete().eq("league_id", L);
+  for (const t of ["draft_grades", "watchlist", "draft_queue", "draft_picks", "rosters", "draft_state", "league_matchups", "league_week_finalisations"]) await db.from(t).delete().eq("league_id", L);
   await db.from("teams").delete().eq("league_id", L);
   await db.from("leagues").delete().eq("id", L);
 }
@@ -83,9 +84,22 @@ async function main() {
   ]);
   await setDraftQueue(db, L, "dt_b", [ranked[149].id, ...wanted]);
 
-  // nobody else turns up: run the clock forward a long way
-  const r = await advanceDraft(db, L, t0 + 6 * 60 * 60 * 1000);
+  // Nobody had the draft open for a while: B's pick is auto-picked 3 minutes late. C (who hasn't
+  // missed a pick) still gets a full clock from then, not a clock that ran out while nobody looked.
   st = await getDraftState(db, L);
+  const bDue = new Date(st.pick_deadline_at!).getTime();
+  const late = bDue + 180_000;
+  await advanceDraft(db, L, late);
+  st = await getDraftState(db, L);
+  check("a late auto-pick doesn't eat the next team's turn", st.pick_index === 3 && new Date(st.pick_deadline_at!).getTime() === late + PICK_SECONDS * 1000, `pick ${st.pick_index}, clock ${(new Date(st.pick_deadline_at!).getTime() - late) / 1000}s`);
+
+  // nobody else turns up: the scheduled job (every 5 minutes) carries it on
+  let r = { autoPicks: 0 };
+  for (let t = late; t < late + 6 * 60 * 60 * 1000 && st.phase !== "complete"; t += 5 * 60 * 1000) {
+    const x = await advanceDraft(db, L, t);
+    r = { autoPicks: r.autoPicks + x.autoPicks };
+    st = await getDraftState(db, L);
+  }
   check("auto-picks carry the draft to the end with nobody watching", st.phase === "complete", `${r.autoPicks} auto-picks`);
 
   const picks = (await db.from("draft_picks").select("*").eq("league_id", L).order("pick_number")).data ?? [];
@@ -110,6 +124,25 @@ async function main() {
   check("missed picks are marked as auto", cPicks.every((p) => p.auto));
   const lg = (await db.from("leagues").select("draft_status, schedule_built_at").eq("id", L).single()).data;
   check("draft complete builds the schedule", lg?.draft_status === "complete" && !!lg?.schedule_built_at);
+  // the draft watchlist moves to the Transactions watchlist when the draft ends (Ethan, 25 Nov 2026)
+  const avoidB = ranked[149].id;
+  const wl = (await db.from("watchlist").select("user_id, player_id").eq("league_id", L)).data ?? [];
+  const takenIds = new Set(picks.map((p) => p.player_id));
+  check(
+    "undrafted draft-watchlist players moved to the owner's Transactions watchlist (drafted ones didn't)",
+    (takenIds.has(avoidB) || wl.some((w) => w.user_id === "dt_b" && w.player_id === avoidB)) && wl.every((w) => !takenIds.has(w.player_id)),
+    `${wl.length} moved`
+  );
+  threw = "";
+  try { await setDraftQueue(db, L, "dt_b", [avoidB]); } catch (e) { threw = (e as Error).message; }
+  check("the draft watchlist can't change after the draft", /draft is over/.test(threw));
+
+  // draft grades are saved when the draft ends, and the league chat is told
+  const grades = (await db.from("draft_grades").select("team_id, grade, rank, bullets").eq("league_id", L)).data ?? [];
+  check("draft grades saved for every team when the draft ends", grades.length === 4 && grades.every((g) => /^[A-DF][+-]?$/.test(g.grade) && (g.bullets as string[]).length >= 2), grades.map((g) => g.grade).join(" "));
+  const posted = (await db.from("chat_messages").select("body").eq("league_id", L).eq("dedupe_key", "draft-grades")).data ?? [];
+  check("the league chat gets the draft grades", posted.length === 1 && /Draft grades/.test(String(posted[0].body)));
+
   const fast = st.missed_in_row["dt_c"] >= 3;
   check(`after 3 misses a team is on the ${FAST_PICK_SECONDS}s clock`, fast, `dt_c missed ${st.missed_in_row["dt_c"]}`);
 

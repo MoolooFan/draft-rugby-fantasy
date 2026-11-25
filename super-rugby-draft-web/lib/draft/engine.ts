@@ -19,6 +19,7 @@ import { rosterSize, squadFormatOf, type SquadFormat } from "@/lib/league/squad"
 import { lockLeagueScoring } from "@/lib/scoring/leagueRules";
 import { strategyChoice } from "@/lib/draft/strategy";
 import { strategyForTeam } from "@/lib/draft/strategyServer";
+import { writeDraftGrades } from "@/lib/draft/gradesServer";
 
 type Db = SupabaseClient;
 
@@ -161,9 +162,13 @@ async function recordPick(db: Db, leagueId: string, ctx: Ctx, teamId: string, pl
   const missed = { ...ctx.state.missed_in_row, [teamId]: auto ? (ctx.state.missed_in_row[teamId] ?? 0) + 1 : 0 };
   const next = pick + 1;
   const done = next > ctx.totalPicks;
-  // the next clock starts now for a real pick, or when the missed pick was due for an auto-pick
-  const startMs = auto && ctx.state.pick_deadline_at ? new Date(ctx.state.pick_deadline_at).getTime() : nowMs;
+  // The next clock starts now. After an auto-pick it starts when the missed pick was due (so a
+  // draft nobody is watching catches up in one go), but only for a team that missed its own last
+  // pick too: anyone else gets their full clock from now, even if the auto-pick was made late
+  // because nobody had the draft open (practice draft, 25 Nov 2026: a team lost its whole turn).
   const nextTeam = done ? null : teamForPick(ctx.order, next);
+  const nextAway = !!nextTeam && (missed[nextTeam] ?? 0) >= 1;
+  const startMs = auto && nextAway && ctx.state.pick_deadline_at ? Math.min(nowMs, new Date(ctx.state.pick_deadline_at).getTime()) : nowMs;
   const deadline = nextTeam ? new Date(startMs + secondsForTeam(missed[nextTeam] ?? 0) * 1000).toISOString() : null;
   const patch = {
     pick_index: next,
@@ -177,6 +182,18 @@ async function recordPick(db: Db, leagueId: string, ctx: Ctx, teamId: string, pl
   ctx.state = { ...ctx.state, ...patch };
 
   if (done) {
+    // Anyone left on a draft watchlist moves to that owner's Transactions watchlist (once).
+    try {
+      await moveDraftWatchlists(db, leagueId, ctx.drafted);
+    } catch (e) {
+      console.error("Draft finished but the watchlists couldn't be moved", leagueId, e);
+    }
+    // Draft grades (fixed from now on; the coach writes the bullet points on its next run)
+    try {
+      await writeDraftGrades(db, leagueId, nowMs);
+    } catch (e) {
+      console.error("Draft finished but the grades couldn't be worked out", leagueId, e);
+    }
     // A schedule problem (e.g. too few weeks left in the season) must not break the draft.
     try {
       await buildScheduleForLeague(db, leagueId, nowMs);
@@ -263,8 +280,34 @@ export async function advanceDraft(db: Db, leagueId: string, nowMs: number): Pro
   return { autoPicks };
 }
 
-/** Replace a team's draft watchlist (in order). */
+/**
+ * When the draft finishes, the players still on each team's draft watchlist who nobody drafted
+ * go onto that owner's Transactions watchlist, once (Ethan, 25 Nov 2026). The draft watchlist
+ * can't change after the draft, so this never needs to happen again.
+ */
+export async function moveDraftWatchlists(db: Db, leagueId: string, drafted: Set<string>) {
+  const queue = await q<Array<{ team_id: string; player_id: string }>>(db.from("draft_queue").select("team_id, player_id").eq("league_id", leagueId).order("position"));
+  if (!queue.length) return 0;
+  const teams = await q<Array<{ id: string; owner_username: string | null }>>(db.from("teams").select("id, owner_username").eq("league_id", leagueId));
+  const owner = new Map(teams.map((t) => [t.id, String(t.owner_username ?? "").trim().toLowerCase()]));
+  const existing = await q<Array<{ user_id: string; player_id: string }>>(db.from("watchlist").select("user_id, player_id").eq("league_id", leagueId));
+  const have = new Set(existing.map((w) => `${w.user_id}|${w.player_id}`));
+  const rows: Array<{ league_id: string; user_id: string; player_id: string }> = [];
+  for (const r of queue) {
+    const user = owner.get(r.team_id);
+    const key = `${user}|${r.player_id}`;
+    if (!user || drafted.has(r.player_id) || have.has(key)) continue;
+    have.add(key);
+    rows.push({ league_id: leagueId, user_id: user, player_id: r.player_id });
+  }
+  if (rows.length) await q(db.from("watchlist").insert(rows));
+  return rows.length;
+}
+
+/** Replace a team's draft watchlist (in order). Fixed once the draft is over. */
 export async function setDraftQueue(db: Db, leagueId: string, teamId: string, playerIds: string[]) {
+  const state = await getDraftState(db, leagueId);
+  if (state.phase === "complete") throw new DraftError("The draft is over: your watchlist is now on the Transactions page", 409);
   const unique = [...new Set(playerIds.map(String))].slice(0, 200);
   await q(db.from("draft_queue").delete().eq("league_id", leagueId).eq("team_id", teamId));
   if (unique.length) {

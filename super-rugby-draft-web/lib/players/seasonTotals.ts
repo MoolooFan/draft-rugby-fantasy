@@ -24,7 +24,7 @@ export function seasonTotals(rows: any[] | null | undefined, player: PlayerLike)
 
 /** Stats people can compare (the names shown on the pages). */
 export const COMPARE_STATS: Array<{ key: StatKey | "points"; label: string }> = [
-  { key: "points", label: "Points" },
+  { key: "points", label: "Fantasy Points" },
   { key: "minutesPlayed", label: "Minutes" },
   { key: "tries", label: "Tries" },
   { key: "tryAssists", label: "Try Assists" },
