@@ -169,23 +169,6 @@ export default function TeamDetailsPage() {
     }
   }
 
-  async function removePicture() {
-    if (!activeLeagueId) return;
-    setPicBusy(true);
-    setPicMsg(null);
-    try {
-      const res = await fetch(`/api/teams/picture?leagueId=${encodeURIComponent(activeLeagueId)}`, { method: "DELETE", credentials: "include" });
-      const j = await res.json().catch(() => null);
-      if (!j?.ok) throw new Error(j?.error ?? "Couldn't remove the picture");
-      setPicMsg({ kind: "ok", text: "Team picture removed." });
-      refreshLeague(activeLeagueId);
-    } catch (e: any) {
-      setPicMsg({ kind: "err", text: e?.message ?? "Couldn't remove the picture" });
-    } finally {
-      setPicBusy(false);
-    }
-  }
-
   // prefill team name from league store
   useEffect(() => {
     const teams = Array.isArray(activeLeague?.teams) ? activeLeague.teams : [];
@@ -355,15 +338,6 @@ export default function TeamDetailsPage() {
                 >
                   Choose an Icon
                 </button>
-                {myTeam?.pictureUrl ? (
-                  <button
-                    onClick={removePicture}
-                    disabled={picBusy}
-                    style={{ height: 30, borderRadius: 999, border: "1px solid #cbd5e1", background: "#eef2f6", color: "#0f172a", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
-                  >
-                    Remove picture
-                  </button>
-                ) : null}
               </div>
             </div>
             {picMsg ? (

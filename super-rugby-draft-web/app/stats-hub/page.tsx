@@ -237,7 +237,7 @@ export default function StatsHubPage() {
               <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%" }}>
                 <thead>
                   <tr>
-                    <th style={{ ...th, ...sticky, cursor: "default", minWidth: 150 }}>Player {loading ? <span style={{ opacity: 0.5 }}>· loading…</span> : <span style={{ opacity: 0.5 }}>· {list.length}</span>}</th>
+                    <th style={{ ...th, ...sticky, cursor: "default", width: 150, minWidth: 150, maxWidth: 150 }}>Player {loading ? <span style={{ opacity: 0.5 }}>· loading…</span> : <span style={{ opacity: 0.5 }}>· {list.length}</span>}</th>
                     {cols.map((c) => (
                       <th key={c} title={colLong(c)} onClick={() => tapCol(c)} style={{ ...th, background: sort.col === c ? "rgba(13,148,136,0.12)" : undefined }}>
                         {colShort(c)}
@@ -252,16 +252,22 @@ export default function StatsHubPage() {
 
                     return (
                       <tr key={p.id}>
-                        <td style={{ ...td, ...sticky, background: on ? "rgb(230,247,245)" : "white" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        {/* the name column is a fixed width: long names are cut off with "…" rather than running into the stats (Ethan, 26 Nov 2026) */}
+                        <td style={{ ...td, ...sticky, width: 150, minWidth: 150, maxWidth: 150, overflow: "hidden", background: on ? "rgb(230,247,245)" : "white" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
                             <input type="checkbox" checked={on} onChange={() => tick(p.id)} aria-label={`Compare ${p.firstName} ${p.lastName}`} />
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={jerseySrc(p.teamCode)} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />
-                            <button onClick={() => setCard(p)} style={{ border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: "pointer", color: "#0f172a", minWidth: 0 }}>
-                              <div style={{ fontSize: 12, fontWeight: 700 }}>
-                                {p.firstName.charAt(0)}. {p.lastName} <StatusTag player={p} />
+                            <img src={jerseySrc(p.teamCode)} alt="" style={{ width: 22, height: 22, objectFit: "contain", flexShrink: 0 }} />
+                            <button onClick={() => setCard(p)} style={{ border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: "pointer", color: "#0f172a", minWidth: 0, flex: 1 }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
+                                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+                                  {p.firstName.charAt(0)}. {p.lastName}
+                                </span>
+                                <span style={{ flexShrink: 0 }}>
+                                  <StatusTag player={p} />
+                                </span>
                               </div>
-                              <div style={{ fontSize: 10, fontWeight: 600, opacity: 0.6 }}>
+                              <div style={{ fontSize: 10, fontWeight: 600, opacity: 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 {p.teamCode} · {positionsLabel(p)}
                               </div>
                             </button>

@@ -116,7 +116,7 @@ async function main() {
       season: 2025, league_id: null, league_name: history["2025"].leagueName, person_name: x.person, place: x.place,
     })),
   ];
-  must(await db.from("honours").insert(honours));
+  must(await db.from("honours").insert([...honours, ...playedRows(honours, { 2026: { league_id: leagueId, league_name: league.name } })]));
 
   const regular = matchups.filter((m) => m.kind === "regular").length;
   console.log(`2026 league "${league.name}": ${regular} regular-season rows (weeks ${firstWeek}-${lastRegularWeek}), ${h26.playoffs.length} finals`);
@@ -133,7 +133,7 @@ async function importHonoursOnly() {
       season: 2025, league_id: null, league_name: history["2025"].leagueName, person_name: x.person, place: x.place,
     })),
   ];
-  must(await db.from("honours").insert(rows));
+  must(await db.from("honours").insert([...rows, ...playedRows(rows)]));
   console.log(`No 2026 league in this database: imported the honours only (${rows.length} rows).`);
 }
 
@@ -141,3 +141,17 @@ main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
+
+/** Everyone in a season's "players" list who didn't place gets a 'played' row (Ethan, 26 Nov 2026),
+ *  so Admin -> History lists them too (see scripts/add-history-players.ts). */
+function playedRows(placed: Array<{ season: number; person_name: string }>, leagues: Record<number, { league_id: string | null; league_name: string }> = {}) {
+  const out: Array<{ season: number; league_id: string | null; league_name: string; person_name: string; place: string }> = [];
+  for (const season of [2025, 2026]) {
+    const h = history[String(season)];
+    for (const person of (h?.players ?? []) as string[]) {
+      if (placed.some((r) => r.season === season && r.person_name === person)) continue;
+      out.push({ season, league_id: leagues[season]?.league_id ?? null, league_name: leagues[season]?.league_name ?? h.leagueName ?? `${season} league`, person_name: person, place: "played" });
+    }
+  }
+  return out;
+}

@@ -1,7 +1,6 @@
 // POST   /api/teams/picture  (form data: leagueId, file)  -> sets your team's picture
 // PUT    /api/teams/picture  { leagueId, icon: { kind, colour, number? } } -> a default icon instead
 //        (boot / posts / ball / jersey 1-23, in a colour: lib/teams/icons.ts)
-// DELETE /api/teams/picture?leagueId=...                  -> removes it (back to initials)
 // The browser crops and shrinks the photo first (a 256 x 256 JPEG); this checks it and stores it
 // in the public "team-pictures" bucket. Only your own team, in a league you're in.
 import { NextResponse } from "next/server";
@@ -78,23 +77,6 @@ export async function PUT(req: Request) {
     if (error) throw error;
     await removeOld(team?.picture_url).catch((e) => console.error("[teams/picture] old picture not removed:", e));
     return NextResponse.json({ ok: true, pictureUrl: value });
-  } catch (e: unknown) {
-    const { msg, status } = toHttpError(e);
-    return NextResponse.json({ ok: false, error: msg }, { status });
-  }
-}
-
-export async function DELETE(req: Request) {
-  try {
-    const leagueId = String(new URL(req.url).searchParams.get("leagueId") ?? "").trim();
-    if (!leagueId) return NextResponse.json({ ok: false, error: "Missing leagueId" }, { status: 400 });
-    const { teamId } = await requireLeagueTeam(leagueId);
-    const { data: team, error: tErr } = await supabaseAdmin.from("teams").select("picture_url").eq("id", teamId).maybeSingle();
-    if (tErr) throw tErr;
-    const { error } = await supabaseAdmin.from("teams").update({ picture_url: null }).eq("id", teamId);
-    if (error) throw error;
-    await removeOld(team?.picture_url).catch((e) => console.error("[teams/picture] old picture not removed:", e));
-    return NextResponse.json({ ok: true });
   } catch (e: unknown) {
     const { msg, status } = toHttpError(e);
     return NextResponse.json({ ok: false, error: msg }, { status });

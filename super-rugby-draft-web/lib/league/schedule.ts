@@ -127,6 +127,70 @@ export function mixHomeAway(rounds: RotationRound[], rng: () => number): Rotatio
   }));
 }
 
+const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+/** How bad a run of home (or away) games in a row is: 1-2 fine, 3 now and then, 4+ never. */
+const runCost = (len: number) => (len <= 2 ? 0 : len === 3 ? 4 : 60 * (len - 2));
+
+/**
+ * Who's at home in each game (Ethan, 26 Nov 2026: "very rarely more than 2 home or away matches
+ * in a row; 3 is fine occasionally"). Goes through the weeks in order and gives home to
+ * whichever side keeps both teams' runs of home / away games short, keeps everyone's home and
+ * away games level, and swaps venues when two teams meet again. Tries many random tie-breaks
+ * and keeps the best season. Byes don't count either way.
+ */
+export function balanceHomeAway(games: RegularGame[], rng: () => number, tries = 250): RegularGame[] {
+  const weeks = [...new Set(games.map((g) => g.week))].sort((a, b) => a - b);
+  const byWeek = new Map<number, RegularGame[]>(weeks.map((w) => [w, games.filter((g) => g.week === w)]));
+  let best: RegularGame[] = games;
+  let bestScore = Infinity;
+  for (let t = 0; t < tries; t++) {
+    const run = new Map<string, number>(); // + home games in a row, - away games in a row
+    const homes = new Map<string, number>();
+    const played = new Map<string, number>();
+    const lastHome = new Map<string, string>(); // pair -> who was at home last time
+    let score = 0;
+    const out: RegularGame[] = [];
+    const next = (id: string, home: boolean) => {
+      const r = run.get(id) ?? 0;
+      return home ? (r > 0 ? r + 1 : 1) : r < 0 ? r - 1 : -1;
+    };
+    const lean = (id: string, home: boolean) => {
+      // home minus away after this game (only matters once it's more than 1 either way)
+      const h = (homes.get(id) ?? 0) + (home ? 1 : 0);
+      const p = (played.get(id) ?? 0) + 1;
+      return Math.max(0, Math.abs(2 * h - p) - 1);
+    };
+    for (const w of weeks) {
+      const list = [...(byWeek.get(w) ?? [])].sort(() => rng() - 0.5);
+      for (const g of list) {
+        if (!g.awayTeamId) {
+          out.push(g);
+          continue;
+        }
+        const x = g.homeTeamId, y = g.awayTeamId;
+        const cost = (h: string, a: string) =>
+          runCost(Math.abs(next(h, true))) + runCost(Math.abs(next(a, false))) + 3 * (lean(h, true) + lean(a, false)) + (lastHome.get(pairKey(h, a)) === h ? 2 : 0) + rng() * 0.5;
+        const [h, a] = cost(x, y) <= cost(y, x) ? [x, y] : [y, x];
+        score += runCost(Math.abs(next(h, true))) + runCost(Math.abs(next(a, false))) + (lastHome.get(pairKey(h, a)) === h ? 2 : 0);
+        run.set(h, next(h, true));
+        run.set(a, next(a, false));
+        homes.set(h, (homes.get(h) ?? 0) + 1);
+        for (const id of [h, a]) played.set(id, (played.get(id) ?? 0) + 1);
+        lastHome.set(pairKey(h, a), h);
+        out.push({ week: g.week, homeTeamId: h, awayTeamId: a });
+      }
+    }
+    // everyone's home and away games level at the end (within 1)
+    for (const [id, p] of played) score += 10 * Math.max(0, Math.abs(2 * (homes.get(id) ?? 0) - p) - 1);
+    if (score < bestScore) {
+      bestScore = score;
+      best = out;
+      if (score === 0) break;
+    }
+  }
+  return best;
+}
+
 export function buildRoundRobin(teamIds: string[], weeks: number[], rng?: () => number): { fixed: RegularGame[]; toDecide: WeeksToDecide | null } {
   const rounds = rng ? mixHomeAway(rotationRounds(teamIds), rng) : rotationRounds(teamIds);
   if (!rounds.length) return { fixed: [], toDecide: null };
@@ -141,6 +205,12 @@ export function buildRoundRobin(teamIds: string[], weeks: number[], rng?: () => 
   });
 
   const rest = weeks.slice(fullWeeks);
+  // short runs of home / away games (the fixed weeks; random draws only, so tests stay fixed)
+  if (rng) {
+    const balanced = balanceHomeAway(fixed, rng);
+    fixed.length = 0;
+    fixed.push(...balanced);
+  }
   if (!rest.length) return { fixed, toDecide: null };
   const flip = Math.floor(fullWeeks / rounds.length) % 2 === 1;
   const flipped = rounds.map((r) => ({

@@ -1,7 +1,7 @@
 "use client";
 // components/WeekGamesCard.tsx
 // Dashboard: the round's Super Rugby games and where each one's points stand (Ethan, 20 Nov
-// 2026): Not started / Live / Complete / Finalised (lib/stats/gameStatus.ts), then whether the
+// 2026): Upcoming / Live / Complete / Finalised (lib/stats/gameStatus.ts), then whether the
 // round's wins and losses have gone into the league table. Data: /api/fixtures/week-status.
 import React, { useEffect, useState } from "react";
 import { GAME_STATUS_LABEL, type GameStatus } from "@/lib/stats/gameStatus";
