@@ -1,7 +1,7 @@
 "use client";
 // components/draftPrep/PlayerLine.tsx
 // One player in a draft prep list (Draft Strategy, Mock Draft): a number on the left, the jersey,
-// name, team and positions, a tag (e.g. "Do not draft", "Plan"), and buttons on the right.
+// name, team and positions, a tag (e.g. "Early target"), and buttons on the right.
 import React from "react";
 import { jerseySrcForTeam } from "@/components/playerCard/cardData";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
@@ -70,7 +70,7 @@ export function PlayerLine({
         <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {p.firstName} {p.lastName}
         </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11, fontWeight: 500, color: muted, minWidth: 0 }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11, fontWeight: 500, color: muted, minWidth: 0, overflow: "hidden" }}>
           <span style={{ whiteSpace: "nowrap" }}>{team} · {positionsLabel(p)}</span>
           {tag ? (
             <span style={{ padding: "1px 6px", borderRadius: 999, background: tones[tagTone].bg, color: tones[tagTone].fg, fontWeight: 700, fontSize: 10, whiteSpace: "nowrap" }}>{tag}</span>

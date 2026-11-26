@@ -124,7 +124,7 @@ export function MockSetup({
 
         <div style={{ ...innerBox, padding: 10, display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: muted }}>
-            {hasStrategy ? "Your draft strategy is used: your plan for each round, targets, players to avoid and your rankings." : "No draft strategy yet. Set one up to practise it here."}
+            {hasStrategy ? "Your draft strategy is used when you auto-pick: your targets, then your Overall Rankings." : onEditStrategy ? "No draft strategy yet. Set one up to practise it here." : "Draft strategies are set up in a league's Draft Room."}
           </div>
           {onEditStrategy ? (
             <button onClick={onEditStrategy} style={{ background: "transparent", border: "none", color: teal, fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>

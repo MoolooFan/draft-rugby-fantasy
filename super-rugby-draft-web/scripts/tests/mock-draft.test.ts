@@ -5,7 +5,7 @@
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
 import { loadSeasonPlayers, type SitePlayer } from "../../lib/players/db";
-import { cleanStrategy, isEmptyStrategy, myRanks, strategyChoice, targetProgress, type DraftStrategy } from "../../lib/draft/strategy";
+import { cleanStrategy, draftStage, EMPTY_STRATEGY, isEmptyStrategy, myRanks, positionRanks, strategyChoice, targetGroupOf, type DraftStrategy } from "../../lib/draft/strategy";
 import { cpuPick, draftGrade, draftValues, makePersonality, starterDemand, teamStrength } from "../../lib/draft/cpu";
 import { rosterSize, squadFits, squadStartingGaps, STANDARD_SQUAD, TEN_SQUAD, type SquadFormat } from "../../lib/league/squad";
 import { teamForPick } from "../../lib/draft/rules";
@@ -27,29 +27,44 @@ type P = { id: string; posAbbrev: string; secondaryPosAbbrev?: string; draftRank
 const pl = (id: string, pos: string, rank: number, pos2?: string): P => ({ id, posAbbrev: pos, secondaryPosAbbrev: pos2, draftRank: rank });
 const pool: P[] = [pl("ob1", "OB", 1), pl("lf1", "LF", 2), pl("lk1", "LK", 3), pl("ho1", "HO", 4), pl("lf2", "LF", 5), pl("fh1", "FH", 6, "CE"), pl("lk2", "LK", 7)];
 
-const junk = cleanStrategy({ rounds: ["LF", "XX", "", "BK", "", ""], targets: { LF: 4, HO: 99, ZZ: 3, PR: -2 }, avoid: ["a", "a", "", 5], ranking: "nope" });
-check("strategy: junk is cleaned", JSON.stringify(junk) === JSON.stringify({ rounds: ["LF", "", "", "BK"], targets: { HO: 15, LF: 4 }, avoid: ["a", "5"], ranking: [] }), JSON.stringify(junk));
-check("strategy: empty", isEmptyStrategy(cleanStrategy({})) && !isEmptyStrategy(junk));
+const junk = cleanStrategy({
+  rounds: ["LF"], avoid: ["a"], // the old layout: dropped
+  targets: { early: ["a", "a", "", 5], mid: ["b", "a"], late: "nope", LF: 4 },
+  positions: { LK: ["a", "b"], ZZ: ["c"], PR: [] },
+  ranking: "nope",
+});
+check(
+  "strategy: junk is cleaned (a player in one target group only, the first)",
+  JSON.stringify(junk) === JSON.stringify({ ranking: [], targets: { early: ["a", "5"], mid: ["b"], late: [] }, positions: { LK: ["a", "b"] } }),
+  JSON.stringify(junk)
+);
+check("strategy: empty", isEmptyStrategy(cleanStrategy({})) && isEmptyStrategy(cleanStrategy({ rounds: ["LF"], targets: { LF: 3 } })) && !isEmptyStrategy(junk));
+check("strategy: positional rankings alone aren't empty", !isEmptyStrategy(cleanStrategy({ positions: { HO: ["x"] } })));
 
 // the page saves the whole order; a player added to the pool later slots in at his Draft Rank
 // spot (here 3rd: Draft Rank has him after ob1 and lf1)
-const mine: DraftStrategy = { rounds: [], targets: {}, avoid: [], ranking: ["lk2", "ho1", "ob1", "lf1", "lk1", "lf2", "fh1"] };
+const mine: DraftStrategy = { ...EMPTY_STRATEGY, ranking: ["lk2", "ho1", "ob1", "lf1", "lk1", "lf2", "fh1"] };
 const r = myRanks([...pool, pl("new", "CE", 2)], mine);
 check("own rankings: their order, a newcomer slots in at his Draft Rank", r.get("lk2") === 1 && r.get("ho1") === 2 && r.get("new") === 3 && r.get("fh1") === 8, JSON.stringify([...r]));
 check("own rankings: none = Draft Rank", myRanks(pool, null).get("ob1") === 1 && myRanks(pool, null).get("lk2") === 7);
 
-const choose = (s: Partial<DraftStrategy>, round = 1, roster: P[] = [], available = pool) =>
-  strategyChoice({ available, roster, round, strategy: { rounds: [], targets: {}, avoid: [], ranking: [], ...s } })?.id;
+const T = (early: string[] = [], mid: string[] = [], late: string[] = []) => ({ early, mid, late });
+const choose = (s: Partial<DraftStrategy>, round = 1, available = pool, totalRounds = 9) =>
+  strategyChoice({ available, round, totalRounds, strategy: { ...EMPTY_STRATEGY, ...s } })?.id;
+check("thirds: 20 rounds = 1-7 early, 8-14 mid, 15-20 late", [1, 7, 8, 14, 15, 20].map((n) => draftStage(n, 20)).join("") === "001122");
 check("strategy pick: nothing set = best Draft Rank", choose({}) === "ob1");
-check("strategy pick: round plan (round 2 = Lock)", choose({ rounds: ["", "LK"] }, 2) === "lk1");
-check("strategy pick: any forward", choose({ rounds: ["FW"] }) === "lf1");
-check("strategy pick: second position counts (Centre)", choose({ rounds: ["CE"] }) === "fh1");
-check("strategy pick: do-not-draft is skipped", choose({ avoid: ["ob1", "lf1"] }) === "lk1");
-check("strategy pick: only do-not-draft left -> still picks", choose({ avoid: ["ob1"] }, 1, [], [pool[0]]) === "ob1");
 check("strategy pick: own rankings", choose({ ranking: ["ho1", "ob1", "lf1", "lk1", "lf2", "fh1", "lk2"] }) === "ho1");
-check("strategy pick: target reached -> next position", choose({ targets: { OB: 1 } }, 3, [pl("x", "OB", 50)]) === "lf1");
-check("strategy pick: plan beats a full target only if nothing else fits the plan", choose({ rounds: ["LF"], targets: { LF: 1 } }, 1, [pl("x", "LF", 50)]) === "lf1");
-check("targets: progress by main position", JSON.stringify(targetProgress([pl("a", "LF", 1), pl("b", "LF", 2, "LK")], { ...mine, targets: { LF: 3 } }).find((t) => t.pos === "LF")) === '{"pos":"LF","have":2,"want":3}');
+check("strategy pick: best early target, in their order", choose({ targets: T(["lk2", "ho1"]) }) === "lk2");
+check("strategy pick: early target already gone -> the next one", choose({ targets: T(["zz", "ho1"]) }) === "ho1");
+check("strategy pick: early rounds don't take mid / late targets", choose({ targets: T([], ["lk2"], ["fh1"]) }, 3) === "ob1");
+check("strategy pick: mid rounds take a leftover early target first", choose({ targets: T(["lf2"], ["lk2"]) }, 4) === "lf2");
+check("strategy pick: mid rounds take mid targets", choose({ targets: T([], ["lk2"], ["fh1"]) }, 4) === "lk2");
+check("strategy pick: late rounds take late targets", choose({ targets: T([], [], ["fh1"]) }, 7) === "fh1");
+check("strategy pick: no targets left -> own rankings", choose({ targets: T(["zz"]), ranking: ["lk1", "ob1", "lf1", "ho1", "lf2", "fh1", "lk2"] }) === "lk1");
+check("strategy pick: positional rankings don't change auto-pick", choose({ positions: { LK: ["lk2"] } }) === "ob1");
+const lk = positionRanks(pool.filter((p) => p.posAbbrev === "LK"), { ...mine, positions: { LK: ["lk1"] } }, "LK");
+check("positional rankings: their list first, then the rest by their overall order", lk.get("lk1") === 1 && lk.get("lk2") === 2, JSON.stringify([...lk]));
+check("targets: one group per player", targetGroupOf({ ...EMPTY_STRATEGY, targets: T(["a"], ["b"]) }, "b") === "mid");
 
 // --- computer teams
 check("demand: Standard = its starting spots", JSON.stringify(starterDemand(STANDARD_SQUAD)) === '{"PR":2,"HO":1,"LK":2,"LF":3,"HB":1,"FH":1,"CE":2,"OB":3}');

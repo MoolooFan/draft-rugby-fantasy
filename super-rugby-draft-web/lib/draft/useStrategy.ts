@@ -1,13 +1,12 @@
 // lib/draft/useStrategy.ts
-// A page's copy of the draft strategy (lib/draft/strategy.ts): your default, or a league's own.
-// Changes show straight away and are saved to the server a moment later. A league without its
-// own strategy shows your default; the first change there gives the league its own copy.
+// A page's copy of your draft strategy for a league (lib/draft/strategy.ts). Changes show
+// straight away and are saved to the server a moment later. No league = no strategy.
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cleanStrategy, EMPTY_STRATEGY, type DraftStrategy } from "@/lib/draft/strategy";
 
-export type StrategySource = "league" | "default" | "none";
+export type StrategySource = "league" | "none";
 
 export function useDraftStrategy(leagueId: string | null | undefined) {
   const [strategy, setStrategy] = useState<DraftStrategy>(EMPTY_STRATEGY);
@@ -43,7 +42,7 @@ export function useDraftStrategy(leagueId: string | null | undefined) {
     timer.current = null;
     const s = pending.current;
     pending.current = null;
-    if (!s) return;
+    if (!s || !lid) return;
     setSaving(true);
     try {
       const r = await fetch("/api/draft/strategy", {
@@ -53,7 +52,7 @@ export function useDraftStrategy(leagueId: string | null | undefined) {
       });
       const j = await r.json();
       if (!j?.ok) throw new Error(j?.error || "Couldn't save");
-      setSource(lid ? "league" : "default");
+      setSource("league");
       setError(null);
     } catch (e) {
       setError(String((e as Error)?.message ?? e));
@@ -78,17 +77,5 @@ export function useDraftStrategy(leagueId: string | null | undefined) {
     [flush]
   );
 
-  /** A league goes back to using your default strategy. */
-  const revertToDefault = useCallback(async () => {
-    if (!lid) return;
-    pending.current = null;
-    const r = await fetch("/api/draft/strategy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leagueId: lid, useDefault: true }) });
-    const j = await r.json().catch(() => null);
-    if (j?.ok) {
-      setStrategy(cleanStrategy(j.strategy));
-      setSource(j.source ?? "none");
-    }
-  }, [lid]);
-
-  return { strategy, update, source, loaded, saving, error, revertToDefault };
+  return { strategy, update, source, loaded, saving, error };
 }

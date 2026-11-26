@@ -119,7 +119,7 @@ export function autoChoice<T extends CpuPlayer>(m: MockDraft, players: T[], byId
   const taken = new Set(m.picks);
   const roster = mockRosters(m)[team].map((id) => byId.get(id)).filter((p): p is T => !!p);
   if (team === m.you) {
-    return strategyChoice({ available: fittingAvailable(m, players, team, byId), roster, round: currentRound(m), strategy });
+    return strategyChoice({ available: fittingAvailable(m, players, team, byId), round: currentRound(m), totalRounds: rosterSize(m.format), strategy });
   }
   return cpuPick({ available: players.filter((p) => !taken.has(p.id)), roster, format: m.format, values, personality: m.personalities[team], rng });
 }

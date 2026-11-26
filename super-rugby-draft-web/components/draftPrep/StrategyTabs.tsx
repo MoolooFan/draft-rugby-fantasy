@@ -1,16 +1,16 @@
 "use client";
 // components/draftPrep/StrategyTabs.tsx
-// The Draft Strategy panel's four tabs (lib/draft/strategy.ts): Round Plan (a position to aim
-// for each round), Targets (how many of each position by the end), Do Not Draft, and My
-// Rankings (their own order of the whole pool).
+// The Draft Strategy panel's three tabs (lib/draft/strategy.ts; Ethan, 25 Nov 2026):
+//   Overall Rankings     their own order of the whole player pool
+//   Targets              Early / Mid / Late Rounds groups, players ranked within each
+//   Positional Rankings  a group per position, players ranked within each
+// Groups start empty: "Add Players" lists everyone who can go in (with an Add button each).
 import React, { useMemo, useState } from "react";
-import { PLAN_OPTIONS, STRATEGY_POSITIONS, myRanks, sortByMyRank, type DraftStrategy, type PlanPos, type StrategyPos } from "@/lib/draft/strategy";
-import { starterDemand } from "@/lib/draft/cpu";
-import { rosterSize, type SquadFormat } from "@/lib/league/squad";
+import { STRATEGY_POSITIONS, TARGET_GROUPS, myRanks, sortByMyRank, targetGroups, targetShort, type DraftStrategy, type StrategyPos, type TargetGroup } from "@/lib/draft/strategy";
 import { POS_NAME } from "@/lib/draft/constants";
 import { canPlayPosition } from "@/lib/players/positions";
-import { innerBox, ink, line, muted, secondaryButton } from "@/lib/ui/theme";
-import { Chip, Stepper } from "./PrepPage";
+import { innerBox, ink, line, muted, primaryButton, secondaryButton, teal } from "@/lib/ui/theme";
+import { Chip } from "./PrepPage";
 import { IconButton, PlayerLine, type LinePlayer } from "./PlayerLine";
 
 type Update = (change: (s: DraftStrategy) => DraftStrategy) => void;
@@ -18,87 +18,8 @@ type Update = (change: (s: DraftStrategy) => DraftStrategy) => void;
 const hint: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: muted, lineHeight: 1.4 };
 const input: React.CSSProperties = { height: 36, width: "100%", borderRadius: 10, border: `1px solid ${line}`, padding: "0 10px", fontSize: 14, color: ink, background: "white", boxSizing: "border-box" };
 const smallButton: React.CSSProperties = { ...secondaryButton, height: 32, width: "auto", padding: "0 14px", fontSize: 12 };
+const PAGE = 50;
 
-// ---------------------------------------------------------------------------
-export function RoundPlanTab({ strategy, update, format }: { strategy: DraftStrategy; update: Update; format: SquadFormat }) {
-  const rounds = rosterSize(format);
-  const planned = strategy.rounds.slice(0, rounds).filter(Boolean).length;
-  const setRound = (i: number, v: PlanPos) =>
-    update((s) => {
-      const next = [...s.rounds];
-      while (next.length <= i) next.push("");
-      next[i] = v;
-      return { ...s, rounds: next };
-    });
-  return (
-    <div style={{ display: "grid", gap: 8 }}>
-      <div style={hint}>
-        Pick the position you want to aim for in each round. In the draft room, players who suit this round&apos;s plan are marked, and if
-        your pick clock runs out, auto-pick takes the best of them (after your draft watchlist).
-      </div>
-      <div style={{ ...innerBox, padding: 0 }}>
-        {Array.from({ length: rounds }, (_, i) => (
-          <label key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderBottom: i < rounds - 1 ? `1px solid ${line}` : "none" }}>
-            <span style={{ width: 64, fontSize: 13, fontWeight: 700 }}>Round {i + 1}</span>
-            <select
-              aria-label={`Round ${i + 1} plan`}
-              value={strategy.rounds[i] ?? ""}
-              onChange={(e) => setRound(i, e.target.value as PlanPos)}
-              style={{ ...input, height: 32, flex: 1, fontWeight: strategy.rounds[i] ? 700 : 500 }}
-            >
-              {PLAN_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </label>
-        ))}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <span style={hint}>{planned ? `${planned} of ${rounds} rounds planned` : "No rounds planned: best available every round"}</span>
-        {planned ? <button style={smallButton} onClick={() => update((s) => ({ ...s, rounds: [] }))}>Clear Plan</button> : null}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-export function TargetsTab({ strategy, update, format }: { strategy: DraftStrategy; update: Update; format: SquadFormat }) {
-  const demand = starterDemand(format);
-  const size = rosterSize(format);
-  const total = STRATEGY_POSITIONS.reduce((a, p) => a + (strategy.targets[p] ?? 0), 0);
-  const set = (p: StrategyPos, n: number) => update((s) => ({ ...s, targets: { ...s.targets, [p]: n } }));
-  return (
-    <div style={{ display: "grid", gap: 8 }}>
-      <div style={hint}>
-        How many of each position you want by the end of the draft (counting each player&apos;s main position). The draft room shows how
-        you&apos;re tracking, and auto-pick moves on from a position once you have enough.
-      </div>
-      <div style={{ ...innerBox, padding: 0 }}>
-        {STRATEGY_POSITIONS.map((p, i) => {
-          const starts = demand[p];
-          const startsText = Number.isInteger(starts) ? String(starts) : `about ${Math.round(starts * 10) / 10}`;
-          return (
-            <div key={p} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderBottom: i < STRATEGY_POSITIONS.length - 1 ? `1px solid ${line}` : "none" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>{POS_NAME[p]}s</div>
-                <div style={{ fontSize: 11, fontWeight: 500, color: muted }}>Starting spots: {startsText}</div>
-              </div>
-              <Stepper value={strategy.targets[p] ?? 0} min={0} max={15} onChange={(n) => set(p, n)} label={`${POS_NAME[p]}s`} />
-            </div>
-          );
-        })}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <span style={{ ...hint, color: total > size ? "#dc2626" : muted }}>
-          {total ? `${total} of ${size} roster spots planned${total > size ? " (more than your roster holds)" : ""}` : "No targets set (0 = no limit)"}
-        </span>
-        {total ? <button style={smallButton} onClick={() => update((s) => ({ ...s, targets: {} }))}>Clear Targets</button> : null}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 function searchPlayers<T extends LinePlayer>(players: T[], q: string): T[] {
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return players;
@@ -108,72 +29,72 @@ function searchPlayers<T extends LinePlayer>(players: T[], q: string): T[] {
   });
 }
 
-export function AvoidTab({ strategy, update, players, onOpen }: { strategy: DraftStrategy; update: Update; players: LinePlayer[]; onOpen: (p: LinePlayer) => void }) {
-  const [q, setQ] = useState("");
-  const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
-  const avoid = new Set(strategy.avoid);
-  const matches = q.trim() ? searchPlayers(players.filter((p) => !avoid.has(p.id)), q).slice(0, 8) : [];
-  const toggle = (id: string) => update((s) => ({ ...s, avoid: s.avoid.includes(id) ? s.avoid.filter((x) => x !== id) : [...s.avoid, id] }));
+/** Move an id to a spot (0-based) in a list. */
+function moved(ids: string[], id: string, to: number): string[] {
+  const out = ids.filter((x) => x !== id);
+  out.splice(Math.max(0, Math.min(out.length, to)), 0, id);
+  return out;
+}
+
+/** A rank number: tap it to type a new rank. */
+function RankNumber({ p, rank, onMove }: { p: LinePlayer; rank: number; onMove: (to: number) => void }) {
+  const [text, setText] = useState<string | null>(null);
+  if (text != null) {
+    return (
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const n = Math.round(Number(text));
+          if (n >= 1) onMove(n - 1);
+          setText(null);
+        }}
+      >
+        <input
+          autoFocus
+          inputMode="numeric"
+          aria-label={`New rank for ${p.firstName} ${p.lastName}`}
+          value={text}
+          onChange={(e) => setText(e.target.value.replace(/\D/g, ""))}
+          onBlur={() => setText(null)}
+          style={{ width: 34, height: 26, borderRadius: 6, border: `1px solid ${line}`, textAlign: "center", fontSize: 13, fontWeight: 700 }}
+        />
+      </form>
+    );
+  }
   return (
-    <div style={{ display: "grid", gap: 8 }}>
-      <div style={hint}>Players you never want. They&apos;re faded in the draft room, and auto-pick won&apos;t take them (even from your watchlist).</div>
-      <input style={input} placeholder="Search a player to add" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search a player to add" />
-      {matches.length ? (
-        <div style={{ ...innerBox, padding: 0 }}>
-          {matches.map((p) => (
-            <PlayerLine key={p.id} p={p} onOpen={() => onOpen(p)} right={<button style={smallButton} onClick={() => { toggle(p.id); setQ(""); }}>Add</button>} />
-          ))}
-        </div>
-      ) : null}
-      <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}>Do not draft ({strategy.avoid.length})</div>
-      {strategy.avoid.length ? (
-        <div style={{ ...innerBox, padding: 0 }}>
-          {strategy.avoid.map((id) => {
-            const p = byId.get(id);
-            if (!p) return null;
-            return <PlayerLine key={id} p={p} onOpen={() => onOpen(p)} right={<IconButton label={`Remove ${p.firstName} ${p.lastName}`} onClick={() => toggle(id)}>✕</IconButton>} />;
-          })}
-        </div>
-      ) : (
-        <div style={hint}>Nobody yet.</div>
-      )}
-    </div>
+    <button
+      aria-label={`Rank ${rank}: move ${p.firstName} ${p.lastName}`}
+      onClick={() => setText(String(rank))}
+      style={{ width: 30, background: "transparent", border: "none", padding: 0, fontSize: 15, fontWeight: 700, color: ink, cursor: "pointer", textDecoration: "underline dotted", textUnderlineOffset: 3 }}
+    >
+      {rank}
+    </button>
   );
 }
 
 // ---------------------------------------------------------------------------
-const PAGE = 50;
-
-export function RankingsTab({ strategy, update, players, onOpen }: { strategy: DraftStrategy; update: Update; players: LinePlayer[]; onOpen: (p: LinePlayer) => void }) {
+export function OverallRankingsTab({ strategy, update, players, onOpen }: { strategy: DraftStrategy; update: Update; players: LinePlayer[]; onOpen: (p: LinePlayer) => void }) {
   const [q, setQ] = useState("");
   const [pos, setPos] = useState<StrategyPos | "">("");
   const [shown, setShown] = useState(PAGE);
-  const [moveTo, setMoveTo] = useState<{ id: string; text: string } | null>(null);
   const ranks = useMemo(() => myRanks(players, strategy), [players, strategy]);
   const order = useMemo(() => sortByMyRank(players, strategy, ranks), [players, strategy, ranks]);
   const visible = useMemo(() => searchPlayers(order, q).filter((p) => !pos || canPlayPosition(p, pos)), [order, q, pos]);
-  const avoid = new Set(strategy.avoid);
+  const groups = useMemo(() => targetGroups(strategy), [strategy]);
   const custom = strategy.ranking.length > 0;
 
-  /** Move a player to a spot in the whole order (0-based) and save the whole order. */
-  const moveToIndex = (id: string, to: number) => {
-    const ids = order.map((p) => p.id).filter((x) => x !== id);
-    ids.splice(Math.max(0, Math.min(ids.length, to)), 0, id);
-    update((s) => ({ ...s, ranking: ids }));
-  };
+  const moveToIndex = (id: string, to: number) => update((s) => ({ ...s, ranking: moved(order.map((p) => p.id), id, to) }));
   // ▲ / ▼ swap with the next player in the list as shown (so with a position picked, locks swap with locks)
   const step = (i: number, d: -1 | 1) => {
     const other = visible[i + d];
-    if (!other) return;
-    const target = (ranks.get(other.id) ?? 1) - 1;
-    moveToIndex(visible[i].id, target);
+    if (other) moveToIndex(visible[i].id, (ranks.get(other.id) ?? 1) - 1);
   };
 
   return (
-    <div style={{ display: "grid", gap: 8 }}>
+    <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(0, 1fr)" }}>
       <div style={hint}>
-        Your own order of the player pool. Mock drafts and auto-pick use it instead of the site&apos;s Draft Rank, and the draft room can
-        sort by it. Use ▲ ▼ or tap a number to move a player to a new rank.
+        Your own order of every player: your custom draft ranking. The draft room can sort by it (My Rank), and auto-pick uses it once
+        your targets are gone. Use ▲ ▼ or tap a number to move a player to a new rank.
       </div>
       <input style={input} placeholder="Search players" value={q} onChange={(e) => { setQ(e.target.value); setShown(PAGE); }} aria-label="Search players" />
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
@@ -188,45 +109,14 @@ export function RankingsTab({ strategy, update, players, onOpen }: { strategy: D
       </div>
       <div style={{ ...innerBox, padding: 0 }}>
         {visible.slice(0, shown).map((p, i) => {
-          const mine = ranks.get(p.id) ?? 0;
-          const editing = moveTo?.id === p.id;
+          const g = groups.get(p.id);
           return (
             <PlayerLine
               key={p.id}
               p={p}
-              number={
-                editing ? (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const n = Math.round(Number(moveTo!.text));
-                      if (n >= 1) moveToIndex(p.id, n - 1);
-                      setMoveTo(null);
-                    }}
-                  >
-                    <input
-                      autoFocus
-                      inputMode="numeric"
-                      aria-label={`New rank for ${p.firstName} ${p.lastName}`}
-                      value={moveTo!.text}
-                      onChange={(e) => setMoveTo({ id: p.id, text: e.target.value.replace(/\D/g, "") })}
-                      onBlur={() => setMoveTo(null)}
-                      style={{ width: 34, height: 26, borderRadius: 6, border: `1px solid ${line}`, textAlign: "center", fontSize: 13, fontWeight: 700 }}
-                    />
-                  </form>
-                ) : (
-                  <button
-                    aria-label={`Rank ${mine}: move ${p.firstName} ${p.lastName}`}
-                    onClick={() => setMoveTo({ id: p.id, text: String(mine) })}
-                    style={{ width: 30, background: "transparent", border: "none", padding: 0, fontSize: 15, fontWeight: 700, color: ink, cursor: "pointer", textDecoration: "underline dotted", textUnderlineOffset: 3 }}
-                  >
-                    {mine}
-                  </button>
-                )
-              }
-              tag={avoid.has(p.id) ? "Do not draft" : custom && p.draftRank && p.draftRank !== mine ? `Draft Rank ${p.draftRank}` : undefined}
-              tagTone={avoid.has(p.id) ? "red" : "grey"}
-              dim={avoid.has(p.id)}
+              number={<RankNumber p={p} rank={ranks.get(p.id) ?? 0} onMove={(to) => moveToIndex(p.id, to)} />}
+              tag={g ? `${targetShort(g)} target` : custom && p.draftRank && p.draftRank !== ranks.get(p.id) ? `Draft Rank ${p.draftRank}` : undefined}
+              tagTone={g ? "teal" : "grey"}
               onOpen={() => onOpen(p)}
               right={
                 <>
@@ -242,6 +132,210 @@ export function RankingsTab({ strategy, update, players, onOpen }: { strategy: D
       {visible.length > shown ? (
         <button style={secondaryButton} onClick={() => setShown((n) => n + PAGE)}>Show More ({visible.length - shown} left)</button>
       ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+/**
+ * One ranked group (a target group or a position): its players in order (▲ ▼, tap the number,
+ * ✕ to take out), and "Add Players", which lists everyone who can go in with an Add button.
+ */
+function RankedGroup({
+  title,
+  ids,
+  setIds,
+  byId,
+  eligible,
+  tagFor,
+  emptyText,
+  onOpen,
+}: {
+  title: string;
+  ids: string[];
+  setIds: (ids: string[]) => void;
+  byId: Map<string, LinePlayer>;
+  /** everyone who can be added (best Draft Rank first) */
+  eligible: LinePlayer[];
+  /** a tag in the Add list (e.g. "Mid target": adding him moves him here) */
+  tagFor?: (p: LinePlayer) => string | undefined;
+  emptyText: string;
+  onOpen: (p: LinePlayer) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [q, setQ] = useState("");
+  const [shown, setShown] = useState(PAGE);
+  const inGroup = new Set(ids);
+  const list = ids.map((id) => byId.get(id)).filter((p): p is LinePlayer => !!p);
+  const matches = useMemo(() => searchPlayers(eligible, q), [eligible, q]);
+
+  if (adding) {
+    return (
+      <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(0, 1fr)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ flex: 1, fontSize: 13, fontWeight: 700 }}>Add to {title}</div>
+          <button style={{ ...primaryButton, height: 32, width: "auto", padding: "0 16px", fontSize: 12 }} onClick={() => { setAdding(false); setQ(""); setShown(PAGE); }}>
+            Done ({ids.length})
+          </button>
+        </div>
+        <input style={input} placeholder="Search players" value={q} onChange={(e) => { setQ(e.target.value); setShown(PAGE); }} aria-label="Search players" />
+        <div style={{ ...innerBox, padding: 0 }}>
+          {matches.slice(0, shown).map((p) => {
+            const added = inGroup.has(p.id);
+            return (
+              <PlayerLine
+                key={p.id}
+                p={p}
+                number={p.draftRank && p.draftRank < 9999 ? p.draftRank : "—"}
+                numberLabel="Draft Rank"
+                tag={added ? undefined : tagFor?.(p)}
+                tagTone="grey"
+                highlight={added}
+                onOpen={() => onOpen(p)}
+                right={
+                  added ? (
+                    <button
+                      aria-label={`Take ${p.firstName} ${p.lastName} out of ${title}`}
+                      style={{ ...smallButton, width: 72, padding: 0, color: teal, borderColor: teal }}
+                      onClick={() => setIds(ids.filter((x) => x !== p.id))}
+                    >
+                      Added ✓
+                    </button>
+                  ) : (
+                    <button
+                      aria-label={`Add ${p.firstName} ${p.lastName} to ${title}`}
+                      style={{ ...primaryButton, height: 32, width: 72, padding: 0, fontSize: 12 }}
+                      onClick={() => setIds([...ids, p.id])}
+                    >
+                      Add
+                    </button>
+                  )
+                }
+              />
+            );
+          })}
+          {!matches.length ? <div style={{ ...hint, padding: 10 }}>No players match.</div> : null}
+        </div>
+        {matches.length > shown ? (
+          <button style={secondaryButton} onClick={() => setShown((n) => n + PAGE)}>Show More ({matches.length - shown} left)</button>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(0, 1fr)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ flex: 1, fontSize: 13, fontWeight: 700 }}>
+          {title} ({list.length})
+        </div>
+        <button style={{ ...primaryButton, height: 32, width: "auto", padding: "0 14px", fontSize: 12 }} onClick={() => setAdding(true)}>
+          + Add Players
+        </button>
+      </div>
+      {list.length ? (
+        <div style={{ ...innerBox, padding: 0 }}>
+          {list.map((p, i) => (
+            <PlayerLine
+              key={p.id}
+              p={p}
+              number={<RankNumber p={p} rank={i + 1} onMove={(to) => setIds(moved(ids, p.id, to))} />}
+              tag={p.draftRank && p.draftRank < 9999 ? `Draft Rank ${p.draftRank}` : undefined}
+              tagTone="grey"
+              onOpen={() => onOpen(p)}
+              right={
+                <>
+                  <IconButton label={`Move ${p.firstName} ${p.lastName} up`} disabled={i === 0} onClick={() => setIds(moved(ids, p.id, i - 1))}>▲</IconButton>
+                  <IconButton label={`Move ${p.firstName} ${p.lastName} down`} disabled={i === list.length - 1} onClick={() => setIds(moved(ids, p.id, i + 1))}>▼</IconButton>
+                  <IconButton label={`Take ${p.firstName} ${p.lastName} out of ${title}`} onClick={() => setIds(ids.filter((x) => x !== p.id))}>✕</IconButton>
+                </>
+              }
+            />
+          ))}
+        </div>
+      ) : (
+        <div style={{ ...innerBox, ...hint, padding: 12 }}>{emptyText}</div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+export function TargetsTab({ strategy, update, players, onOpen }: { strategy: DraftStrategy; update: Update; players: LinePlayer[]; onOpen: (p: LinePlayer) => void }) {
+  const [group, setGroup] = useState<TargetGroup>("early");
+  const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
+  const groups = useMemo(() => targetGroups(strategy), [strategy]);
+  const label = TARGET_GROUPS.find((g) => g.key === group)!.label;
+  // a player is in one group at most: adding him here takes him out of the others
+  const setIds = (ids: string[]) =>
+    update((s) => {
+      const here = new Set(ids);
+      const targets = { ...s.targets };
+      for (const { key } of TARGET_GROUPS) targets[key] = key === group ? ids : targets[key].filter((id) => !here.has(id));
+      return { ...s, targets };
+    });
+  return (
+    <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(0, 1fr)" }}>
+      <div style={hint}>
+        Players you want, in early, mid and late round groups, ranked within each group. They&apos;re tagged in the draft room. If your
+        pick clock runs out, auto-pick takes your best target still there (after your draft watchlist): early targets in the first third of
+        the draft, then mid, then late.
+      </div>
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
+        {TARGET_GROUPS.map((g) => (
+          <Chip key={g.key} active={group === g.key} onClick={() => setGroup(g.key)}>
+            {g.label} ({strategy.targets[g.key].length})
+          </Chip>
+        ))}
+      </div>
+      <RankedGroup
+        key={group}
+        title={label}
+        ids={strategy.targets[group]}
+        setIds={setIds}
+        byId={byId}
+        eligible={players}
+        tagFor={(p) => {
+          const g = groups.get(p.id);
+          return g && g !== group ? `${targetShort(g)} target` : undefined;
+        }}
+        emptyText={`No ${label.toLowerCase()} targets yet. Tap "Add Players" to choose some.`}
+        onOpen={onOpen}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+export function PositionalRankingsTab({ strategy, update, players, onOpen }: { strategy: DraftStrategy; update: Update; players: LinePlayer[]; onOpen: (p: LinePlayer) => void }) {
+  const [pos, setPos] = useState<StrategyPos>("PR");
+  const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
+  const eligible = useMemo(() => players.filter((p) => canPlayPosition(p, pos)), [players, pos]);
+  const name = POS_NAME[pos] ?? pos;
+  const plural = name === "Flyhalf" ? "Flyhalves" : `${name}s`;
+  return (
+    <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(0, 1fr)" }}>
+      <div style={hint}>
+        Rank players within each position. A player who plays more than one position can go in each of those groups. In the draft room,
+        filter by one position and sort by My Rank to see your order for it.
+      </div>
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
+        {STRATEGY_POSITIONS.map((p) => (
+          <Chip key={p} active={pos === p} onClick={() => setPos(p)}>
+            {p} ({strategy.positions[p]?.length ?? 0})
+          </Chip>
+        ))}
+      </div>
+      <RankedGroup
+        key={pos}
+        title={plural}
+        ids={strategy.positions[pos] ?? []}
+        setIds={(ids) => update((s) => ({ ...s, positions: { ...s.positions, [pos]: ids } }))}
+        byId={byId}
+        eligible={eligible}
+        emptyText={`No ${plural.toLowerCase()} ranked yet. Tap "Add Players" to choose some.`}
+        onOpen={onOpen}
+      />
     </div>
   );
 }

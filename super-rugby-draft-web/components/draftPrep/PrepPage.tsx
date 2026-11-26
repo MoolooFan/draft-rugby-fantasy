@@ -60,9 +60,10 @@ export function PrepTabs<T extends string>({ tabs, active, onChange }: { tabs: r
           aria-selected={t === active}
           onClick={() => onChange(t)}
           style={{
-            height: 32,
+            minHeight: 32,
             border: "none",
             borderRadius: 9,
+            lineHeight: 1.15,
             background: t === active ? "white" : "transparent",
             boxShadow: t === active ? "0 1px 3px rgba(15,23,42,0.15)" : "none",
             color: t === active ? ink : muted,
