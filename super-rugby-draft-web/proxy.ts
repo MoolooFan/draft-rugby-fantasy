@@ -70,7 +70,8 @@ function redirectTo(
 
 export const config = {
   matcher: [
-    // Everything except Next's own files and static images/icons.
-    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|images/|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico)$).*)",
+    // Everything except Next's own files, static images/icons and the push notification worker
+    // (public/sw.js: the phone fetches it in the background, signed in or not).
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|images/|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico)$).*)",
   ],
 };

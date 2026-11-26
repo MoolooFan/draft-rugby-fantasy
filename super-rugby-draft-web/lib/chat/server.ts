@@ -1,14 +1,27 @@
 // lib/chat/server.ts (server only)
 // Writing chat messages, including the automated posts (the round recap message, trades, waiver
-// and free agent reports). Automated posts never stop the thing that triggered them: a
-// failure is logged and ignored. Rules and text: lib/chat/common.ts.
+// and free agent reports), and the phone notifications that go with them (lib/notifications).
+// Automated posts never stop the thing that triggered them: a failure is logged and ignored.
+// Rules and text: lib/chat/common.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { LEAGUE_CHANNEL, dmChannel, freeAgentReportText, tradeText, waiverReportText, type ChatKind } from "@/lib/chat/common";
 import { getSeason, SEASONS, weekLabel } from "@/lib/season";
+import { pushChatMessage, pushTradeOffer, pushTradeResult, pushWaiverResults } from "@/lib/notifications/events";
 
 export async function postMessage(
   db: SupabaseClient,
-  m: { leagueId: string; channel: string; senderTeamId: string | null; kind: ChatKind; body?: string | null; imageUrl?: string | null; meta?: Record<string, unknown>; dedupeKey?: string | null }
+  m: {
+    leagueId: string;
+    channel: string;
+    senderTeamId: string | null;
+    kind: ChatKind;
+    body?: string | null;
+    imageUrl?: string | null;
+    meta?: Record<string, unknown>;
+    dedupeKey?: string | null;
+    /** false: no phone notification for this message */
+    push?: boolean;
+  }
 ): Promise<void> {
   const { error } = await db.from("chat_messages").insert({
     league_id: m.leagueId,
@@ -20,8 +33,13 @@ export async function postMessage(
     meta: m.meta ?? {},
     dedupe_key: m.dedupeKey ?? null,
   });
-  // the same automated post twice: the dedupe key stops it (that's fine)
-  if (error && !String(error.message).toLowerCase().includes("duplicate")) throw error;
+  // the same automated post twice: the dedupe key stops it (that's fine, and no notification)
+  if (error) {
+    if (!String(error.message).toLowerCase().includes("duplicate")) throw error;
+    return;
+  }
+  // phone notification for it (lib/notifications/events.ts), unless the caller sends its own
+  if (m.push !== false) await pushChatMessage(db, m);
 }
 
 /** An automated post that must never break the caller. */
@@ -33,7 +51,7 @@ async function safely(what: string, fn: () => Promise<void>) {
   }
 }
 
-async function names(db: SupabaseClient, season: number, ids: string[]): Promise<Map<string, string>> {
+export async function names(db: SupabaseClient, season: number, ids: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const unique = [...new Set(ids.filter(Boolean))];
   for (let i = 0; i < unique.length; i += 200) {
@@ -43,7 +61,7 @@ async function names(db: SupabaseClient, season: number, ids: string[]): Promise
   return out;
 }
 
-async function leagueBasics(db: SupabaseClient, leagueId: string) {
+export async function leagueBasics(db: SupabaseClient, leagueId: string) {
   const [{ data: lg }, { data: teams }] = await Promise.all([
     db.from("leagues").select("season").eq("id", leagueId).maybeSingle(),
     db.from("teams").select("id, name").eq("league_id", leagueId),
@@ -77,6 +95,7 @@ export async function postTradeOffer(db: SupabaseClient, t: { id: string; league
       dedupeKey: `trade-offer:${t.id}`,
     });
   });
+  await pushTradeOffer(db, t);
 }
 
 /** A trade answered: a note in the DM; accepted ones are also posted in the league chat. */
@@ -109,6 +128,7 @@ export async function postTradeResult(db: SupabaseClient, tradeId: string, resul
       dedupeKey: `trade-accepted:${tradeId}`,
     });
   });
+  await pushTradeResult(db, tradeId, result);
 }
 
 // ---- waivers and free agents
@@ -122,6 +142,8 @@ export async function postWaiverReport(db: SupabaseClient, leagueId: string, wee
     const text = waiverReportText(roundName(week), ok.map((c) => ({ teamName: teamName(c.team_id), added: n.get(c.add_player_id) ?? c.add_player_id, dropped: c.drop_player_id ? n.get(c.drop_player_id) ?? c.drop_player_id : null })));
     if (text) await postMessage(db, { leagueId, channel: LEAGUE_CHANNEL, senderTeamId: null, kind: "system", body: text, dedupeKey: `waivers:${week}` });
   });
+  // each team with claims in: how theirs went
+  await pushWaiverResults(db, leagueId, week);
 }
 
 export async function postFreeAgentReport(db: SupabaseClient, leagueId: string, week: number) {

@@ -34,6 +34,7 @@ import type { PowerTable } from "@/lib/league/powerServer";
 import { WeekGamesCard } from "@/components/WeekGamesCard";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { PreDraftDashboard } from "@/components/dashboard/PreDraftDashboard";
+import { PushPromptCard } from "@/components/PushSettings";
 import { NoLeague } from "@/components/dashboard/NoLeague";
 import { MatchupCard } from "@/components/dashboard/MatchupCard";
 import { UpcomingFixtureCard } from "@/components/dashboard/UpcomingFixtureCard";
@@ -1049,6 +1050,8 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
         }}
       >
         <DashboardHeader onOpenMenu={() => setMenuOpen(true)} bannerTitle={effectiveDashState === "postDraft" ? bannerTitle : null} bannerTime={bannerTime} />
+        {/* "Get notifications" once, until they're on or "Not now" (components/PushSettings.tsx) */}
+        {activeLeague ? <PushPromptCard cardStyle={{ ...cardStyle, marginTop: 14 }} /> : null}
         {effectiveDashState === "noLeague" && <NoLeague />}
         {effectiveDashState === "preDraft" && activeLeague ? (
           <PreDraftDashboard
