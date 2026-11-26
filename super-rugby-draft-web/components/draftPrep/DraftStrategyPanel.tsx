@@ -12,6 +12,7 @@ import { isEmptyStrategy } from "@/lib/draft/strategy";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 import { PrepTabs } from "@/components/draftPrep/PrepPage";
+import { usePlayerView } from "@/components/draftPrep/strategyView";
 import { OverallRankingsTab, PositionalRankingsTab, TargetsTab } from "@/components/draftPrep/StrategyTabs";
 import type { LinePlayer } from "@/components/draftPrep/PlayerLine";
 import { card, muted, primaryButton, secondaryButton, teal } from "@/lib/ui/theme";
@@ -20,12 +21,10 @@ const TABS = ["Overall Rankings", "Targets", "Positional Rankings"] as const;
 type Tab = (typeof TABS)[number];
 
 export function DraftStrategyPanel({
-  leagueName,
   strat,
   onClose,
   onMockDraft,
 }: {
-  leagueName: string;
   /** the draft room's useDraftStrategy() */
   strat: ReturnType<typeof useDraftStrategy>;
   onClose: () => void;
@@ -53,6 +52,8 @@ export function DraftStrategyPanel({
         .sort((a, b) => (a.draftRank ?? 9999) - (b.draftRank ?? 9999)),
     [pool]
   );
+  // one search / Filters / stat for all three tabs (components/draftPrep/strategyView.tsx)
+  const view = usePlayerView(players);
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Draft Strategy" style={{ position: "fixed", inset: 0, zIndex: 9000, overflowY: "auto", color: "white", background: "linear-gradient(to bottom, rgb(15, 23, 42), rgb(13, 148, 136), rgb(16, 185, 129))" }}>
@@ -75,27 +76,25 @@ export function DraftStrategyPanel({
               ✕
             </button>
           </div>
-          <div style={{ marginTop: 10, fontSize: 18, fontWeight: 700 }}>Draft Strategy</div>
-          <div style={{ marginTop: 2, fontSize: 12, fontWeight: 500, color: muted }}>Plan your draft: your own player rankings, the players you're targeting, and rankings for each position.</div>
+          <div style={{ marginTop: 10, display: "flex", alignItems: "baseline", gap: 8 }}>
+            <div style={{ flex: 1, fontSize: 18, fontWeight: 700 }}>Draft Strategy</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: error ? "#dc2626" : teal, whiteSpace: "nowrap" }} aria-live="polite">
+              {error ? "Not saved" : saving ? "Saving…" : loaded && !isEmptyStrategy(strategy) ? "Saved" : ""}
+            </div>
+          </div>
         </div>
 
         <div style={{ display: "grid", gap: 10, marginTop: 10, gridTemplateColumns: "minmax(0, 1fr)" }}>
           <div style={{ ...card, display: "grid", gap: 10, gridTemplateColumns: "minmax(0, 1fr)" }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-              <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: muted, lineHeight: 1.4 }}>For {leagueName}. Changes save as you go.</div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: error ? "#dc2626" : teal, whiteSpace: "nowrap" }} aria-live="polite">
-                {error ? "Not saved" : saving ? "Saving…" : loaded && !isEmptyStrategy(strategy) ? "Saved" : ""}
-              </div>
-            </div>
             <PrepTabs tabs={TABS} active={tab} onChange={setTab} />
             {!loaded ? (
               <div style={{ fontSize: 13, color: muted, padding: 10 }}>Loading…</div>
             ) : tab === "Overall Rankings" ? (
-              <OverallRankingsTab strategy={strategy} update={update} players={players} onOpen={setOpen} />
+              <OverallRankingsTab strategy={strategy} update={update} players={players} view={view} onOpen={setOpen} />
             ) : tab === "Targets" ? (
-              <TargetsTab strategy={strategy} update={update} players={players} onOpen={setOpen} />
+              <TargetsTab strategy={strategy} update={update} players={players} view={view} onOpen={setOpen} />
             ) : (
-              <PositionalRankingsTab strategy={strategy} update={update} players={players} onOpen={setOpen} />
+              <PositionalRankingsTab strategy={strategy} update={update} players={players} view={view} onOpen={setOpen} />
             )}
           </div>
 
@@ -103,7 +102,6 @@ export function DraftStrategyPanel({
             {onMockDraft ? (
               <>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>Try it out</div>
-                <div style={{ fontSize: 12, fontWeight: 500, color: muted }}>Practise against computer teams. Nothing you pick there counts anywhere.</div>
                 <button style={primaryButton} onClick={onMockDraft}>Start a Mock Draft</button>
               </>
             ) : null}

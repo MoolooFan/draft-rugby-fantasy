@@ -1373,7 +1373,6 @@ const ModalOverlay = useStableComponent(ModalOverlay__render);
 
       {strategyOpen && activeLeague ? (
         <DraftStrategyPanel
-          leagueName={activeLeague.name}
           strat={strat}
           onClose={closeStrategy}
           onMockDraft={phase === "preDraft" ? () => router.push(`/mock-draft?leagueId=${encodeURIComponent(activeLeague.id)}`) : undefined}
