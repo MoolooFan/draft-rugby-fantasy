@@ -1,7 +1,7 @@
 "use client";
 // components/draftPrep/DraftStrategyPanel.tsx
-// Draft Strategy (Ethan, 21 Nov 2026; like ESPN's): plan your draft before it starts. Four tabs:
-// Round Plan, Targets, Do Not Draft and My Rankings (lib/draft/strategy.ts). Since 25 Nov 2026 it
+// Draft Strategy (Ethan, 21 Nov 2026; redone 25 Nov 2026): plan your draft before it starts. Three
+// tabs (components/draftPrep/StrategyTabs.tsx): Overall Rankings, Targets, Positional Rankings. Since 25 Nov 2026 it
 // lives inside the draft room (it was its own page): it opens over the room and Back closes it.
 // It edits the draft room's own copy of the strategy, so changes show in the room straight away.
 // The draft watchlist (in the draft room) is separate and still comes first for auto-pick.
@@ -9,34 +9,31 @@ import React, { useEffect, useMemo, useState } from "react";
 import { usePlayerPool } from "@/lib/players/pool";
 import type { useDraftStrategy } from "@/lib/draft/useStrategy";
 import { isEmptyStrategy } from "@/lib/draft/strategy";
-import { STANDARD_SQUAD, type SquadFormat } from "@/lib/league/squad";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 import { PrepTabs } from "@/components/draftPrep/PrepPage";
-import { AvoidTab, RankingsTab, RoundPlanTab, TargetsTab } from "@/components/draftPrep/StrategyTabs";
+import { OverallRankingsTab, PositionalRankingsTab, TargetsTab } from "@/components/draftPrep/StrategyTabs";
 import type { LinePlayer } from "@/components/draftPrep/PlayerLine";
 import { card, muted, primaryButton, secondaryButton, teal } from "@/lib/ui/theme";
 
-const TABS = ["Round Plan", "Targets", "Do Not Draft", "My Rankings"] as const;
+const TABS = ["Overall Rankings", "Targets", "Positional Rankings"] as const;
 type Tab = (typeof TABS)[number];
 
 export function DraftStrategyPanel({
   leagueName,
-  format,
   strat,
   onClose,
   onMockDraft,
 }: {
   leagueName: string;
-  format: SquadFormat | null | undefined;
   /** the draft room's useDraftStrategy() */
   strat: ReturnType<typeof useDraftStrategy>;
   onClose: () => void;
   /** left out while the draft is on (no mock drafts then) */
   onMockDraft?: () => void;
 }) {
-  const { strategy, update, source, loaded, saving, error, revertToDefault } = strat;
-  const [tab, setTab] = useState<Tab>("Round Plan");
+  const { strategy, update, loaded, saving, error } = strat;
+  const [tab, setTab] = useState<Tab>("Overall Rankings");
   const [open, setOpen] = useState<LinePlayer | null>(null);
 
   // the draft room behind doesn't scroll while this is open
@@ -56,9 +53,6 @@ export function DraftStrategyPanel({
         .sort((a, b) => (a.draftRank ?? 9999) - (b.draftRank ?? 9999)),
     [pool]
   );
-
-  const sourceText =
-    source === "league" ? `${leagueName} has its own strategy.` : `${leagueName} is using your default strategy. Change anything to give it its own.`;
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Draft Strategy" style={{ position: "fixed", inset: 0, zIndex: 9000, overflowY: "auto", color: "white", background: "linear-gradient(to bottom, rgb(15, 23, 42), rgb(13, 148, 136), rgb(16, 185, 129))" }}>
@@ -82,31 +76,26 @@ export function DraftStrategyPanel({
             </button>
           </div>
           <div style={{ marginTop: 10, fontSize: 18, fontWeight: 700 }}>Draft Strategy</div>
-          <div style={{ marginTop: 2, fontSize: 12, fontWeight: 500, color: muted }}>Plan your draft: positions by round, targets, players to avoid and your own rankings.</div>
+          <div style={{ marginTop: 2, fontSize: 12, fontWeight: 500, color: muted }}>Plan your draft: your own player rankings, the players you're targeting, and rankings for each position.</div>
         </div>
 
-        <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-          <div style={{ ...card, display: "grid", gap: 10 }}>
+        <div style={{ display: "grid", gap: 10, marginTop: 10, gridTemplateColumns: "minmax(0, 1fr)" }}>
+          <div style={{ ...card, display: "grid", gap: 10, gridTemplateColumns: "minmax(0, 1fr)" }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-              <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: muted, lineHeight: 1.4 }}>{sourceText}</div>
+              <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: muted, lineHeight: 1.4 }}>For {leagueName}. Changes save as you go.</div>
               <div style={{ fontSize: 11, fontWeight: 700, color: error ? "#dc2626" : teal, whiteSpace: "nowrap" }} aria-live="polite">
                 {error ? "Not saved" : saving ? "Saving…" : loaded && !isEmptyStrategy(strategy) ? "Saved" : ""}
               </div>
             </div>
-            {source === "league" ? (
-              <button style={{ ...secondaryButton, height: 32, fontSize: 12 }} onClick={() => void revertToDefault()}>Use My Default Instead</button>
-            ) : null}
             <PrepTabs tabs={TABS} active={tab} onChange={setTab} />
             {!loaded ? (
               <div style={{ fontSize: 13, color: muted, padding: 10 }}>Loading…</div>
-            ) : tab === "Round Plan" ? (
-              <RoundPlanTab strategy={strategy} update={update} format={format ?? STANDARD_SQUAD} />
+            ) : tab === "Overall Rankings" ? (
+              <OverallRankingsTab strategy={strategy} update={update} players={players} onOpen={setOpen} />
             ) : tab === "Targets" ? (
-              <TargetsTab strategy={strategy} update={update} format={format ?? STANDARD_SQUAD} />
-            ) : tab === "Do Not Draft" ? (
-              <AvoidTab strategy={strategy} update={update} players={players} onOpen={setOpen} />
+              <TargetsTab strategy={strategy} update={update} players={players} onOpen={setOpen} />
             ) : (
-              <RankingsTab strategy={strategy} update={update} players={players} onOpen={setOpen} />
+              <PositionalRankingsTab strategy={strategy} update={update} players={players} onOpen={setOpen} />
             )}
           </div>
 
@@ -129,11 +118,8 @@ export function DraftStrategyPanel({
           player={{ ...open, posName: open.posAbbrev, secondaryPosAbbrev: open.secondaryPosAbbrev ?? undefined }}
           teamLabel=""
           initialTab="Stats"
-          actions={[
-            strategy.avoid.includes(open.id)
-              ? { label: "Remove from Do Not Draft", onClick: () => update((s) => ({ ...s, avoid: s.avoid.filter((x) => x !== open.id) })), variant: "secondary" }
-              : { label: "Add to Do Not Draft", onClick: () => update((s) => ({ ...s, avoid: [...s.avoid, open.id] })), variant: "secondary" },
-          ]}
+          hideActions
+          actions={[]}
         />
       ) : null}
     </div>

@@ -1,85 +1,89 @@
 // lib/draft/strategy.ts
-// A user's draft strategy (Ethan, 21 Nov 2026; like ESPN's): a position to aim for in each
-// round, how many of each position they want by the end, players they never want, and their own
-// player rankings. Kept on the server per account (one default, plus one per league). The draft
-// watchlist is separate and still comes first.
+// A user's draft strategy for a league (Ethan, 21 Nov 2026; redone 25 Nov 2026). Three parts:
+//   - Overall Rankings: their own order of the whole player pool (empty = the site's Draft Rank)
+//   - Targets: players they want, in three groups (early, mid and late rounds), ranked within
+//     each group. A player is in one group at most.
+//   - Positional Rankings: players ranked within each position group (Prop, Hooker...). A player
+//     can be in every group for a position he plays.
+// Kept on the server, one per person per league. The draft watchlist is separate and comes first.
 //
-// Used by the Draft Strategy panel in the draft room, the draft room (this round's plan, targets, greyed-out
-// players), mock drafts, and auto-pick when the clock runs out: watchlist first, then the best
-// player (by their own rankings) who fits this round's plan, never a do-not-draft player unless
-// nobody else fits. Pure code (browser + server).
-import { canPlayPosition, playerPositions } from "@/lib/players/positions";
-import { BACK_POSITIONS, FORWARD_POSITIONS } from "@/lib/league/squad";
+// Used by the Draft Strategy panel in the draft room, the draft room (target tags, "My Rank"
+// sort), mock drafts, and auto-pick when the clock runs out: watchlist first, then targets, then
+// Overall Rankings (see strategyChoice). Pure code (browser + server).
 
 export const STRATEGY_POSITIONS = ["PR", "HO", "LK", "LF", "HB", "FH", "CE", "OB"] as const;
 export type StrategyPos = (typeof STRATEGY_POSITIONS)[number];
 
-/** What a round can aim for: "" = best available, a position, or any forward / any back. */
-export type PlanPos = "" | StrategyPos | "FW" | "BK";
-
-export const PLAN_OPTIONS: Array<{ value: PlanPos; label: string; short: string }> = [
-  { value: "", label: "Best available", short: "BPA" },
-  { value: "PR", label: "Prop", short: "PR" },
-  { value: "HO", label: "Hooker", short: "HO" },
-  { value: "LK", label: "Lock", short: "LK" },
-  { value: "LF", label: "Loose forward", short: "LF" },
-  { value: "HB", label: "Halfback", short: "HB" },
-  { value: "FH", label: "Flyhalf", short: "FH" },
-  { value: "CE", label: "Centre", short: "CE" },
-  { value: "OB", label: "Outside back", short: "OB" },
-  { value: "FW", label: "Any forward", short: "FWD" },
-  { value: "BK", label: "Any back", short: "BCK" },
-];
-const PLAN_VALUES = new Set<string>(PLAN_OPTIONS.map((o) => o.value));
-export const planLabel = (p: PlanPos | null | undefined) => PLAN_OPTIONS.find((o) => o.value === (p ?? ""))?.label ?? "Best available";
+export const TARGET_GROUPS = [
+  { key: "early", label: "Early Rounds", short: "Early" },
+  { key: "mid", label: "Mid Rounds", short: "Mid" },
+  { key: "late", label: "Late Rounds", short: "Late" },
+] as const;
+export type TargetGroup = (typeof TARGET_GROUPS)[number]["key"];
 
 export type DraftStrategy = {
-  /** round 1 first; missing / "" = best available */
-  rounds: PlanPos[];
-  /** how many of each position they want by the end of the draft (counting main positions) */
-  targets: Partial<Record<StrategyPos, number>>;
-  /** do-not-draft player ids */
-  avoid: string[];
   /** their own rankings (player ids, best first); empty = the site's Draft Rank */
   ranking: string[];
+  /** target players by group, best first */
+  targets: Record<TargetGroup, string[]>;
+  /** players ranked within each position group, best first */
+  positions: Partial<Record<StrategyPos, string[]>>;
 };
 
-export const EMPTY_STRATEGY: DraftStrategy = { rounds: [], targets: {}, avoid: [], ranking: [] };
+export const EMPTY_STRATEGY: DraftStrategy = { ranking: [], targets: { early: [], mid: [], late: [] }, positions: {} };
 
-export const STRATEGY_LIMITS = { rounds: 30, targetMax: 15, avoid: 300, ranking: 2000 } as const;
+export const STRATEGY_LIMITS = { ranking: 2000, group: 200 } as const;
 
-/** A saved / sent strategy, checked (anything broken is dropped). */
+/** A saved / sent strategy, checked (anything broken, or from the old layout, is dropped). */
 export function cleanStrategy(input: unknown): DraftStrategy {
   const raw = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const ids = (v: unknown, max: number) =>
     Array.isArray(v) ? [...new Set(v.map((x) => String(x ?? "").trim()).filter(Boolean))].slice(0, max) : [];
-  const rounds = (Array.isArray(raw.rounds) ? raw.rounds : [])
-    .slice(0, STRATEGY_LIMITS.rounds)
-    .map((r) => (PLAN_VALUES.has(String(r ?? "")) ? (String(r ?? "") as PlanPos) : ""));
-  while (rounds.length && !rounds[rounds.length - 1]) rounds.pop();
-  const targets: DraftStrategy["targets"] = {};
   const rawTargets = (raw.targets && typeof raw.targets === "object" ? raw.targets : {}) as Record<string, unknown>;
-  for (const p of STRATEGY_POSITIONS) {
-    const n = Math.max(0, Math.min(STRATEGY_LIMITS.targetMax, Math.round(Number(rawTargets[p]) || 0)));
-    if (n) targets[p] = n;
+  const seen = new Set<string>();
+  const targets = { early: [], mid: [], late: [] } as DraftStrategy["targets"];
+  for (const { key } of TARGET_GROUPS) {
+    targets[key] = ids(rawTargets[key], STRATEGY_LIMITS.group).filter((id) => !seen.has(id) && !!seen.add(id));
   }
-  return { rounds, targets, avoid: ids(raw.avoid, STRATEGY_LIMITS.avoid), ranking: ids(raw.ranking, STRATEGY_LIMITS.ranking) };
+  const rawPositions = (raw.positions && typeof raw.positions === "object" ? raw.positions : {}) as Record<string, unknown>;
+  const positions: DraftStrategy["positions"] = {};
+  for (const pos of STRATEGY_POSITIONS) {
+    const list = ids(rawPositions[pos], STRATEGY_LIMITS.group);
+    if (list.length) positions[pos] = list;
+  }
+  return { ranking: ids(raw.ranking, STRATEGY_LIMITS.ranking), targets, positions };
 }
 
 export function isEmptyStrategy(s: DraftStrategy | null | undefined): boolean {
-  return !s || (!s.rounds.some(Boolean) && !Object.keys(s.targets).length && !s.avoid.length && !s.ranking.length);
+  return !s || (!s.ranking.length && !TARGET_GROUPS.some((g) => s.targets[g.key].length) && !Object.values(s.positions).some((l) => l?.length));
 }
 
-/** Does this player suit a round's plan? (Best available: everyone.) */
-export function planMatches(player: Record<string, unknown> | { posAbbrev?: string | null }, plan: PlanPos | null | undefined): boolean {
-  if (!plan) return true;
-  if (plan === "FW") return playerPositions(player).some((p) => FORWARD_POSITIONS.includes(p));
-  if (plan === "BK") return playerPositions(player).some((p) => BACK_POSITIONS.includes(p));
-  return canPlayPosition(player, plan);
+/** Which target group a player is in (or null). */
+export function targetGroupOf(s: DraftStrategy | null | undefined, id: string): TargetGroup | null {
+  for (const { key } of TARGET_GROUPS) if (s?.targets[key].includes(id)) return key;
+  return null;
 }
 
-/** The plan for a round (1-based). */
-export const planForRound = (s: DraftStrategy | null | undefined, round: number): PlanPos => s?.rounds[round - 1] ?? "";
+/** id -> the target group, for tagging players in lists. */
+export function targetGroups(s: DraftStrategy | null | undefined): Map<string, TargetGroup> {
+  const out = new Map<string, TargetGroup>();
+  for (const { key } of TARGET_GROUPS) for (const id of s?.targets[key] ?? []) out.set(id, key);
+  return out;
+}
+
+export const targetShort = (g: TargetGroup) => TARGET_GROUPS.find((x) => x.key === g)?.short ?? "";
+
+/**
+ * Which part of the draft a round is in, for auto-pick: the draft in thirds (0 = early, 1 = mid,
+ * 2 = late). E.g. 20 rounds: 1-7 early, 8-14 mid, 15-20 late. The groups are only labels for the
+ * user (Ethan, 25 Nov 2026); this is just how auto-pick reads them.
+ */
+export function draftStage(round: number, totalRounds: number): 0 | 1 | 2 {
+  const t = Math.max(1, totalRounds);
+  if (round <= Math.ceil(t / 3)) return 0;
+  if (round <= Math.ceil((2 * t) / 3)) return 1;
+  return 2;
+}
 
 type Ranked = { id: string; draftRank?: number | null };
 
@@ -113,50 +117,42 @@ export function sortByMyRank<T extends Ranked>(players: T[], s: DraftStrategy | 
   return [...players].sort((a, b) => (r.get(a.id) ?? 99999) - (r.get(b.id) ?? 99999));
 }
 
-/** Position targets against a roster: have (by main position) / want. */
-export function targetProgress(roster: Array<{ posAbbrev?: string | null }>, s: DraftStrategy | null | undefined) {
-  const have: Record<string, number> = {};
-  for (const p of roster) {
-    const pos = String(p.posAbbrev ?? "").toUpperCase();
-    if (pos) have[pos] = (have[pos] ?? 0) + 1;
-  }
-  return STRATEGY_POSITIONS.map((pos) => ({ pos, have: have[pos] ?? 0, want: s?.targets[pos] ?? 0 }));
-}
-
 /**
- * The player the strategy would take this round, from players who are available AND fit the
- * roster (the caller checks that). Order of preference:
- *   1. fits this round's plan and his position isn't already at its target
- *   2. fits this round's plan
- *   3. any position not yet at its target
- *   4. anyone
- * each by the user's own rankings, skipping do-not-draft players; if only do-not-draft players
- * are left, the best of them (a pick has to be made).
+ * The player the strategy would take, from players who are available AND fit the roster (the
+ * caller checks that): their best target still there for this part of the draft (early targets
+ * in the first third; early then mid in the second; any target in the last), in the order
+ * they ranked them; otherwise the best player left by their Overall Rankings.
  */
-export function strategyChoice<T extends Ranked & { posAbbrev?: string | null }>(args: {
+export function strategyChoice<T extends Ranked>(args: {
   available: T[];
-  roster: Array<{ posAbbrev?: string | null }>;
   round: number;
+  totalRounds: number;
   strategy: DraftStrategy | null | undefined;
   ranks?: Map<string, number>;
 }): T | null {
-  const { available, roster, round, strategy } = args;
+  const { available, round, totalRounds, strategy } = args;
   if (!available.length) return null;
-  const ranks = args.ranks ?? myRanks(available, strategy);
-  const avoid = new Set(strategy?.avoid ?? []);
-  const sorted = sortByMyRank(available, strategy, ranks);
-  const wanted = sorted.filter((p) => !avoid.has(p.id));
-  if (!wanted.length) return sorted[0];
-  const plan = planForRound(strategy, round);
-  const progress = new Map(targetProgress(roster, strategy).map((t) => [t.pos, t]));
-  const full = (p: T) => {
-    const t = progress.get(String(p.posAbbrev ?? "").toUpperCase() as StrategyPos);
-    return !!t && t.want > 0 && t.have >= t.want;
-  };
-  return (
-    (plan ? wanted.find((p) => planMatches(p, plan) && !full(p)) : undefined) ??
-    (plan ? wanted.find((p) => planMatches(p, plan)) : undefined) ??
-    wanted.find((p) => !full(p)) ??
-    wanted[0]
-  );
+  const byId = new Map(available.map((p) => [p.id, p]));
+  const stage = draftStage(round, totalRounds);
+  for (const { key } of TARGET_GROUPS.slice(0, stage + 1)) {
+    for (const id of strategy?.targets[key] ?? []) {
+      const p = byId.get(id);
+      if (p) return p;
+    }
+  }
+  return sortByMyRank(available, strategy, args.ranks ?? myRanks(available, strategy))[0];
+}
+
+/**
+ * Players in the order for one position: their Positional Rankings for it first, then everyone
+ * else by their Overall Rankings. Returns id -> 1-based rank (only for players given).
+ */
+export function positionRanks<T extends Ranked>(players: T[], s: DraftStrategy | null | undefined, pos: StrategyPos, overall?: Map<string, number>): Map<string, number> {
+  const r = overall ?? myRanks(players, s);
+  const listed = (s?.positions[pos] ?? []).filter((id) => players.some((p) => p.id === id));
+  const inList = new Set(listed);
+  const rest = players.filter((p) => !inList.has(p.id)).sort((a, b) => (r.get(a.id) ?? 99999) - (r.get(b.id) ?? 99999));
+  const out = new Map<string, number>();
+  [...listed, ...rest.map((p) => p.id)].forEach((id, i) => out.set(id, i + 1));
+  return out;
 }

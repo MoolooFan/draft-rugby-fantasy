@@ -1,12 +1,12 @@
 "use client";
 // components/mockDraft/MockRoom.tsx
-// The mock draft while it's on: who's picking (and your clock), your plan for this round, and
+// The mock draft while it's on: who's picking (and your clock), your targets still there, and
 // three tabs: Players (draft from here), My Team, Board (every pick so far).
 import React, { useMemo, useState } from "react";
 import { Chip, PrepTabs } from "@/components/draftPrep/PrepPage";
 import { IconButton, PlayerLine, type LinePlayer } from "@/components/draftPrep/PlayerLine";
 import { currentRound, fittingAvailable, mockRosters, onTheClock, pickLabel, picksUntilYou, teamAt, totalPicks, type MockDraft } from "@/lib/draft/mock";
-import { planForRound, planLabel, planMatches, STRATEGY_POSITIONS, targetProgress, type DraftStrategy, type StrategyPos } from "@/lib/draft/strategy";
+import { STRATEGY_POSITIONS, TARGET_GROUPS, targetGroups, targetShort, type DraftStrategy, type StrategyPos } from "@/lib/draft/strategy";
 import { assignToSlots, kindShort, rosterSize, slotKind } from "@/lib/league/squad";
 import { roundForPick } from "@/lib/draft/rules";
 import { canPlayPosition, positionsLabel } from "@/lib/players/positions";
@@ -16,12 +16,6 @@ type P = LinePlayer & { id: string };
 const sub: React.CSSProperties = { fontSize: 11, fontWeight: 500, color: muted };
 const TABS = ["Players", "My Team", "Board"] as const;
 type Tab = (typeof TABS)[number];
-
-/** The round of your next pick (or the current round if you have none left). */
-function yourNextRound(m: MockDraft): number {
-  const wait = picksUntilYou(m);
-  return wait < 0 ? currentRound(m) : roundForPick(m.order.length, m.picks.length + 1 + wait);
-}
 
 export function MockRoom({
   mock,
@@ -56,8 +50,8 @@ export function MockRoom({
   const yourTurn = clock === mock.you;
   const n = mock.picks.length + 1;
   const wait = picksUntilYou(mock);
-  const round = yourNextRound(mock);
-  const plan = planForRound(strategy, round);
+  const taken = new Set(mock.picks);
+  const targetsLeft = TARGET_GROUPS.map((g) => ({ ...g, all: strategy?.targets[g.key].length ?? 0, left: (strategy?.targets[g.key] ?? []).filter((id) => !taken.has(id)).length })).filter((g) => g.all > 0);
   const last = mock.picks.length ? { n: mock.picks.length, p: byId.get(mock.picks[mock.picks.length - 1]) } : null;
 
   return (
@@ -91,10 +85,16 @@ export function MockRoom({
             <div style={{ ...num, fontSize: 26, fontWeight: 700, color: secondsLeft <= 10 ? "#fde68a" : "white" }}>0:{String(Math.max(0, secondsLeft)).padStart(2, "0")}</div>
           ) : null}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, fontWeight: 600 }}>Your plan, round {round}:</span>
-          <span style={{ padding: "2px 8px", borderRadius: 999, background: plan ? "rgba(13,148,136,0.12)" : "#eef2f6", color: plan ? teal : muted, fontSize: 12, fontWeight: 700 }}>{planLabel(plan)}</span>
-        </div>
+        {targetsLeft.length ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Your targets left:</span>
+            {targetsLeft.map((g) => (
+              <span key={g.key} style={{ padding: "2px 8px", borderRadius: 999, background: g.left ? "rgba(13,148,136,0.12)" : "#eef2f6", color: g.left ? teal : muted, fontSize: 12, fontWeight: 700 }}>
+                {g.short} {g.left}/{g.all}
+              </span>
+            ))}
+          </div>
+        ) : null}
         {last?.p ? (
           <div style={sub}>
             Last pick: {pickLabel(mock, last.n)} {mock.teamNames[teamAt(mock, last.n)]}: <b style={{ color: ink }}>{last.p.firstName} {last.p.lastName}</b> ({positionsLabel(last.p)})
@@ -122,9 +122,9 @@ export function MockRoom({
       <div style={{ ...card, display: "grid", gap: 10 }}>
         <PrepTabs tabs={TABS} active={tab} onChange={setTab} />
         {tab === "Players" ? (
-          <PlayersTab mock={mock} players={players} byId={byId} strategy={strategy} ranks={ranks} plan={plan} yourTurn={yourTurn} onPick={onPick} onOpen={onOpen} />
+          <PlayersTab mock={mock} players={players} byId={byId} strategy={strategy} ranks={ranks} yourTurn={yourTurn} onPick={onPick} onOpen={onOpen} />
         ) : tab === "My Team" ? (
-          <TeamView mock={mock} team={mock.you} byId={byId} strategy={strategy} onOpen={onOpen} />
+          <TeamView mock={mock} team={mock.you} byId={byId} onOpen={onOpen} />
         ) : (
           <BoardView mock={mock} byId={byId} onOpen={onOpen} />
         )}
@@ -142,7 +142,6 @@ function PlayersTab({
   byId,
   strategy,
   ranks,
-  plan,
   yourTurn,
   onPick,
   onOpen,
@@ -152,7 +151,6 @@ function PlayersTab({
   byId: Map<string, P>;
   strategy: DraftStrategy | null;
   ranks: Map<string, number>;
-  plan: ReturnType<typeof planForRound>;
   yourTurn: boolean;
   onPick: (id: string) => void;
   onOpen: (p: P) => void;
@@ -162,7 +160,7 @@ function PlayersTab({
   const [byMine, setByMine] = useState(true);
   const [shown, setShown] = useState(PAGE);
   const custom = (strategy?.ranking.length ?? 0) > 0;
-  const avoid = useMemo(() => new Set(strategy?.avoid ?? []), [strategy]);
+  const targets = useMemo(() => targetGroups(strategy), [strategy]);
   const fits = useMemo(() => new Set(fittingAvailable(mock, players, mock.you, byId).map((p) => p.id)), [mock, players, byId]);
   const list = useMemo(() => {
     const taken = new Set(mock.picks);
@@ -198,17 +196,16 @@ function PlayersTab({
       <div style={{ ...innerBox, padding: 0 }}>
         {list.slice(0, shown).map((p) => {
           const ok = fits.has(p.id);
-          const isPlan = !!plan && planMatches(p, plan);
+          const target = targets.get(p.id);
           return (
             <PlayerLine
               key={p.id}
               p={p}
               number={byMine && custom ? ranks.get(p.id) : p.draftRank}
               numberLabel={byMine && custom ? "Your rank" : "Draft Rank"}
-              highlight={isPlan && !avoid.has(p.id)}
-              dim={avoid.has(p.id)}
-              tag={avoid.has(p.id) ? "Do not draft" : isPlan ? "Plan" : !ok ? "No room" : undefined}
-              tagTone={avoid.has(p.id) ? "red" : isPlan ? "teal" : "grey"}
+              highlight={!!target}
+              tag={target ? `${targetShort(target)} target` : !ok ? "No room" : undefined}
+              tagTone={target ? "teal" : "grey"}
               onOpen={() => onOpen(p)}
               right={
                 <button
@@ -230,24 +227,14 @@ function PlayersTab({
 }
 
 // ---------------------------------------------------------------------------
-export function TeamView({ mock, team, byId, strategy, onOpen }: { mock: MockDraft; team: number; byId: Map<string, P>; strategy: DraftStrategy | null; onOpen: (p: P) => void }) {
+export function TeamView({ mock, team, byId, onOpen }: { mock: MockDraft; team: number; byId: Map<string, P>; onOpen: (p: P) => void }) {
   const ids = mockRosters(mock)[team];
   const roster = ids.map((id) => byId.get(id)).filter((p): p is P => !!p);
   const slots = assignToSlots(roster, mock.format);
   const pickOf = new Map<string, number>();
   mock.picks.forEach((id, i) => pickOf.set(id, i + 1));
-  const progress = team === mock.you ? targetProgress(roster, strategy).filter((t) => t.want > 0) : [];
   return (
     <div style={{ display: "grid", gap: 8 }}>
-      {progress.length ? (
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {progress.map((t) => (
-            <span key={t.pos} style={{ padding: "3px 8px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: t.have >= t.want ? "rgba(13,148,136,0.12)" : "#eef2f6", color: t.have >= t.want ? teal : ink }}>
-              {t.pos} {t.have}/{t.want}
-            </span>
-          ))}
-        </div>
-      ) : null}
       <div style={{ ...innerBox, padding: 0 }}>
         {[...slots.entries()].map(([slotId, p]) => {
           const k = slotKind(slotId);

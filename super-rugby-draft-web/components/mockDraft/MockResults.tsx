@@ -6,7 +6,6 @@ import React, { useState } from "react";
 import { PrepTabs } from "@/components/draftPrep/PrepPage";
 import type { LinePlayer } from "@/components/draftPrep/PlayerLine";
 import { yourPlace, type MockDraft } from "@/lib/draft/mock";
-import type { DraftStrategy } from "@/lib/draft/strategy";
 import { card, innerBox, ink, line, muted, primaryButton, secondaryButton, teal } from "@/lib/ui/theme";
 import { BoardView, TeamView } from "./MockRoom";
 import { ordinalSuffix } from "./MockSetup";
@@ -28,14 +27,12 @@ const GRADE_TEXT: Record<string, string> = {
 export function MockResults({
   mock,
   byId,
-  strategy,
   onOpen,
   onAgain,
   onSettings,
 }: {
   mock: MockDraft;
   byId: Map<string, P>;
-  strategy: DraftStrategy | null;
   onOpen: (p: P) => void;
   onAgain: () => void;
   onSettings: () => void;
@@ -68,14 +65,14 @@ export function MockResults({
         <PrepTabs tabs={TABS} active={tab} onChange={(t) => { setTab(t); setTeam(null); }} />
         {missing ? <div style={{ fontSize: 11, color: muted }}>{missing} player{missing === 1 ? " is" : "s are"} no longer in the player pool.</div> : null}
         {tab === "My Team" ? (
-          <TeamView mock={mock} team={mock.you} byId={byId} strategy={strategy} onOpen={onOpen} />
+          <TeamView mock={mock} team={mock.you} byId={byId} onOpen={onOpen} />
         ) : tab === "Board" ? (
           <BoardView mock={mock} byId={byId} onOpen={onOpen} />
         ) : team != null ? (
           <div style={{ display: "grid", gap: 8 }}>
             <button onClick={() => setTeam(null)} style={{ justifySelf: "start", background: "transparent", border: "none", color: teal, fontSize: 12, fontWeight: 700, cursor: "pointer", padding: 0 }}>‹ All teams</button>
             <div style={{ fontSize: 14, fontWeight: 700 }}>{mock.teamNames[team]} · {mock.result?.grades[team]}</div>
-            <TeamView mock={mock} team={team} byId={byId} strategy={strategy} onOpen={onOpen} />
+            <TeamView mock={mock} team={team} byId={byId} onOpen={onOpen} />
           </div>
         ) : (
           <div style={{ ...innerBox, padding: 0 }}>

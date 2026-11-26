@@ -242,7 +242,7 @@ export default function MockDraftPage() {
           }}
         />
       ) : view === "results" && mock ? (
-        <MockResults mock={mock} byId={byId} strategy={strat} onOpen={setOpen} onAgain={start} onSettings={() => { setMock(null); setView("setup"); }} />
+        <MockResults mock={mock} byId={byId} onOpen={setOpen} onAgain={start} onSettings={() => { setMock(null); setView("setup"); }} />
       ) : (
         <MockSetup
           settings={effectiveSettings}

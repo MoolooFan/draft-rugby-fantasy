@@ -34,8 +34,8 @@ import { PlusMinusIcon } from "@/components/PlusMinusIcon";
 import { DraftPlanStrip } from "@/components/draftPrep/DraftPlanStrip";
 import { DraftStrategyPanel } from "@/components/draftPrep/DraftStrategyPanel";
 import { useDraftStrategy } from "@/lib/draft/useStrategy";
-import { isEmptyStrategy, myRanks, planForRound, planMatches } from "@/lib/draft/strategy";
-import { roundForPick } from "@/lib/draft/rules";
+import { isEmptyStrategy, myRanks, positionRanks, STRATEGY_POSITIONS, targetGroups, targetShort, type StrategyPos } from "@/lib/draft/strategy";
+import { canPlayPosition } from "@/lib/players/positions";
 
 type DraftTab = "Player Pool" | "Watchlist" | "Teams" | "Draft Results";
 type DraftPhase = "preDraft" | "liveDraft" | "complete";
@@ -374,7 +374,7 @@ function resolvePlayer(x: any): Player | null {
   // What the number column shows / sorts by (Filters): draft rank, or the chosen season's points
   // or a stat, per game / total / per 80 (lib/players/statView)
   const [sortMode, setSortMode] = useState<string>("DRAFT_RANK");
-  // your draft strategy: plan for each round, targets, do-not-draft, rankings. Edited in the
+  // your draft strategy: overall rankings, targets, positional rankings. Edited in the
   // Draft Strategy panel, which opens over this page (Ethan, 25 Nov 2026: no longer its own page).
   const strat = useDraftStrategy(activeLeagueId ?? null);
   const draftStrategyRaw = strat.strategy;
@@ -406,9 +406,16 @@ function resolvePlayer(x: any): Player | null {
     setStrategyOpen(false);
   };
   const draftStrategy = isEmptyStrategy(draftStrategyRaw) ? null : draftStrategyRaw;
-  const avoidIds = useMemo(() => new Set(draftStrategy?.avoid ?? []), [draftStrategy]);
-  const hasMyRanks = (draftStrategy?.ranking.length ?? 0) > 0;
-  const myRankById = useMemo(() => myRanks(allPlayers, draftStrategy), [allPlayers, draftStrategy]);
+  const targetById = useMemo(() => targetGroups(draftStrategy), [draftStrategy]);
+  const hasMyRanks = !!draftStrategy && (draftStrategy.ranking.length > 0 || Object.values(draftStrategy.positions).some((l) => l?.length));
+  // "My Rank": your Overall Rankings, or with one position picked in Filters, your Positional
+  // Rankings for it (then everyone else at that position by your overall order)
+  const rankPos = poolFilters.positions.length === 1 && (STRATEGY_POSITIONS as readonly string[]).includes(poolFilters.positions[0]) ? (poolFilters.positions[0] as StrategyPos) : null;
+  const myRankById = useMemo(() => {
+    const overall = myRanks(allPlayers, draftStrategy);
+    if (!rankPos || !draftStrategy?.positions[rankPos]?.length) return overall;
+    return positionRanks(allPlayers.filter((p) => canPlayPosition(p, rankPos)), draftStrategy, rankPos, overall);
+  }, [allPlayers, draftStrategy, rankPos]);
   const sortOptions = useMemo(() => (hasMyRanks ? [DRAFT_SORT_OPTIONS[0], { value: "MY_RANK", label: "My Rank" }, ...DRAFT_SORT_OPTIONS.slice(1)] : DRAFT_SORT_OPTIONS), [hasMyRanks]);
   const rankMode = sortMode === "DRAFT_RANK" || sortMode === "MY_RANK";
   const [statView] = useStatView();
@@ -441,13 +448,6 @@ function resolvePlayer(x: any): Player | null {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allPlayers, draftedIds, search, poolFilters, getLivePlayerById, sortMode, totalsById, statView, myRankById]);
 
-  // your next pick's round (for the plan) and your players so far (for the targets)
-  const yourPlanRound = draftComplete ? 0 : roundForPick(teams.length || 1, phase === "liveDraft" ? pickIndex + nextPickInTurns : 1);
-  const plan = planForRound(draftStrategy, yourPlanRound);
-  const yourRoster = useMemo(
-    () => picks.map((p, i) => (p && ownerForPickSnake(i + 1)?.id === yourTeamId ? (p as Player) : null)).filter((p): p is Player => !!p),
-    [picks, ownerForPickSnake, yourTeamId]
-  );
 
   const playerPoolPlayers = useMemo(() => {
     return filteredPlayers.filter((p) => canTeamDraftPlayer(yourTeamId, p, activeLeague?.squadFormat));
@@ -830,8 +830,8 @@ const Filters = useStableComponent(Filters__render);
 
   function PlayerRow__render({ p, draftEnabled, reorder }: { p: Player; draftEnabled: boolean; reorder?: { index: number; count: number } }) {
     const isStar = !!watchlist[p.id];
-    const isAvoid = avoidIds.has(p.id);
-    const isPlan = !isAvoid && !!plan && planMatches(p, plan);
+    // one of your draft strategy's targets (early / mid / late)
+    const target = targetById.get(p.id);
     const arrow: React.CSSProperties = { border: "none", background: "transparent", fontSize: 12, fontWeight: 700, padding: "0 2px", cursor: "pointer", lineHeight: "12px" };
 
     return (
@@ -843,10 +843,10 @@ const Filters = useStableComponent(Filters__render);
           alignItems: "center",
           padding: "10px 10px",
           borderBottom: "1px solid rgba(0,0,0,0.08)",
-          borderLeft: isPlan ? "3px solid #0d9488" : "3px solid transparent",
+          borderLeft: target ? "3px solid #0d9488" : "3px solid transparent",
         }}
       >
-        <div onClick={() => openPlayerCard(p)} style={{ cursor: "pointer", userSelect: "none", opacity: isAvoid ? 0.5 : 1 }}>
+        <div onClick={() => openPlayerCard(p)} style={{ cursor: "pointer", userSelect: "none" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {reorder ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 18 }} onClick={(e) => e.stopPropagation()}>
@@ -860,8 +860,7 @@ const Filters = useStableComponent(Filters__render);
             <div>
               <div style={{ fontWeight: 500, fontSize: 12 }}>
                 {p.firstName[0]}. {p.lastName} <StatusTag player={p} />
-                {isPlan ? <span style={{ marginLeft: 4, padding: "0 5px", borderRadius: 999, background: "rgba(13,148,136,0.14)", color: "#0d9488", fontSize: 9, fontWeight: 700 }}>Plan</span> : null}
-                {isAvoid ? <span style={{ marginLeft: 4, padding: "0 5px", borderRadius: 999, background: "rgba(239,68,68,0.14)", color: "#dc2626", fontSize: 9, fontWeight: 700 }}>Avoid</span> : null}
+                {target ? <span style={{ marginLeft: 4, padding: "0 5px", borderRadius: 999, background: "rgba(13,148,136,0.14)", color: "#0d9488", fontSize: 9, fontWeight: 700, whiteSpace: "nowrap" }}>{targetShort(target)} target</span> : null}
               </div>
               <div style={{ fontSize: 10, opacity: 0.7 }}>
                 {TEAM_OPTIONS.find((t) => t.value === p.teamCode)?.label ?? p.teamCode}
@@ -889,7 +888,7 @@ const PlayerRow = useStableComponent(PlayerRow__render);
 
     return (
       <>
-        {!draftComplete ? <DraftPlanStrip strategy={draftStrategy} round={yourPlanRound} roster={yourRoster} leagueId={activeLeagueId ?? null} hideMockDraft={phase === "liveDraft"} onEditStrategy={openStrategy} /> : null}
+        {!draftComplete ? <DraftPlanStrip strategy={draftStrategy} draftedIds={draftedIds} leagueId={activeLeagueId ?? null} hideMockDraft={phase === "liveDraft"} onEditStrategy={openStrategy} /> : null}
         <Filters />
         <div style={listBox}>
           {/* the column's name, right above the numbers (same layout as the rows) */}
@@ -1375,7 +1374,6 @@ const ModalOverlay = useStableComponent(ModalOverlay__render);
       {strategyOpen && activeLeague ? (
         <DraftStrategyPanel
           leagueName={activeLeague.name}
-          format={activeLeague.squadFormat}
           strat={strat}
           onClose={closeStrategy}
           onMockDraft={phase === "preDraft" ? () => router.push(`/mock-draft?leagueId=${encodeURIComponent(activeLeague.id)}`) : undefined}

@@ -71,16 +71,15 @@ async function main() {
   const wanted = [ranked[150].id, ranked[151].id];
   await setDraftQueue(db, L, "dt_b", wanted);
 
-  // draft strategies (lib/draft/strategy.ts): team C aims for a hooker in round 1 and a loose
-  // forward in round 2 (its league strategy); team D (its default strategy) never wants the
-  // next three best players; team B puts a player on its watchlist but also on do-not-draft
+  // draft strategies (lib/draft/strategy.ts): team C's early targets are the best hooker and a
+  // low-ranked loose forward, in that order; team D only has an old "default" strategy (no longer
+  // used), so it goes by Draft Rank; team B's watchlist still comes before anything else
   const hookers = ranked.filter((p) => p.posAbbrev === "HO");
-  const avoidD = [ranked[1].id, ranked[2].id, ranked[3].id];
+  const sleeperLF = [...ranked].reverse().find((p) => p.posAbbrev === "LF")!;
+  const oldDefault = ranked[140].id;
   await db.from("draft_strategies").insert([
-    { username: "dt_c", league_id: L, data: { rounds: ["HO", "LF"] } },
-    { username: "dt_c", league_id: "", data: { rounds: ["PR", "PR"] } }, // the league one wins
-    { username: "dt_d", league_id: "", data: { avoid: avoidD } },
-    { username: "dt_b", league_id: "", data: { avoid: [ranked[149].id] } },
+    { username: "dt_c", league_id: L, data: { targets: { early: [hookers[0].id, sleeperLF.id] } } },
+    { username: "dt_d", league_id: "", data: { ranking: [oldDefault] } },
   ]);
   await setDraftQueue(db, L, "dt_b", [ranked[149].id, ...wanted]);
 
@@ -105,11 +104,11 @@ async function main() {
   const picks = (await db.from("draft_picks").select("*").eq("league_id", L).order("pick_number")).data ?? [];
   check(`all ${TEAMS.length * ROSTER_SIZE} picks made, no player twice`, picks.length === TEAMS.length * ROSTER_SIZE && new Set(picks.map((p) => p.player_id)).size === picks.length);
   const bPicks = picks.filter((p) => p.team_id === "dt_b");
-  check("team B's first auto-picks came from its watchlist, in order (skipping its do-not-draft player)", bPicks[0].player_id === wanted[0] && bPicks[1].player_id === wanted[1]);
+  check("team B's first auto-picks came from its watchlist, in order", bPicks[0].player_id === ranked[149].id && bPicks[1].player_id === wanted[0]);
   const cFirst = picks.filter((p) => p.team_id === "dt_c").slice(0, 2).map((p) => ctx.players.get(p.player_id)!);
-  check("strategy: team C took the best hooker in round 1, a loose forward in round 2", cFirst[0].id === hookers[0].id && [cFirst[1].posAbbrev, cFirst[1].secondaryPosAbbrev, cFirst[1].thirdPosAbbrev].includes("LF"), cFirst.map((p) => `${p.posAbbrev} #${p.draftRank}`).join(", "));
-  const dIds = new Set(picks.filter((p) => p.team_id === "dt_d").map((p) => p.player_id));
-  check("strategy: team D never took its do-not-draft players", avoidD.every((id) => !dIds.has(id)));
+  check("strategy: team C took its early targets in order (best hooker, then its low-ranked loose forward)", cFirst[0].id === hookers[0].id && cFirst[1].id === sleeperLF.id, cFirst.map((p) => `${p.posAbbrev} #${p.draftRank}`).join(", "));
+  const dFirst = picks.find((p) => p.team_id === "dt_d")!;
+  check("strategy: an old default strategy is ignored (team D went by Draft Rank)", dFirst.player_id !== oldDefault && (ctx.players.get(dFirst.player_id)?.draftRank ?? 999) < 10);
   const end = await loadDraftContext(db, L);
   const fitsAll = TEAMS.every((t) => {
     const roster = (end.rosters.get(t) ?? []).map((id) => end.players.get(id)!);

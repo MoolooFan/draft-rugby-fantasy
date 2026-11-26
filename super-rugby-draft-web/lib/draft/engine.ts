@@ -209,20 +209,17 @@ export async function makePick(db: Db, leagueId: string, teamId: string, playerI
 
 /**
  * The player auto-pick would take: the team's draft watchlist first (in order), then their draft
- * strategy (lib/draft/strategy.ts: this round's plan, position targets, their own rankings),
- * which with nothing set is the best draft rank. Never a do-not-draft player unless nobody
- * else fits.
+ * strategy (lib/draft/strategy.ts: their targets for this part of the draft, then their Overall
+ * Rankings), which with nothing set is the best draft rank.
  */
 export async function autoPickChoice(db: Db, leagueId: string, ctx: Ctx, teamId: string): Promise<string | null> {
   const [queue, strategy] = await Promise.all([
     q<Array<{ player_id: string }>>(db.from("draft_queue").select("player_id").eq("league_id", leagueId).eq("team_id", teamId).order("position")),
     strategyForTeam(db, leagueId, teamId).catch(() => null),
   ]);
-  const avoid = new Set(strategy?.avoid ?? []);
-  for (const { player_id } of queue) if (!avoid.has(player_id) && !pickProblem(ctx, teamId, player_id)) return player_id;
+  for (const { player_id } of queue) if (!pickProblem(ctx, teamId, player_id)) return player_id;
   const available = [...ctx.players.values()].filter((p) => !pickProblem(ctx, teamId, p.id));
-  const roster = (ctx.rosters.get(teamId) ?? []).map((id) => ctx.players.get(id)).filter((p): p is SitePlayer => !!p);
-  const choice = strategyChoice({ available, roster, round: roundForPick(ctx.order.length, ctx.state.pick_index), strategy });
+  const choice = strategyChoice({ available, round: roundForPick(ctx.order.length, ctx.state.pick_index), totalRounds: rosterSize(ctx.format), strategy });
   return choice?.id ?? null;
 }
 
