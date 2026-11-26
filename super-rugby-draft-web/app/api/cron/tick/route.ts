@@ -9,6 +9,7 @@
 // - Final scores of finished games from the official fantasy game (lib/results/matchScores.ts).
 // - Locks lineups at each deadline and finalises each round when it's due (lib/results/engine).
 // - Keeps live drafts moving (auto-picks) even with nobody in the draft room.
+// - Phone notifications on a timer: draft starting soon, lineup reminders (lib/notifications/reminders.ts).
 // - Nightly backup of the database at about 3am NZ time (lib/backup/run.ts).
 // Outside game weekends it does almost nothing, so it's cheap to call often.
 import { NextResponse } from "next/server";
@@ -16,6 +17,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { finishGames, runGameStats, type GameRunReport } from "@/lib/stats/gameRuns";
 import { runResultsTick } from "@/lib/results/engine";
 import { importMatchScores } from "@/lib/results/matchScores";
+import { sendDueReminders } from "@/lib/notifications/reminders";
 import { currentSeasonYear, getSeason, realRoundsAwaitingTeamLists } from "@/lib/season";
 import { applyFantasyFeed, applyQuestionable, clearFinishedGameStatuses, importRoundStatus, type ImportReport } from "@/lib/status/import";
 import { runDueWaivers } from "@/lib/waivers/process";
@@ -99,10 +101,14 @@ async function tick() {
     },
   });
 
+  // Phone notifications on a timer: the draft starting in 30 minutes, team selection closing in
+  // 2 hours (lib/notifications/reminders.ts; each sent once).
+  const reminders = await sendDueReminders(supabaseAdmin, seasonYear, now);
+
   // Nightly backup (3am NZ time, once a day)
   const backup = await backupIfDue(supabaseAdmin, now).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
 
-  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, matchScores, finishedBeforeFinalise, statusImports, lateChanges, statusesCleared, questionable, waivers, drafts, coach, backup, ...results };
+  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, matchScores, finishedBeforeFinalise, statusImports, lateChanges, statusesCleared, questionable, waivers, drafts, reminders, coach, backup, ...results };
 }
 
 async function handle(req: Request) {

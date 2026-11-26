@@ -12,6 +12,7 @@ import { AppMenu } from "@/components/AppMenu";
 import { useLeagueStore } from "@/lib/league/store";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { validateNewPassword } from "@/lib/auth/validate";
+import { PushPanel } from "@/components/PushSettings";
 import { NOTIFICATION_TYPES, withDefaults, type NotificationKey, type NotificationSettings } from "@/lib/notifications/types";
 
 type Me = { username: string; displayName: string; firstName: string | null; lastName: string | null };
@@ -289,8 +290,10 @@ export default function AccountPage() {
           {/* Notifications */}
           <div style={cardStyle}>
             <div style={sectionTitle}>Notifications</div>
+            {/* phone push notifications: on / off for this phone (components/PushSettings.tsx) */}
+            <PushPanel />
             <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.9, marginBottom: 8 }}>
-              Choose which notifications you get. Notifications aren&apos;t switched on for the site yet; your choices are saved for when they are.
+              Choose which notifications you get (on every phone you&apos;ve turned them on for; chat ones also set what counts as unread).
             </div>
             <div style={{ display: "grid", gap: 6 }}>
               {NOTIFICATION_TYPES.map((t) => {
