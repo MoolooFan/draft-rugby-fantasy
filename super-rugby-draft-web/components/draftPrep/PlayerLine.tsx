@@ -7,6 +7,7 @@ import { jerseySrcForTeam } from "@/components/playerCard/cardData";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { positionsLabel } from "@/lib/players/positions";
 import { ink, line, muted, num, teal } from "@/lib/ui/theme";
+import { justDragged } from "./strategyView";
 
 export type LinePlayer = {
   id: string;
@@ -29,6 +30,7 @@ export function PlayerLine({
   highlight,
   dim,
   onOpen,
+  stat,
   right,
 }: {
   p: LinePlayer;
@@ -41,6 +43,8 @@ export function PlayerLine({
   /** faded: e.g. a do-not-draft player */
   dim?: boolean;
   onOpen?: () => void;
+  /** a stat column just left of the buttons (Draft Strategy) */
+  stat?: React.ReactNode;
   right?: React.ReactNode;
 }) {
   const team = normalizeTeamCode(p.teamCode);
@@ -63,7 +67,9 @@ export function PlayerLine({
       ) : null}
       <img src={jerseySrcForTeam(team)} alt="" width={30} height={30} style={{ width: 30, height: 30, objectFit: "contain", flexShrink: 0 }} />
       <button
-        onClick={onOpen}
+        onClick={() => {
+          if (!justDragged()) onOpen?.();
+        }}
         disabled={!onOpen}
         style={{ flex: 1, minWidth: 0, textAlign: "left", background: "transparent", border: "none", padding: 0, color: ink, cursor: onOpen ? "pointer" : "default" }}
       >
@@ -77,6 +83,7 @@ export function PlayerLine({
           ) : null}
         </div>
       </button>
+      {stat != null ? <div style={{ ...num, width: 44, flexShrink: 0, textAlign: "center", fontSize: 12, fontWeight: 700, color: ink }}>{stat}</div> : null}
       {right ? <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>{right}</div> : null}
     </div>
   );

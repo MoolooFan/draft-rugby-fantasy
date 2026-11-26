@@ -5,6 +5,8 @@
 //   Targets              Early / Mid / Late Rounds groups, players ranked within each
 //   Positional Rankings  a group per position, players ranked within each
 // Groups start empty: "Add Players" lists everyone who can go in (with an Add button each).
+// Every list has the search + Filters and a stat column (components/draftPrep/strategyView.tsx);
+// ranked lists reorder by dragging (press and hold), ▲ ▼, or tapping the number (26 Nov 2026).
 import React, { useMemo, useState } from "react";
 import { STRATEGY_POSITIONS, TARGET_GROUPS, myRanks, sortByMyRank, targetGroups, targetShort, type DraftStrategy, type StrategyPos, type TargetGroup } from "@/lib/draft/strategy";
 import { POS_NAME } from "@/lib/draft/constants";
@@ -12,22 +14,15 @@ import { canPlayPosition } from "@/lib/players/positions";
 import { innerBox, ink, line, muted, primaryButton, secondaryButton, teal } from "@/lib/ui/theme";
 import { Chip } from "./PrepPage";
 import { IconButton, PlayerLine, type LinePlayer } from "./PlayerLine";
+import { DragList, ListHeading, StrategyFilterBar, type PlayerView } from "./strategyView";
 
 type Update = (change: (s: DraftStrategy) => DraftStrategy) => void;
+type TabProps = { strategy: DraftStrategy; update: Update; players: LinePlayer[]; view: PlayerView; onOpen: (p: LinePlayer) => void };
 
 const hint: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: muted, lineHeight: 1.4 };
-const input: React.CSSProperties = { height: 36, width: "100%", borderRadius: 10, border: `1px solid ${line}`, padding: "0 10px", fontSize: 14, color: ink, background: "white", boxSizing: "border-box" };
 const smallButton: React.CSSProperties = { ...secondaryButton, height: 32, width: "auto", padding: "0 14px", fontSize: 12 };
+const column: React.CSSProperties = { display: "grid", gap: 8, gridTemplateColumns: "minmax(0, 1fr)" };
 const PAGE = 50;
-
-function searchPlayers<T extends LinePlayer>(players: T[], q: string): T[] {
-  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  if (!words.length) return players;
-  return players.filter((p) => {
-    const hay = `${p.firstName} ${p.lastName} ${p.teamCode}`.toLowerCase();
-    return words.every((w) => hay.includes(w));
-  });
-}
 
 /** Move an id to a spot (0-based) in a list. */
 function moved(ids: string[], id: string, to: number): string[] {
@@ -73,14 +68,13 @@ function RankNumber({ p, rank, onMove }: { p: LinePlayer; rank: number; onMove: 
 }
 
 // ---------------------------------------------------------------------------
-export function OverallRankingsTab({ strategy, update, players, onOpen }: { strategy: DraftStrategy; update: Update; players: LinePlayer[]; onOpen: (p: LinePlayer) => void }) {
-  const [q, setQ] = useState("");
-  const [pos, setPos] = useState<StrategyPos | "">("");
+export function OverallRankingsTab({ strategy, update, players, view, onOpen }: TabProps) {
   const [shown, setShown] = useState(PAGE);
   const ranks = useMemo(() => myRanks(players, strategy), [players, strategy]);
   const order = useMemo(() => sortByMyRank(players, strategy, ranks), [players, strategy, ranks]);
-  const visible = useMemo(() => searchPlayers(order, q).filter((p) => !pos || canPlayPosition(p, pos)), [order, q, pos]);
+  const visible = useMemo(() => order.filter(view.matches), [order, view]);
   const groups = useMemo(() => targetGroups(strategy), [strategy]);
+  const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const custom = strategy.ranking.length > 0;
 
   const moveToIndex = (id: string, to: number) => update((s) => ({ ...s, ranking: moved(order.map((p) => p.id), id, to) }));
@@ -89,44 +83,38 @@ export function OverallRankingsTab({ strategy, update, players, onOpen }: { stra
     const other = visible[i + d];
     if (other) moveToIndex(visible[i].id, (ranks.get(other.id) ?? 1) - 1);
   };
+  const page = visible.slice(0, shown);
 
   return (
-    <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(0, 1fr)" }}>
-      <div style={hint}>
-        Your own order of every player: your custom draft ranking. The draft room can sort by it (My Rank), and auto-pick uses it once
-        your targets are gone. Use ▲ ▼ or tap a number to move a player to a new rank.
-      </div>
-      <input style={input} placeholder="Search players" value={q} onChange={(e) => { setQ(e.target.value); setShown(PAGE); }} aria-label="Search players" />
-      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
-        <Chip active={!pos} onClick={() => setPos("")}>All</Chip>
-        {STRATEGY_POSITIONS.map((p) => (
-          <Chip key={p} active={pos === p} onClick={() => { setPos(p); setShown(PAGE); }}>{p}</Chip>
-        ))}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <span style={hint}>{custom ? "Using your rankings" : "Same as the site's Draft Rank (move anyone to start your own)"}</span>
-        {custom ? <button style={smallButton} onClick={() => update((s) => ({ ...s, ranking: [] }))}>Reset to Draft Rank</button> : null}
-      </div>
+    <div style={column}>
+      <StrategyFilterBar view={view} />
+      {custom ? (
+        <button style={{ ...smallButton, justifySelf: "end" }} onClick={() => update((s) => ({ ...s, ranking: [] }))}>Reset to Draft Rank</button>
+      ) : null}
       <div style={{ ...innerBox, padding: 0 }}>
-        {visible.slice(0, shown).map((p, i) => {
-          const g = groups.get(p.id);
-          return (
-            <PlayerLine
-              key={p.id}
-              p={p}
-              number={<RankNumber p={p} rank={ranks.get(p.id) ?? 0} onMove={(to) => moveToIndex(p.id, to)} />}
-              tag={g ? `${targetShort(g)} target` : custom && p.draftRank && p.draftRank !== ranks.get(p.id) ? `Draft Rank ${p.draftRank}` : undefined}
-              tagTone={g ? "teal" : "grey"}
-              onOpen={() => onOpen(p)}
-              right={
-                <>
-                  <IconButton label={`Move ${p.firstName} ${p.lastName} up`} disabled={i === 0} onClick={() => step(i, -1)}>▲</IconButton>
-                  <IconButton label={`Move ${p.firstName} ${p.lastName} down`} disabled={i === visible.length - 1} onClick={() => step(i, 1)}>▼</IconButton>
-                </>
-              }
-            />
-          );
-        })}
+        <ListHeading view={view} rightWidth={60} />
+        <DragList ids={page.map((p) => p.id)} onMove={(id, overId) => moveToIndex(id, (ranks.get(overId) ?? 1) - 1)}>
+          {(id) => {
+            const p = byId.get(id)!;
+            const i = page.indexOf(p);
+            const g = groups.get(p.id);
+            return (
+              <PlayerLine
+                p={p}
+                number={<RankNumber p={p} rank={ranks.get(p.id) ?? 0} onMove={(to) => moveToIndex(p.id, to)} />}
+                tag={g ? `${targetShort(g)} target` : undefined}
+                stat={view.statText(p)}
+                onOpen={() => onOpen(p)}
+                right={
+                  <>
+                    <IconButton label={`Move ${p.firstName} ${p.lastName} up`} disabled={i === 0} onClick={() => step(i, -1)}>▲</IconButton>
+                    <IconButton label={`Move ${p.firstName} ${p.lastName} down`} disabled={i === visible.length - 1} onClick={() => step(i, 1)}>▼</IconButton>
+                  </>
+                }
+              />
+            );
+          }}
+        </DragList>
         {!visible.length ? <div style={{ ...hint, padding: 10 }}>No players match.</div> : null}
       </div>
       {visible.length > shown ? (
@@ -138,8 +126,9 @@ export function OverallRankingsTab({ strategy, update, players, onOpen }: { stra
 
 // ---------------------------------------------------------------------------
 /**
- * One ranked group (a target group or a position): its players in order (▲ ▼, tap the number,
- * ✕ to take out), and "Add Players", which lists everyone who can go in with an Add button.
+ * One ranked group (a target group or a position): its players in order (drag, ▲ ▼, tap the
+ * number, ✕ to take out), and "Add Players", which lists everyone who can go in with an Add
+ * button (sorted by the chosen stat).
  */
 function RankedGroup({
   title,
@@ -147,6 +136,7 @@ function RankedGroup({
   setIds,
   byId,
   eligible,
+  view,
   tagFor,
   emptyText,
   onOpen,
@@ -155,42 +145,43 @@ function RankedGroup({
   ids: string[];
   setIds: (ids: string[]) => void;
   byId: Map<string, LinePlayer>;
-  /** everyone who can be added (best Draft Rank first) */
+  /** everyone who can be added */
   eligible: LinePlayer[];
+  view: PlayerView;
   /** a tag in the Add list (e.g. "Mid target": adding him moves him here) */
   tagFor?: (p: LinePlayer) => string | undefined;
   emptyText: string;
   onOpen: (p: LinePlayer) => void;
 }) {
   const [adding, setAdding] = useState(false);
-  const [q, setQ] = useState("");
   const [shown, setShown] = useState(PAGE);
   const inGroup = new Set(ids);
-  const list = ids.map((id) => byId.get(id)).filter((p): p is LinePlayer => !!p);
-  const matches = useMemo(() => searchPlayers(eligible, q), [eligible, q]);
+  const all = ids.map((id) => byId.get(id)).filter((p): p is LinePlayer => !!p);
+  const list = all.filter(view.matches);
+  const matches = useMemo(() => view.byStat(eligible.filter(view.matches)), [eligible, view]);
 
   if (adding) {
     return (
-      <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(0, 1fr)" }}>
+      <div style={column}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ flex: 1, fontSize: 13, fontWeight: 700 }}>Add to {title}</div>
-          <button style={{ ...primaryButton, height: 32, width: "auto", padding: "0 16px", fontSize: 12 }} onClick={() => { setAdding(false); setQ(""); setShown(PAGE); }}>
+          <button style={{ ...primaryButton, height: 32, width: "auto", padding: "0 16px", fontSize: 12 }} onClick={() => { setAdding(false); setShown(PAGE); }}>
             Done ({ids.length})
           </button>
         </div>
-        <input style={input} placeholder="Search players" value={q} onChange={(e) => { setQ(e.target.value); setShown(PAGE); }} aria-label="Search players" />
+        <StrategyFilterBar view={view} />
         <div style={{ ...innerBox, padding: 0 }}>
+          <ListHeading view={view} rightWidth={72} />
           {matches.slice(0, shown).map((p) => {
             const added = inGroup.has(p.id);
             return (
               <PlayerLine
                 key={p.id}
                 p={p}
-                number={p.draftRank && p.draftRank < 9999 ? p.draftRank : "—"}
-                numberLabel="Draft Rank"
                 tag={added ? undefined : tagFor?.(p)}
                 tagTone="grey"
                 highlight={added}
+                stat={view.statText(p)}
                 onOpen={() => onOpen(p)}
                 right={
                   added ? (
@@ -224,35 +215,45 @@ function RankedGroup({
   }
 
   return (
-    <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(0, 1fr)" }}>
+    <div style={column}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <div style={{ flex: 1, fontSize: 13, fontWeight: 700 }}>
-          {title} ({list.length})
+          {title} ({all.length})
         </div>
         <button style={{ ...primaryButton, height: 32, width: "auto", padding: "0 14px", fontSize: 12 }} onClick={() => setAdding(true)}>
           + Add Players
         </button>
       </div>
-      {list.length ? (
-        <div style={{ ...innerBox, padding: 0 }}>
-          {list.map((p, i) => (
-            <PlayerLine
-              key={p.id}
-              p={p}
-              number={<RankNumber p={p} rank={i + 1} onMove={(to) => setIds(moved(ids, p.id, to))} />}
-              tag={p.draftRank && p.draftRank < 9999 ? `Draft Rank ${p.draftRank}` : undefined}
-              tagTone="grey"
-              onOpen={() => onOpen(p)}
-              right={
-                <>
-                  <IconButton label={`Move ${p.firstName} ${p.lastName} up`} disabled={i === 0} onClick={() => setIds(moved(ids, p.id, i - 1))}>▲</IconButton>
-                  <IconButton label={`Move ${p.firstName} ${p.lastName} down`} disabled={i === list.length - 1} onClick={() => setIds(moved(ids, p.id, i + 1))}>▼</IconButton>
-                  <IconButton label={`Take ${p.firstName} ${p.lastName} out of ${title}`} onClick={() => setIds(ids.filter((x) => x !== p.id))}>✕</IconButton>
-                </>
-              }
-            />
-          ))}
-        </div>
+      {all.length ? (
+        <>
+          <StrategyFilterBar view={view} />
+          <div style={{ ...innerBox, padding: 0 }}>
+            <ListHeading view={view} rightWidth={92} />
+            <DragList ids={list.map((p) => p.id)} onMove={(id, overId) => setIds(moved(ids, id, ids.indexOf(overId)))}>
+              {(id) => {
+                const p = byId.get(id)!;
+                const i = list.indexOf(p);
+                const rank = ids.indexOf(id);
+                return (
+                  <PlayerLine
+                    p={p}
+                    number={<RankNumber p={p} rank={rank + 1} onMove={(to) => setIds(moved(ids, p.id, to))} />}
+                    stat={view.statText(p)}
+                    onOpen={() => onOpen(p)}
+                    right={
+                      <>
+                        <IconButton label={`Move ${p.firstName} ${p.lastName} up`} disabled={i === 0} onClick={() => setIds(moved(ids, p.id, ids.indexOf(list[i - 1].id)))}>▲</IconButton>
+                        <IconButton label={`Move ${p.firstName} ${p.lastName} down`} disabled={i === list.length - 1} onClick={() => setIds(moved(ids, p.id, ids.indexOf(list[i + 1].id)))}>▼</IconButton>
+                        <IconButton label={`Take ${p.firstName} ${p.lastName} out of ${title}`} onClick={() => setIds(ids.filter((x) => x !== p.id))}>✕</IconButton>
+                      </>
+                    }
+                  />
+                );
+              }}
+            </DragList>
+            {!list.length ? <div style={{ ...hint, padding: 10 }}>No players match.</div> : null}
+          </div>
+        </>
       ) : (
         <div style={{ ...innerBox, ...hint, padding: 12 }}>{emptyText}</div>
       )}
@@ -261,7 +262,7 @@ function RankedGroup({
 }
 
 // ---------------------------------------------------------------------------
-export function TargetsTab({ strategy, update, players, onOpen }: { strategy: DraftStrategy; update: Update; players: LinePlayer[]; onOpen: (p: LinePlayer) => void }) {
+export function TargetsTab({ strategy, update, players, view, onOpen }: TabProps) {
   const [group, setGroup] = useState<TargetGroup>("early");
   const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const groups = useMemo(() => targetGroups(strategy), [strategy]);
@@ -275,12 +276,7 @@ export function TargetsTab({ strategy, update, players, onOpen }: { strategy: Dr
       return { ...s, targets };
     });
   return (
-    <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(0, 1fr)" }}>
-      <div style={hint}>
-        Players you want, in early, mid and late round groups, ranked within each group. They&apos;re tagged in the draft room. If your
-        pick clock runs out, auto-pick takes your best target still there (after your draft watchlist): early targets in the first third of
-        the draft, then mid, then late.
-      </div>
+    <div style={column}>
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
         {TARGET_GROUPS.map((g) => (
           <Chip key={g.key} active={group === g.key} onClick={() => setGroup(g.key)}>
@@ -295,6 +291,7 @@ export function TargetsTab({ strategy, update, players, onOpen }: { strategy: Dr
         setIds={setIds}
         byId={byId}
         eligible={players}
+        view={view}
         tagFor={(p) => {
           const g = groups.get(p.id);
           return g && g !== group ? `${targetShort(g)} target` : undefined;
@@ -307,18 +304,14 @@ export function TargetsTab({ strategy, update, players, onOpen }: { strategy: Dr
 }
 
 // ---------------------------------------------------------------------------
-export function PositionalRankingsTab({ strategy, update, players, onOpen }: { strategy: DraftStrategy; update: Update; players: LinePlayer[]; onOpen: (p: LinePlayer) => void }) {
+export function PositionalRankingsTab({ strategy, update, players, view, onOpen }: TabProps) {
   const [pos, setPos] = useState<StrategyPos>("PR");
   const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const eligible = useMemo(() => players.filter((p) => canPlayPosition(p, pos)), [players, pos]);
   const name = POS_NAME[pos] ?? pos;
   const plural = name === "Flyhalf" ? "Flyhalves" : `${name}s`;
   return (
-    <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(0, 1fr)" }}>
-      <div style={hint}>
-        Rank players within each position. A player who plays more than one position can go in each of those groups. In the draft room,
-        filter by one position and sort by My Rank to see your order for it.
-      </div>
+    <div style={column}>
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
         {STRATEGY_POSITIONS.map((p) => (
           <Chip key={p} active={pos === p} onClick={() => setPos(p)}>
@@ -333,6 +326,7 @@ export function PositionalRankingsTab({ strategy, update, players, onOpen }: { s
         setIds={(ids) => update((s) => ({ ...s, positions: { ...s.positions, [pos]: ids } }))}
         byId={byId}
         eligible={eligible}
+        view={view}
         emptyText={`No ${plural.toLowerCase()} ranked yet. Tap "Add Players" to choose some.`}
         onOpen={onOpen}
       />

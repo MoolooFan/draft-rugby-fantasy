@@ -23,6 +23,7 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `0d5f3d5` | Draft Strategy: Filters and a stat column on every list (like the Draft Room), drag players to reorder (press and hold), explanation text removed | |
 | `92f8674` | **Draft Strategy redone**: three tabs (Overall Rankings, Targets in Early / Mid / Late Rounds groups, Positional Rankings), each group ranked, players added from an "Add Players" list. Round Plan and Do Not Draft removed. Auto-pick uses your targets for that part of the draft, then your Overall Rankings. Draft room tags your targets. One strategy per league (no more "default") | |
 
 ### 25 Nov 2026
