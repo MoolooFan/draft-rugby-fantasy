@@ -1,10 +1,11 @@
 "use client";
 // components/dashboard/DashboardHeader.tsx
-// The Dashboard's top: the menu button and the deadline banner (waivers / team selection).
+// The Dashboard's top: the menu button and the deadline banner (waivers / team selection; none
+// before the draft).
 // Moved out of app/dashboard/page.tsx.
 import React from "react";
 
-export function DashboardHeader({ onOpenMenu, bannerTitle, bannerTime }: { onOpenMenu: () => void; bannerTitle: string; bannerTime: string }) {
+export function DashboardHeader({ onOpenMenu, bannerTitle, bannerTime }: { onOpenMenu: () => void; bannerTitle: string | null; bannerTime: string }) {
   return (
       <>
 
@@ -32,7 +33,7 @@ export function DashboardHeader({ onOpenMenu, bannerTitle, bannerTime }: { onOpe
 </div>
 
         {/* Deadline banner */}
-        <div
+        {bannerTitle == null ? null : <div
           style={{
             marginTop: 10,
             borderRadius: 999,
@@ -65,7 +66,7 @@ export function DashboardHeader({ onOpenMenu, bannerTitle, bannerTime }: { onOpe
           >
             {bannerTime}
           </div>
-        </div>
+        </div>}
       </>
   );
 }

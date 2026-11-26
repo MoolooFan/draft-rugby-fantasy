@@ -11,7 +11,7 @@ import { AppMenu } from "@/components/AppMenu";
 import { loadMyLeagues, useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
 
-import { currentSeasonYear, fixturesByFantasyWeek, getSeason, roundLabel, totalFantasyWeeks } from "@/lib/season";
+import { currentSeasonYear, fixturesByFantasyWeek, getSeason, realRoundsForWeek, roundLabel, totalFantasyWeeks, weekDeadlineMs } from "@/lib/season";
 
 // This season's fixtures, numbered by fantasy week (see lib/season).
 const fixturesData = fixturesByFantasyWeek();
@@ -33,6 +33,7 @@ import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
 import type { PowerTable } from "@/lib/league/powerServer";
 import { WeekGamesCard } from "@/components/WeekGamesCard";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
+import { PreDraftDashboard } from "@/components/dashboard/PreDraftDashboard";
 import { NoLeague } from "@/components/dashboard/NoLeague";
 import { MatchupCard } from "@/components/dashboard/MatchupCard";
 import { UpcomingFixtureCard } from "@/components/dashboard/UpcomingFixtureCard";
@@ -67,6 +68,7 @@ import {
   type Player,
   type SlotId,
   type StandingRow,
+  type PositionInfo,
 } from "@/components/dashboard/helpers";
 
 export default function DashboardPage() {
@@ -700,9 +702,23 @@ const dashState: DashboardState = useMemo(() => {
   return "preDraft";
 }, [activeLeague]);
 
-// We only run one league and it is post-draft.
-// If there is no league, show NoLeague. Otherwise always show PostDraft.
-const effectiveDashState: DashboardState = activeLeague ? "postDraft" : "noLeague";
+// Before the league's draft is finished: the pre-draft dashboard (components/dashboard/PreDraftDashboard)
+const effectiveDashState: DashboardState = dashState;
+
+// The season's latest round whose lineups have locked (0 = the season hasn't started). Before the
+// draft the league has no weeks of its own yet, so this comes from the season's fixtures: a league
+// that starts mid-season shows that round's games and Player of the Week (Ethan, 26 Nov 2026).
+const leagueSeason = activeLeague?.season ?? currentSeasonYear();
+const seasonWeekNow = useMemo(() => {
+  if (!nowMs) return 0;
+  const s = getSeason(leagueSeason);
+  let w = 0;
+  for (let i = 1; i <= totalFantasyWeeks(s); i++) {
+    const d = weekDeadlineMs(s, i);
+    if (d != null && d <= nowMs) w = i;
+  }
+  return w;
+}, [nowMs, leagueSeason]);
 
   // DEV: switch dashboards while we build
 
@@ -955,6 +971,33 @@ const bestAvailablePlayers: Player[] = useMemo(() => bestAvailable(allPlayers, r
 
 const playersOfWeek: Player[] = useMemo(() => playersOfTheWeek(allPlayers, weekPointsByPlayerId, displayWeek), [allPlayers, weekPointsByPlayerId, displayWeek]);
 
+// before the draft: Player of the Week for the season's latest round (see seasonWeekNow)
+const preDraftPlayersOfWeek: Player[] = useMemo(() => {
+  if (effectiveDashState !== "preDraft" || !seasonWeekNow) return [];
+  const rounds = new Set(realRoundsForWeek(getSeason(leagueSeason), seasonWeekNow));
+  const metaById = new Map<string, PositionInfo>();
+  for (const p of (Array.isArray(allPlayers) ? allPlayers : []) as Array<{ id?: string } & NonNullable<PositionInfo>>) {
+    if (p?.id != null) metaById.set(normaliseId(p.id), p);
+  }
+  // one score per player per real round (the same row can come more than once), then added up
+  // over the week's rounds
+  const perRound = new Map<string, number>();
+  for (const row of roundRows ?? []) {
+    const round = rowRound(row);
+    if (!rounds.has(round)) continue;
+    const pid = rowPlayerId(row);
+    if (!pid) continue;
+    const id = normaliseId(pid);
+    perRound.set(`${id}|${round}`, calcFantasyPoints(row, metaById.get(id) ?? null));
+  }
+  const m = new Map<string, number>();
+  for (const [k, pts] of perRound) {
+    const id = k.slice(0, k.lastIndexOf("|"));
+    m.set(id, (m.get(id) ?? 0) + pts);
+  }
+  return playersOfTheWeek(allPlayers, m, seasonWeekNow);
+}, [effectiveDashState, seasonWeekNow, roundRows, allPlayers, leagueSeason]);
+
 function goToTransactionsForAdd(playerId: string) {
   router.push(`/transactions?addPlayerId=${encodeURIComponent(playerId)}`);
 }
@@ -1005,8 +1048,26 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
           paddingBottom: "calc(18px + env(safe-area-inset-bottom))",
         }}
       >
-        <DashboardHeader onOpenMenu={() => setMenuOpen(true)} bannerTitle={bannerTitle} bannerTime={bannerTime} />
+        <DashboardHeader onOpenMenu={() => setMenuOpen(true)} bannerTitle={effectiveDashState === "postDraft" ? bannerTitle : null} bannerTime={bannerTime} />
         {effectiveDashState === "noLeague" && <NoLeague />}
+        {effectiveDashState === "preDraft" && activeLeague ? (
+          <PreDraftDashboard
+            leagueId={activeLeague.id}
+            leagueName={leagueName}
+            roundText={seasonWeekNow > 0 ? roundLabel(seasonWeekNow, leagueSeason) : "Pre-season"}
+            draftAt={activeLeague.draftAt ?? null}
+            draftLive={activeLeague.draftStatus === "live"}
+            timeZone={userTz}
+            after={
+              seasonWeekNow > 0 ? (
+                <>
+                  <WeekGamesCard leagueId={activeLeague.id} week={seasonWeekNow} noTable />
+                  <PlayerOfWeekCard playersOfWeek={preDraftPlayersOfWeek} onOpenPlayer={openPlayerOfWeek} />
+                </>
+              ) : null
+            }
+          />
+        ) : null}
         {effectiveDashState === "postDraft" && (
           <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
             <MatchupCard

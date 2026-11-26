@@ -47,7 +47,6 @@ export function AppMenu({
     if (item === "Dashboard") router.replace("/dashboard");
     if (item === "League") router.push("/league");
     if (item === "Draft Room") router.push("/draft-room");
-    if (item === "Mock Draft") router.push("/mock-draft");
 
         // Pages
     if (item === "Transactions") router.push("/transactions");
@@ -62,13 +61,13 @@ export function AppMenu({
   }
 
   // No league joined yet: only the pages that work without one (plan item E2). The Stats Hub
-  // (was the no-league Player Pool) is for everyone (16 Nov 2026). Mock Draft
-  // work with or without a league (21 Nov 2026).
+  // (was the no-league Player Pool) is for everyone (16 Nov 2026). Mock Draft isn't in the menu
+  // (26 Nov 2026): it's on the Dashboard before the draft and in the Draft Room.
   const hasLeague = (leagues ?? []).length > 0;
   const items: ActiveMenu[] = [
     ...((hasLeague
-      ? ["Dashboard", "Matchup", "Team Selection", "Transactions", "Stats Hub", "League", "Draft Room", "Mock Draft", "Fixtures", "Team Details", "Account"]
-      : ["Dashboard", "League", "Mock Draft", "Fixtures", "Stats Hub", "Account"]) as ActiveMenu[]),
+      ? ["Dashboard", "Matchup", "Team Selection", "Transactions", "Stats Hub", "League", "Draft Room", "Fixtures", "Team Details", "Account"]
+      : ["Dashboard", "League", "Fixtures", "Stats Hub", "Account"]) as ActiveMenu[]),
     // only for the site admin (the server checks again on the admin page)
     ...(getActiveUserProfile()?.isSiteAdmin ? (["Admin"] as ActiveMenu[]) : []),
   ];

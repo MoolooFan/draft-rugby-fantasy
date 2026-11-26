@@ -34,7 +34,8 @@ const kickoffText = (iso: string) => {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("en-NZ", { weekday: "short", hour: "numeric", minute: "2-digit" });
 };
 
-export function WeekGamesCard({ leagueId, week }: { leagueId: string | null; week: number }) {
+/** noTable: no "League Table Updated" line (before the league's draft it has no table yet) */
+export function WeekGamesCard({ leagueId, week, noTable = false }: { leagueId: string | null; week: number; noTable?: boolean }) {
   const [data, setData] = useState<{ key: string; value: WeekGames } | null>(null);
   const key = `${leagueId ?? ""}|${week}`;
 
@@ -75,7 +76,7 @@ export function WeekGamesCard({ leagueId, week }: { leagueId: string | null; wee
             </Pill>
           </div>
         ))}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 0" }}>
+        {noTable ? null : <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 0" }}>
           <div style={{ flex: 1, fontSize: 12, fontWeight: 700, color: d.tableUpdated ? ink : muted }}>League Table Updated</div>
           {d.tableUpdated ? (
             <Pill bg="#dcfce7" fg="#15803d">
@@ -87,7 +88,7 @@ export function WeekGamesCard({ leagueId, week }: { leagueId: string | null; wee
           ) : (
             <Pill bg="#e2e8f0" fg="#475569">Pending</Pill>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );
