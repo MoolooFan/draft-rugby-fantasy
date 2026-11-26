@@ -23,6 +23,8 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `92713e7` | **Real match scores**: final scores come from the official fantasy game after each game (the 5-minute background job), shown on Fixtures, player cards, Matchup and Team Selection, and used for team win / draw points. `scripts/import-match-scores.ts` fills in a whole season | No (uses the match_results table that was already there) |
+| `c01071c` | Draft Room page split into smaller files (looks and works the same); Moana players show "Moana" instead of "MOA" | No |
 | `b8c5626` | iPhone bar behind the clock is navy (it was green with a fade below it) | No |
 | `6dda7e7` | No blur at the top of the Home Screen app (solid status bar); strategy / mock draft tops match the other pages; team pictures can't be removed (every team gets a default icon); FDR shadows; 10-starter squad has 4 bench; home/away games mixed so runs are short; Stats Hub names cut off; "Upcoming" games; drag to swap in Team Selection; Isaac and Josh in Admin History | Yes (honours "played" rows, default team icons) |
 | `9b85e37` | **Dashboard before the draft**: draft date and time with Enter Draft Room, Draft Preparation (Draft Strategy, Mock Draft); this round's games and Player of the Week if the season has started. Mock Draft moved out of the strategy box in the Draft Room and out of the menu | |

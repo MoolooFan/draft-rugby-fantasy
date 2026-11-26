@@ -120,7 +120,7 @@ export type FantasyFeed = {
   squads: Map<number, string>;
 };
 
-async function getJson(url: string): Promise<unknown> {
+export async function getJson(url: string): Promise<unknown> {
   const res = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" });
   if (!res.ok) throw new Error(`${url}: ${res.status}`);
   return res.json();

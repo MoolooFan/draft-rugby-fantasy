@@ -6,6 +6,7 @@
 //   (retrying every call until they're out); then, until each game kicks off, late changes from the
 //   official fantasy game (lib/status/fantasyFeed.ts); clears Starting/Benched once a game has
 //   finished (saving who started in player_round_roles first).
+// - Final scores of finished games from the official fantasy game (lib/results/matchScores.ts).
 // - Locks lineups at each deadline and finalises each round when it's due (lib/results/engine).
 // - Keeps live drafts moving (auto-picks) even with nobody in the draft room.
 // - Nightly backup of the database at about 3am NZ time (lib/backup/run.ts).
@@ -14,6 +15,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { finishGames, runGameStats, type GameRunReport } from "@/lib/stats/gameRuns";
 import { runResultsTick } from "@/lib/results/engine";
+import { importMatchScores } from "@/lib/results/matchScores";
 import { currentSeasonYear, getSeason, realRoundsAwaitingTeamLists } from "@/lib/season";
 import { applyFantasyFeed, applyQuestionable, clearFinishedGameStatuses, importRoundStatus, type ImportReport } from "@/lib/status/import";
 import { runDueWaivers } from "@/lib/waivers/process";
@@ -37,6 +39,13 @@ async function tick() {
   const firstCallOfHour = new Date(now).getUTCMinutes() < 5;
   const synced = await runGameStats(supabaseAdmin, seasonYear, now, { firstCallOfHour });
   let finishedBeforeFinalise: GameRunReport | null = null;
+
+  // Final scores of finished games (official fantasy game), before any week is finalised so the
+  // team-win / draw points are in (lib/results/matchScores.ts). Only reads the feed while a recent
+  // game is missing its score.
+  const matchScores = await importMatchScores(supabaseAdmin, seasonYear, now)
+    .then((r) => ({ ...r, unmatched: r.unmatched.slice(0, 20) }))
+    .catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
 
   // Team lists / injury lists: each article is read once, from Wednesday 4:30pm NZT until kickoff.
   const statusImports: Array<ImportReport | { realRound: number; error: string }> = [];
@@ -93,7 +102,7 @@ async function tick() {
   // Nightly backup (3am NZ time, once a day)
   const backup = await backupIfDue(supabaseAdmin, now).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
 
-  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, finishedBeforeFinalise, statusImports, lateChanges, statusesCleared, questionable, waivers, drafts, coach, backup, ...results };
+  return { ok: true, season: seasonYear, at: new Date(now).toISOString(), statsSync: synced, matchScores, finishedBeforeFinalise, statusImports, lateChanges, statusesCleared, questionable, waivers, drafts, coach, backup, ...results };
 }
 
 async function handle(req: Request) {

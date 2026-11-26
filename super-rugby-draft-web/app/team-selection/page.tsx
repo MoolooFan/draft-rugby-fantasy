@@ -16,6 +16,7 @@ import { useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
 import { useTransactionsStore } from "@/lib/transactions/store";
 
+import { useFixturesWithScores } from "@/lib/fixtures/useScores";
 import { currentSeasonYear, fixturesByFantasyWeek, roundLabel, SEASONS } from "@/lib/season";
 
 // This season's fixtures, numbered by fantasy week (see lib/season).
@@ -381,7 +382,8 @@ function getLivePlayerById(id: string) {
 }
 
   // Fixtures
-  const fixtures = useMemo(() => fixturesData as AnyFixture[], []);
+  // with the real final scores (lib/fixtures/useScores.ts), so finished games count as finished
+  const fixtures = useFixturesWithScores(fixturesData as AnyFixture[]);
   const normalizedFixtures = useMemo(() => {
     return fixtures
       .map((f) => ({ ...f, kickoffMs: toMs(f.kickoffAt) }))

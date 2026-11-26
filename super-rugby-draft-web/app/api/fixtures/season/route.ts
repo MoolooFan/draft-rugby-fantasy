@@ -9,6 +9,8 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { SEASONS, currentSeasonYear, fixturesByFantasyWeek, kickoffMs, roundLabel } from "@/lib/season";
 import { demo } from "@/lib/demo";
+import { withScores } from "@/lib/fixtures/scores";
+import { savedMatchScores } from "@/lib/results/matchScores";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +27,9 @@ export async function GET(req: Request) {
 
     const d = demo();
     const notYet = (f: { realRound: number }) => !!d && season === d.season && f.realRound > d.lastRealRound;
-    const fixtures = fixturesByFantasyWeek(season).map((f) => {
+    // final scores from the official fantasy game (match_results) where the fixtures file has none
+    const scores = await savedMatchScores(supabaseAdmin, season).catch(() => []);
+    const fixtures = withScores(fixturesByFantasyWeek(season), scores).map((f) => {
       const home = rating.get(f.homeTeam);
       const away = rating.get(f.awayTeam);
       const file = f as typeof f & { fdrHome?: number; fdrAway?: number };
