@@ -1,5 +1,5 @@
 // Run: npx tsx scripts/tests/schedule.test.ts  — checks the schedule maker for 4-12 teams and every finals option.
-import { buildLeagueSchedule, pickRoundForWeek, resolveSource, type FinalsSize, type PlayoffResult, type RegularGame } from "../../lib/league/schedule";
+import { balanceHomeAway, buildLeagueSchedule, pickRoundForWeek, resolveSource, type FinalsSize, type PlayoffResult, type RegularGame } from "../../lib/league/schedule";
 const weeks = Array.from({ length: 16 }, (_, i) => i + 1);
 let failures = 0;
 const fail = (m: string) => { failures++; if (failures < 30) console.log("FAIL", m); };
@@ -82,6 +82,34 @@ for (let n = 4; n <= 12; n++) {
   }
 }
 console.log(idleReport.join("\n"));
+
+// Home and away (Ethan, 26 Nov 2026): never 4+ home or away games in a row, runs of 3 rare,
+// everyone's home and away games level, and every pair still meets as often as before
+{
+  let threes = 0, teamSeasons = 0;
+  for (const n of [4, 6, 8, 10, 12, 7, 9]) {
+    for (let k = 0; k < 25; k++) {
+      const teams = Array.from({ length: n }, (_, i) => `t${i}`);
+      const plain = buildLeagueSchedule({ teamIds: teams, weeks, finals: 4 });
+      const sch = buildLeagueSchedule({ teamIds: teams, weeks, finals: 4, rng: Math.random });
+      // the balancing only swaps venues: same games in the same weeks
+      const pairs = (games: RegularGame[]) => games.map((g) => [g.homeTeamId, g.awayTeamId ?? "bye"].sort().join("-") + "@" + g.week).sort().join(",");
+      if (pairs(plain.regular) !== pairs(balanceHomeAway(plain.regular, Math.random))) fail(`home/away n=${n}: balancing changed the games, not just the venues`);
+      for (const t of teams) {
+        const seq = sch.regular.filter((g) => g.awayTeamId && (g.homeTeamId === t || g.awayTeamId === t)).sort((a, b) => a.week - b.week).map((g) => (g.homeTeamId === t ? "H" : "A")).join("");
+        for (const m of seq.match(/H+|A+/g) ?? []) {
+          if (m.length >= 4) fail(`home/away n=${n}: ${t} has ${m.length} ${m[0] === "H" ? "home" : "away"} games in a row (${seq})`);
+          if (m.length === 3) threes++;
+        }
+        const h = [...seq].filter((x) => x === "H").length;
+        if (Math.abs(2 * h - seq.length) > 2) fail(`home/away n=${n}: ${t} has ${h} home of ${seq.length}`);
+        teamSeasons++;
+      }
+    }
+  }
+  if (threes > teamSeasons * 0.15) fail(`home/away: too many runs of 3 (${threes} in ${teamSeasons} team-seasons)`);
+  console.log(`home/away: ${threes} runs of 3 in ${teamSeasons} team-seasons, none longer`);
+}
 console.log(failures ? `\n${failures} FAILURES` : "\nALL CHECKS PASSED");
 const show = (n: number, F: FinalsSize) => {
   const sch = buildLeagueSchedule({ teamIds: Array.from({ length: n }, (_, i) => `T${i + 1}`), weeks, finals: F });

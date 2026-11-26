@@ -610,6 +610,9 @@ const WeekList = useStableComponent(WeekList__render);
           <div
             style={{
               minWidth: 640,
+              // room round the edges so the boxes' shadows aren't cut off (bottom row, last column)
+              width: "max-content",
+              padding: "2px 14px 16px 2px",
               display: "grid",
               gridTemplateColumns: `160px repeat(${weeks.length}, 50px)`,
               gap: 8,

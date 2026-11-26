@@ -10,6 +10,7 @@ import { CAPTAIN_MULTIPLIER, statCountsFromRow } from "@/lib/scoring";
 
 import { AppMenu } from "@/components/AppMenu";
 import { PlayerCardModal } from "@/components/PlayerCardModal";
+import { DragSwapTile, justDraggedTile, SwapDnd } from "@/components/teamSelection/DragSwap";
 
 import { useLeagueStore } from "@/lib/league/store";
 import { useDraftStore } from "@/lib/draft/store";
@@ -824,9 +825,16 @@ function isStarterSlotId(id: SlotId) {
 
     // If we are in "swap select target" mode:
 if (swapFromSlot) {
-  const fromId = swapFromSlot;
-  const toId = slotId;
+  doSwap(swapFromSlot, slotId);
+  return;
+}
 
+    // Normal tap: open player card
+    if (p) openPlayer(p);
+  }
+
+  /** Swap two tiles' players (tap Swap then the other player, or drag one onto the other). */
+  function doSwap(fromId: SlotId, toId: SlotId) {
   if (fromId === toId) {
     setSwapFromSlot(null);
     return;
@@ -858,11 +866,6 @@ setIsDirty(true);
 });
 
   setSwapFromSlot(null);
-  return;
-}
-
-    // Normal tap: open player card
-    if (p) openPlayer(p);
   }
 
 function getUpcomingFixtureTag(teamCodeOrName: string) {
@@ -932,12 +935,15 @@ function tileSubtext(p: Player | null) {
 
   
 
-  // a lineup tile (components/teamSelection/Tiles.tsx)
-  const renderTile = (slotId: SlotId) => {
+  // dragging a tile onto another swaps them (components/teamSelection/DragSwap.tsx)
+  const [dragSlot, setDragSlot] = useState<SlotId | null>(null);
+
+  // a lineup tile (components/teamSelection/Tiles.tsx); bare = the copy that follows your finger
+  const renderTile = (slotId: SlotId, bare = false) => {
     const slot = SLOT_DEFS.find((s) => s.id === slotId)!;
     const p = lineup[slotId];
     const isCaptain = !!p?.id && captainId === p.id && slot.starter;
-    return (
+    const tile = (
       <PlayerTile
         slot={slot}
         player={p}
@@ -951,8 +957,16 @@ function tileSubtext(p: Player | null) {
         subtext={tileSubtext(p)}
         captainProj={!!p && viewMode === "Projected" && p.id === captainId}
         livePlayer={p ? getLivePlayerById(p.id) : null}
-        onPress={() => onTilePress(slotId)}
+        onPress={() => {
+          if (!justDraggedTile()) onTilePress(slotId);
+        }}
       />
+    );
+    if (bare) return tile;
+    return (
+      <DragSwapTile id={slotId} canDrag={!!p && !irDropMode}>
+        {tile}
+      </DragSwapTile>
     );
   };
 
@@ -1100,14 +1114,31 @@ function tileSubtext(p: Player | null) {
           onSave={() => saveSelection()}
         />
 
+        <SwapDnd
+          activeId={dragSlot}
+          onStart={(id) => {
+            setDragSlot(id as SlotId);
+            setSwapFromSlot(id as SlotId); // light up where he can go
+          }}
+          onDrop={(from, to) => {
+            setDragSlot(null);
+            if (getSwapPlan(from as SlotId, to as SlotId)) doSwap(from as SlotId, to as SlotId);
+            else setSwapFromSlot(null);
+          }}
+          onCancel={() => {
+            setDragSlot(null);
+            setSwapFromSlot(null);
+          }}
+          overlay={(id) => renderTile(id as SlotId, true)}
+        >
         {/* Starters on field */}
-        <Pitch pitchRowCount={PITCH_ROWS} starterIds={STARTER_IDS} fieldPos={FIELD_POS} renderTile={renderTile} />
+        <Pitch pitchRowCount={PITCH_ROWS} starterIds={STARTER_IDS} fieldPos={FIELD_POS} renderTile={(id) => renderTile(id)} />
 
         {/* Bench */}
         <BenchPanel
           benchIds={BENCH_IDS}
           irCount={squad.ir}
-          renderTile={renderTile}
+          renderTile={(id) => renderTile(id)}
           renderIr={renderIr}
           fitIrName={fitIrPlayer ? nameOf(fitIrPlayer) : null}
           irNotice={irNotice}
@@ -1115,6 +1146,7 @@ function tileSubtext(p: Player | null) {
           onCancelDrop={() => { setIrDropMode(false); setIrNotice(null); }}
           irBusy={irBusy}
         />
+        </SwapDnd>
   </div>
 )}
 

@@ -36,7 +36,11 @@ export const metadata: Metadata = {
 
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    // a solid status bar (Ethan, 26 Nov 2026): with "black-translucent" the page is drawn under
+    // the clock and iOS 26.1+ blurs the top of it, which a page can't turn off. "default" starts
+    // the page below the clock (it takes the dark themeColor). Saved when the app is added to the
+    // Home Screen: remove it and add it again to see the change.
+    statusBarStyle: "default",
     title: `Draft Fantasy ${currentSeasonYear()}`,
   },
 

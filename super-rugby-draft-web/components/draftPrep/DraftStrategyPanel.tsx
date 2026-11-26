@@ -57,8 +57,9 @@ export function DraftStrategyPanel({
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Draft Strategy" style={{ position: "fixed", inset: 0, zIndex: 9000, overflowY: "auto", color: "white", background: "linear-gradient(to bottom, rgb(15, 23, 42), rgb(13, 148, 136), rgb(16, 185, 129))" }}>
-      <div style={{ maxWidth: 420, margin: "0 auto", padding: "0 12px", paddingBottom: "calc(18px + env(safe-area-inset-bottom))" }}>
-        <div style={{ ...card, borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingTop: "calc(14px + env(safe-area-inset-top, 0px))" }}>
+      {/* the same top as the other pages: a gap above a rounded card (Ethan, 26 Nov 2026) */}
+      <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px", paddingTop: "calc(16px + env(safe-area-inset-top, 0px))", paddingBottom: "calc(18px + env(safe-area-inset-bottom))" }}>
+        <div style={card}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <button
               onClick={onClose}

@@ -157,14 +157,6 @@ export function JoinLeagueModal({ onClose }: { onClose: () => void }) {
                   >
                     Or choose an icon
                   </button>
-                  {pic.kind !== "none" ? (
-                    <button
-                      onClick={() => setPic({ kind: "none" })}
-                      style={{ background: "transparent", border: "none", color: "#0d9488", fontSize: 11, fontWeight: 600, textDecoration: "underline", cursor: "pointer", justifySelf: "start", padding: 0 }}
-                    >
-                      Remove picture
-                    </button>
-                  ) : null}
                 </div>
               </div>
               <input

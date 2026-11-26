@@ -50,11 +50,11 @@ export const STANDARD_SQUAD: SquadFormat = {
 
 /**
  * The set 10-starter squad (Ethan, 19 Nov 2026): 5 forwards (3 of them tight five) and 5 backs
- * (2 of them halves), 5 bench, 1 IR.
+ * (2 of them halves), 4 bench (Ethan, 26 Nov 2026: was 5), 1 IR.
  */
 export const TEN_SQUAD: SquadFormat = {
   starters: { TF: 3, FW: 2, HV: 2, BK: 3 },
-  bench: 5,
+  bench: 4,
   ir: 1,
 };
 
