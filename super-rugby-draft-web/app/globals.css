@@ -15,8 +15,8 @@ body {
 }
 
 /*
-  iPhone home-screen app: the page is drawn under the clock/battery bar (black-translucent status
-  bar). The page itself carries the site's gradient (with the bottom green behind it), so no dark
+  iPhone home-screen app: the status bar is solid now ("default", 26 Nov 2026; its navy colour
+  comes from a thin fixed strip in app/layout.tsx). The page itself carries the site's gradient (with the bottom green behind it), so no dark
   strip shows at the top or bottom whatever height iOS gives the page; the pages' own gradient
   layers sit on top of it. Body padding (set in app/layout.tsx) keeps content below the clock.
 */
