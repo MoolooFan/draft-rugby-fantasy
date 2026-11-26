@@ -2,21 +2,17 @@
 // Who won each real Super Rugby game, for leagues whose scoring gives points for a team win or
 // draw (Ethan, 19 Nov 2026). Server only.
 //
-// Results come from the match_results table (to be filled with the player stats); any game not
-// there yet falls back to the season's fixtures file, if it has a final score.
+// Results come from the match_results table (filled from the official fantasy game after each
+// game, lib/results/matchScores.ts); any game not there falls back to the season's fixtures file,
+// if it has a final score.
 //
 // addMatchResults() puts WIN / DRW (1 per game) into a player's raw stats for the rounds he
 // played (more than 0 minutes) and his team won / drew, so lib/scoring reads them like stats.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { SEASONS } from "@/lib/season";
-import { teamCodeFromName } from "@/lib/status/articles";
+import { teamCode as code } from "@/lib/fixtures/scores";
 
 type Result = "W" | "D" | "L";
-const code = (team: string): string | null => {
-  const t = String(team ?? "").trim().toUpperCase();
-  if (t === "MOP") return "MOA";
-  return /^[A-Z]{3}$/.test(t) ? t : teamCodeFromName(team);
-};
 const key = (realRound: number, team: string) => `${realRound}|${team}`;
 
 /** Each team's result per real round: "round|CODE" -> W / D / L. */
