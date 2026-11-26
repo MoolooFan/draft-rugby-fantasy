@@ -108,6 +108,12 @@ export default async function RootLayout({
           background: "transparent",
         }}
       >
+        {/* the colour iOS 26 gives the bar behind the clock (Ethan, 26 Nov 2026). Safari takes it
+            from a fixed element touching the top of the screen, or else the page background (green
+            at the bottom of our gradient, so the clock sat on a green band above the navy page).
+            This thin navy strip matches the top of the gradient; pop-ups above it (z-index 50+)
+            give their own colour while open. Draft Strategy was already right: it's a fixed panel. */}
+        <div aria-hidden style={{ position: "fixed", top: 0, left: 0, right: 0, height: 6, background: "#0f172a", zIndex: 30, pointerEvents: "none" }} />
         {d ? (
           <div style={{ position: "sticky", top: 0, zIndex: 9000, background: "#f59e0b", color: "#0f172a", fontSize: 11, fontWeight: 700, textAlign: "center", padding: "4px 8px" }}>
             {d.label}
