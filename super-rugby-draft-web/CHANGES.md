@@ -23,6 +23,7 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `24ab97d` | Plan (REBUILD-PLAN.md) brought up to date: what's left at the top, everything from 18-26 Nov added | No |
 | `92713e7` | **Real match scores**: final scores come from the official fantasy game after each game (the 5-minute background job), shown on Fixtures, player cards, Matchup and Team Selection, and used for team win / draw points. `scripts/import-match-scores.ts` fills in a whole season | No (uses the match_results table that was already there) |
 | `c01071c` | Draft Room page split into smaller files (looks and works the same); Moana players show "Moana" instead of "MOA" | No |
 | `b8c5626` | iPhone bar behind the clock is navy (it was green with a fade below it) | No |
