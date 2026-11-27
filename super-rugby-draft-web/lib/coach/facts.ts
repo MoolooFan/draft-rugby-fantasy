@@ -2,12 +2,12 @@
 // The fact sheet the AI coach writes from (Ethan, 17 Nov 2026). Pure code: the server
 // (lib/coach/data.ts) gathers the data, this turns it into a compact, readable summary with the
 // numbers already worked out (so the coach doesn't have to do sums), covering what Ethan asked
-// it to weigh up: how repeatable each stat is, consistency and boom / bust, age and role, team
-// quality, the opponent and the rest of the schedule (incl. the fantasy finals weeks), injury and
-// rest risk, status changes for him and his teammates, and Ethan's own notes.
+// it to weigh up: how repeatable each stat is, consistency and boom / bust, age and role, how
+// many fantasy points each opponent gives up to his position (lib/coach/matchups.ts) over the
+// next game, the rest of the season and the fantasy finals weeks, injury and rest risk, status
+// changes for him and his teammates, and Ethan's own notes.
 // Tested in scripts/tests/coach.test.ts.
 import { isFrontRow, playerPoints, roundPoints, type ScoringRules, type StatCounts, type StatKey } from "@/lib/scoring";
-import type { TeamStrength } from "@/lib/projections/project";
 import { STAT_LABELS } from "@/lib/players/statsHub";
 
 export type CoachKind = "outlook" | "post_game" | "team_list" | "status" | "news";
@@ -23,9 +23,8 @@ export type CoachGame = {
   listed?: "starting" | "bench" | null;
 };
 
-export type TeamInfo = { name: string; strength: TeamStrength; attackRank: number; defenceRank: number; teams: number };
-
-export type FixtureInfo = { label: string; opp: string; home: boolean | null; oppAttackRank: number; oppDefenceRank: number };
+/** A game: who against, and how many fantasy points that team gives up to his position (lib/coach/matchups.ts). */
+export type FixtureInfo = { label: string; opp: string; home: boolean | null; oppAllows: string | null };
 
 export type CoachFactsInput = {
   kind: CoachKind;
@@ -50,7 +49,6 @@ export type CoachFactsInput = {
   };
   games: CoachGame[];
   lastSeasonGames: CoachGame[];
-  team: TeamInfo | null;
   next: (FixtureInfo & { projection: { pts: number; low: number; high: number; role: string; kicker: boolean } | null }) | null;
   remaining: FixtureInfo[];
   finalsWeeks: FixtureInfo[];
@@ -161,15 +159,13 @@ export function gameLine(g: CoachGame, frontRow: boolean, rules: ScoringRules): 
   return `${g.label}${where}${g.listed === "bench" ? " off the bench" : ""}: ${mins} min, ${roundPoints(pts)} pts${bits.length ? ` - ${bits.join(", ")}` : ""}`;
 }
 
-const fixtureText = (f: FixtureInfo, teams: number) =>
-  `${f.label}: ${f.home == null ? "v" : f.home ? "home v" : "away at"} ${f.opp} (their attack ${f.oppAttackRank}/${teams}, defence ${f.oppDefenceRank}/${teams}; 1 = best)`;
+const fixtureText = (f: FixtureInfo) => `${f.label}: ${f.home == null ? "v" : f.home ? "home v" : "away at"} ${f.opp}${f.oppAllows ? ` (matchup: ${f.oppAllows})` : ""}`;
 
 /** The fact sheet sent to the coach (plain JSON, numbers worked out). */
 export function buildFacts(input: CoachFactsInput): Record<string, unknown> {
   const { player: p, rules } = input;
   const front = isFrontRow({ posAbbrev: p.posAbbrev, secondaryPosAbbrev: p.secondaryPosAbbrev, thirdPosAbbrev: p.thirdPosAbbrev }, rules);
   const pts = (gs: CoachGame[]) => gs.filter(played).map((g) => playerPoints(g.counts, front, rules));
-  const teams = input.team?.teams ?? 11;
   const sheet: Record<string, unknown> = {
     player: {
       name: p.name,
@@ -197,27 +193,16 @@ export function buildFacts(input: CoachFactsInput): Record<string, unknown> {
     [`stats${input.season - 1}`]: input.lastSeasonGames.length
       ? { note: `last season (${input.season - 1})`, fantasyPoints: pointsProfile(pts(input.lastSeasonGames)), keyStatsPerGame: keyStatAverages(input.lastSeasonGames) }
       : null,
-    team: input.team
-      ? {
-          name: input.team.name,
-          basedOn: "their last 8 games (going back into last season when needed)",
-          pointsForPerGame: r1(input.team.strength.pointsFor),
-          pointsAgainstPerGame: r1(input.team.strength.pointsAgainst),
-          triesPerGame: r1(input.team.strength.triesPerGame),
-          attackRank: `${input.team.attackRank}/${teams}`,
-          defenceRank: `${input.team.defenceRank}/${teams}`,
-        }
-      : null,
     nextGame: input.next
       ? {
-          game: fixtureText(input.next, teams),
+          game: fixtureText(input.next),
           projection: input.next.projection
             ? { expectedPoints: input.next.projection.pts, likelyRange: `${input.next.projection.low}-${input.next.projection.high}`, role: input.next.projection.role, kickingThisWeek: input.next.projection.kicker }
             : null,
         }
       : null,
-    restOfSeason: input.remaining.map((f) => fixtureText(f, teams)),
-    fantasyFinalsWeeks: input.finalsWeeks.map((f) => fixtureText(f, teams)),
+    restOfSeason: input.remaining.map(fixtureText),
+    fantasyFinalsWeeks: input.finalsWeeks.map(fixtureText),
     teammatesSamePositionWithNews: input.teammates.map((t) => `${t.name} (${t.positions}): ${t.status}`),
     latestNews: input.notes,
     newsReports: (input.articles ?? []).map((a) => ({ date: a.date, headline: a.title, relevantText: a.excerpt })),
@@ -240,8 +225,8 @@ export function buildFacts(input: CoachFactsInput): Record<string, unknown> {
 
 /**
  * The numbers shown with a note on the player card (Ethan, 27 Nov 2026): his projected points for
- * the note's week at the time it was written, and for an after-the-game note what he scored.
- * Season outlooks have neither.
+ * his next game at the time it was written (shown only on the "next week" part), and for an
+ * after-the-game note what he scored. Season outlooks have neither.
  */
 export function notePoints(input: CoachFactsInput): { projected: number | null; scored: number | null } {
   if (input.kind === "outlook") return { projected: null, scored: null };
@@ -250,7 +235,7 @@ export function notePoints(input: CoachFactsInput): { projected: number | null; 
     if (!g) return { projected: null, scored: null };
     const { posAbbrev, secondaryPosAbbrev, thirdPosAbbrev } = input.player;
     const front = isFrontRow({ posAbbrev, secondaryPosAbbrev, thirdPosAbbrev }, input.rules);
-    return { projected: g.projected, scored: roundPoints(playerPoints(g.counts, front, input.rules)) };
+    return { projected: input.next?.projection?.pts ?? null, scored: roundPoints(playerPoints(g.counts, front, input.rules)) };
   }
   return { projected: input.next?.projection?.pts ?? null, scored: null };
 }

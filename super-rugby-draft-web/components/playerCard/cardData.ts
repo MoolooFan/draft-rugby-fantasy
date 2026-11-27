@@ -282,6 +282,7 @@ export function buildRoundsFromSheetRows(
 export function isFixtureCompleteAny(raw: any) {
   const s = String(raw?.status ?? raw?.Status ?? "").toLowerCase().trim();
   if (s === "final" || s === "complete" || s === "completed") return true;
+  if (s === "live") return false; // a live score isn't a result yet
 
   const hs = raw?.homeScore ?? raw?.HomeScore ?? raw?.["Home Score"];
   const as = raw?.awayScore ?? raw?.AwayScore ?? raw?.["Away Score"];

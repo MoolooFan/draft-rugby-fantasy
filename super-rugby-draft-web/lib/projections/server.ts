@@ -6,6 +6,8 @@
 // Before a team's list is out: expected lineup from his earlier lists (and Ethan's role note);
 // once it's out: his real role (not named = 0). Injured / suspended / out = 0 until the status
 // is removed. Byes = 0.
+import { savedMatchScores } from "@/lib/results/matchScores";
+import type { MatchScore } from "@/lib/fixtures/scores";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isFrontRow, statCountsFromRaw, type ScoringRules, type StatCounts } from "@/lib/scoring";
 import { loadSeasonPlayers, type SitePlayer } from "@/lib/players/db";
@@ -89,8 +91,13 @@ function gamesByPlayer(rows: StatRow[], season: number, players: Map<string, Sit
   return out;
 }
 
-/** Real teams' games (score from player stats: tries, conversions, penalties, drop goals). */
-export function teamGames(rows: StatRow[], season: number, teamOf: (id: string) => string | null): Map<string, TeamGame[]> {
+/**
+ * Real teams' games: the official final score (match_results, from the official fantasy game;
+ * Ethan, 27 Nov 2026), and tries, penalty-goal attempts and lineout steals from the player stats.
+ * Only a game with no official score (an older season) has its score added up from the player
+ * stats (tries, conversions, penalties, drop goals; this misses penalty tries).
+ */
+export function teamGames(rows: StatRow[], season: number, teamOf: (id: string) => string | null, official: MatchScore[] = []): Map<string, TeamGame[]> {
   const s = SEASONS[season] ? getSeason(season) : null;
   const opp = new Map<string, string>(); // `${team}|${round}` -> opponent
   for (const f of s?.fixtures ?? []) {
@@ -112,14 +119,20 @@ export function teamGames(rows: StatRow[], season: number, teamOf: (id: string) 
     a.steals += n("lineoutSteals");
     acc.set(key, a);
   }
+  const score = new Map<string, { for: number; against: number }>();
+  for (const m of official) {
+    score.set(`${team(m.homeTeam)}|${m.realRound}`, { for: m.homeScore, against: m.awayScore });
+    score.set(`${team(m.awayTeam)}|${m.realRound}`, { for: m.awayScore, against: m.homeScore });
+  }
   const out = new Map<string, TeamGame[]>();
   for (const [key, a] of acc) {
     const [t, round] = key.split("|");
     const o = opp.get(key);
     const against = o ? acc.get(`${o}|${round}`) : undefined;
     if (!against) continue;
+    const real = score.get(key);
     if (!out.has(t)) out.set(t, []);
-    out.get(t)!.push({ round: Number(round), pointsFor: a.pts, pointsAgainst: against.pts, tries: a.tries, penaltyShots: a.pens, lineoutSteals: a.steals });
+    out.get(t)!.push({ round: Number(round), pointsFor: real ? real.for : a.pts, pointsAgainst: real ? real.against : against.pts, tries: a.tries, penaltyShots: a.pens, lineoutSteals: a.steals });
   }
   for (const g of out.values()) g.sort((x, y) => x.round - y.round);
   return out;
@@ -168,8 +181,12 @@ export async function weekProjections(
   const posAvg = new Map([...byPos].map(([pos, g]) => [pos, averageRates(g, rules)]));
 
   // real teams: strength from their last 8 games (last season's carry into the new one)
-  const tg = teamGames(rows, season, (id) => team(byId.get(id)?.teamCode));
-  const ltg = lastSeason ? teamGames(lastRows, lastSeason, (id) => team(lastById.get(id)?.teamCode)) : new Map<string, TeamGame[]>();
+  const [official, lastOfficial] = await Promise.all([
+    savedMatchScores(db, season).catch(() => [] as MatchScore[]),
+    lastSeason ? savedMatchScores(db, lastSeason).catch(() => [] as MatchScore[]) : Promise.resolve([] as MatchScore[]),
+  ]);
+  const tg = teamGames(rows, season, (id) => team(byId.get(id)?.teamCode), official);
+  const ltg = lastSeason ? teamGames(lastRows, lastSeason, (id) => team(lastById.get(id)?.teamCode), lastOfficial) : new Map<string, TeamGame[]>();
   const strength = new Map<string, TeamStrength>();
   for (const t of new Set([...tg.keys(), ...ltg.keys(), ...players.map((p) => team(p.teamCode))])) {
     const recent = [...(ltg.get(t) ?? []).map((g) => ({ ...g, round: g.round - 100 })), ...(tg.get(t) ?? [])].slice(-8);

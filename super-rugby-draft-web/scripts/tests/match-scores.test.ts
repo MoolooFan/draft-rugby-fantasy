@@ -58,5 +58,18 @@ check("games without a score unchanged", shown[3] === pageFixtures[3] && shown[4
 check("official score wins over the file's", withScores([{ ...pageFixtures[1], homeScore: 12, awayScore: 36, status: "final" }], scores)[0].homeScore === 36);
 check("no scores: same list back", withScores(pageFixtures, []) === pageFixtures);
 
+// live scores (Ethan, 27 Nov 2026): games being played, while they're on
+const during = Date.parse("2027-02-14T17:45:00+11:00"); // Blues v Chiefs kicked off 40 min ago
+const liveGames = feedGames(feed, during);
+const bc = liveGames.find((g) => g.homeTeam === "Blues" && g.awayTeam === "Chiefs");
+check("live: a game being played (kicked off, not completed) comes in as not final", liveGames.length === 5 && !!bc && bc.final === false && bc.homeScore === 15);
+check("live: not before kickoff, and not for a postponed game",
+  feedGames([{ number: 1, tournaments: [game("playing", "Blues", "Chiefs", 0, 0, "2027-02-14T17:05:00+11:00")] }], Date.parse("2027-02-14T16:00:00+11:00")).length === 0
+  && feedGames([{ number: 1, tournaments: [game("postponed", "Blues", "Chiefs", 0, 0, "2027-02-14T17:05:00+11:00")] }], during).length === 0);
+const livePlan = planMatchScores(liveGames, fixtures).scores;
+const liveShown = withScores(pageFixtures, livePlan);
+check("live: shown with the score and marked live; finished games still final",
+  liveShown[3].status === "live" && liveShown[3].homeScore === 15 && liveShown[3].awayScore === 19 && liveShown[0].status === "final");
+
 console.log(failures ? `\n${failures} FAILED` : "\nAll passed");
 process.exit(failures ? 1 : 0);

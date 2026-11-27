@@ -4,15 +4,15 @@
 // earlier coach notes), then builds each player's fact sheet (lib/coach/facts.ts).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadSeasonPlayers, type SitePlayer } from "@/lib/players/db";
-import { loadStats, teamGames, weekProjections, type StatRow, type WeekProjections } from "@/lib/projections/server";
-import { teamStrength, type TeamStrength } from "@/lib/projections/project";
+import { loadStats, weekProjections, type StatRow, type WeekProjections } from "@/lib/projections/server";
 import { fantasyWeekForRealRound, fixturesForWeek, getSeason, realRoundsForWeek, SEASONS, totalFantasyWeeks, weekLabel, type SeasonConfig } from "@/lib/season";
-import { STANDARD_SCORING, statCountsFromRaw, type ScoringRules } from "@/lib/scoring";
+import { isFrontRow, playerPoints, STANDARD_SCORING, statCountsFromRaw, type ScoringRules } from "@/lib/scoring";
 import { statusKind } from "@/lib/status/kind";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { teamCodeFromName } from "@/lib/status/articles";
 import { canPlayPosition, positionsLabel } from "@/lib/players/positions";
-import type { CoachFactsInput, CoachGame, CoachKind, FixtureInfo, TeamInfo } from "@/lib/coach/facts";
+import type { CoachFactsInput, CoachGame, CoachKind, FixtureInfo } from "@/lib/coach/facts";
+import { allowedText, pointsAllowed, posGroup, type Appearance, type AllowedRow, type PosGroup } from "@/lib/coach/matchups";
 import { articleExcerpt, TEAM_NAMES } from "@/lib/coach/articles";
 
 const TEAM_NAME: Record<string, string> = {
@@ -39,7 +39,8 @@ export type CoachCtx = {
   players: Map<string, SitePlayer>;
   games: Map<string, CoachGame[]>;
   lastGames: Map<string, CoachGame[]>;
-  teams: Map<string, TeamInfo>;
+  /** fantasy points each team gives up to each position (lib/coach/matchups.ts) */
+  allowed: Map<string, Map<PosGroup, AllowedRow>>;
   proj: WeekProjections | null;
   profiles: Map<string, { birth_date: string | null; international: string | null; rest_notes: string | null; injury_notes: string | null }>;
   notes: { player: Map<string, string[]>; team: Map<string, string[]>; general: string[] };
@@ -79,6 +80,35 @@ function coachGames(rows: StatRow[], season: number, playerTeam: (id: string) =>
   return out;
 }
 
+/**
+ * Every player's games as appearances against a team: his position that day (jersey on the team
+ * list if known, else his listed position) and his fantasy points. `offset` keeps last season's
+ * games before this season's.
+ */
+function appearances(rows: StatRow[], season: number, players: Map<string, SitePlayer>, rules: ScoringRules, offset: number): Appearance[] {
+  const s = SEASONS[season] ? getSeason(season) : null;
+  if (!s) return [];
+  const opp = new Map<string, string>();
+  for (const f of s.fixtures) {
+    const h = fixtureTeam(f.homeTeam), a = fixtureTeam(f.awayTeam);
+    opp.set(`${h}|${f.week}`, a);
+    opp.set(`${a}|${f.week}`, h);
+  }
+  const out: Appearance[] = [];
+  for (const r of rows) {
+    const p = players.get(String(r.internal_player_id));
+    if (!p) continue;
+    const c = statCountsFromRaw(r.stats);
+    if (!(Number(c.minutesPlayed) > 0)) continue;
+    const o = opp.get(`${team(p.teamCode)}|${r.round}`);
+    const fw = fantasyWeekForRealRound(s, r.round);
+    const group = posGroup(p.posAbbrev, fw ? p.weeklyStatus?.[`W${fw}`] : null);
+    if (!o || !group) continue;
+    out.push({ opp: o, game: r.round + offset, group, points: playerPoints(c, isFrontRow(p, rules), rules), minutes: Number(c.minutesPlayed) });
+  }
+  return out;
+}
+
 /** Load what the coach needs for a season, looking ahead to `week`. */
 export async function loadCoachCtx(db: SupabaseClient, season: number, week: number): Promise<CoachCtx> {
   const s = getSeason(season);
@@ -97,23 +127,12 @@ export async function loadCoachCtx(db: SupabaseClient, season: number, week: num
   const lastById = new Map(lastPlayers.map((p) => [p.id, p]));
   const proj = week >= 1 && week <= totalFantasyWeeks(s) ? await weekProjections(db, season, week, rules).catch(() => null) : null;
 
-  // team strength (last 8 games, last season's carrying into this one) and ranks
-  const tg = teamGames(rows, season, (id) => team(byId.get(id)?.teamCode));
-  const ltg = lastSeason ? teamGames(lastRows, lastSeason, (id) => team(lastById.get(id)?.teamCode)) : new Map();
-  const strengths = new Map<string, TeamStrength>();
-  for (const t of new Set([...tg.keys(), ...ltg.keys(), ...players.map((p) => team(p.teamCode))])) {
-    if (!t) continue;
-    const recent = [...(ltg.get(t) ?? []).map((g: { round: number }) => ({ ...g, round: g.round - 100 })), ...(tg.get(t) ?? [])].slice(-8);
-    strengths.set(t, teamStrength(recent));
-  }
-  const list = [...strengths.entries()];
-  const rankBy = (f: (x: TeamStrength) => number, desc: boolean) => {
-    const sorted = [...list].sort((a, b) => (desc ? f(b[1]) - f(a[1]) : f(a[1]) - f(b[1])));
-    return new Map(sorted.map(([t], i) => [t, i + 1]));
-  };
-  const attack = rankBy((x) => x.pointsFor, true);
-  const defence = rankBy((x) => x.pointsAgainst, false);
-  const teams = new Map<string, TeamInfo>(list.map(([t, st]) => [t, { name: teamName(t), strength: st, attackRank: attack.get(t)!, defenceRank: defence.get(t)!, teams: list.length }]));
+  // fantasy points each team gives up to each position, per 80 minutes: its last 12 games (last
+  // season's carry into this one)
+  const allowed = pointsAllowed([
+    ...(lastSeason ? appearances(lastRows, lastSeason, lastById, rules, -100) : []),
+    ...appearances(rows, season, byId, rules, 0),
+  ]);
 
   const notes = { player: new Map<string, string[]>(), team: new Map<string, string[]>(), general: [] as string[] };
   for (const c of ctxRows.data ?? []) {
@@ -131,7 +150,7 @@ export async function loadCoachCtx(db: SupabaseClient, season: number, week: num
     players: byId,
     games: coachGames(rows, season, (id) => team(byId.get(id)?.teamCode), (id, w) => byId.get(id)?.weeklyStatus?.[`W${w}`] ?? null),
     lastGames: lastSeason ? coachGames(lastRows, lastSeason, (id) => team(lastById.get(id)?.teamCode), (id, w) => lastById.get(id)?.weeklyStatus?.[`W${w}`] ?? null) : new Map(),
-    teams,
+    allowed,
     proj,
     profiles: new Map((profiles.data ?? []).map((p) => [String(p.player_id), p])),
     notes,
@@ -168,19 +187,17 @@ export async function loadPreviousNotes(db: SupabaseClient, ctx: CoachCtx, playe
   }
 }
 
-function fixtureFor(ctx: CoachCtx, teamCode: string, week: number): FixtureInfo | null {
+function fixtureFor(ctx: CoachCtx, teamCode: string, week: number, group: PosGroup | null): FixtureInfo | null {
   const t = team(teamCode);
   for (const f of fixturesForWeek(ctx.s, week)) {
     const h = fixtureTeam(f.homeTeam), a = fixtureTeam(f.awayTeam);
     if (h !== t && a !== t) continue;
     const opp = h === t ? a : h;
-    const o = ctx.teams.get(opp);
     return {
       label: weekLabel(ctx.s, week),
       opp: teamName(opp),
       home: f.neutralVenue ? null : h === t,
-      oppAttackRank: o?.attackRank ?? 0,
-      oppDefenceRank: o?.defenceRank ?? 0,
+      oppAllows: group ? allowedText(ctx.allowed.get(opp)?.get(group), group) : null,
     };
   }
   return null;
@@ -209,13 +226,15 @@ export function coachInput(
   const games = ctx.games.get(playerId) ?? [];
   const status = p.weeklyStatus?.[`W${ctx.week}`] || p.status || null;
   const pr = ctx.proj?.players[playerId] ?? null;
-  const next = fixtureFor(ctx, t, ctx.week);
+  // his position for matchups: this week's jersey if the team list is out, else his listed position
+  const group = posGroup(p.posAbbrev, p.weeklyStatus?.[`W${ctx.week}`]);
+  const next = fixtureFor(ctx, t, ctx.week, group);
   const remaining: FixtureInfo[] = [];
   for (let w = ctx.week + 1; w <= weeks; w++) {
-    const f = fixtureFor(ctx, t, w);
+    const f = fixtureFor(ctx, t, w, group);
     if (f) remaining.push(f);
   }
-  const finalsWeeks = [weeks - 1, weeks].filter((w) => w >= 1).map((w) => fixtureFor(ctx, t, w)).filter((f): f is FixtureInfo => !!f);
+  const finalsWeeks = [weeks - 1, weeks].filter((w) => w >= 1).map((w) => fixtureFor(ctx, t, w, group)).filter((f): f is FixtureInfo => !!f);
 
   // teammates who play his position and have a status this week
   const teammates: CoachFactsInput["teammates"] = [];
@@ -261,7 +280,6 @@ export function coachInput(
     },
     games: kind === "post_game" ? [...before, ...(thisGame ? [thisGame] : [])] : games,
     lastSeasonGames: ctx.lastGames.get(playerId) ?? [],
-    team: ctx.teams.get(t) ?? null,
     next: next ? { ...next, projection: pr ? { pts: pr.pts, low: pr.low, high: pr.high, role: pr.role, kicker: pr.kicker } : null } : null,
     remaining,
     finalsWeeks,
