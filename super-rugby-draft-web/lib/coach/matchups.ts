@@ -20,6 +20,23 @@ export const POS_GROUP_NAME: Record<PosGroup, string> = {
   OB: "outside backs",
 };
 
+/**
+ * How much a team's points given up to a position mean (Ethan, 27 Nov 2026). From 2026, odd
+ * rounds vs even rounds (scripts/backtest-projections.ts --matchups): outside backs 0.61,
+ * centres 0.45, props 0.36 repeat; hookers 0.21 a little; locks, loose forwards, halfbacks and
+ * first fives about 0 (mostly chance). To re-check with 2027's data and jersey numbers.
+ */
+export const MATCHUP_RELIABILITY: Record<PosGroup, "a real pattern" | "a weak pattern" | "mostly chance"> = {
+  OB: "a real pattern",
+  CE: "a real pattern",
+  PR: "a real pattern",
+  HO: "a weak pattern",
+  LK: "mostly chance",
+  LF: "mostly chance",
+  HB: "mostly chance",
+  FH: "mostly chance",
+};
+
 /** Starting players per position (how many full games' minutes the league average is worth early on). */
 const STARTERS: Record<PosGroup, number> = { PR: 2, HO: 1, LK: 2, LF: 3, HB: 1, FH: 1, CE: 2, OB: 3 };
 

@@ -52,6 +52,7 @@ const input: CoachFactsInput = {
   remaining: [{ label: "Round 4", opp: "Reds", home: false, oppAllows: null }],
   finalsWeeks: [{ label: "Round 16", opp: "Force", home: true, oppAllows: null }],
   teammates: [{ name: "Other Flanker", positions: "LF", status: "Knee - 4 weeks" }],
+  matchupGroup: "LF",
   thisGame: { ...games[1], teamScore: 31, oppScore: 24, projected: 15 },
   notes: ["2027-03-01: plays openside this year"],
   previous: [{ kind: "outlook", label: "Season", headline: "A workhorse to rely on" }],
@@ -92,6 +93,12 @@ check("jersey -> position: #7 loose forward, #12 centre, bench #18 uses his list
   check("points allowed text", allowedText(al.get("BLU")!.get("OB"), "OB") === "outside backs score 30 pts per 80 minutes against them (league average 22.5; the most of 2 teams)"
     && allowedText(al.get("BLU")!.get("LF"), "LF")!.includes("the fewest"));
 }
+
+check("fact sheet: how much the matchup numbers mean for his position",
+  facts.matchupReliability as unknown as string === "For loose forwards, the matchup numbers are mostly chance."
+  && String((buildFacts({ ...input, matchupGroup: "OB" }) as Record<string, unknown>).matchupReliability).includes("a real pattern")
+  && (buildFacts({ ...input, matchupGroup: null }) as Record<string, unknown>).matchupReliability === null);
+check("system prompt: matchups only when relevant", coachSystemPrompt(STANDARD_SCORING).includes("You don't have to mention matchups"));
 
 // prompt and notes
 const sys = coachSystemPrompt(STANDARD_SCORING);

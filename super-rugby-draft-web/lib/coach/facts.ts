@@ -9,6 +9,7 @@
 // Tested in scripts/tests/coach.test.ts.
 import { isFrontRow, playerPoints, roundPoints, type ScoringRules, type StatCounts, type StatKey } from "@/lib/scoring";
 import { STAT_LABELS } from "@/lib/players/statsHub";
+import { MATCHUP_RELIABILITY, POS_GROUP_NAME, type PosGroup } from "@/lib/coach/matchups";
 
 export type CoachKind = "outlook" | "post_game" | "team_list" | "status" | "news";
 
@@ -53,6 +54,8 @@ export type CoachFactsInput = {
   remaining: FixtureInfo[];
   finalsWeeks: FixtureInfo[];
   teammates: Array<{ name: string; positions: string; status: string }>;
+  /** his position for the matchup numbers (this week's jersey if known, else his listed position) */
+  matchupGroup?: PosGroup | null;
   thisGame?: (CoachGame & { teamScore: number | null; oppScore: number | null; projected: number | null }) | null;
   statusChange?: { from: string | null; to: string | null } | null;
   notes: string[];
@@ -200,6 +203,9 @@ export function buildFacts(input: CoachFactsInput): Record<string, unknown> {
             ? { expectedPoints: input.next.projection.pts, likelyRange: `${input.next.projection.low}-${input.next.projection.high}`, role: input.next.projection.role, kickingThisWeek: input.next.projection.kicker }
             : null,
         }
+      : null,
+    matchupReliability: input.matchupGroup
+      ? `For ${POS_GROUP_NAME[input.matchupGroup]}, the matchup numbers are ${MATCHUP_RELIABILITY[input.matchupGroup]}.`
       : null,
     restOfSeason: input.remaining.map(fixtureText),
     fantasyFinalsWeeks: input.finalsWeeks.map(fixtureText),
