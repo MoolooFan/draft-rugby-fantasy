@@ -34,8 +34,8 @@ export const COACH_NOTE_SCHEMA = {
   type: "object",
   properties: {
     headline: { type: "string", description: "One punchy line, at most 90 characters." },
-    body: { type: "string", description: "The note itself, 2-5 sentences." },
-    next_week: { type: "string", description: "Outlook for his next game (opponent, whether this can be repeated, anything else); empty string if not asked for." },
+    body: { type: "string", description: "The note itself: 2-3 short sentences, at most 60 words." },
+    next_week: { type: "string", description: "Outlook for his next game in 1-2 short sentences (at most 35 words); empty string if not asked for." },
     verdict: { type: "string", enum: [...COACH_VERDICTS] },
     trend: { type: "string", enum: ["up", "down", "steady"] },
     factors: { type: "array", items: { type: "string" }, description: "Up to 4 short reasons (a few words each)." },
@@ -70,28 +70,30 @@ What to weigh up, when the fact sheet has it:
 - Team quality: strong attacking teams create more high-scoring games and tries; weak teams spend more time defending (more tackles, fewer tries).
 - The opponent and the schedule: the next opponent's attack and defence ranks, the rest of the season, and the fantasy finals weeks (the last two weeks).
 - Risks: injury history, international rest policies (e.g. All Blacks / Wallabies rest weeks), suspensions, a crowded position.
-- The commissioner's notes are trusted news from the league's commissioner: use them.
-- Articles the commissioner shared (articlesSharedByCommissioner) are news reports: use what they say about him (selection, role, injuries, form, coach comments) and you can name the source (e.g. "the Herald reports..."). Don't copy long passages; if an article is about his team rather than him, only use it where it affects him.
+- latestNews is confirmed, trusted news: use it.
+- newsReports are recent news stories: use what they say about him (selection, role, injuries, form, coach comments). If a story is about his team rather than him, only use it where it affects him. Don't copy passages.
 
 Rules:
-- Only use facts in the fact sheet. Never invent injuries, quotes, selections, ages or news. If something important is unknown, say so briefly or leave it out.
-- Be specific: name opponents, give numbers (points, tackles, minutes) and say plainly whether to start, bench, pick up or avoid him.
-- Short and readable on a phone: the body is 2-5 sentences. No hype, no emojis, no headings.
+- Only use facts in the fact sheet. Never invent injuries, quotes, selections, ages or news. If something isn't known, leave it out: never say that something is unknown or missing.
+- Write it as your own knowledge, the way a pundit would. Never say where anything came from: no "the commissioner", "the league", "reports", "according to", "confirmed by", newspaper or website names, "an article", "the fact sheet", "the data", "the stats show" or "notes".
+- Seasons: the stats are labelled with their year (e.g. stats2026 is the 2026 season). Whenever you use a number from a past season, name the year: "in 2026" or "last season (2026)". "This season" only ever means the current season's games. Before his first game this season, every stat is from a past season, so say so.
+- Be specific: name opponents, give a few key numbers (points, tackles, minutes) and say plainly whether to start, bench, pick up or avoid him. Pick the 2-3 points that matter most; don't list everything.
+- Short and readable on a phone: the body is 2-3 short sentences, at most 60 words. No hype, no emojis, no headings.
 - Don't repeat the previous coach notes word for word; build on them.
 - Verdicts: must_start (an every-week starter), start, borderline (could go either way), bench (sit him this week), pickup (worth adding if he's a free agent), hold (keep, but don't start / don't panic), avoid (not worth a spot), monitor (wait for more news).`;
 }
 
 const TASK: Record<CoachKind, string> = {
   outlook:
-    "Write his SEASON OUTLOOK for fantasy: what to expect over the season (role, scoring profile, consistency, upside / breakout chance, risks such as injury, rest weeks or a crowded position, the schedule including the fantasy finals weeks), and where he fits on a fantasy team. next_week: leave empty. The verdict is for the season (e.g. must_start for a top player, pickup / monitor for a sleeper, avoid for someone unlikely to play).",
+    "Write his SEASON OUTLOOK for fantasy in at most 3 sentences (60 words): his role and what kind of scorer he is, the one or two biggest upsides or risks (e.g. breakout chance, injury, rest weeks, a crowded position, a tough finals run), and where he fits on a fantasy team. next_week: leave empty. The verdict is for the season (e.g. must_start for a top player, pickup / monitor for a sleeper, avoid for someone unlikely to play).",
   post_game:
     "His game has just finished (thisGame). Write a FANTASY EVALUATION of the game: how many points and how (which stats), whether that is likely to repeat (stats' repeatability, his usual output), and anything notable (minutes, kicking, a card, coming off the bench). Then in next_week give a brief outlook for his next game: the opponent, whether a similar score is likely, and anything else that could affect him. The verdict is for next week.",
   team_list:
     "The team and injury lists for this round are out (statusNow, statusChange, teammates). Say whether this changes anything for him this week (role, minutes, kicking, a teammate in or out) and whether he is a good bet this week or not. Keep it short. next_week: leave empty. The verdict is for this week.",
   status:
-    "The commissioner has just changed his status (statusChange). Explain what it means for fantasy managers now and over the next few weeks (expected return, who benefits, whether to hold, bench or drop him). next_week: leave empty.",
+    "His status has just changed (statusChange). Explain what it means for fantasy managers now and over the next few weeks (expected return, who benefits, whether to hold, bench or drop him). next_week: leave empty.",
   news:
-    "The commissioner has added news about him (the newest commissioner note, or a new article in articlesSharedByCommissioner). Explain what it means for fantasy managers: role, points outlook, and what to do with him. next_week: leave empty unless it is about his next game.",
+    "There is new news about him (the newest item in latestNews, or a story in newsReports). Explain what it means for fantasy managers: role, points outlook, and what to do with him. next_week: leave empty unless it is about his next game.",
 };
 
 /** The user message for one note: the task and the fact sheet. */

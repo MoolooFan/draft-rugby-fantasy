@@ -92,6 +92,10 @@ type CoachNote = {
   verdict: string | null;
   trend: string | null;
   factors: string[] | null;
+  /** his projected points for the note's week when it was written (none for outlooks) */
+  projected?: number | null;
+  /** after a game: what he scored */
+  scored?: number | null;
   created_at: string;
 };
 
@@ -120,8 +124,73 @@ export function VerdictChip({ verdict }: { verdict: string | null | undefined })
   return <span style={{ fontSize: 10, fontWeight: 700, color: "white", background: v.bg, borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap" }}>{v.label}</span>;
 }
 
-// Player card > AI Coach tab (Ethan, 17 Nov 2026; lib/coach): the coach's notes about this
-// player, newest first: season outlook, after each game, team lists, status changes and news.
+const smallLabel: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.6 };
+const pill = (bg: string, color: string): React.CSSProperties => ({ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "2px 8px", background: bg, color, whiteSpace: "nowrap" });
+const fmt = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
+
+/** One note: what it is and when, the verdict, then the note itself. */
+function CoachNoteView({ n, label }: { n: CoachNote; label: string }) {
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <span style={smallLabel}>{label}</span>
+        <span style={{ flex: 1 }} />
+        {n.trend === "up" ? <span title="Trending up" style={{ color: "#16a34a", fontWeight: 700 }}>▲</span> : n.trend === "down" ? <span title="Trending down" style={{ color: "#dc2626", fontWeight: 700 }}>▼</span> : null}
+        <VerdictChip verdict={n.verdict} />
+      </div>
+      <div style={{ marginTop: 4, fontSize: 13, fontWeight: 700, lineHeight: 1.3 }}>{n.headline}</div>
+      <div style={{ marginTop: 4, fontSize: 12, fontWeight: 600, lineHeight: 1.45 }}>{n.body}</div>
+      {n.next_week ? (
+        <div style={{ marginTop: 6, fontSize: 12, fontWeight: 600, lineHeight: 1.45 }}>
+          <b>Next week: </b>
+          {n.next_week}
+        </div>
+      ) : null}
+      {n.factors?.length ? (
+        <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
+          {n.factors.map((f) => (
+            <span key={f} style={{ fontSize: 10, fontWeight: 600, borderRadius: 999, padding: "2px 8px", background: "rgba(15,23,42,0.07)" }}>
+              {f}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+type WeekGroup = { key: string; season: number; week: number | null; notes: CoachNote[] };
+
+/** Updates grouped by week, newest week first (notes come newest first). */
+function byWeek(notes: CoachNote[]): WeekGroup[] {
+  const groups: WeekGroup[] = [];
+  const at = new Map<string, WeekGroup>();
+  for (const n of notes) {
+    const key = `${n.season}|${n.week ?? "-"}`;
+    let g = at.get(key);
+    if (!g) {
+      g = { key, season: n.season, week: n.week, notes: [] };
+      at.set(key, g);
+      groups.push(g);
+    }
+    g.notes.push(n);
+  }
+  return groups;
+}
+
+/** The week's projection (the newest one written before the game, else the one with the game) and what he scored. */
+function weekPoints(notes: CoachNote[]): { projected: number | null; scored: number | null } {
+  const num = (v: unknown) => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+  const before = notes.filter((n) => n.kind !== "post_game").map((n) => num(n.projected)).find((v) => v != null);
+  const games = notes.filter((n) => n.kind === "post_game");
+  const after = games.map((n) => num(n.projected)).find((v) => v != null);
+  const scores = games.map((n) => num(n.scored)).filter((v): v is number => v != null);
+  return { projected: before ?? after ?? null, scored: scores.length ? scores.reduce((a, b) => a + b, 0) : null };
+}
+
+// Player card > AI Coach tab (Ethan, 17 + 27 Nov 2026; lib/coach): the newest season outlook in its
+// own box, then a box for each week's updates (newest week first) with his projected points for
+// that week at the time, and what he scored once the game's done.
 export function CoachTab({ playerId }: { playerId: string }) {
   const [data, setData] = useState<{ key: string; notes: CoachNote[] } | null>(null);
   const [error, setError] = useState<{ key: string; text: string } | null>(null);
@@ -144,39 +213,38 @@ export function CoachTab({ playerId }: { playerId: string }) {
   if (error?.key === playerId) return <TabCard><div style={{ color: "#b91c1c" }}>{error.text}</div></TabCard>;
   if (data?.key !== playerId) return <TabCard><div style={{ opacity: 0.7 }}>Loading…</div></TabCard>;
   if (!data.notes.length) return <TabCard><div style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>No scouting completed</div></TabCard>;
+
+  const outlook = data.notes.find((n) => n.kind === "outlook") ?? null;
+  const weeks = byWeek(data.notes.filter((n) => n.kind !== "outlook"));
+  // the year goes on a week's box when the notes cover more than one season
+  const manySeasons = new Set(data.notes.map((n) => n.season)).size > 1;
   return (
     <div style={{ display: "grid", gap: 8 }}>
-      {data.notes.map((n) => (
-        <TabCard key={n.id}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.6 }}>
-              {KIND_LABEL[n.kind] ?? n.kind}
-              {n.week ? ` · ${roundLabel(n.week, n.season)}` : ""} · {when(Date.parse(n.created_at))}
-            </span>
-            <span style={{ flex: 1 }} />
-            {n.trend === "up" ? <span title="Trending up" style={{ color: "#16a34a", fontWeight: 700 }}>▲</span> : n.trend === "down" ? <span title="Trending down" style={{ color: "#dc2626", fontWeight: 700 }}>▼</span> : null}
-            <VerdictChip verdict={n.verdict} />
-          </div>
-          <div style={{ marginTop: 4, fontSize: 13, fontWeight: 700, lineHeight: 1.3 }}>{n.headline}</div>
-          <div style={{ marginTop: 4, fontSize: 12, fontWeight: 600, lineHeight: 1.45 }}>{n.body}</div>
-          {n.next_week ? (
-            <div style={{ marginTop: 6, fontSize: 12, fontWeight: 600, lineHeight: 1.45 }}>
-              <b>Next week: </b>
-              {n.next_week}
+      {outlook ? (
+        <TabCard>
+          <CoachNoteView n={outlook} label={`Season outlook ${outlook.season} · ${when(Date.parse(outlook.created_at))}`} />
+        </TabCard>
+      ) : null}
+      {weeks.map((g) => {
+        const pts = weekPoints(g.notes);
+        return (
+          <TabCard key={g.key}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", paddingBottom: 8, borderBottom: "1px solid rgba(15,23,42,0.08)" }}>
+              <span style={{ fontSize: 13, fontWeight: 800 }}>{g.week ? roundLabel(g.week, g.season) : "Updates"}{manySeasons ? ` · ${g.season}` : ""}</span>
+              <span style={{ flex: 1 }} />
+              {pts.projected != null ? <span style={pill("rgba(37,99,235,0.1)", "#1d4ed8")}>Projected {fmt(pts.projected)}</span> : null}
+              {pts.scored != null ? <span style={pill("rgba(22,163,74,0.12)", "#15803d")}>Scored {fmt(pts.scored)}</span> : null}
             </div>
-          ) : null}
-          {n.factors?.length ? (
-            <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
-              {n.factors.map((f) => (
-                <span key={f} style={{ fontSize: 10, fontWeight: 600, borderRadius: 999, padding: "2px 8px", background: "rgba(15,23,42,0.07)" }}>
-                  {f}
-                </span>
+            <div style={{ display: "grid", gap: 10, marginTop: 8 }}>
+              {g.notes.map((n, i) => (
+                <div key={n.id} style={i ? { paddingTop: 10, borderTop: "1px solid rgba(15,23,42,0.06)" } : undefined}>
+                  <CoachNoteView n={n} label={`${KIND_LABEL[n.kind] ?? n.kind} · ${when(Date.parse(n.created_at))}`} />
+                </div>
               ))}
             </div>
-          ) : null}
-        </TabCard>
-      ))}
-      <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.55, textAlign: "center" }}>Written by AI from the stats and the commissioner&apos;s notes. It can make mistakes.</div>
+          </TabCard>
+        );
+      })}
     </div>
   );
 }

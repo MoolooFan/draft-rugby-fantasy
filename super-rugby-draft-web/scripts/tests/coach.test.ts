@@ -1,5 +1,5 @@
 // Run: npx tsx scripts/tests/coach.test.ts — the AI coach's fact sheet and note handling (lib/coach).
-import { ageOn, buildFacts, gameLine, hisSpread, keyStatAverages, pointsProfile, repeatability, type CoachFactsInput, type CoachGame } from "../../lib/coach/facts";
+import { ageOn, buildFacts, gameLine, hisSpread, keyStatAverages, notePoints, pointsProfile, repeatability, type CoachFactsInput, type CoachGame } from "../../lib/coach/facts";
 import { cleanNote, coachSystemPrompt, coachUserMessage, COACH_NOTE_SCHEMA } from "../../lib/coach/prompt";
 import { STANDARD_SCORING } from "../../lib/scoring";
 
@@ -58,11 +58,18 @@ const input: CoachFactsInput = {
 };
 const facts = buildFacts(input) as Record<string, Record<string, unknown>>;
 check("fact sheet: player (age, international, rest), this season, team, next game, finals, teammates, notes",
-  facts.player.age === 28 && facts.player.international === "All Blacks" && !!facts.thisSeason.fantasyPoints && (facts.team.attackRank as string) === "3/11"
+  facts.player.age === 28 && facts.player.international === "All Blacks" && !!facts.stats2027.fantasyPoints && String(facts.stats2026.note).includes("2026") && (facts.team.attackRank as string) === "3/11"
   && String((facts.nextGame as Record<string, unknown>).game).includes("Crusaders") && (facts.fantasyFinalsWeeks as unknown as string[]).length === 1
-  && (facts.teammatesSamePositionWithNews as unknown as string[])[0].includes("Knee") && (facts.commissionerNotes as unknown as string[]).length === 1);
+  && (facts.teammatesSamePositionWithNews as unknown as string[])[0].includes("Knee") && (facts.latestNews as unknown as string[]).length === 1);
 check("fact sheet: this game with result and how repeatable each stat is",
   String((facts.thisGame as Record<string, unknown>).result) === "Hurricanes 31 - 24 Blues" && "Tries" in ((facts.thisGame as Record<string, unknown>).howRepeatable as object));
+
+check("fact sheet: never mentions the commissioner (Ethan, 27 Nov 2026)", !JSON.stringify(facts).toLowerCase().includes("commissioner") && !coachSystemPrompt(STANDARD_SCORING).replace(/no "the commissioner"/, "").toLowerCase().includes("commissioner"));
+check("fact sheet: no games yet this season says so", String((buildFacts({ ...input, kind: "outlook", games: [], thisGame: null }) as Record<string, Record<string, unknown>>).stats2027.note).includes("no games yet"));
+const np = notePoints(input);
+check("note points: after a game = projection beforehand + what he scored", np.projected === 15 && np.scored != null && np.scored > 0);
+check("note points: other updates = this week's projection; outlooks none",
+  notePoints({ ...input, kind: "team_list" }).projected === 18.5 && notePoints({ ...input, kind: "team_list" }).scored === null && notePoints({ ...input, kind: "outlook" }).projected === null);
 
 // prompt and notes
 const sys = coachSystemPrompt(STANDARD_SCORING);
