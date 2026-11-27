@@ -17,6 +17,9 @@ const DRAFT_SORT_OPTIONS: Array<{ value: string; label: string }> = [
   ...COMPARE_STATS.map((c) => ({ value: c.key, label: c.label })),
 ];
 
+/** The extra numbers on a computer: games, points, points per game, minutes per game. */
+const EXTRA_LABELS = ["Games", "Pts", "Pts/G", "Min/G"];
+
 /**
  * Search, Filters and the number column for the Player Pool and Watchlist. The number is the
  * draft rank, "My Rank" (your strategy's Overall Rankings, or with one position picked in
@@ -28,6 +31,7 @@ export function usePoolView({
   draftedIds,
   strategy,
   liveById,
+  withExtras = false,
 }: {
   players: Player[];
   draftedIds: Set<string>;
@@ -35,6 +39,8 @@ export function usePoolView({
   strategy: DraftStrategy | null;
   /** the player's latest status (injured, ...) for the Status filter */
   liveById: (id: string) => unknown;
+  /** computers: also games, points, points per game and minutes per game (Ethan, 27 Nov 2026) */
+  withExtras?: boolean;
 }) {
   const [search, setSearch] = useState("");
   // C2: the same Filters pop-up as the Transactions page (Team / Position / Status, several of each)
@@ -55,10 +61,10 @@ export function usePoolView({
 
   const totalsById = useMemo(() => {
     const m = new Map<string, SeasonTotals>();
-    if (sortMode === "DRAFT_RANK" || sortMode === "MY_RANK") return m;
+    if (!withExtras && (sortMode === "DRAFT_RANK" || sortMode === "MY_RANK")) return m;
     for (const p of players) m.set(p.id, seasonTotals(statRows, p));
     return m;
-  }, [players, statRows, sortMode]);
+  }, [players, statRows, sortMode, withExtras]);
 
   const metricOf = useMemo(
     () =>
@@ -98,6 +104,17 @@ export function usePoolView({
     numberText: (p: Player) => (rankMode ? String(metricOf(p) ?? "") : formatStatView(metricOf(p), statView)),
     columnLabel: sortOptions.find((o) => o.value === sortMode)?.label ?? "Draft Rank",
     columnNote: rankMode ? "" : `${STAT_VIEW_LABEL[statView]} · ${statSeason}`,
+    extras: withExtras
+      ? {
+          note: `${statSeason} season`,
+          labels: EXTRA_LABELS,
+          values: (p: Player): string[] => {
+            const t = totalsById.get(p.id);
+            if (!t || !t.games) return EXTRA_LABELS.map(() => "–");
+            return [String(t.games), String(Math.round(t.points)), (t.points / t.games).toFixed(1), String(Math.round(t.minutes / t.games))];
+          },
+        }
+      : undefined,
   };
 }
 

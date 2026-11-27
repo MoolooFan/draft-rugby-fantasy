@@ -1,7 +1,8 @@
 "use client";
 // components/draftRoom/PoolList.tsx
 // The Draft Room's Player Pool and Watchlist lists: each player with his number (draft rank,
-// My Rank or a stat), the watchlist eye and the Draft button. Your draft strategy's targets get a
+// My Rank or a stat), the watchlist eye and the Draft button. On a computer the Player Pool also
+// shows last season's games, points, points per game and minutes per game (`extras`). Your draft strategy's targets get a
 // teal edge and an "Early target" tag; the Watchlist has ▲▼ to set the order auto-pick uses.
 import React from "react";
 import type { Player } from "@/lib/draft/types";
@@ -29,18 +30,26 @@ export type PoolListProps = {
   onOpen: (p: Player) => void;
   /** the Watchlist: ▲▼ to move a player up or down */
   onMove?: (id: string, by: -1 | 1) => void;
+  /** computers: more numbers before the main one */
+  extras?: { note: string; labels: string[]; values: (p: Player) => string[] };
 };
 
-const ROW_COLUMNS = "1fr 160px";
+const EXTRA_W = 44;
+const rowColumns = (extras?: PoolListProps["extras"]) => `minmax(0, 1fr) ${160 + (extras ? extras.labels.length * (EXTRA_W + 8) : 0)}px`;
 
 export function PoolList(props: PoolListProps) {
-  const { players, emptyText, columnNote, columnLabel, draftComplete, onMove } = props;
+  const { players, emptyText, columnNote, columnLabel, draftComplete, onMove, extras } = props;
   return (
     <div style={listBox}>
       {/* the column's name, right above the numbers (same layout as the rows) */}
-      <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: ROW_COLUMNS, gap: 10, alignItems: "center", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
-        <div>{columnNote}</div>
+      <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: rowColumns(extras), gap: 10, alignItems: "center", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
+        <div>{columnNote || extras?.note}</div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          {extras?.labels.map((l) => (
+            <div key={l} style={{ width: EXTRA_W, textAlign: "center", whiteSpace: "nowrap", fontWeight: 600 }}>
+              {l}
+            </div>
+          ))}
           <div style={{ width: 40, display: "flex", justifyContent: "center", whiteSpace: "nowrap", fontWeight: 600 }}>{columnLabel}</div>
           <div style={{ width: 32 }} />
           <div style={{ width: 64 }} />
@@ -69,6 +78,7 @@ function PlayerRow({
   onDraft,
   onOpen,
   reorder,
+  extras,
 }: PoolListProps & { p: Player; reorder?: { index: number; count: number; onMove: (id: string, by: -1 | 1) => void } }) {
   const target = targetById.get(p.id);
   const arrow: React.CSSProperties = { border: "none", background: "transparent", fontSize: 12, fontWeight: 700, padding: "0 2px", cursor: "pointer", lineHeight: "12px" };
@@ -77,7 +87,7 @@ function PlayerRow({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: ROW_COLUMNS,
+        gridTemplateColumns: rowColumns(extras),
         gap: 10,
         alignItems: "center",
         padding: "10px 10px",
@@ -116,6 +126,11 @@ function PlayerRow({
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 }}>
+        {extras?.values(p).map((v, i) => (
+          <div key={i} style={{ fontSize: 12, fontWeight: 500, width: EXTRA_W, textAlign: "center", color: "#334155" }}>
+            {v}
+          </div>
+        ))}
         <div style={{ fontSize: 12, fontWeight: 700, width: 40, textAlign: "center" }}>{numberText(p)}</div>
         {/* the draft watchlist is fixed once the draft is over (it moves to the Transactions watchlist) */}
         {draftComplete ? <div style={{ width: 32 }} /> : <WatchButton active={watched(p.id)} onClick={() => onToggleWatch(p.id)} />}
