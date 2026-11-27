@@ -5,6 +5,8 @@
 // lives inside the draft room (it was its own page): it opens over the room and Back closes it.
 // It edits the draft room's own copy of the strategy, so changes show in the room straight away.
 // The draft watchlist (in the draft room) is separate and still comes first for auto-pick.
+// On a computer it sits in the draft room's middle column instead (`embedded`; Ethan, 27 Nov
+// 2026): no Back / close, and the page behind keeps scrolling.
 import React, { useEffect, useMemo, useState } from "react";
 import { usePlayerPool } from "@/lib/players/pool";
 import type { useDraftStrategy } from "@/lib/draft/useStrategy";
@@ -24,25 +26,29 @@ export function DraftStrategyPanel({
   strat,
   onClose,
   onMockDraft,
+  embedded = false,
 }: {
   /** the draft room's useDraftStrategy() */
   strat: ReturnType<typeof useDraftStrategy>;
   onClose: () => void;
   /** left out while the draft is on (no mock drafts then) */
   onMockDraft?: () => void;
+  /** in a column of the draft room (computers) instead of over it */
+  embedded?: boolean;
 }) {
   const { strategy, update, loaded, saving, error } = strat;
   const [tab, setTab] = useState<Tab>("Overall Rankings");
   const [open, setOpen] = useState<LinePlayer | null>(null);
 
-  // the draft room behind doesn't scroll while this is open
+  // the draft room behind doesn't scroll while this is open (over the room only)
   useEffect(() => {
+    if (embedded) return;
     const before = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = before;
     };
-  }, []);
+  }, [embedded]);
 
   const pool = usePlayerPool();
   const players: LinePlayer[] = useMemo(
@@ -55,11 +61,19 @@ export function DraftStrategyPanel({
   // one search / Filters / stat for all three tabs (components/draftPrep/strategyView.tsx)
   const view = usePlayerView(players);
 
+  const outer: React.CSSProperties = embedded
+    ? { color: "white" }
+    : { position: "fixed", inset: 0, zIndex: 9000, overflowY: "auto", color: "white", background: "linear-gradient(to bottom, rgb(15, 23, 42), rgb(13, 148, 136), rgb(16, 185, 129))" };
+  const inner: React.CSSProperties = embedded
+    ? {}
+    : { maxWidth: 420, margin: "0 auto", padding: "16px 18px", paddingTop: "calc(16px + env(safe-area-inset-top, 0px))", paddingBottom: "calc(18px + env(safe-area-inset-bottom))" };
+
   return (
-    <div role="dialog" aria-modal="true" aria-label="Draft Strategy" style={{ position: "fixed", inset: 0, zIndex: 9000, overflowY: "auto", color: "white", background: "linear-gradient(to bottom, rgb(15, 23, 42), rgb(13, 148, 136), rgb(16, 185, 129))" }}>
+    <div {...(embedded ? { "aria-label": "Draft Strategy" } : { role: "dialog", "aria-modal": true, "aria-label": "Draft Strategy" })} style={outer}>
       {/* the same top as the other pages: a gap above a rounded card (Ethan, 26 Nov 2026) */}
-      <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px", paddingTop: "calc(16px + env(safe-area-inset-top, 0px))", paddingBottom: "calc(18px + env(safe-area-inset-bottom))" }}>
+      <div style={inner}>
         <div style={card}>
+          {embedded ? null : (
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <button
               onClick={onClose}
@@ -77,7 +91,8 @@ export function DraftStrategyPanel({
               ✕
             </button>
           </div>
-          <div style={{ marginTop: 10, display: "flex", alignItems: "baseline", gap: 8 }}>
+          )}
+          <div style={{ marginTop: embedded ? 0 : 10, display: "flex", alignItems: "baseline", gap: 8 }}>
             <div style={{ flex: 1, fontSize: 18, fontWeight: 700 }}>Draft Strategy</div>
             <div style={{ fontSize: 11, fontWeight: 700, color: error ? "#dc2626" : teal, whiteSpace: "nowrap" }} aria-live="polite">
               {error ? "Not saved" : saving ? "Saving…" : loaded && !isEmptyStrategy(strategy) ? "Saved" : ""}
@@ -99,15 +114,17 @@ export function DraftStrategyPanel({
             )}
           </div>
 
-          <div style={{ ...card, display: "grid", gap: 8 }}>
-            {onMockDraft ? (
-              <>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>Try it out</div>
-                <button style={primaryButton} onClick={onMockDraft}>Start a Mock Draft</button>
-              </>
-            ) : null}
-            <button style={onMockDraft ? secondaryButton : primaryButton} onClick={onClose}>Back to the Draft Room</button>
-          </div>
+          {embedded && !onMockDraft ? null : (
+            <div style={{ ...card, display: "grid", gap: 8 }}>
+              {onMockDraft ? (
+                <>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>Try it out</div>
+                  <button style={primaryButton} onClick={onMockDraft}>Start a Mock Draft</button>
+                </>
+              ) : null}
+              {embedded ? null : <button style={onMockDraft ? secondaryButton : primaryButton} onClick={onClose}>Back to the Draft Room</button>}
+            </div>
+          )}
         </div>
       </div>
 

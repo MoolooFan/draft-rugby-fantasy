@@ -180,7 +180,11 @@ export function PushPanel() {
 
 const DISMISS_KEY = "sr-push-prompt-dismissed-v1";
 
-/** Dashboard: a one-time card until notifications are on or you tap "Not now". */
+/**
+ * Dashboard: a one-time card until notifications are on or you tap "Not now". Only in the Home
+ * Screen app (Ethan, 27 Nov 2026): not on a computer or in a phone's browser (notifications can
+ * still be turned on from the Account page there).
+ */
 export function PushPromptCard({ cardStyle }: { cardStyle: React.CSSProperties }) {
   const { state, busy, error, turnOn } = usePush();
   const [dismissed, setDismissed] = useState(true);
@@ -192,7 +196,7 @@ export function PushPromptCard({ cardStyle }: { cardStyle: React.CSSProperties }
       /* storage blocked: show it */
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the device's saved choice, only readable in the browser
-    setDismissed(d);
+    setDismissed(d || !isStandalone());
   }, []);
   const dismiss = () => {
     try {
@@ -202,7 +206,7 @@ export function PushPromptCard({ cardStyle }: { cardStyle: React.CSSProperties }
     }
     setDismissed(true);
   };
-  if (dismissed || (state !== "off" && state !== "needs-home-screen")) return null;
+  if (dismissed || state !== "off") return null;
 
   return (
     <div style={cardStyle}>
@@ -210,13 +214,10 @@ export function PushPromptCard({ cardStyle }: { cardStyle: React.CSSProperties }
       <div style={{ ...small, marginTop: 4 }}>
         Trade offers, waiver results, lineup reminders, the draft starting and chat, on your phone. You choose which on the Account page.
       </div>
-      {state === "needs-home-screen" ? <HomeScreenSteps /> : null}
-      <div style={{ display: "grid", gridTemplateColumns: state === "off" ? "1fr 1fr" : "1fr", gap: 8, marginTop: 10 }}>
-        {state === "off" ? (
-          <button style={button} disabled={busy} onClick={turnOn}>
-            {busy ? "Turning on…" : "Turn on"}
-          </button>
-        ) : null}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+        <button style={button} disabled={busy} onClick={turnOn}>
+          {busy ? "Turning on…" : "Turn on"}
+        </button>
         <button style={plainButton} onClick={dismiss}>
           Not now
         </button>

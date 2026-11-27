@@ -3,6 +3,9 @@
 // The Draft Room: the countdown / pick clock, then Player Pool, Watchlist, Teams and Draft
 // Results, plus the Draft Strategy panel over the top. This file loads the data and joins the
 // pieces up; the pieces themselves are in components/draftRoom (split up 26 Nov 2026).
+// On a computer (Ethan, 27 Nov 2026) it's three columns under the header: the Player Pool /
+// Watchlist, Draft Strategy (always open, editable during the draft), and a team with the
+// latest picks.
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -29,6 +32,7 @@ import { TeamsTab } from "@/components/draftRoom/TeamsTab";
 import { DraftResultsTab, type DraftPickRow } from "@/components/draftRoom/DraftResultsTab";
 import { DraftConfirmModal, DraftOrderModal } from "@/components/draftRoom/Modals";
 import { usePoolView, useStrategyPanel } from "@/components/draftRoom/hooks";
+import { useIsDesktop } from "@/lib/ui/useIsDesktop";
 
 const TABS = ["Player Pool", "Watchlist", "Teams", "Draft Results"] as const;
 type DraftTab = (typeof TABS)[number];
@@ -38,6 +42,8 @@ type Modal = null | { type: "draftConfirm"; player: Player } | { type: "playerCa
 export default function DraftRoomPage() {
   useRequireSession();
   const router = useRouter();
+  // computers get three columns (below)
+  const isDesktop = useIsDesktop();
 
   // -------- league --------
   const leagues = useLeagueStore((s) => s.leagues);
@@ -296,91 +302,85 @@ export default function DraftRoomPage() {
   };
   const openMenu = () => setMenuOpen(true);
 
-  return (
-    <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
-      <div
-        aria-hidden="true"
-        style={{ position: "fixed", inset: 0, zIndex: -1, background: "linear-gradient(to bottom, rgb(15, 23, 42), rgb(13, 148, 136), rgb(16, 185, 129))" }}
+  const header =
+    phase === "preDraft" ? (
+      <PreDraftHeader
+        draftAt={typeof activeLeague?.draftAt === "number" && Number.isFinite(activeLeague.draftAt) ? activeLeague.draftAt : null}
+        firstPickName={firstPickTeamName}
+        onShowOrder={draftOrderTeams.length ? () => setModal({ type: "draftOrder" }) : undefined}
+        onMenu={openMenu}
       />
+    ) : draftComplete ? (
+      <CompleteHeader latestPickText={latestPickText} onMenu={openMenu} />
+    ) : (
+      <LiveHeader
+        deadlineMs={serverDeadlineMs ?? null}
+        draftComplete={draftComplete}
+        currentPick={currentPick}
+        totalPicks={totalPicks}
+        latestPickText={latestPickText}
+        youOnClock={youOnClock}
+        nextPickInTurns={nextPickInTurns}
+        onTheClockName={teams.find((t) => t.id === onTheClockTeamId)?.name ?? "TBC"}
+        onMenu={openMenu}
+      />
+    );
 
-      <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px", paddingBottom: "calc(18px + env(safe-area-inset-bottom))" }}>
-        {phase === "preDraft" ? (
-          <PreDraftHeader
-            draftAt={typeof activeLeague?.draftAt === "number" && Number.isFinite(activeLeague.draftAt) ? activeLeague.draftAt : null}
-            firstPickName={firstPickTeamName}
-            onShowOrder={draftOrderTeams.length ? () => setModal({ type: "draftOrder" }) : undefined}
-            onMenu={openMenu}
-          />
-        ) : draftComplete ? (
-          <CompleteHeader latestPickText={latestPickText} onMenu={openMenu} />
-        ) : (
-          <LiveHeader
-            deadlineMs={serverDeadlineMs ?? null}
-            draftComplete={draftComplete}
-            currentPick={currentPick}
-            totalPicks={totalPicks}
-            latestPickText={latestPickText}
-            youOnClock={youOnClock}
-            nextPickInTurns={nextPickInTurns}
-            onTheClockName={teams.find((t) => t.id === onTheClockTeamId)?.name ?? "TBC"}
-            onMenu={openMenu}
-          />
-        )}
-
-        <div style={{ marginTop: 10, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.18)" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
-            {TABS.map((t) => (
-              <button
-                key={t}
-                onClick={() => setActiveTab(t)}
-                style={{ height: 30, border: "none", background: t === activeTab ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.10)", color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {activeTab === "Player Pool" && (
-          <>
-            {!draftComplete ? (
-              <DraftPlanStrip strategy={draftStrategy} draftedIds={draftedIds} leagueId={activeLeagueId ?? null} hideMockDraft={phase === "liveDraft"} onEditStrategy={strategyPanel.show} />
-            ) : null}
-            {filterBar}
-            <PoolList {...listProps} players={playerPoolPlayers} emptyText="No eligible players available for your remaining roster slots." />
-          </>
-        )}
-        {activeTab === "Watchlist" && (
-          <>
-            {filterBar}
-            <PoolList {...listProps} players={watchlistPlayers} emptyText="No players in your watchlist yet." onMove={moveWatchlist} />
-          </>
-        )}
-        {activeTab === "Teams" && (
-          <TeamsTab
-            teams={teams}
-            selectedTeamId={selectedTeamId}
-            onSelectTeam={setSelectedTeamId}
-            players={selectedTeamPlayers}
-            loading={!selectedRoster && !selectedTeamPlayers.length}
-            squad={squadFormat ?? STANDARD_SQUAD}
-            pickNumberOf={getPlayerPickNumber}
-            onOpen={(p) => openPlayerCard(p)}
-          />
-        )}
-        {activeTab === "Draft Results" && <DraftResultsTab results={draftResults} onOpen={openPlayerCard} />}
+  const tabBar = (tabs: readonly DraftTab[], active: DraftTab) => (
+    <div style={{ marginTop: 10, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.18)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
+        {tabs.map((t) => (
+          <button
+            key={t}
+            onClick={() => setActiveTab(t)}
+            style={{ height: 30, border: "none", background: t === active ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.10)", color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+          >
+            {t}
+          </button>
+        ))}
       </div>
+    </div>
+  );
 
-      <AppMenu open={menuOpen} onClose={() => setMenuOpen(false)} leagues={leagues} activeLeagueId={activeLeagueId ?? null} setActiveLeague={setActiveLeague} activeItem="Draft Room" />
-
-      {strategyPanel.open && activeLeague ? (
-        <DraftStrategyPanel
-          strat={strat}
-          onClose={strategyPanel.close}
-          onMockDraft={phase === "preDraft" ? () => router.push(`/mock-draft?leagueId=${encodeURIComponent(activeLeague.id)}`) : undefined}
-        />
+  // on a computer the strategy is always on screen: the strip's "edit" goes to it
+  const editStrategy = isDesktop ? () => document.getElementById("draft-strategy-column")?.scrollTo({ top: 0, behavior: "smooth" }) : strategyPanel.show;
+  const poolTab = (
+    <>
+      {!draftComplete ? (
+        <DraftPlanStrip strategy={draftStrategy} draftedIds={draftedIds} leagueId={activeLeagueId ?? null} hideMockDraft={phase === "liveDraft"} onEditStrategy={editStrategy} />
       ) : null}
+      {filterBar}
+      <PoolList {...listProps} players={playerPoolPlayers} emptyText="No eligible players available for your remaining roster slots." />
+    </>
+  );
+  const watchlistTab = (
+    <>
+      {filterBar}
+      <PoolList {...listProps} players={watchlistPlayers} emptyText="No players in your watchlist yet." onMove={moveWatchlist} />
+    </>
+  );
+  const teamsTab = (
+    <TeamsTab
+      teams={teams}
+      selectedTeamId={selectedTeamId}
+      onSelectTeam={setSelectedTeamId}
+      players={selectedTeamPlayers}
+      loading={!selectedRoster && !selectedTeamPlayers.length}
+      squad={squadFormat ?? STANDARD_SQUAD}
+      pickNumberOf={getPlayerPickNumber}
+      onOpen={(p) => openPlayerCard(p)}
+    />
+  );
+  const mockDraft = phase === "preDraft" && activeLeague ? () => router.push(`/mock-draft?leagueId=${encodeURIComponent(activeLeague.id)}`) : undefined;
+  const background = (
+    <div
+      aria-hidden="true"
+      style={{ position: "fixed", inset: 0, zIndex: -1, background: "linear-gradient(to bottom, rgb(15, 23, 42), rgb(13, 148, 136), rgb(16, 185, 129))" }}
+    />
+  );
 
+  const modals = (
+    <>
       {modal?.type === "draftConfirm" && (
         <DraftConfirmModal
           player={modal.player}
@@ -413,6 +413,72 @@ export default function DraftRoomPage() {
           }
         />
       )}
+    </>
+  );
+
+  // ---------------- computers: three columns ----------------
+  if (isDesktop) {
+    const made = draftResults.filter((r) => r.player);
+    // the latest picks first; before the draft, the pick order
+    const latest = made.length ? [...made].reverse() : draftResults;
+    const column: React.CSSProperties = { minHeight: 0, overflowY: "auto", paddingBottom: 16 };
+    const columnTitle: React.CSSProperties = { fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.85, margin: "4px 2px 0" };
+    const poolSide: DraftTab = activeTab === "Watchlist" ? "Watchlist" : "Player Pool";
+    return (
+      <main style={{ height: "100svh", display: "flex", flexDirection: "column", color: "white" }}>
+        {background}
+        <div style={{ padding: "16px 20px 0", maxWidth: 1600, width: "100%", margin: "0 auto" }}>{header}</div>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 0.85fr)",
+            gap: 18,
+            padding: "12px 20px 0",
+            maxWidth: 1600,
+            width: "100%",
+            margin: "0 auto",
+          }}
+        >
+          <section aria-label="Players" style={column}>
+            {tabBar(["Player Pool", "Watchlist"], poolSide)}
+            {poolSide === "Watchlist" ? watchlistTab : poolTab}
+          </section>
+          <section id="draft-strategy-column" aria-label="Draft Strategy" style={{ ...column, paddingTop: 10 }}>
+            {activeLeague ? <DraftStrategyPanel embedded strat={strat} onClose={() => {}} onMockDraft={mockDraft} /> : null}
+          </section>
+          <section aria-label="Teams and picks" style={column}>
+            <div style={columnTitle}>Teams</div>
+            {teamsTab}
+            <div style={{ ...columnTitle, marginTop: 16 }}>{made.length ? "Latest picks" : "Pick order"}</div>
+            <DraftResultsTab results={latest} onOpen={openPlayerCard} />
+          </section>
+        </div>
+        {modals}
+      </main>
+    );
+  }
+
+  // ---------------- phones ----------------
+  return (
+    <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
+      {background}
+
+      <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px", paddingBottom: "calc(18px + env(safe-area-inset-bottom))" }}>
+        {header}
+        {tabBar(TABS, activeTab)}
+        {activeTab === "Player Pool" && poolTab}
+        {activeTab === "Watchlist" && watchlistTab}
+        {activeTab === "Teams" && teamsTab}
+        {activeTab === "Draft Results" && <DraftResultsTab results={draftResults} onOpen={openPlayerCard} />}
+      </div>
+
+      <AppMenu open={menuOpen} onClose={() => setMenuOpen(false)} leagues={leagues} activeLeagueId={activeLeagueId ?? null} setActiveLeague={setActiveLeague} activeItem="Draft Room" />
+
+      {strategyPanel.open && activeLeague ? <DraftStrategyPanel strat={strat} onClose={strategyPanel.close} onMockDraft={mockDraft} /> : null}
+
+      {modals}
     </main>
   );
 }

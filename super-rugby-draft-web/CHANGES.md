@@ -23,6 +23,8 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `f62902c` | The "Get notifications" card on the Dashboard only shows in the Home Screen app (not on a computer or in a phone's browser); notifications can still be turned on from the Account page anywhere | No |
+| `a0eefc0` | **Desktop layout, part 1** (plan H12): on a computer (screens 1024 px and wider) the menu sits on the left all the time and the ☰ buttons are hidden. **Draft Room** on a computer: the header across the top, then three columns: Player Pool / Watchlist, Draft Strategy (always open, editable during the draft), and a team with the latest picks (the pick order before the draft). Other pages are still the phone column for now. Phones unchanged | No |
 | `a48f514` | Plan (REBUILD-PLAN.md): what's left, as of 27 Nov | No |
 | `17daa05` | **Admin → Coach**: Delete on each note, plus Delete All (season) Notes; custom info ("Tell the coach something") and shared articles can now be deleted, not just turned off (each asks first). **AI coach**: before Round 1's team lists are read (Wednesday 4:30 pm NZ) notes don't look ahead to Round 1 (no "Next week" part or projection); after-game notes and later weeks as before | No |
 | `87b717e` | **AI coach**: knows how much the matchup numbers mean for each position (from 2026: a real pattern for outside backs, centres and props, a weak one for hookers, mostly chance for locks, loose forwards, halfbacks and first fives). It mentions a matchup only when it's relevant, and doesn't base advice on the "mostly chance" ones | No |
