@@ -6,18 +6,19 @@ Every change is listed, with a code to undo it, in `super-rugby-draft-web/CHANGE
 
 Status key: ⬜ not started · 🔶 in progress · ✅ done
 
-## Where things stand (26 Nov 2026)
+## Where things stand (27 Nov 2026)
 
 **Still to build** (in the agreed order):
-1. 🔶 Push notifications (D1): built 26 Nov; needs its database change on the online 2027 project (Ethan's OK), then Ethan tries it on his iPhone
+1. 🔶 Push notifications (D1): built 26 Nov, database change online 27 Nov; Ethan tries it on his iPhone (Home Screen app)
 2. ⏳ Help page and info buttons (G4): Ethan writes the content first
-3. ⬜ AI coach key: Ethan gets an Anthropic API key and puts it in Vercel (walkthrough); the coach is built (G13) but can't write notes without it
+3. 🔶 AI coach (G13): key in Vercel 27 Nov; changes 27 Nov (no sources named, shorter notes, season years, separate outlook / next week / update boxes, points given up per position with how reliable each is, deletes, no Round 1 look-ahead before its team lists). Ethan tests a few notes, then Delete All before the season; season outlooks about 2 weeks before Round 1
 4. ⬜ Desktop layout (H12): the site is built for phones; make it work well on a computer screen
 5. 🔶 Live match scores during games (D2): built 27 Nov; check the official feed's live status words in Round 1 2027
+6. ⬜ Maybe: package security updates (`npm audit`: 15 older warnings, incl. Next.js)
 
-**Waiting for the 2027 season:** official 2027 player list import (item 13), Round 1 checks of the official fantasy game's in-season wording (late team changes, G2 jersey numbers), launch day (`GO-LIVE.md`), tidy-up after launch.
+**Waiting for the 2027 season:** official 2027 player list import (item 13), Round 1 checks of the official fantasy game's in-season wording (late team changes, G2 jersey numbers, live scores), re-test points given up per position with 2027 data (`backtest-projections.ts --matchups`), launch day (`GO-LIVE.md`), tidy-up after launch.
 
-**Test-site leftovers for Ethan:** delete practice leagues PNDMH and PYPZL (`npx tsx scripts/practice-draft.ts --code=<CODE> --remove --confirm=dbmzgofmjbeeskhwohuv`); check the iPhone top bar after re-adding the Home Screen app.
+**Test-site leftovers for Ethan:** delete practice leagues PNDMH and PYPZL (`npx tsx scripts/practice-draft.ts --code=<CODE> --remove --confirm=dbmzgofmjbeeskhwohuv`); check the iPhone top bar (looked right in his 27 Nov screenshots).
 
 Many items below still say "browser check pending" from when they were built; most have since been used on the test and demo sites (practice draft 25 Nov, demo league). Anything that turns out wrong goes on Ethan's next list.
 
