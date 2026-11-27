@@ -3,9 +3,9 @@
 // The Draft Room: the countdown / pick clock, then Player Pool, Watchlist, Teams and Draft
 // Results, plus the Draft Strategy panel over the top. This file loads the data and joins the
 // pieces up; the pieces themselves are in components/draftRoom (split up 26 Nov 2026).
-// On a computer (Ethan, 27 Nov 2026) it's three columns under the header: the Player Pool /
-// Watchlist, Draft Strategy (always open, editable during the draft), and a team with the
-// latest picks.
+// On a computer (Ethan, 27 Nov 2026): every pick in a row of boxes under the header (scroll
+// back / ahead), then three columns: the Player Pool, your Draft Strategy (always open and
+// editable during the draft; your Watchlist instead if you haven't set a strategy), and a team.
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -31,6 +31,7 @@ import { PoolList } from "@/components/draftRoom/PoolList";
 import { TeamsTab } from "@/components/draftRoom/TeamsTab";
 import { DraftResultsTab, type DraftPickRow } from "@/components/draftRoom/DraftResultsTab";
 import { DraftConfirmModal, DraftOrderModal } from "@/components/draftRoom/Modals";
+import { PickStrip } from "@/components/draftRoom/PickStrip";
 import { usePoolView, useStrategyPanel } from "@/components/draftRoom/hooks";
 import { useIsDesktop } from "@/lib/ui/useIsDesktop";
 
@@ -342,8 +343,9 @@ export default function DraftRoomPage() {
     </div>
   );
 
-  // on a computer the strategy is always on screen: the strip's "edit" goes to it
-  const editStrategy = isDesktop ? () => document.getElementById("draft-strategy-column")?.scrollTo({ top: 0, behavior: "smooth" }) : strategyPanel.show;
+  // on a computer a strategy that's been set is always on screen: the strip's "edit" goes to it
+  const hasStrategy = !isEmptyStrategy(draftStrategy);
+  const editStrategy = isDesktop && hasStrategy ? () => document.getElementById("draft-strategy-column")?.scrollTo({ top: 0, behavior: "smooth" }) : strategyPanel.show;
   const poolTab = (
     <>
       {!draftComplete ? (
@@ -416,18 +418,24 @@ export default function DraftRoomPage() {
     </>
   );
 
-  // ---------------- computers: three columns ----------------
+  // ---------------- computers: the picks, then three columns ----------------
   if (isDesktop) {
-    const made = draftResults.filter((r) => r.player);
-    // the latest picks first; before the draft, the pick order
-    const latest = made.length ? [...made].reverse() : draftResults;
     const column: React.CSSProperties = { minHeight: 0, overflowY: "auto", paddingBottom: 16 };
     const columnTitle: React.CSSProperties = { fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.85, margin: "4px 2px 0" };
-    const poolSide: DraftTab = activeTab === "Watchlist" ? "Watchlist" : "Player Pool";
+    // with a strategy: Player Pool / Watchlist tabs here and the strategy in the middle;
+    // without one: the Player Pool here and the Watchlist in the middle
+    const poolSide: DraftTab = hasStrategy && activeTab === "Watchlist" ? "Watchlist" : "Player Pool";
     return (
       <main style={{ height: "100svh", display: "flex", flexDirection: "column", color: "white" }}>
         {background}
-        <div style={{ padding: "16px 20px 0", maxWidth: 1600, width: "100%", margin: "0 auto" }}>{header}</div>
+        <div style={{ padding: "16px 20px 0", maxWidth: 1600, width: "100%", margin: "0 auto" }}>
+          {header}
+          {draftResults.length ? (
+            <div style={{ marginTop: 12 }}>
+              <PickStrip results={draftResults} teams={teams} onClockPick={currentPick} yourTeamId={yourTeamId} draftComplete={draftComplete} onOpen={openPlayerCard} />
+            </div>
+          ) : null}
+        </div>
         <div
           style={{
             flex: 1,
@@ -435,26 +443,33 @@ export default function DraftRoomPage() {
             display: "grid",
             gridTemplateColumns: "minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 0.85fr)",
             gap: 18,
-            padding: "12px 20px 0",
+            padding: "8px 20px 0",
             maxWidth: 1600,
             width: "100%",
             margin: "0 auto",
           }}
         >
           <section aria-label="Players" style={column}>
-            {tabBar(["Player Pool", "Watchlist"], poolSide)}
+            {hasStrategy ? tabBar(["Player Pool", "Watchlist"], poolSide) : null}
             {poolSide === "Watchlist" ? watchlistTab : poolTab}
           </section>
-          <section id="draft-strategy-column" aria-label="Draft Strategy" style={{ ...column, paddingTop: 10 }}>
-            {activeLeague ? <DraftStrategyPanel embedded strat={strat} onClose={() => {}} onMockDraft={mockDraft} /> : null}
-          </section>
-          <section aria-label="Teams and picks" style={column}>
-            <div style={columnTitle}>Teams</div>
+          {hasStrategy ? (
+            <section id="draft-strategy-column" aria-label="Draft Strategy" style={{ ...column, paddingTop: 10 }}>
+              {activeLeague ? <DraftStrategyPanel embedded strat={strat} onClose={() => {}} onMockDraft={mockDraft} /> : null}
+            </section>
+          ) : (
+            <section aria-label="Watchlist" style={column}>
+              <div style={{ ...columnTitle, marginTop: 14 }}>Watchlist</div>
+              <PoolList {...listProps} players={watchlistPlayers} emptyText="No players in your watchlist yet. Tap the eye next to a player to add him." onMove={moveWatchlist} />
+            </section>
+          )}
+          <section aria-label="Teams" style={column}>
+            <div style={{ ...columnTitle, marginTop: 14 }}>Teams</div>
             {teamsTab}
-            <div style={{ ...columnTitle, marginTop: 16 }}>{made.length ? "Latest picks" : "Pick order"}</div>
-            <DraftResultsTab results={latest} onOpen={openPlayerCard} />
           </section>
         </div>
+        <AppMenu open={menuOpen} onClose={() => setMenuOpen(false)} leagues={leagues} activeLeagueId={activeLeagueId ?? null} setActiveLeague={setActiveLeague} activeItem="Draft Room" />
+        {strategyPanel.open && activeLeague ? <DraftStrategyPanel strat={strat} onClose={strategyPanel.close} onMockDraft={mockDraft} /> : null}
         {modals}
       </main>
     );

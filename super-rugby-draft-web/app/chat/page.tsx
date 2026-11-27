@@ -394,7 +394,6 @@ function ChatPageInner() {
       {/* Writing a message */}
       {channel && inLeague ? (
         <div
-          className="fixed-bar"
           style={{
             position: "fixed",
             left: 0,

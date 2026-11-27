@@ -11,7 +11,6 @@ import { PlayerCompareHost } from "@/components/PlayerCompare";
 import { TeamProfileHost } from "@/components/TeamProfileModal";
 import { LeagueStakesPrompt } from "@/components/LeagueStakes";
 import { demo, demoClockSource } from "@/lib/demo";
-import { DesktopSidebar } from "@/components/AppMenu";
 
 /**
  * Viewport configuration
@@ -124,9 +123,7 @@ export default async function RootLayout({
           <LeagueSync username={sessionProfile?.username ?? null} />
           {sessionProfile ? <ChatNotifier /> : null}
           <ScoringRulesSync>
-            {/* computers: the menu on the left (components/AppMenu.tsx, app/globals.css) */}
-            {sessionProfile ? <DesktopSidebar /> : null}
-            <div className="app-main">{children}</div>
+            {children}
             {/* compare two players, from any page (player card Compare button, Stats Hub) */}
             {sessionProfile ? <PlayerCompareHost /> : null}
             {/* a team's profile, tapping a team on the standings / power rankings / dashboard / matchup */}
