@@ -27,6 +27,8 @@ import { DropSelectModal } from "@/components/transactions/DropSelectModal";
 import { ConfirmAcceptTradeModal } from "@/components/transactions/ConfirmAcceptTradeModal";
 import { createPlayerMetrics, VIEW_MODES, type InfoMode } from "@/components/transactions/playerMetrics";
 import { formatDeadline, useNowTick, normUser, extractRosterIdsClient, SORT_OPTIONS, NO_DROP } from "@/components/transactions/helpers";
+import { useIsDesktop } from "@/lib/ui/useIsDesktop";
+import { DEFAULT_TX_COLUMNS, toggleColumn, txColumnShort, useTxColumnsStore } from "@/lib/players/poolColumns";
 import type { Player, AnyFixture, TabKey } from "@/components/transactions/helpers";
 import { PlayerRow } from "@/components/transactions/PlayerRow";
 import { PlayerListBox } from "@/components/transactions/PlayerListBox";
@@ -1261,8 +1263,25 @@ const modalActions = useMemo(
   activeLeague?.id,
   selectionWeek,
 ]);
-  // one Player Pool / Watchlist row
-  const renderPlayerRow = (p: Player) => (
+  // computers (Ethan, 27 Nov 2026): up to 5 picked columns, and the Watchlist beside the pool
+  const isDesktop = useIsDesktop();
+  const txColumns = useTxColumnsStore((st) => st.columns);
+  const setTxColumns = useTxColumnsStore((st) => st.setColumns);
+  const columnModes = txColumns.filter((c) => SORT_OPTIONS.some((o) => o.value === c)) as InfoMode[];
+  const filterColumns = isDesktop
+    ? { selected: txColumns, options: SORT_OPTIONS, toggle: (k: string) => setTxColumns(toggleColumn(txColumns, k)), reset: () => setTxColumns(DEFAULT_TX_COLUMNS) }
+    : undefined;
+  const listColumns = isDesktop
+    ? {
+        labels: columnModes.map(txColumnShort),
+        titles: columnModes.map((m) => SORT_OPTIONS.find((o) => o.value === m)?.label ?? m),
+        sorted: columnModes.map((m) => m === infoMode),
+        onSort: (i: number) => setInfoMode(columnModes[i]),
+      }
+    : undefined;
+
+  // one Player Pool / Watchlist row (`withColumns`: the picked columns, on a computer)
+  const renderPlayerRow = (p: Player, withColumns = false) => (
     <PlayerRow
       key={p.id}
       p={p}
@@ -1283,6 +1302,7 @@ const modalActions = useMemo(
       openDropModal={openDropModal}
       goToTradeProposal={goToTradeProposal}
       openPlayer={(pl) => setModalPlayer(hydratePlayer(pl))}
+      columnModes={withColumns && isDesktop ? columnModes : undefined}
     />
   );
 
@@ -1301,9 +1321,11 @@ const modalActions = useMemo(
 
       <div
         style={{
-          maxWidth: 420,
+          maxWidth: isDesktop ? 1280 : 420,
           margin: "0 auto",
-          padding: "16px 18px",
+          paddingTop: 16,
+          paddingLeft: isDesktop ? 24 : 18,
+          paddingRight: isDesktop ? 24 : 18,
           paddingBottom: "calc(18px + env(safe-area-inset-bottom))",
         }}
       >
@@ -1316,7 +1338,8 @@ const modalActions = useMemo(
         <TxTabs tab={tab} onTab={setTab} pendingOffersCount={pendingOffersCount} />
 
         {tab === "Player Pool" && (
-          <>
+          <div style={isDesktop ? { display: "grid", gridTemplateColumns: "minmax(0, 1.7fr) minmax(0, 1fr)", gap: 18, alignItems: "start" } : undefined}>
+          <div style={{ minWidth: 0 }}>
             <PoolFilterBar
   search={search}
   setSearch={setSearch}
@@ -1329,10 +1352,18 @@ const modalActions = useMemo(
   setSort={(v) => setInfoMode(v as any)}
   sortOptions={SORT_OPTIONS}
   statOptions
+  columns={filterColumns}
 />
 
-            <PlayerListBox viewLabel={statViewLabelFor(infoMode)} metricHeading={metricLabel(infoMode)} players={playerPoolPlayers} emptyText="No available players found." renderRow={renderPlayerRow} />
-          </>
+            <PlayerListBox viewLabel={statViewLabelFor(infoMode)} metricHeading={metricLabel(infoMode)} players={playerPoolPlayers} emptyText="No available players found." renderRow={(p) => renderPlayerRow(p, true)} columns={listColumns} />
+          </div>
+          {isDesktop ? (
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.85, margin: "24px 2px 0" }}>Watchlist</div>
+              <PlayerListBox viewLabel={statViewLabelFor(infoMode)} metricHeading={metricLabel(infoMode)} players={watchlistPlayers} emptyText="No players in your watchlist yet. Tap the star next to a player to add him." renderRow={(p) => renderPlayerRow(p)} />
+            </div>
+          ) : null}
+          </div>
         )}
 
         {tab === "Watchlist" && (
@@ -1349,9 +1380,10 @@ const modalActions = useMemo(
   setSort={(v) => setInfoMode(v as any)}
   sortOptions={SORT_OPTIONS}
   statOptions
+  columns={filterColumns}
 />
 
-            <PlayerListBox viewLabel={statViewLabelFor(infoMode)} metricHeading={metricLabel(infoMode)} players={watchlistPlayers} emptyText="No players in your watchlist yet." renderRow={renderPlayerRow} />
+            <PlayerListBox viewLabel={statViewLabelFor(infoMode)} metricHeading={metricLabel(infoMode)} players={watchlistPlayers} emptyText="No players in your watchlist yet." renderRow={(p) => renderPlayerRow(p, true)} columns={listColumns} />
           </>
         )}
 

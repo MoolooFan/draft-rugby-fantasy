@@ -9,6 +9,7 @@ import { JerseyTile, type Player } from "@/components/transactions/helpers";
 import { StarButton, TxActionButton } from "@/components/transactions/bits";
 import { positionsLabel } from "@/lib/players/positions";
 import { StatusTag } from "@/components/StatusTag";
+import { TX_COL_W, txRightWidth } from "@/components/transactions/PlayerListBox";
 
 export type PlayerRowProps = {
   p: Player;
@@ -30,12 +31,14 @@ export type PlayerRowProps = {
   goToTradeProposal: (partnerTeamId: string, requestPlayerId: string) => void;
   /** open the player card */
   openPlayer: (p: Player) => void;
+  /** computers: the picked columns (in place of the single number) */
+  columnModes?: InfoMode[];
 };
 
 /** One player in the Transactions page's Player Pool / Watchlist: jersey, name, status, the chosen number, watch star and the add / claim / trade button. */
 export function PlayerRow({
   p, yourDraftTeamId, activeLeague, ownerByPlayerId, lockedUnownedSet, watchlist, toggleWatchlist, windowMode, tradeWindowOpen,
-  enableTrades, infoMode, metricValue, teamLabel, isAddCoolingDown, guardedAdd, openDropModal, goToTradeProposal, openPlayer,
+  enableTrades, infoMode, metricValue, teamLabel, isAddCoolingDown, guardedAdd, openDropModal, goToTradeProposal, openPlayer, columnModes,
 }: PlayerRowProps) {
   const ENABLE_TRADES = enableTrades;
   // Ownership
@@ -79,7 +82,7 @@ if (isOwned && !isOwnedByYou) {
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "1fr 140px",
+        gridTemplateColumns: `minmax(0, 1fr) ${txRightWidth(columnModes?.length)}px`,
         gap: 10,
         alignItems: "center",
         padding: "10px 10px",
@@ -116,9 +119,15 @@ if (isOwned && !isOwnedByYou) {
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, width: 40, textAlign: "center" }}>
-          {metricValue(p, infoMode)}
-        </div>
+        {columnModes ? (
+          columnModes.map((m) => (
+            <div key={m} style={{ fontSize: 12, fontWeight: m === infoMode ? 700 : 500, width: TX_COL_W, textAlign: "center", color: m === infoMode ? "#0f172a" : "#334155" }}>
+              {metricValue(p, m)}
+            </div>
+          ))
+        ) : (
+          <div style={{ fontSize: 12, fontWeight: 700, width: 40, textAlign: "center" }}>{metricValue(p, infoMode)}</div>
+        )}
 
         <StarButton active={isStar} onClick={() => toggleWatchlist(p.id)} />
 
