@@ -12,7 +12,7 @@ Status key: ⬜ not started · 🔶 in progress · ✅ done
 1. 🔶 Push notifications (D1): built 26 Nov, database change online 27 Nov; Ethan tries it on his iPhone (Home Screen app)
 2. ⏳ Help page and info buttons (G4): Ethan writes the content first
 3. 🔶 AI coach (G13): key in Vercel 27 Nov; changes 27 Nov (no sources named, shorter notes, season years, separate outlook / next week / update boxes, points given up per position with how reliable each is, deletes, no Round 1 look-ahead before its team lists). Ethan tests a few notes, then Delete All before the season; season outlooks about 2 weeks before Round 1
-4. 🔶 Desktop layout (H12): part 1 done 27 Nov (sidebar menu at 1024 px+, Draft Room in 3 columns). Next, in Ethan's order: Dashboard & Matchup, Team Selection & Transactions / Player Pool, League / Stats Hub / Fixtures. Pages use lib/ui/useIsDesktop.ts
+4. 🔶 Desktop layout (H12): Draft Room done 27 Nov (pick boxes strip; pool | strategy if set, else watchlist | teams; menu stays the pop-out drawer, sidebar tried and dropped). Next, in Ethan's order: Dashboard & Matchup, Team Selection & Transactions / Player Pool, League / Stats Hub / Fixtures. Pages use lib/ui/useIsDesktop.ts
 5. 🔶 Live match scores during games (D2): built 27 Nov; check the official feed's live status words in Round 1 2027
 6. ⬜ Maybe: package security updates (`npm audit`: 15 older warnings, incl. Next.js)
 
