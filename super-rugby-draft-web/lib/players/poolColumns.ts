@@ -85,3 +85,22 @@ export function toggleColumn(columns: string[], key: string): string[] {
   if (columns.includes(key)) return columns.filter((c) => c !== key);
   return columns.length >= MAX_POOL_COLUMNS ? columns : [...columns, key];
 }
+
+// ---------------------------------------------------------------------------
+// Transactions' Player Pool on a computer: its own numbers (Projected, Match Average, Form, ...;
+// components/transactions/playerMetrics.ts), up to 5 of them, remembered on this device.
+
+export const DEFAULT_TX_COLUMNS = ["PROJECTED", "MATCH_AVG", "FORM_3", "TOTAL_PTS", "TRIES"];
+
+const TX_SHORT: Record<string, string> = {
+  DRAFT_RANK: "Rank", PROJECTED: "Proj", MATCH_AVG: "Avg", TOTAL_PTS: "Pts", FORM_3: "Form", LAST_SCORE: "Last", GAMES_PLAYED: "Games",
+  TRIES: "Tries", TRY_ASSISTS: "TA", LINEBREAKS: "LB", LINEBREAK_ASSISTS: "LBA", DEFENDERS_BEATEN: "DB", METRES_GAINED: "Metres",
+  OFFLOADS: "Offl", TACKLES: "Tkl", MISSED_TACKLES: "MT", TURNOVERS_FORCED: "TO", INTERCEPTIONS: "Int", KICKS_50_22: "50:22",
+  PENALTIES_CONCEDED: "PC", ERRORS: "Err", LINEOUTS_WON: "LO", LINEOUT_STEALS: "LO St", LINEOUT_ERRORS: "LO Err", SCRUMS_WON: "Scr",
+  CONVERSIONS: "Con", PENALTY_GOALS: "PG", DROP_GOALS: "DG", YELLOW_CARDS: "YC", RED_CARDS: "RC",
+};
+export const txColumnShort = (mode: string) => TX_SHORT[mode] ?? mode;
+
+export const useTxColumnsStore = create<{ columns: string[]; setColumns: (c: string[]) => void }>()(
+  persist((set) => ({ columns: DEFAULT_TX_COLUMNS, setColumns: (columns) => set({ columns: columns.slice(0, MAX_POOL_COLUMNS) }) }), { name: "sr-tx-columns-v1" })
+);
