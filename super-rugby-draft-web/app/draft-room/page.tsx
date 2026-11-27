@@ -287,6 +287,7 @@ export default function DraftRoomPage() {
       setSort={pool.setSortMode}
       sortOptions={pool.sortOptions}
       statOptions
+      columns={pool.columns}
     />
   );
   const listProps = {

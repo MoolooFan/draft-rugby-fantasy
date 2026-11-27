@@ -97,6 +97,7 @@ export function PoolFilterBar({
   sortOptions,
   defaultSort,
   statOptions,
+  columns,
 }: {
   search: string;
   setSearch: (v: string) => void;
@@ -113,6 +114,8 @@ export function PoolFilterBar({
   defaultSort?: string;
   /** also show Per game / Total / Per 80 and the season (2026 / 2027) in the pop-up */
   statOptions?: boolean;
+  /** computers: pick the list's stat columns, up to 5 (lib/players/poolColumns.ts; Ethan, 27 Nov 2026) */
+  columns?: { selected: string[]; options: Array<{ value: string; label: string }>; toggle: (v: string) => void; reset: () => void };
 }) {
   const [open, setOpen] = useState(false);
   const [statView, setStatView] = useStatView();
@@ -129,6 +132,7 @@ export function PoolFilterBar({
     }
     const sortTo = defaultSort ?? (sortOptions?.some((o) => o.value === "DRAFT_RANK") ? "DRAFT_RANK" : sortOptions?.[0]?.value);
     if (setSort && sortTo) setSort(sortTo);
+    columns?.reset();
   };
   const active =
     filters.teams.length +
@@ -221,6 +225,30 @@ export function PoolFilterBar({
                   STAT_VIEWS.map((v) => <Chip key={v} on={statView === v} label={STAT_VIEW_LABEL[v]} onClick={() => setStatView(v)} />)
                 )
               : null}
+            {columns ? (
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.6 }}>
+                  Columns ({columns.selected.length} of 5 picked)
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {columns.options.map((o) => {
+                    const at = columns.selected.indexOf(o.value);
+                    const full = at < 0 && columns.selected.length >= 5;
+                    return (
+                      <Chip
+                        key={o.value}
+                        on={at >= 0}
+                        label={at >= 0 ? `${at + 1}. ${o.label}` : o.label}
+                        onClick={() => {
+                          if (!full) columns.toggle(o.value);
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>Tap to add or take away (up to 5, shown in the order picked). Click a column&apos;s heading in the list to sort by it.</div>
+              </div>
+            ) : null}
             {statOptions && seasons.length > 1
               ? section(
                   "Season",
