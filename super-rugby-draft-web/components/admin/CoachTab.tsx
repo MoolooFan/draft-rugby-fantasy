@@ -70,6 +70,14 @@ export function CoachNoteRow({ n, name, onChange, setMsg }: { n: CoachAdmin["not
             >
               {n.hidden ? "Show" : "Hide"}
             </button>
+            <button
+              style={{ ...primaryButton, height: 28, width: "auto", padding: "0 12px", fontSize: 11, background: "#b91c1c" }}
+              onClick={() => {
+                if (window.confirm(`Delete this note about ${name}? This can't be undone.`)) act({ action: "note_delete", id: n.id }, "Note deleted");
+              }}
+            >
+              Delete
+            </button>
           </div>
         </>
       )}
@@ -202,9 +210,20 @@ export function CoachTab({ season, setMsg }: { season: number; setMsg: (m: strin
                 <div style={{ fontSize: 12, fontWeight: 500 }}>
                   <b>{c.scope === "player" ? nameOf(c.player_id) : c.scope === "team" ? c.team_code : "Everyone"}:</b> {c.text}
                 </div>
-                <button style={{ ...primaryButton, height: 26, width: "auto", padding: "0 10px", fontSize: 11 }} onClick={() => act({ action: "context_toggle", id: c.id, active: !c.active }, c.active ? "Turned off" : "Turned on")}>
-                  {c.active ? "Turn Off" : "Turn On"}
-                </button>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button style={{ ...primaryButton, height: 26, width: "auto", padding: "0 10px", fontSize: 11 }} onClick={() => act({ action: "context_toggle", id: c.id, active: !c.active }, c.active ? "Turned off" : "Turned on")}>
+                    {c.active ? "Turn Off" : "Turn On"}
+                  </button>
+                  <button
+                    style={{ ...primaryButton, height: 26, width: "auto", padding: "0 10px", fontSize: 11, background: "#b91c1c" }}
+                    disabled={busy}
+                    onClick={() => {
+                      if (window.confirm("Delete this? The coach stops using it. This can't be undone.")) act({ action: "context_delete", id: c.id }, "Deleted");
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -212,7 +231,20 @@ export function CoachTab({ season, setMsg }: { season: number; setMsg: (m: strin
       </div>
 
       <div style={whiteBox}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>Latest notes</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>Latest notes</div>
+          {data.notes.length ? (
+            <button
+              style={{ ...primaryButton, height: 28, width: "auto", padding: "0 12px", fontSize: 11, background: "#b91c1c" }}
+              disabled={busy}
+              onClick={() => {
+                if (window.confirm(`Delete every coach note for ${season} (season outlooks, after-game, team-list, status and news notes)? This can't be undone.`)) act({ action: "notes_delete_all", season });
+              }}
+            >
+              Delete All {season} Notes
+            </button>
+          ) : null}
+        </div>
         {data.notes.length ? data.notes.map((n) => <CoachNoteRow key={n.id} n={n} name={nameOf(n.player_id)} onChange={load} setMsg={setMsg} />) : <div style={{ fontSize: 12, fontWeight: 500, opacity: 0.7 }}>None yet.</div>}
       </div>
     </div>

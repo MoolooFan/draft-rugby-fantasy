@@ -84,10 +84,12 @@ export async function writeNoteNow(
   if (!input) return { ok: false, reason: "Player not found" };
   const params = noteParams(settings.model, ctx, args.kind, buildFacts(input));
   const nums = notePoints(input);
+  const lookAhead = input.nextWeekOpen !== false;
   // a declined request is retried on the fallback model the API picks (Claude API only)
   const message = await anthropic().beta.messages.create({ ...params, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" });
   const note = noteFrom(message as never);
   if (!note) return { ok: false, reason: "The coach couldn't write this one" };
+  if (!lookAhead) note.next_week = "";
   await saveNote(db, { season: args.season, player_id: args.playerId, kind: args.kind, week, source_key: args.sourceKey, model: settings.model, ...nums }, note);
   return { ok: true };
 }
@@ -111,13 +113,13 @@ export async function submitBatch(db: SupabaseClient, ctx: CoachCtx, model: stri
   const todo = items.filter((i) => !done.has(i.sourceKey));
   await loadPreviousNotes(db, ctx, todo.map((i) => i.playerId));
   const requests: Array<{ custom_id: string; params: ReturnType<typeof noteParams> }> = [];
-  const map: Record<string, { player_id: string; source_key: string; week: number | null; kind: CoachKind; projected: number | null; scored: number | null }> = {};
+  const map: Record<string, { player_id: string; source_key: string; week: number | null; kind: CoachKind; projected: number | null; scored: number | null; noLookAhead?: boolean }> = {};
   todo.forEach((it, n) => {
     const input = coachInput(ctx, it.playerId, kind, it.extra ?? {});
     if (!input) return;
     const id = `n${n}`;
     requests.push({ custom_id: id, params: noteParams(model, ctx, kind, buildFacts(input)) });
-    map[id] = { player_id: it.playerId, source_key: it.sourceKey, week: it.week, kind, ...notePoints(input) };
+    map[id] = { player_id: it.playerId, source_key: it.sourceKey, week: it.week, kind, ...notePoints(input), ...(input.nextWeekOpen === false ? { noLookAhead: true } : {}) };
   });
   if (!requests.length) {
     await db.from("coach_jobs").insert({ job_key: jobKey, kind, season: ctx.season, week: ctx.week, status: "skipped", requests: 0, finished_at: new Date().toISOString() });
@@ -138,13 +140,14 @@ export async function collectBatches(db: SupabaseClient): Promise<number> {
     try {
       const b = await anthropic().messages.batches.retrieve(job.batch_id);
       if (b.processing_status !== "ended") continue;
-      const items = (job.items ?? {}) as Record<string, { player_id: string; source_key: string; week: number | null; kind: CoachKind; projected?: number | null; scored?: number | null }>;
+      const items = (job.items ?? {}) as Record<string, { player_id: string; source_key: string; week: number | null; kind: CoachKind; projected?: number | null; scored?: number | null; noLookAhead?: boolean }>;
       let n = 0;
       for await (const r of await anthropic().messages.batches.results(job.batch_id)) {
         const it = items[r.custom_id];
         if (!it || r.result.type !== "succeeded") continue;
         const note = noteFrom(r.result.message as never);
         if (!note) continue;
+        if (it.noLookAhead || it.kind === "outlook") note.next_week = "";
         await saveNote(db, { season: job.season, player_id: it.player_id, kind: it.kind, week: it.week, source_key: it.source_key, model: settings.model, projected: it.projected ?? null, scored: it.scored ?? null }, note);
         n++;
       }

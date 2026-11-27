@@ -5,7 +5,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadSeasonPlayers, type SitePlayer } from "@/lib/players/db";
 import { loadStats, weekProjections, type StatRow, type WeekProjections } from "@/lib/projections/server";
-import { fantasyWeekForRealRound, fixturesForWeek, getSeason, realRoundsForWeek, SEASONS, totalFantasyWeeks, weekLabel, type SeasonConfig } from "@/lib/season";
+import { fantasyWeekForRealRound, fixturesForWeek, getSeason, realRoundsForWeek, SEASONS, teamListsReadAtMs, totalFantasyWeeks, weekLabel, type SeasonConfig } from "@/lib/season";
 import { isFrontRow, playerPoints, STANDARD_SCORING, statCountsFromRaw, type ScoringRules } from "@/lib/scoring";
 import { statusKind } from "@/lib/status/kind";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
@@ -203,6 +203,18 @@ function fixtureFor(ctx: CoachCtx, teamCode: string, week: number, group: PosGro
   return null;
 }
 
+/**
+ * Whether a note may look ahead to his next game (Ethan, 27 Nov 2026): not for Round 1 until its
+ * team lists are read (Wednesday 4:30 pm NZ), the weekly outlook time; after-game notes always.
+ */
+export function nextWeekOpen(ctx: Pick<CoachCtx, "s" | "week">, kind: CoachKind, nowMs: number): boolean {
+  if (kind === "outlook") return false;
+  if (kind === "post_game" || ctx.week !== 1) return true;
+  const first = Math.min(...realRoundsForWeek(ctx.s, 1));
+  const at = Number.isFinite(first) ? teamListsReadAtMs(ctx.s, first) : null;
+  return at == null || nowMs >= at;
+}
+
 /** One player's fact-sheet input. */
 export function coachInput(
   ctx: CoachCtx,
@@ -284,6 +296,7 @@ export function coachInput(
     remaining,
     finalsWeeks,
     teammates,
+    nextWeekOpen: nextWeekOpen(ctx, kind, nowMs),
     matchupGroup: group,
     thisGame,
     statusChange: extra.statusChange ?? null,

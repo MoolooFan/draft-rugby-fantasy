@@ -114,6 +114,17 @@ export function CoachArticles({
     }
   }
 
+  async function remove(a: CoachArticle) {
+    if (!window.confirm(`Delete "${a.title || a.url}"? The coach stops using it. This can't be undone.`)) return;
+    try {
+      await api("/api/admin/coach", { action: "article_delete", id: a.id });
+      setMsg("Article deleted");
+      onSaved();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Something went wrong");
+    }
+  }
+
   return (
     <div style={{ ...whiteBox, display: "grid", gap: 8 }}>
       <div style={{ fontSize: 13, fontWeight: 700 }}>Share an article</div>
@@ -213,9 +224,14 @@ export function CoachArticles({
                   {[...a.player_ids.map(nameOf), ...a.team_codes].join(", ")}
                 </div>
               </div>
-              <button style={{ ...primaryButton, height: 26, width: "auto", padding: "0 10px", fontSize: 11 }} onClick={() => toggleActive(a)}>
-                {a.active ? "Turn Off" : "Turn On"}
-              </button>
+              <div style={{ display: "flex", gap: 4 }}>
+                <button style={{ ...primaryButton, height: 26, width: "auto", padding: "0 10px", fontSize: 11 }} onClick={() => toggleActive(a)}>
+                  {a.active ? "Turn Off" : "Turn On"}
+                </button>
+                <button style={{ ...primaryButton, height: 26, width: "auto", padding: "0 10px", fontSize: 11, background: "#b91c1c" }} onClick={() => remove(a)}>
+                  Delete
+                </button>
+              </div>
             </div>
           ))}
         </div>
