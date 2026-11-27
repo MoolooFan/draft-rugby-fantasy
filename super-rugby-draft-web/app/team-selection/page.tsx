@@ -5,6 +5,8 @@ import { useSeasonStatRows } from "@/lib/players/useStatRows";
 import { pitchRows, rosterSize, STANDARD_SQUAD } from "@/lib/league/squad";
 import React, { useEffect, useMemo, useState } from "react";
 import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
+import { useIsDesktop } from "@/lib/ui/useIsDesktop";
+import { SquadTable, type SquadRow } from "@/components/teamSelection/SquadTable";
 import { teamOutlook } from "@/lib/projections/live";
 import { CAPTAIN_MULTIPLIER, statCountsFromRow } from "@/lib/scoring";
 
@@ -937,6 +939,42 @@ function tileSubtext(p: Player | null) {
 
   
 
+  // computers (Ethan, 27 Nov 2026): the pitch on the left, the whole squad as a table on the right
+  const isDesktop = useIsDesktop();
+  const squadRows: SquadRow[] = useMemo(() => {
+    if (!isDesktop) return [];
+    const order = new Map(SLOT_DEFS.map((sd, i) => [sd.id, i]));
+    const fmt = (v: unknown) => (v == null || !Number.isFinite(Number(v)) ? "–" : Number(v).toFixed(1));
+    const row = (p: Player, where: string, starter: boolean): SquadRow => {
+      const stats = getLiveStat(p);
+      const sid = getPlayerSheetId(p);
+      const proj = playerProj(p);
+      return {
+        player: p as SquadRow["player"],
+        where,
+        starter,
+        captain: p.id === captainId,
+        vice: p.id === viceId,
+        opp: getUpcomingFixtureTag(p.teamCode),
+        proj: proj == null ? "–" : formatProjection(proj),
+        latest: stats?.latest == null ? "–" : String(stats.latest),
+        form: fmt(stats?.form),
+        ppg: fmt(stats?.ppg),
+        lastSeason: fmt(sid ? lastSeasonAvgById.get(sid) : null),
+      };
+    };
+    const inTeam = rosterPool
+      .filter((p) => slotOfPlayer.has(p.id))
+      .sort((a, b) => (order.get(slotOfPlayer.get(a.id)!) ?? 99) - (order.get(slotOfPlayer.get(b.id)!) ?? 99))
+      .map((p) => {
+        const sd = SLOT_DEFS.find((x) => x.id === slotOfPlayer.get(p.id));
+        return row(p, sd?.starter ? sd.label.replace(/\s+/g, " ") : "Sub", !!sd?.starter);
+      });
+    const notPicked = rosterPool.filter((p) => !slotOfPlayer.has(p.id) && !irPlayers.some((x) => x.id === p.id)).map((p) => row(p, "Not picked", false));
+    return [...inTeam, ...notPicked, ...irPlayers.map((p) => row(p, "IR", false))];
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuilt whenever the lineup, squad or numbers change
+  }, [isDesktop, rosterPool, irPlayers, slotOfPlayer, SLOT_DEFS, captainId, viceId, weekProj, projReady, statsByPlayerId, lastSeasonAvgById, normalizedFixtures]);
+
   // dragging a tile onto another swaps them (components/teamSelection/DragSwap.tsx)
   const [dragSlot, setDragSlot] = useState<SlotId | null>(null);
 
@@ -1096,9 +1134,11 @@ function tileSubtext(p: Player | null) {
 ) : (
   <div
     style={{
-      maxWidth: 420,
+      maxWidth: isDesktop ? 1280 : 420,
       margin: "0 auto",
-      padding: "16px 18px",
+      paddingTop: 16,
+      paddingLeft: isDesktop ? 24 : 18,
+      paddingRight: isDesktop ? 24 : 18,
       paddingBottom: "calc(18px + env(safe-area-inset-bottom))",
     }}
   >
@@ -1116,6 +1156,8 @@ function tileSubtext(p: Player | null) {
           onSave={() => saveSelection()}
         />
 
+        <div style={isDesktop ? { display: "grid", gridTemplateColumns: "420px minmax(0, 1fr)", gap: 20, alignItems: "start" } : undefined}>
+        <div style={{ minWidth: 0 }}>
         <SwapDnd
           activeId={dragSlot}
           onStart={(id) => {
@@ -1149,6 +1191,20 @@ function tileSubtext(p: Player | null) {
           irBusy={irBusy}
         />
         </SwapDnd>
+        </div>
+        {isDesktop ? (
+          <div style={{ marginTop: 14, minWidth: 0 }}>
+            <SquadTable
+              rows={squadRows}
+              lastSeasonYear={hasLastSeason ? lastSeasonYear : null}
+              onOpen={(id) => {
+                const p = [...rosterPool, ...irPlayers].find((x) => x.id === id);
+                if (p) openPlayer(p);
+              }}
+            />
+          </div>
+        ) : null}
+        </div>
   </div>
 )}
 
