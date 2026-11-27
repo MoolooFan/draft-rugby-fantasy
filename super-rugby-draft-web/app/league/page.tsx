@@ -1,5 +1,7 @@
 "use client";
 
+import { useIsClient } from "@/lib/hooks/useIsClient";
+import { useStoreHydrated } from "@/lib/hooks/useStoreHydrated";
 import { useIsDesktop } from "@/lib/ui/useIsDesktop";
 import React, { useEffect, useMemo, useState } from "react";
 import { card as themeCard } from "@/lib/ui/theme";
@@ -15,7 +17,6 @@ import { currentSeasonYear, fixturesByFantasyWeek } from "@/lib/season";
 // This season's fixtures, numbered by fantasy week (see lib/season).
 const fixturesData = fixturesByFantasyWeek();
 import type { Fixture } from "@/lib/fixtures/types";
-import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { toMs, pickValue } from "@/lib/league/weekHelpers";
 import { ladderOrder, tieBreakHolder } from "@/lib/league/ladder";
 import { LeagueSettingsModal } from "./LeagueSettingsModal";
@@ -93,39 +94,21 @@ function calcFantasyPoints(row: any, player?: any): number {
   return pointsFromRow(row, player ?? null);
 }
 
+/** The tab asked for in the address (?tab=Power), if it's one of the League page's. */
+function tabFromAddress(): LeagueTab | null {
+  const want = new URLSearchParams(window.location.search).get("tab");
+  return want === "Power" || want === "Fixtures" || want === "Results" || want === "Shield" ? want : null;
+}
+
 export default function LeaguePage() {
  useRequireSession();
  // computers (Ethan, 27 Nov 2026): wider; standings beside the latest results; rounds in columns
  const isDesktop = useIsDesktop();
   // --- prevent "bounce" before zustand persist hydrates ---
-  const [leagueHydrated, setLeagueHydrated] = useState(() =>
-    // @ts-ignore - persist is added by zustand middleware at runtime
-    useLeagueStore.persist?.hasHydrated?.() ?? true
-  );
+  // saved data loaded from this device (lib/hooks/useStoreHydrated.ts)
+  const leagueHydrated = useStoreHydrated(useLeagueStore);
 
-  useEffect(() => {
-    // @ts-ignore
-    const persistApi = useLeagueStore.persist;
-    if (!persistApi?.onFinishHydration) {
-      setLeagueHydrated(true);
-      return;
-    }
-
-    // set immediately in case it hydrated between renders
-    setLeagueHydrated(persistApi.hasHydrated());
-
-    const unsub = persistApi.onFinishHydration(() => setLeagueHydrated(true));
-    return () => {
-      // onFinishHydration returns an unsubscribe in zustand v4
-      try { unsub?.(); } catch {}
-    };
-  }, []);
-
-const [mounted, setMounted] = useState(false);
-
-useEffect(() => {
-  setMounted(true);
-}, []);
+const mounted = useIsClient();
 
     // ---- Live sheet feed (MUST be inside component) ----
   const livePlayersLoaded = usePlayersStore((s) => s.loaded);
@@ -364,12 +347,11 @@ useEffect(() => {
   const updateLeagueSettings = useLeagueStore((s) => s.updateLeagueSettings);
   const setDraftOrder = useLeagueStore((s) => s.setDraftOrder);
 
-  const [tab, setTab] = useState<LeagueTab>("Standings");
-  // ?tab=Power (the dashboard's "View Power Rankings" link) opens that tab
-  useEffect(() => {
-    const want = new URLSearchParams(window.location.search).get("tab");
-    if (want === "Power" || want === "Fixtures" || want === "Results" || want === "Shield") setTab(want);
-  }, []);
+  const [tabPicked, setTab] = useState<LeagueTab | null>(null);
+  // ?tab=Power (the dashboard's "View Power Rankings" link) opens that tab (read once the page is
+  // in the browser, so the server and browser draw the same first)
+  const isClient = useIsClient();
+  const tab: LeagueTab = tabPicked ?? (isClient ? tabFromAddress() : null) ?? "Standings";
   const [menuOpen, setMenuOpen] = useState(false);
   const [modal, setModal] = useState<Modal>(null);
 
@@ -564,12 +546,13 @@ const playoffOdds = (teamId: string) => {
   return league?.teams.find((t) => t.id === id)?.name ?? "TBC";
 };
 
+const leagueTeams = league?.teams;
 const fixtures = useMemo<FixtureWeek[]>(() => {
-  if (!league?.teams?.length) return [];
+  if (!leagueTeams?.length) return [];
 
   const teamNameById = (id: string | null | undefined, opts?: { tbcIfMissing?: boolean }) => {
     if (!id) return opts?.tbcIfMissing ? "TBC" : "BYE";
-    return league.teams.find((t) => t.id === id)?.name ?? "TBC";
+    return leagueTeams.find((t) => t.id === id)?.name ?? "TBC";
   };
 
   const byWeek = new Map<number, FixtureRow[]>();
@@ -608,7 +591,7 @@ const kind = r.kind ? String(r.kind).toLowerCase() : null;
 
   const weeks = Array.from(byWeek.keys()).sort((a, b) => a - b);
   return weeks.map((w) => ({ weekNo: w, rows: byWeek.get(w)! }));
-}, [league?.teams, sheetFixtures]);
+}, [leagueTeams, sheetFixtures]);
 
   // ------- styles (match your vibe) -------
   const card35: React.CSSProperties = { ...themeCard, padding: undefined };
@@ -651,20 +634,18 @@ const kind = r.kind ? String(r.kind).toLowerCase() : null;
       </button>
     );
   }
-const Hamburger = useStableComponent(Hamburger__render);
 
   function Header__render() {
     return (
       <div style={{ ...card35, padding: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Hamburger />
+          {Hamburger__render()}
         </div>
 
         <div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>{leagueName}</div>
       </div>
     );
   }
-const Header = useStableComponent(Header__render);
 
   function Tabs__render() {
     const tabs: LeagueTab[] = ["Standings", "Fixtures", "Results", "Power", ...(league?.shield?.enabled || league?.shield?.holderTeamId ? (["Shield"] as LeagueTab[]) : [])];
@@ -680,7 +661,6 @@ const Header = useStableComponent(Header__render);
       </div>
     );
   }
-const Tabs = useStableComponent(Tabs__render);
 
   // Still booting → show loading
 if (!mounted || !leagueHydrated) {
@@ -718,7 +698,7 @@ if (!league) {
 
       <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px" }}>
         <div style={{ marginBottom: 10 }}>
-          <Hamburger />
+          {Hamburger__render()}
         </div>
         <div style={{ ...themeCard }}>
           <div style={{ fontWeight: 700, fontSize: 16 }}>No active league</div>
@@ -773,8 +753,8 @@ if (!league) {
           paddingBottom: "calc(18px + env(safe-area-inset-bottom))",
         }}
       >
-        <Header />
-        <Tabs />
+        {Header__render()}
+        {Tabs__render()}
 
         {tab === "Standings" && (
           <div style={isDesktop ? { display: "grid", gridTemplateColumns: "minmax(0, 1.3fr) minmax(0, 1fr)", gap: 18, alignItems: "start" } : undefined}>

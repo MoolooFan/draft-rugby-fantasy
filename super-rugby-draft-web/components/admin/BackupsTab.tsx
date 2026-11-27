@@ -14,6 +14,8 @@ const day = (name: string) => {
 };
 
 export function BackupsTab({ setMsg }: { setMsg: (m: string | null) => void }) {
+  // when the tab was opened (the time isn't read while drawing; React 19 rules)
+  const [openedAt] = useState(() => Date.now());
   const [data, setData] = useState<BackupList | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -44,7 +46,7 @@ export function BackupsTab({ setMsg }: { setMsg: (m: string | null) => void }) {
   }
 
   const latest = data?.files[0] ?? null;
-  const stale = latest ? Date.now() - new Date(`${latest.name.slice(0, 10)}T00:00:00`).getTime() > 2 * 24 * 3600 * 1000 : false;
+  const stale = latest ? openedAt - new Date(`${latest.name.slice(0, 10)}T00:00:00`).getTime() > 2 * 24 * 3600 * 1000 : false;
 
   return (
     <div style={{ display: "grid", gap: 10 }}>

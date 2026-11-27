@@ -1,5 +1,6 @@
 "use client";
 
+import { useIsClient } from "@/lib/hooks/useIsClient";
 import { benchOf, startersOf } from "@/lib/scoring/week";
 import { slotShortLabel, STANDARD_SQUAD } from "@/lib/league/squad";
 import React, { useEffect, useMemo, useState } from "react";
@@ -75,11 +76,7 @@ export default function MatchupPage() {
   const [cardOpen, setCardOpen] = useState(false);
 const [pointsOpen, setPointsOpen] = useState(false);
 const [watchlistSet, setWatchlistSet] = useState<Set<string>>(new Set());
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useIsClient();
 
 const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 const [selectedOwned, setSelectedOwned] = useState(false);
@@ -116,10 +113,11 @@ useEffect(() => {
     .catch((e) => console.error("watchlist GET error", e));
 }, [activeLeague?.id]);
 
+const selectedPlayerId = selectedPlayer?.id;
 const selectedIsWatched = useMemo(() => {
-  if (!selectedPlayer?.id) return false;
-  return watchlistSet.has(normaliseId(selectedPlayer.id));
-}, [watchlistSet, selectedPlayer?.id]);
+  if (!selectedPlayerId) return false;
+  return watchlistSet.has(normaliseId(selectedPlayerId));
+}, [watchlistSet, selectedPlayerId]);
 
 useEffect(() => {
   if (!activeLeague?.id) return;
@@ -407,7 +405,7 @@ const matchupsThisWeek = useMemo(() => {
     return idx >= 0 ? idx : 0;
   }, [matchupsThisWeek, yourLeagueTeamId]);
 
-  const [matchupIdx, setMatchupIdx] = useState(0);
+  const [matchupIdxPicked, setMatchupIdx] = useState(0);
 
   const [tsTick, setTsTick] = useState(0);
 
@@ -418,11 +416,14 @@ useEffect(() => {
   return () => window.removeEventListener("focus", onFocus);
 }, []);
 
-  useEffect(() => setMatchupIdx(defaultIndex), [defaultIndex]);
-
-  useEffect(() => {
-  if (matchupIdx >= matchupsThisWeek.length) setMatchupIdx(0);
-}, [matchupIdx, matchupsThisWeek.length]);
+  // back to your own matchup when the round changes (set while drawing, not in an effect)
+  const [defaultFor, setDefaultFor] = useState(defaultIndex);
+  if (defaultFor !== defaultIndex) {
+    setDefaultFor(defaultIndex);
+    setMatchupIdx(defaultIndex);
+  }
+  // a matchup that no longer exists (fewer games this round): the first one
+  const matchupIdx = matchupIdxPicked < matchupsThisWeek.length ? matchupIdxPicked : 0;
 
   const matchup = matchupsThisWeek[matchupIdx] ?? null;
 
@@ -448,13 +449,13 @@ const [rosterByTeamId, setRosterByTeamId] = useState<Map<string, any>>(new Map()
 const [selectionByTeamId, setSelectionByTeamId] = useState<Map<string, any>>(new Map());
 
 const ownerTeamIdForSelected = useMemo(() => {
-  if (!selectedPlayer?.id) return null;
+  if (!selectedPlayerId) return null;
 
   for (const [teamId, roster] of rosterByTeamId.entries()) {
-    if (rosterContainsPlayer(roster, selectedPlayer.id)) return teamId;
+    if (rosterContainsPlayer(roster, selectedPlayerId)) return teamId;
   }
   return null;
-}, [selectedPlayer?.id, rosterByTeamId]);
+}, [selectedPlayerId, rosterByTeamId]);
 
 const ownerTeamLabelForSelected = useMemo(() => {
   if (!selectedPlayer?.id) return "";
@@ -693,11 +694,11 @@ function pointsWithCaptain(p: Player | null, effCaptainId: string | null) {
 }
 
 const selectedLive = useMemo(() => {
-  if (!selectedPlayer?.id) return null;
+  if (!selectedPlayerId) return null;
   return typeof getLivePlayerById === "function"
-    ? getLivePlayerById(selectedPlayer.id)
+    ? getLivePlayerById(selectedPlayerId)
     : null;
-}, [getLivePlayerById, selectedPlayer?.id]);
+}, [getLivePlayerById, selectedPlayerId]);
 
 const selectedStatus = useMemo(() => {
   return (selectedLive as any)?.status ?? (selectedPlayer as any)?.status ?? null;

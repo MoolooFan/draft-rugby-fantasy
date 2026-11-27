@@ -11,7 +11,9 @@ export type StrategySource = "league" | "none";
 export function useDraftStrategy(leagueId: string | null | undefined) {
   const [strategy, setStrategy] = useState<DraftStrategy>(EMPTY_STRATEGY);
   const [source, setSource] = useState<StrategySource>("none");
-  const [loaded, setLoaded] = useState(false);
+  // loaded for which league ("" = none): "loaded" means loaded for this one (React 19 rules: not
+  // reset in an effect)
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
@@ -20,7 +22,6 @@ export function useDraftStrategy(leagueId: string | null | undefined) {
 
   useEffect(() => {
     let live = true;
-    setLoaded(false);
     fetch(`/api/draft/strategy${lid ? `?leagueId=${encodeURIComponent(lid)}` : ""}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
@@ -31,7 +32,7 @@ export function useDraftStrategy(leagueId: string | null | undefined) {
         setError(null);
       })
       .catch((e) => live && setError(String(e?.message ?? e)))
-      .finally(() => live && setLoaded(true));
+      .finally(() => live && setLoadedFor(lid));
     return () => {
       live = false;
     };
@@ -77,5 +78,6 @@ export function useDraftStrategy(leagueId: string | null | undefined) {
     [flush]
   );
 
+  const loaded = loadedFor === lid;
   return { strategy, update, source, loaded, saving, error };
 }

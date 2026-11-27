@@ -2,7 +2,8 @@
 // The Transactions page's own types, small helpers and constants (moved out of
 // app/transactions/page.tsx to keep that file smaller; nothing changed in how they work).
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useState } from "react";
+import { useNow } from "@/lib/hooks/useNow";
+import React from "react";
 import { JERSEYS, JERSEY_PLACEHOLDER } from "@/lib/teams/images";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 
@@ -89,17 +90,9 @@ export function formatDeadline(dtMs: number, timeZone?: string) {
   });
 }
 
+/** 0 on the server and first pass (so they match), then the time, every `ms` (lib/hooks/useNow.ts). */
 export function useNowTick(ms = 30_000) {
-  const [now, setNow] = useState<number>(0);
-
-  useEffect(() => {
-    // set immediately after mount so server/client match on first HTML
-    setNow(Date.now());
-    const t = window.setInterval(() => setNow(Date.now()), ms);
-    return () => window.clearInterval(t);
-  }, [ms]);
-
-  return now;
+  return useNow(ms);
 }
 
 export function getInitials(name: string | null | undefined) {

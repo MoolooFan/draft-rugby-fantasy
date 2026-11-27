@@ -2,7 +2,8 @@
 // The Matchup page's pure helpers and types (moved out of app/matchup/page.tsx, 20 Nov 2026):
 // ids, points rows, jerseys, saved lineups, the league's fixtures (records, streaks, weeks) and
 // rosters. No page state in here.
-import { useEffect, useState, type CSSProperties } from "react";
+import { useNow } from "@/lib/hooks/useNow";
+import type { CSSProperties } from "react";
 import type { Fixture } from "@/lib/fixtures/types";
 import { pickValue } from "@/lib/league/weekHelpers";
 import { formatStatCount, isFrontRow, pointsBreakdown, pointsFromRow, statCountsFromRow } from "@/lib/scoring";
@@ -247,17 +248,9 @@ export function teamSelectionFallbackSnapshot(
   return { week: displayWeek, teamId, lockedAtMs: 0, lineup, captainId, viceId };
 }
 
+/** 0 on the server and first pass (so they match), then the time, every `ms` (lib/hooks/useNow.ts). */
 export function useNowTick(ms = 1000) {
-  const [now, setNow] = useState<number>(0);
-
-  useEffect(() => {
-    // First client paint: still 0 (matches server), then update
-    setNow(Date.now());
-    const t = window.setInterval(() => setNow(Date.now()), ms);
-    return () => window.clearInterval(t);
-  }, [ms]);
-
-  return now;
+  return useNow(ms);
 }
 
 // ---- The league's fantasy fixtures (/api/fixtures/leagueMatches): records, streaks, weeks ----

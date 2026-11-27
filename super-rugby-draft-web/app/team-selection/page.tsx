@@ -1,5 +1,7 @@
 "use client";
 
+import { useIsClient } from "@/lib/hooks/useIsClient";
+import { useStoreHydrated } from "@/lib/hooks/useStoreHydrated";
 import { PER80_MIN_MINUTES } from "@/lib/players/statView";
 import { useSeasonStatRows } from "@/lib/players/useStatRows";
 import { pitchRows, rosterSize, STANDARD_SQUAD } from "@/lib/league/squad";
@@ -66,46 +68,13 @@ export default function TeamSelectionPage() {
   // (router not needed anymore unless you use it elsewhere)
 
   // --- prevent hydration mismatch before zustand persist finishes ---
-const [leagueHydrated, setLeagueHydrated] = useState(() =>
-  // @ts-ignore
-  useLeagueStore.persist?.hasHydrated?.() ?? true
-);
-const [draftHydrated, setDraftHydrated] = useState(() =>
-  // @ts-ignore
-  useDraftStore.persist?.hasHydrated?.() ?? true
-);
-const [txnHydrated, setTxnHydrated] = useState(() =>
-  // @ts-ignore
-  useTransactionsStore.persist?.hasHydrated?.() ?? true
-);
+// saved data loaded from this device (lib/hooks/useStoreHydrated.ts)
+const leagueHydrated = useStoreHydrated(useLeagueStore);
+// saved data loaded from this device (lib/hooks/useStoreHydrated.ts)
+const draftHydrated = useStoreHydrated(useDraftStore);
+// saved data loaded from this device (lib/hooks/useStoreHydrated.ts)
+const txnHydrated = useStoreHydrated(useTransactionsStore);
 const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
-
-useEffect(() => {
-  // @ts-ignore
-  const p = useLeagueStore.persist;
-  if (!p?.onFinishHydration) { setLeagueHydrated(true); return; }
-  setLeagueHydrated(p.hasHydrated());
-  const unsub = p.onFinishHydration(() => setLeagueHydrated(true));
-  return () => { try { unsub?.(); } catch {} };
-}, []);
-
-useEffect(() => {
-  // @ts-ignore
-  const p = useDraftStore.persist;
-  if (!p?.onFinishHydration) { setDraftHydrated(true); return; }
-  setDraftHydrated(p.hasHydrated());
-  const unsub = p.onFinishHydration(() => setDraftHydrated(true));
-  return () => { try { unsub?.(); } catch {} };
-}, []);
-
-useEffect(() => {
-  // @ts-ignore
-  const p = useTransactionsStore.persist;
-  if (!p?.onFinishHydration) { setTxnHydrated(true); return; }
-  setTxnHydrated(p.hasHydrated());
-  const unsub = p.onFinishHydration(() => setTxnHydrated(true));
-  return () => { try { unsub?.(); } catch {} };
-}, []);
 
   // Menu + league swap
   const [menuOpen, setMenuOpen] = useState(false);
@@ -127,8 +96,7 @@ useEffect(() => {
 
   const userId = useMemo(() => getActiveUsername(), []);
   const userTz = useMemo(() => getActiveTimezone(), []);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useIsClient();
 
   const ready = mounted && leagueHydrated && draftHydrated && txnHydrated;
 
@@ -516,29 +484,24 @@ const [saveToast, setSaveToast] = useState<string | null>(null);
 const [loadedFromServer, setLoadedFromServer] = useState(false);
 const [loadedWeek, setLoadedWeek] = useState<number | null>(null);
 
-useEffect(() => {
-  if (!yourDraftTeamId) return;
-  if (!hasLoadedSaved) return; // ✅ don't touch lineup until after server load attempt
-
-  setLineup((prev) => {
-    const next = reconcileLineupWithRoster(prev, rosterPool, SLOT_DEFS);
-
-    const prevIds = Object.values(prev).map((p) => p?.id ?? null);
-    const nextIds = Object.values(next).map((p) => p?.id ?? null);
-    const changed = JSON.stringify(prevIds) !== JSON.stringify(nextIds);
-
-    if (changed) {
-      // If roster changed (drops/adds), mark dirty so user can re-save
-      setIsDirty(true);
-
-      // also clear badges if their player disappeared
-      setCaptainId((cid) => (cid && rosterPool.some((p) => p.id === cid) ? cid : null));
-      setViceId((vid) => (vid && rosterPool.some((p) => p.id === vid) ? vid : null));
-    }
-
-    return next;
-  });
-}, [yourDraftTeamId, rosterPool, hasLoadedSaved, SLOT_DEFS]);
+// The lineup matched to the squad whenever the squad changes (a pickup or drop), once the saved
+// lineup has loaded. Done while drawing, once per squad (React 19 rules; it used to be an effect).
+const rosterSig = yourDraftTeamId && hasLoadedSaved ? `${rosterPool.map((p) => p.id).join(",")}|${SLOT_DEFS.map((d) => d.id).join(",")}` : null;
+const [reconciledFor, setReconciledFor] = useState<string | null>(null);
+if (rosterSig && rosterSig !== reconciledFor) {
+  setReconciledFor(rosterSig);
+  const next = reconcileLineupWithRoster(lineup, rosterPool, SLOT_DEFS);
+  const prevIds = Object.values(lineup).map((p) => p?.id ?? null);
+  const nextIds = Object.values(next).map((p) => p?.id ?? null);
+  if (JSON.stringify(prevIds) !== JSON.stringify(nextIds)) {
+    setLineup(next);
+    // the squad changed (drops / adds): mark it so it can be saved again
+    setIsDirty(true);
+    // and clear the captain / vice if their player has gone
+    setCaptainId((cid) => (cid && rosterPool.some((p) => p.id === cid) ? cid : null));
+    setViceId((vid) => (vid && rosterPool.some((p) => p.id === vid) ? vid : null));
+  }
+}
 
 async function saveSelection(weekOverride?: number) {
   if (!activeLeague?.id || !yourDraftTeamId) return;
@@ -649,18 +612,20 @@ useEffect(() => {
   };
 }, [activeLeague?.id, yourDraftTeamId, selectionWeek, rosterPool, SLOT_DEFS]);
 
-useEffect(() => {
-  if (!hasLoadedSaved) return;
-  if (loadedFromServer) return;
-  if (!rosterPool.length) return;
-  if (loadedWeek !== selectionWeek) return;
-
-  const isEmpty = Object.values(lineup).every((p) => !p?.id);
-  if (!isEmpty) return;
-
+// Nothing saved for this round: start from the default lineup (once per round; set while drawing)
+const [defaultedFor, setDefaultedFor] = useState<number | null>(null);
+if (
+  hasLoadedSaved &&
+  !loadedFromServer &&
+  rosterPool.length > 0 &&
+  loadedWeek === selectionWeek &&
+  defaultedFor !== selectionWeek &&
+  Object.values(lineup).every((p) => !p?.id)
+) {
+  setDefaultedFor(selectionWeek);
   setLineup(initialLineup);
   setIsDirty(false);
-}, [hasLoadedSaved, loadedFromServer, loadedWeek, selectionWeek, rosterPool.length, initialLineup, lineup]);
+}
 
 // Captain / vice-captain rules (same as the server, lib/league/lineup.ts): both must be starting.
 // Start of the season: the team's 1st and 2nd draft picks. If the captain is benched (or leaves),
@@ -668,13 +633,12 @@ useEffect(() => {
 const pickRank = useMemo(() => {
   return (id: string) => pickNumbers[id] ?? 100_000 + Number(sheetPlayerByDraftId.get(normaliseId(id))?.draftRank ?? 9999);
 }, [pickNumbers, sheetPlayerByDraftId]);
-useEffect(() => {
-  if (!hasLoadedSaved) return;
-  if (!Object.values(lineup).some((p) => p?.id)) return;
+// (kept right while drawing: whenever the lineup changes, the captain / vice are checked again)
+if (hasLoadedSaved && Object.values(lineup).some((p) => p?.id)) {
   const caps = fixCaptains(lineup as unknown as ServerLineup, captainId, viceId, pickRank);
   if (caps.captainId !== captainId) setCaptainId(caps.captainId);
   if (caps.viceId !== viceId) setViceId(caps.viceId);
-}, [lineup, captainId, viceId, hasLoadedSaved, pickRank]);
+}
 
 // Expected points for the week being picked (like the matchup page): each player's, and the
 // team's total for this lineup (captain x2, auto-subs for anyone ruled out). Updates as you

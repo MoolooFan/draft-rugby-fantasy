@@ -123,15 +123,10 @@ const yourLeagueTeamId = useMemo(() => {
 }, [yourLeagueTeamId, activeLeague]);
 
     // Partner team selection
-  const [partnerTeamId, setPartnerTeamId] = useState<string>(partnerTeamIdInitial);
-
-  useEffect(() => {
-    // If partner not provided, try to pick the first "other" team in league.
-    if (partnerTeamId) return;
-    const teams = (activeLeague as any)?.teams ?? [];
-    const other = teams.find((t: any) => t.id && t.id !== yourDraftTeamId);
-    if (other?.id) setPartnerTeamId(other.id);
-  }, [partnerTeamId, activeLeague, yourDraftTeamId]);
+  const [partnerPicked, setPartnerTeamId] = useState<string>(partnerTeamIdInitial);
+  // If partner not provided, the first "other" team in the league (worked out, not set in an effect)
+  const partnerTeamId: string =
+    partnerPicked || (((activeLeague as any)?.teams ?? []) as any[]).find((t: any) => t.id && t.id !== yourDraftTeamId)?.id || "";
 
   // Players
   const playerPool = usePlayerPool();
@@ -335,18 +330,20 @@ const [proposeError, setProposeError] = useState<string | null>(null);
   };
 
   return [addToWatchlistAction, tradeAction];
-}, [modalPlayer, modalContext, watchlist, toggleWatchlist]);
+}, [modalPlayer, modalContext, watchlist, toggleWatchlist, setRequestingIds, setOfferingIds]);
 
   // Info mode
   const [infoMode, setInfoMode] = useState<InfoMode>("AVG_PPG");
   const [statView] = useStatView(); // C1
 
-  // When partner team changes: clear selections + go back to REQUESTING
-  useEffect(() => {
+  // When partner team changes: clear selections + go back to REQUESTING (set while drawing)
+  const [selectionsFor, setSelectionsFor] = useState(partnerTeamId);
+  if (selectionsFor !== partnerTeamId) {
+    setSelectionsFor(partnerTeamId);
     setRequestingIds([]);
     setOfferingIds([]);
     setStep("REQUESTING");
-  }, [partnerTeamId]);
+  }
 
 // Get a team roster as a flat unique list
 // Priority:
@@ -405,16 +402,13 @@ const yourRosterLive = useMemo(() => {
   return yourRoster.map((p) => hydratePlayer(p));
 }, [yourRoster, livePlayersLoaded, getLivePlayerById, roundRows]);
 
-// Prefill requested player (only if on current partner roster)
-useEffect(() => {
-  if (!prefillRequestPlayerId) return;
-  if (!partnerRoster.some((p) => p.id === prefillRequestPlayerId)) return;
-
-  setRequestingIds((prev) => {
-    if (prev.includes(prefillRequestPlayerId)) return prev;
-    return [...prev, prefillRequestPlayerId];
-  });
-}, [prefillRequestPlayerId, partnerRoster]);
+// Prefill requested player (only if on current partner roster; once per partner, set while drawing)
+const prefillKey = prefillRequestPlayerId && partnerRoster.some((p) => p.id === prefillRequestPlayerId) ? `${prefillRequestPlayerId}|${partnerTeamId}` : null;
+const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
+if (prefillKey && prefillKey !== prefilledFor) {
+  setPrefilledFor(prefillKey);
+  setRequestingIds((prev) => (prev.includes(prefillRequestPlayerId!) ? prev : [...prev, prefillRequestPlayerId!]));
+}
 
   // Validity check (both rosters must remain viable after swap)
   const validity = useMemo(() => {

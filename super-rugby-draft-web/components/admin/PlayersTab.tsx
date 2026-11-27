@@ -39,14 +39,17 @@ export function PlayerForm({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [week, setWeek] = useState(1);
-  const [weekStatus, setWeekStatus] = useState("");
+  const [weekStatus, setWeekStatus] = useState(() => player?.weeklyStatus?.["W1"] ?? "");
   const weeks = totalFantasyWeeks(getSeason(season));
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setF((x) => ({ ...x, [k]: e.target.type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value }));
 
-  useEffect(() => {
+  // the chosen week's status, again whenever the week or player changes (set while drawing)
+  const [statusFor, setStatusFor] = useState<{ p: unknown; w: number }>({ p: player, w: week });
+  if (statusFor.p !== player || statusFor.w !== week) {
+    setStatusFor({ p: player, w: week });
     setWeekStatus(player?.weeklyStatus?.[`W${week}`] ?? "");
-  }, [week, player]);
+  }
 
   async function save() {
     setBusy(true);
@@ -193,9 +196,17 @@ export function PlayersTab({ season, setMsg }: { season: number; setMsg: (m: str
       setLoading(false);
     }
   }, [season]);
+  // the season's players (fetched here, set when they arrive; Refresh uses load())
   useEffect(() => {
-    void load();
-  }, [load]);
+    let live = true;
+    api<{ players: AdminPlayer[] }>(`/api/admin/players?season=${season}`)
+      .then((r) => live && setPlayers(r.players))
+      .catch((e) => live && setErr(e instanceof Error ? e.message : "Couldn't load players"))
+      .finally(() => live && setLoading(false));
+    return () => {
+      live = false;
+    };
+  }, [season]);
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();

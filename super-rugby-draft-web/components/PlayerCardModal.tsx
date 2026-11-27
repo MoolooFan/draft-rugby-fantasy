@@ -107,7 +107,9 @@ const { season: chosenStatSeason } = useStatSeason();
 // the four numbers above the tabs (Ethan, 25 Nov 2026).
 const [cardView, setCardView] = useState<StatView>(() => useStatViewStore.getState().view);
 const [cardSeason, setCardSeason] = useState<number>(chosenStatSeason);
-const [cardSeasonRounds, setCardSeasonRounds] = useState<PlayerRound[] | null>(null);
+// another season's rounds for the Stats tab, labelled with whose and which season they are, so
+// they can't show for the wrong player (React 19 rules: no clearing them in an effect)
+const [cardSeasonData, setCardSeasonData] = useState<{ key: string; rounds: PlayerRound[] } | null>(null);
 const [upcomingFixtures, setUpcomingFixtures] = useState<FixtureRow[]>([]);
 const [upcomingWeeks, setUpcomingWeeks] = useState<number[]>([]);
 const [upcomingLastCompleted, setUpcomingLastCompleted] = useState<number>(0);
@@ -147,29 +149,32 @@ const statusText = useMemo<string | null>(() => {
 const statusK = statusKind(statusText);
 
 
-useEffect(() => {
+// back to the tab asked for when the card opens again or shows another player (set while drawing)
+const tabKey = `${initialTab}|${open ? 1 : 0}|${p.id}`;
+const [tabFor, setTabFor] = useState(tabKey);
+if (tabFor !== tabKey) {
+  setTabFor(tabKey);
   setTab(initialTab);
-}, [initialTab, open, p.id]);
+}
 
 // the Stats tab's own season, when it's not the one the rest of the card shows
 useEffect(() => {
-  if (!open || cardSeason === chosenStatSeason) {
-    setCardSeasonRounds(null);
-    return;
-  }
+  if (!open || cardSeason === chosenStatSeason) return;
   let cancelled = false;
+  const key = `${p.id}|${cardSeason}`;
   cachedJson<{ rows?: Record<string, unknown>[] }>(`/api/players/round-stats?season=${cardSeason}`)
     .then((j) => {
-      if (!cancelled) setCardSeasonRounds(buildRoundsFromSheetRows(Array.isArray(j?.rows) ? (j.rows as never) : [], p));
+      if (!cancelled) setCardSeasonData({ key, rounds: buildRoundsFromSheetRows(Array.isArray(j?.rows) ? (j.rows as never) : [], p) });
     })
     .catch(() => {
-      if (!cancelled) setCardSeasonRounds([]);
+      if (!cancelled) setCardSeasonData({ key, rounds: [] });
     });
   return () => {
     cancelled = true;
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [open, p.id, cardSeason, chosenStatSeason]);
+const cardSeasonRounds = cardSeasonData?.key === `${p.id}|${cardSeason}` ? cardSeasonData.rounds : null;
 const statsTabRounds = useMemo(() => (cardSeason === chosenStatSeason ? rounds : cardSeasonRounds ?? []), [cardSeason, chosenStatSeason, rounds, cardSeasonRounds]);
 // Games Played / Starts for the season shown (Ethan, 20 Nov 2026): a game is a round he played
 // in (minutes in the stats); a start is one of those where the team list (or a late change) had

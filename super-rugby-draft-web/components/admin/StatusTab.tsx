@@ -31,9 +31,22 @@ export function StatusTab({ setMsg }: { setMsg: (m: string | null) => void }) {
       setErr(e instanceof Error ? e.message : "Couldn't load");
     }
   }, []);
+  // first load (fetched here, set when it arrives; the buttons below use load())
   useEffect(() => {
-    void load();
-  }, [load]);
+    let live = true;
+    api<{ rounds: number[]; flags: StatusFlag[]; imports: StatusImport[] }>("/api/admin/status")
+      .then((r) => {
+        if (!live) return;
+        setRounds(r.rounds);
+        setFlags(r.flags);
+        setImports(r.imports);
+        setLoaded(true);
+      })
+      .catch((e) => live && setErr(e instanceof Error ? e.message : "Couldn't load"));
+    return () => {
+      live = false;
+    };
+  }, []);
 
   async function runImport() {
     setBusy("import");

@@ -154,21 +154,30 @@ export function LeagueStakesPrompt() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!leagueId) return setStakes(null);
+    if (!leagueId) return; // (nothing shows without a league: see below)
     const s = await fetchStakes(leagueId);
     setStakes(s && s.myTeamId ? s : null);
   }, [leagueId]);
 
+  // now, when the app comes back into view, and every 5 minutes (fetched here, its result set when
+  // it arrives)
   useEffect(() => {
-    void refresh();
-    const onFocus = () => void refresh();
-    window.addEventListener("focus", onFocus);
-    const timer = window.setInterval(() => void refresh(), 5 * 60_000);
+    if (!leagueId) return;
+    let live = true;
+    const run = () => {
+      fetchStakes(leagueId).then((s) => {
+        if (live) setStakes(s && s.myTeamId ? s : null);
+      });
+    };
+    run();
+    window.addEventListener("focus", run);
+    const timer = window.setInterval(run, 5 * 60_000);
     return () => {
-      window.removeEventListener("focus", onFocus);
+      live = false;
+      window.removeEventListener("focus", run);
       window.clearInterval(timer);
     };
-  }, [refresh]);
+  }, [leagueId]);
 
   if (!leagueId || !stakes || stakes.myTeamId == null || !needsAgreement(stakes)) return null;
 

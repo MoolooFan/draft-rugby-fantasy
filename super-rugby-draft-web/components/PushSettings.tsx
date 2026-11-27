@@ -5,6 +5,7 @@
 // them on or tap "Not now". iPhones only allow notifications for a site added to the Home Screen
 // (iOS 16.4+), and only after a tap, so in Safari it explains how to add it first.
 // Sending is on the server (lib/notifications/push.ts); public/sw.js shows them on the phone.
+import { useIsClient } from "@/lib/hooks/useIsClient";
 import React, { useCallback, useEffect, useState } from "react";
 
 export type PushState =
@@ -39,31 +40,39 @@ async function currentSubscription(): Promise<PushSubscription | null> {
 let resynced = false;
 
 export function usePush() {
-  const [state, setState] = useState<PushState>("loading");
+  const [asked, setState] = useState<PushState>("loading");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // phones / browsers that can't: worked out directly once the page is in the browser (React 19
+  // rules); otherwise what the phone says (below)
+  const isClient = useIsClient();
+  const cant: PushState | null = !isClient ? "loading" : !supported() ? (isIos() && !isStandalone() ? "needs-home-screen" : "unsupported") : null;
+  const state: PushState = cant ?? asked;
 
-  const check = useCallback(async () => {
-    if (!supported()) return setState(isIos() && !isStandalone() ? "needs-home-screen" : "unsupported");
-    if (Notification.permission === "denied") return setState("denied");
-    try {
-      const sub = await currentSubscription();
-      if (sub && Notification.permission === "granted") {
-        setState("on");
-        // once a visit, make sure the server still has this phone (e.g. after signing in again)
-        if (!resynced) {
-          resynced = true;
-          fetch("/api/push", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON() }) }).catch(() => {});
-        }
-      } else setState("off");
-    } catch {
-      setState("off");
-    }
-  }, []);
-
+  // what the phone says (asked here, the answer set when it comes back)
   useEffect(() => {
-    void check();
-  }, [check]);
+    if (!supported()) return;
+    let live = true;
+    currentSubscription()
+      .then((sub) => {
+        if (!live) return;
+        if (Notification.permission === "denied") setState("denied");
+        else if (sub && Notification.permission === "granted") {
+          setState("on");
+          // once a visit, make sure the server still has this phone (e.g. after signing in again)
+          if (!resynced) {
+            resynced = true;
+            fetch("/api/push", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON() }) }).catch(() => {});
+          }
+        } else setState("off");
+      })
+      .catch(() => {
+        if (live) setState("off");
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const turnOn = useCallback(async () => {
     setBusy(true);

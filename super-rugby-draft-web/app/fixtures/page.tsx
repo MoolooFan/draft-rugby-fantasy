@@ -11,7 +11,6 @@ import type { Fixture } from "@/lib/fixtures/types";
 import { AppMenu } from "@/components/AppMenu";
 import { useLeagueStore } from "@/lib/league/store";
 import { roundLabel } from "@/lib/season";
-import { useStableComponent } from "@/lib/hooks/useStableComponent";
 import { TEAM_LOGOS, TEAM_LOGO_PLACEHOLDER } from "@/lib/teams/images";
 
 type TabKey = "Fixtures" | "Results" | "FDR";
@@ -435,7 +434,6 @@ if (!Number.isFinite(w) || w <= 0) continue;
       </button>
     );
   }
-const Hamburger = useStableComponent(Hamburger__render);
 
   function TeamBadge__render({ code, size = 28 }: { code: string; size?: number }) {
   return (
@@ -453,7 +451,6 @@ const Hamburger = useStableComponent(Hamburger__render);
     />
   );
 }
-const TeamBadge = useStableComponent(TeamBadge__render);
 
   function Tabs__render() {
     const tabs: TabKey[] = ["Fixtures", "Results", "FDR"];
@@ -469,7 +466,6 @@ const TeamBadge = useStableComponent(TeamBadge__render);
       </div>
     );
   }
-const Tabs = useStableComponent(Tabs__render);
 
   function WeekLabel__render({ week }: { week: number }) {
     return (
@@ -488,7 +484,6 @@ const Tabs = useStableComponent(Tabs__render);
       </div>
     );
   }
-const WeekLabel = useStableComponent(WeekLabel__render);
 
   function FixtureRow__render({ f, mode }: { f: AnyFixture; mode: "fixtures" | "results" }) {
     const home = f.homeTeamCode ?? f.homeTeam ?? "HOME";
@@ -522,7 +517,7 @@ const sub = live ? "" : mode === "fixtures" ? (kickoffMs ? formatKickoffCompact(
       >
         {/* left */}
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <TeamBadge code={home} size={32} />
+          {TeamBadge__render({ code: home, size: 32 })}
 
           <div style={{ fontSize: 12, fontWeight: 500 }}>{home}</div>
         </div>
@@ -547,13 +542,12 @@ const sub = live ? "" : mode === "fixtures" ? (kickoffMs ? formatKickoffCompact(
         {/* right */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
           <div style={{ fontSize: 12, fontWeight: 500 }}>{away}</div>
-          <TeamBadge code={away} size={32} />
+          {TeamBadge__render({ code: away, size: 32 })}
 
         </div>
       </div>
     );
   }
-const FixtureRow = useStableComponent(FixtureRow__render);
 
   function WeekList__render({ which }: { which: "upcoming" | "completed" }) {
     const weeks = which === "upcoming" ? upcomingWeeks : completedWeeks;
@@ -574,9 +568,9 @@ const FixtureRow = useStableComponent(FixtureRow__render);
 
           return (
             <div key={w} style={isDesktop ? { ...listBox, marginTop: 0 } : undefined}>
-              <WeekLabel week={w} />
+              {WeekLabel__render({ week: w })}
               {rows.map((f) => (
-                <FixtureRow key={f.id} f={f} mode={mode} />
+                <React.Fragment key={f.id}>{FixtureRow__render({ f, mode })}</React.Fragment>
               ))}
             </div>
           );
@@ -584,7 +578,6 @@ const FixtureRow = useStableComponent(FixtureRow__render);
       </div>
     );
   }
-const WeekList = useStableComponent(WeekList__render);
 
   function FdrTable__render() {
     // Show only upcoming weeks (columns)
@@ -666,7 +659,7 @@ const WeekList = useStableComponent(WeekList__render);
             {teams.map((t) => (
               <React.Fragment key={t}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <TeamBadge code={t} size={28} />
+                  {TeamBadge__render({ code: t, size: 28 })}
 
                   <div style={{ fontSize: 12, fontWeight: 500 }}>{t}</div>
                 </div>
@@ -747,7 +740,6 @@ const WeekList = useStableComponent(WeekList__render);
       </div>
     );
   }
-const FdrTable = useStableComponent(FdrTable__render);
 
   return (
     <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
@@ -776,16 +768,16 @@ const FdrTable = useStableComponent(FdrTable__render);
         {/* Header */}
         <div style={{ ...card35, padding: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Hamburger />
+            {Hamburger__render()}
           </div>
           <div style={{ marginTop: 8, fontSize: 22, fontWeight: 700 }}>Fixtures</div>
         </div>
 
-        <Tabs />
+        {Tabs__render()}
 
-        {tab === "Fixtures" && <WeekList which="upcoming" />}
-        {tab === "Results" && <WeekList which="completed" />}
-        {tab === "FDR" && <FdrTable />}
+        {tab === "Fixtures" && WeekList__render({ which: "upcoming" })}
+        {tab === "Results" && WeekList__render({ which: "completed" })}
+        {tab === "FDR" && FdrTable__render()}
       </div>
 
       <AppMenu

@@ -334,10 +334,11 @@ export function swapPlanFor(fromId: SlotId, toId: SlotId, l: Lineup, SLOT_DEFS: 
 
 /** small time tick hook (same idea as your other pages) */
 export function useNowTick(ms = 500) {
-  const [, force] = useState(0);
+  // the time is kept in state and moved on by the timer (not read while drawing; React 19 rules)
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const t = window.setInterval(() => force((x) => x + 1), ms);
+    const t = window.setInterval(() => setNow(Date.now()), ms);
     return () => window.clearInterval(t);
   }, [ms]);
-  return Date.now();
+  return now;
 }

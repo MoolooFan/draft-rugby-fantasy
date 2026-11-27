@@ -4,6 +4,8 @@
 // before or after a league's draft. Settings -> the draft -> results (lib/draft/mock.ts). The
 // computer teams pick with lib/draft/cpu.ts; your auto-picks use your draft strategy. Nothing
 // is saved to any league; the last 5 finished mock drafts are kept on this device.
+import { useIsClient } from "@/lib/hooks/useIsClient";
+import { useNow } from "@/lib/hooks/useNow";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireSession } from "@/lib/session/useRequireSession";
@@ -19,6 +21,7 @@ import { useDraftStrategy } from "@/lib/draft/useStrategy";
 import {
   autoChoice,
   fittingAvailable,
+  HISTORY_SIZE,
   isFinished,
   loadHistory,
   loadLive,
@@ -57,37 +60,28 @@ export default function MockDraftPage() {
     void loadMyLeagues();
   }, []);
 
-  // the league it's for: ?leagueId= (from the draft room), else the active league
-  const [queryLeague, setQueryLeague] = useState<string | null>(null);
-  useEffect(() => {
-    setQueryLeague(new URLSearchParams(window.location.search).get("leagueId"));
-  }, []);
+  // the league it's for: ?leagueId= (from the draft room), else the active league. Read once the
+  // page is in the browser (so the server and browser draw the same first; React 19 rules)
+  const isClient = useIsClient();
+  const queryLeague = isClient ? new URLSearchParams(window.location.search).get("leagueId") : null;
   const league = leagues.find((l) => l.id === (queryLeague ?? activeLeagueId)) ?? null;
   const leagueFormat = league?.squadFormat && !isStandardSquad(league.squadFormat) ? league.squadFormat : null;
   const { strategy, loaded: strategyLoaded } = useDraftStrategy(league?.id ?? null);
 
   // settings (remembered on this device)
   const [settings, setSettingsState] = useState<MockSettings>(DEFAULT_SETTINGS);
-  const settingsTouched = useRef(false);
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(SETTINGS_KEY);
-      if (raw) {
-        setSettingsState({ ...DEFAULT_SETTINGS, ...JSON.parse(raw) });
-        settingsTouched.current = true;
-      }
-    } catch {
-      /* no storage: defaults */
-    }
-  }, []);
-  // a league's size and squad, until they change the settings themselves
-  useEffect(() => {
-    if (!league || settingsTouched.current) return;
-    const n = league.teams?.length ?? 0;
+  // set once they've changed the settings (or saved ones were found on this device)
+  const [settingsTouched, setSettingsTouched] = useState(false);
+  // a league's size and squad, until they change the settings themselves (set while drawing)
+  const sizeKey = league && !settingsTouched ? `${league.id}:${league.teams?.length ?? 0}:${leagueFormat ? 1 : 0}` : null;
+  const [sizedFor, setSizedFor] = useState<string | null>(null);
+  if (sizeKey && sizeKey !== sizedFor) {
+    setSizedFor(sizeKey);
+    const n = league?.teams?.length ?? 0;
     setSettingsState((s) => ({ ...s, teams: n >= 2 ? n : s.teams, squad: leagueFormat ? "league" : "standard" }));
-  }, [league, leagueFormat]);
+  }
   const setSettings = (s: MockSettings) => {
-    settingsTouched.current = true;
+    setSettingsTouched(true);
     setSettingsState(s);
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...s, leagueId: undefined, leagueName: undefined }));
@@ -120,10 +114,23 @@ export default function MockDraftPage() {
   const [live, setLive] = useState<MockDraft | null>(null);
   const [open, setOpen] = useState<P | null>(null);
   const [finishing, setFinishing] = useState(false);
-  useEffect(() => {
+  // what's saved on this device (settings, past mocks, one in progress): read once the page is in
+  // the browser, while drawing (not in an effect; React 19 rules)
+  const [storageRead, setStorageRead] = useState(false);
+  if (isClient && !storageRead) {
+    setStorageRead(true);
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (raw) {
+        setSettingsState({ ...DEFAULT_SETTINGS, ...JSON.parse(raw) });
+        setSettingsTouched(true);
+      }
+    } catch {
+      /* no storage: defaults */
+    }
     setHistory(loadHistory());
     setLive(loadLive());
-  }, []);
+  }
 
   const values = useMemo(() => {
     const format = mock?.format ?? mockFormat(effectiveSettings, leagueFormat);
@@ -135,15 +142,23 @@ export default function MockDraftPage() {
   const ranks = useMemo(() => myRanks(players, strategy), [players, strategy]);
   const strat = isEmptyStrategy(strategy) ? null : strategy;
 
-  // keep the one in progress on this device; a finished one goes in the history
+  // a finished mock: off the "in progress" list, into the history, and the results showing (set
+  // while drawing, once per mock)
+  const finishedId = mock && isFinished(mock) ? mock.id : null;
+  const [finishedSeen, setFinishedSeen] = useState<string | null>(null);
+  if (mock && finishedId && finishedId !== finishedSeen) {
+    setFinishedSeen(finishedId);
+    setLive(null);
+    // (one opened from the history is already there)
+    setHistory((h) => (h.some((x) => x.id === mock.id) ? h : [mock, ...h].slice(0, HISTORY_SIZE)));
+    setView("results");
+  }
+  // ...and on this device: keep the one in progress; a finished one goes in the saved history
   useEffect(() => {
     if (!mock) return;
     if (isFinished(mock)) {
       saveLive(null);
-      setLive(null);
-      // (one opened from the history is already there)
-      if (!loadHistory().some((x) => x.id === mock.id)) setHistory(saveToHistory(mock));
-      setView("results");
+      if (!loadHistory().some((x) => x.id === mock.id)) saveToHistory(mock);
     } else if (view === "draft") {
       saveLive(mock);
     }
@@ -166,26 +181,21 @@ export default function MockDraftPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mock?.picks.length, view, clock, finishing]);
 
-  // your clock
-  const [deadline, setDeadline] = useState<number | null>(null);
-  const [now, setNow] = useState(() => Date.now());
+  // your clock: starts when it's your pick (noted while drawing), auto-picks when it runs out
+  const now = useNow(250);
   const yourTurn = !!mock && view === "draft" && clock === mock.you;
+  const turnKey = yourTurn && mock ? `${mock.id}:${mock.picks.length}` : null;
+  const [turnStart, setTurnStart] = useState<{ key: string | null; at: number }>({ key: null, at: 0 });
+  if (turnStart.key !== turnKey) setTurnStart({ key: turnKey, at: now });
+  const deadline = turnKey && turnStart.key === turnKey && mock?.settings.timer ? turnStart.at + mock.settings.timer * 1000 : null;
+  const autoPickedFor = useRef<string | null>(null);
   useEffect(() => {
-    setDeadline(yourTurn && mock!.settings.timer ? Date.now() + mock!.settings.timer * 1000 : null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [yourTurn, mock?.picks.length]);
-  useEffect(() => {
-    if (deadline == null) return;
-    const t = window.setInterval(() => setNow(Date.now()), 250);
-    return () => window.clearInterval(t);
-  }, [deadline]);
-  useEffect(() => {
-    if (deadline != null && now >= deadline && yourTurn) {
-      setDeadline(null);
+    if (deadline != null && now >= deadline && yourTurn && autoPickedFor.current !== turnKey) {
+      autoPickedFor.current = turnKey; // once per turn
       autoPick();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [now, deadline, yourTurn]);
+  }, [now, deadline, yourTurn, turnKey]);
 
   const start = () => {
     const s = effectiveSettings;

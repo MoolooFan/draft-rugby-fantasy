@@ -1,5 +1,7 @@
 "use client";
 
+import { useIsClient } from "@/lib/hooks/useIsClient";
+import { useNow } from "@/lib/hooks/useNow";
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -43,13 +45,8 @@ export default function TeamOfTheWeekPage() {
   // Draft teams (for owner label)
   const draftTeams = useDraftStore((s) => s.teams);
 
-  // live now (client-only)
-  const [nowMs, setNowMs] = useState(0);
-  useEffect(() => {
-    setNowMs(Date.now());
-    const t = window.setInterval(() => setNowMs(Date.now()), 30_000);
-    return () => window.clearInterval(t);
-  }, []);
+  // live now (0 on the server and first pass; lib/hooks/useNow.ts)
+  const nowMs = useNow(30_000);
 
   // fixtures normalized
   const fixtures = useMemo(() => {
@@ -109,10 +106,13 @@ export default function TeamOfTheWeekPage() {
   }, [sheetFixtures, selectionWeek]);
 
   const [week, setWeek] = useState<number>(1);
-  useEffect(() => {
-    const w = Math.min(Math.max(1, displayWeekDefault || 1), maxFantasyWeek || 1);
-    setWeek(w);
-  }, [displayWeekDefault, maxFantasyWeek]);
+  // the latest round to start with (and again when that changes); set while drawing
+  const defaultWeek = Math.min(Math.max(1, displayWeekDefault || 1), maxFantasyWeek || 1);
+  const [weekFor, setWeekFor] = useState<number | null>(null);
+  if (weekFor !== defaultWeek) {
+    setWeekFor(defaultWeek);
+    setWeek(defaultWeek);
+  }
 
   const realRound = useMemo(() => {
     if (week <= 0) return 0;
@@ -212,9 +212,10 @@ export default function TeamOfTheWeekPage() {
   }, [lineup, weekPointsByPlayerId]);
 
   // -------- Ownership map (server rosters) --------
+  const activeLeagueTeams = activeLeague?.teams;
   const leagueTeams = useMemo(() => {
-    return Array.isArray(activeLeague?.teams) ? (activeLeague!.teams as any[]) : [];
-  }, [activeLeague?.teams]);
+    return Array.isArray(activeLeagueTeams) ? (activeLeagueTeams as any[]) : [];
+  }, [activeLeagueTeams]);
 
   const yourLeagueTeamId = useMemo(() => {
     if (!leagueTeams.length) return null;
@@ -295,15 +296,22 @@ export default function TeamOfTheWeekPage() {
   const storeRemoveFromWatchlist = usePlayersStore((s: any) => s.removeFromWatchlist ?? null);
 
   const [localWatchlistIds, setLocalWatchlistIds] = useState<string[]>([]);
-  useEffect(() => {
+  // this league's watchlist saved on this device (read while drawing once in the browser, and
+  // again if the league / team changes)
+  const isClient = useIsClient();
+  const [watchFor, setWatchFor] = useState<string | null>(null);
+  if (isClient && watchFor !== watchKey) {
+    setWatchFor(watchKey);
+    let ids: string[] = [];
     try {
       const raw = localStorage.getItem(watchKey);
       const arr = raw ? (JSON.parse(raw) as any[]) : [];
-      setLocalWatchlistIds(Array.isArray(arr) ? arr.map(String) : []);
+      ids = Array.isArray(arr) ? arr.map(String) : [];
     } catch {
-      setLocalWatchlistIds([]);
+      /* none saved */
     }
-  }, [watchKey]);
+    setLocalWatchlistIds(ids);
+  }
 
   // 👇 ADD THIS DIRECTLY BELOW 👇
 useEffect(() => {

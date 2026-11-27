@@ -36,9 +36,23 @@ export function CommissionerPanel({ leagueId, onReverse }: { leagueId: string; o
     }
   }, [leagueId]);
 
+  // the moves, when the panel is opened (fetched here, set when they arrive; Undo uses load())
   useEffect(() => {
-    if (open) void load();
-  }, [open, load]);
+    if (!open) return;
+    let live = true;
+    fetch(`/api/leagues/reverse?leagueId=${encodeURIComponent(leagueId)}`, { cache: "no-store" })
+      .then(async (r) => {
+        const j = await r.json().catch(() => null);
+        if (!live) return;
+        if (!r.ok || !j?.ok) throw new Error(j?.error ?? "Couldn't load the moves");
+        setMoves(j.moves ?? []);
+        setError(null);
+      })
+      .catch((e) => live && setError(e instanceof Error ? e.message : "Couldn't load the moves"));
+    return () => {
+      live = false;
+    };
+  }, [open, leagueId]);
 
   const box: React.CSSProperties = { ...listBox, marginTop: 14 };
 

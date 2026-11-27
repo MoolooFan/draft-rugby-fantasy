@@ -13,14 +13,14 @@ export function DifficultyRow({ season, r, setMsg }: { season: number; r: Rating
   const [away, setAway] = useState(r.away_rating);
   const [pinned, setPinned] = useState(r.pinned);
   const [busy, setBusy] = useState(false);
-  const changed = home !== r.home_rating || away !== r.away_rating || pinned !== r.pinned;
+  // what's saved (kept here rather than changing the row passed in; React 19 rules)
+  const [saved, setSaved] = useState({ home: r.home_rating, away: r.away_rating, pinned: r.pinned });
+  const changed = home !== saved.home || away !== saved.away || pinned !== saved.pinned;
   async function save() {
     setBusy(true);
     try {
       await api("/api/admin/difficulty", { season, team: r.team, homeRating: home, awayRating: away, pinned });
-      r.home_rating = home;
-      r.away_rating = away;
-      r.pinned = pinned;
+      setSaved({ home, away, pinned });
       setMsg(`Saved ${r.team}: ${home} at their ground, ${away} at yours${pinned ? " (pinned)" : ""}`);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Save failed");

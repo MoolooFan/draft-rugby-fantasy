@@ -10,7 +10,7 @@ import { BonusPointsFields } from "@/components/BonusPointsFields";
 import { CommissionerHandover } from "@/components/CommissionerHandover";
 import { cleanBonusRules, type BonusRules } from "@/lib/league/bonus";
 import { DEFAULT_SHIELD_START, NO_SHIELD_REWARDS, type ShieldRewards, type ShieldStart } from "@/lib/league/shield";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 
 import type { League, PlayoffFormat } from "@/lib/league/types";
 
@@ -79,10 +79,14 @@ const [draftOrderIds, setDraftOrderIds] = useState<string[]>(() =>
 league.teams.map((t) => t.id)
 );
 
-// If the active league changes while modal open, reset draft order list
-useEffect(() => {
-setDraftOrderIds(league.teams.map((t) => t.id));
-}, [league.id, league.teams]);
+// If the active league (or its teams) changes while the pop-up is open, start the order again
+// (set while drawing, not in an effect)
+const teamsKey = `${league.id}:${league.teams.map((t) => t.id).join(",")}`;
+const [orderFor, setOrderFor] = useState(teamsKey);
+if (orderFor !== teamsKey) {
+  setOrderFor(teamsKey);
+  setDraftOrderIds(league.teams.map((t) => t.id));
+}
 
 function moveTeam(fromIdx: number, toIdx: number) {
 setDraftOrderIds((prev) => {
