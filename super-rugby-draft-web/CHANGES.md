@@ -23,6 +23,7 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `c7c14c3` | Desktop Draft Room: the Player Pool's extra numbers are now Games, Pts, Pts/G and **Tries** (instead of minutes per game); the last column still follows the stat picked in Filters | No |
 | `9274c7f` | Desktop Draft Room: each Player Pool line also shows last season's **Games, Pts, Pts/G and Min/G** (before the Draft Rank / chosen stat), with a wider pool column. The pick boxes no longer say "On the clock" before the draft starts. Phones unchanged | No |
 | `056c772` | Desktop Draft Room (Ethan's changes): **every pick in a row of boxes** under the header like ESPN (round / pick, team, player; the pick on the clock highlighted and kept in view; scroll or use the arrows for earlier and upcoming picks). The middle column shows your **Draft Strategy only if you've set one**, otherwise your **Watchlist**. The **menu is back to the pop-out drawer** (☰) on computers too; the always-on sidebar is gone. Also the plan update for part 1 | No |
 | `f62902c` | The "Get notifications" card on the Dashboard only shows in the Home Screen app (not on a computer or in a phone's browser); notifications can still be turned on from the Account page anywhere | No |
