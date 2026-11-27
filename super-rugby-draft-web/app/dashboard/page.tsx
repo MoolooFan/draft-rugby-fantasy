@@ -41,6 +41,7 @@ import { UpcomingFixtureCard } from "@/components/dashboard/UpcomingFixtureCard"
 import { PowerCard, StandingsCard } from "@/components/dashboard/StandingsCard";
 import { PlayerOfWeekCard } from "@/components/dashboard/PlayerOfWeekCard";
 import { BestAvailableCard } from "@/components/dashboard/BestAvailableCard";
+import { useIsDesktop, useIsWide } from "@/lib/ui/useIsDesktop";
 import {
   bestAvailable,
   buildRecordsUpToWeek,
@@ -74,6 +75,9 @@ import {
 
 export default function DashboardPage() {
   const router = useRouter();
+  // computers: the cards in 2 or 3 columns (Ethan, 27 Nov 2026)
+  const isDesktop = useIsDesktop();
+  const isWide = useIsWide();
   const [modal, setModal] = useState<Modal>(null);
 
     // ✅ keep league + draft store hydrated (same idea as Draft Room)
@@ -1043,9 +1047,10 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
 
       <div
         style={{
-          maxWidth: 420,
+          // computers: wider once the league's on (columns); before the draft it stays narrow
+          maxWidth: isDesktop && effectiveDashState === "postDraft" ? (isWide ? 1400 : 980) : 420,
           margin: "0 auto",
-          padding: "16px 18px",
+          paddingTop: 16, paddingLeft: isDesktop ? 24 : 18, paddingRight: isDesktop ? 24 : 18,
           paddingBottom: "calc(18px + env(safe-area-inset-bottom))",
         }}
       >
@@ -1071,8 +1076,9 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
             }
           />
         ) : null}
-        {effectiveDashState === "postDraft" && (
-          <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
+        {effectiveDashState === "postDraft" && (() => {
+          const cards = {
+            matchup: (
             <MatchupCard
               leagueName={leagueName}
               weekLabel={weekLabel}
@@ -1084,6 +1090,8 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
               pendingTradeCount={pendingTradeCount}
             />
 
+            ),
+            upcoming: (
             <UpcomingFixtureCard
               upcomingWeek={upcomingWeek}
               upcomingHome={upcomingHome}
@@ -1094,17 +1102,30 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
               myLineupCheck={myLineupCheck}
             />
 
+            ),
+            games: (
+              <>
             {/* this round's Super Rugby games and where their points stand (before round 1: round 1's) */}
             <WeekGamesCard leagueId={activeLeague?.id ?? null} week={displayWeek > 0 ? displayWeek : selectionWeek} />
 
+              </>
+            ),
+            table: (
+              <>
             {preseasonPower ? (
               <PowerCard leagueName={leagueName} rows={preseasonPower.rows ?? []} teams={activeLeague?.teams ?? []} />
             ) : (
               <StandingsCard leagueName={leagueName} standings={standings} />
             )}
 
+              </>
+            ),
+            potw: (
             <PlayerOfWeekCard playersOfWeek={playersOfWeek} onOpenPlayer={openPlayerOfWeek} />
 
+            ),
+            coach: (
+              <>
             {/* AI coach: the latest notes about your players (lib/coach) */}
             {activeLeague?.id ? (
               <CoachFeed
@@ -1121,6 +1142,9 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
               />
             ) : null}
 
+              </>
+            ),
+            best: (
             <BestAvailableCard
               players={bestAvailablePlayers}
               onOpenPlayer={openAvailablePlayer}
@@ -1129,8 +1153,46 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
               onAdd={goToTransactionsForAdd}
               addBtnBg={addBtnBg}
             />
-          </div>
-        )}
+            ),
+          };
+          const stack: React.CSSProperties = { display: "grid", gap: 14, alignContent: "start", minWidth: 0 };
+          // computers: your matchup and this round in the first column, the league in the
+          // second, coach news and best available in the third (or under the second)
+          if (isDesktop) {
+            return (
+              <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: isWide ? "repeat(3, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))", gap: 14, alignItems: "start" }}>
+                <div style={stack}>
+                  {cards.matchup}
+                  {cards.upcoming}
+                  {cards.games}
+                </div>
+                <div style={stack}>
+                  {cards.table}
+                  {cards.potw}
+                  {isWide ? null : cards.coach}
+                  {isWide ? null : cards.best}
+                </div>
+                {isWide ? (
+                  <div style={stack}>
+                    {cards.coach}
+                    {cards.best}
+                  </div>
+                ) : null}
+              </div>
+            );
+          }
+          return (
+            <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
+              {cards.matchup}
+              {cards.upcoming}
+              {cards.games}
+              {cards.table}
+              {cards.potw}
+              {cards.coach}
+              {cards.best}
+            </div>
+          );
+        })()}
 
       </div>
 

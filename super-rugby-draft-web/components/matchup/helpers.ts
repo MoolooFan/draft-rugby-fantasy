@@ -576,3 +576,30 @@ export const listBox: CSSProperties = {
   overflow: "hidden",
   color: "#0f172a",
 };
+
+/**
+ * A player's key stats in one round, for the Matchup page on a computer (Ethan, 27 Nov 2026):
+ * minutes, then whatever he did of tries, try assists, line breaks, metres, tackles, turnovers,
+ * lineouts and goal kicking, e.g. "62 min · 1 T · 12 Tkl · 45 m". Empty if he didn't play.
+ */
+export function statLineText(c: Partial<Record<string, number | undefined>>): string {
+  const n = (k: string) => Number(c[k]) || 0;
+  if (!n("minutesPlayed")) return "";
+  const parts = [`${n("minutesPlayed")} min`];
+  const add = (k: string, label: string) => {
+    if (n(k)) parts.push(`${n(k)} ${label}`);
+  };
+  add("tries", "T");
+  add("tryAssists", "TA");
+  add("lineBreaks", "LB");
+  add("conversions", "Con");
+  add("penaltyGoals", "Pen");
+  add("tackles", "Tkl");
+  add("metresGained", "m");
+  add("defendersBeaten", "DB");
+  add("turnoversForced", "TO");
+  add("lineoutsWon", "LO");
+  add("yellowCards", "YC");
+  add("redCards", "RC");
+  return parts.join(" · ");
+}

@@ -3,7 +3,8 @@
 // One row of the Matchup page's lineups: the left team's player, the position (or bench number /
 // IR) in the middle, the right team's player. Each side: jersey and name (tap for the player
 // card), the fixture ("CRU (A)" / BYE), the points pill (tap for the points breakdown) and the
-// projection under it. Moved out of app/matchup/page.tsx.
+// projection under it. Moved out of app/matchup/page.tsx. On a computer (`wide`; Ethan, 27 Nov
+// 2026) each side also shows the full name and his key stats that round (statLine).
 import React from "react";
 import { muted, num } from "@/lib/ui/theme";
 import { jerseySrcForPlayer, type Player } from "./helpers";
@@ -23,6 +24,8 @@ export type LineupCell = {
   proj: { text: string; captain: boolean } | null;
   onOpenCard: () => void;
   onOpenPoints: () => void;
+  /** computers: his key stats this round, e.g. "62 min · 1 T · 12 Tkl · 45 m" */
+  statLine?: string | null;
 };
 
 const PURPLE = "rgba(168,85,247,0.95)";
@@ -48,7 +51,7 @@ function Jersey({ player }: { player: Player | null }) {
   );
 }
 
-function Cell({ cell, side }: { cell: LineupCell; side: "left" | "right" }) {
+function Cell({ cell, side, wide }: { cell: LineupCell; side: "left" | "right"; wide?: boolean }) {
   const p = cell.player;
   const jersey = (
     <button
@@ -65,9 +68,12 @@ function Cell({ cell, side }: { cell: LineupCell; side: "left" | "right" }) {
         onClick={cell.onOpenCard}
         style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", cursor: p ? "pointer" : "default" }}
       >
-        {p ? p.lastName : "—"}
+        {p ? (wide ? `${p.firstName} ${p.lastName}` : p.lastName) : "—"}
       </div>
       <div style={{ fontSize: 10, fontWeight: 600, opacity: 0.55 }}>{p ? cell.fixtureTag : "—"}</div>
+      {wide && p && cell.statLine ? (
+        <div style={{ fontSize: 10.5, fontWeight: 600, color: "#334155", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cell.statLine}</div>
+      ) : null}
     </div>
   );
   const points = (
@@ -110,13 +116,13 @@ function Cell({ cell, side }: { cell: LineupCell; side: "left" | "right" }) {
   );
 }
 
-export function LineupRow({ label, ir = false, left, right }: { label: string; ir?: boolean; left: LineupCell; right: LineupCell }) {
+export function LineupRow({ label, ir = false, left, right, wide = false }: { label: string; ir?: boolean; left: LineupCell; right: LineupCell; wide?: boolean }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 34px 1fr", gap: 10, padding: "7px 10px", borderTop: "1px solid rgba(0,0,0,0.08)", alignItems: "center" }}>
-      <Cell cell={left} side="left" />
+    <div style={{ display: "grid", gridTemplateColumns: wide ? "minmax(0, 1fr) 44px minmax(0, 1fr)" : "1fr 34px 1fr", gap: wide ? 16 : 10, padding: wide ? "8px 14px" : "7px 10px", borderTop: "1px solid rgba(0,0,0,0.08)", alignItems: "center" }}>
+      <Cell cell={left} side="left" wide={wide} />
       {/* the position, bench number (1–5) or IR */}
       <div style={{ textAlign: "center", fontSize: 11, fontWeight: 700, opacity: ir ? 1 : 0.7, color: ir ? "#dc2626" : undefined }}>{label}</div>
-      <Cell cell={right} side="right" />
+      <Cell cell={right} side="right" wide={wide} />
     </div>
   );
 }
