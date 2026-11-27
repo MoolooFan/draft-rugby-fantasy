@@ -44,3 +44,41 @@ button, input, select, textarea {
 * {
   box-sizing: border-box;
 }
+
+/*
+  Computers (1024 px and wider; Ethan, 27 Nov 2026): the menu sits on the left all the time
+  (DesktopSidebar in components/AppMenu.tsx), the page moves over to make room, and the pages'
+  ☰ buttons are hidden. Phones and small tablets are unchanged. Pages that lay themselves out
+  differently on a computer use lib/ui/useIsDesktop.ts (same 1024 px).
+*/
+.desk-sidebar {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .desk-sidebar {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 240px;
+    padding: 18px 16px;
+    overflow-y: auto;
+    color: white;
+    background: linear-gradient(to bottom, rgb(11, 18, 34), rgb(12, 120, 112), rgb(14, 160, 112));
+    border-right: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+    z-index: 40;
+  }
+  body:has(.desk-sidebar) .app-main {
+    margin-left: 240px;
+  }
+  body:has(.desk-sidebar) button[aria-label="Open menu"] {
+    display: none !important;
+  }
+  /* bars fixed to the bottom of the screen (e.g. the chat box) start after the sidebar */
+  body:has(.desk-sidebar) .fixed-bar {
+    left: 240px !important;
+  }
+}
