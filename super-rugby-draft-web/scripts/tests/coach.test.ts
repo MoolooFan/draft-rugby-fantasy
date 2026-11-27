@@ -2,6 +2,8 @@
 import { ageOn, buildFacts, gameLine, hisSpread, keyStatAverages, notePoints, pointsProfile, repeatability, type CoachFactsInput, type CoachGame } from "../../lib/coach/facts";
 import { cleanNote, coachSystemPrompt, coachUserMessage, COACH_NOTE_SCHEMA } from "../../lib/coach/prompt";
 import { STANDARD_SCORING } from "../../lib/scoring";
+import { getSeason, realRoundsForWeek, teamListsReadAtMs } from "../../lib/season";
+import { nextWeekOpen } from "../../lib/coach/data";
 import { allowedText, pointsAllowed, posGroup, type Appearance } from "../../lib/coach/matchups";
 
 let failures = 0;
@@ -99,6 +101,19 @@ check("fact sheet: how much the matchup numbers mean for his position",
   && String((buildFacts({ ...input, matchupGroup: "OB" }) as Record<string, unknown>).matchupReliability).includes("a real pattern")
   && (buildFacts({ ...input, matchupGroup: null }) as Record<string, unknown>).matchupReliability === null);
 check("system prompt: matchups only when relevant", coachSystemPrompt(STANDARD_SCORING).includes("You don't have to mention matchups"));
+
+// Round 1: no look ahead until its team lists are read (Wednesday 4:30 pm NZ)
+{
+  const s26 = getSeason(2026);
+  const at = teamListsReadAtMs(s26, Math.min(...realRoundsForWeek(s26, 1)))!;
+  const c1 = { s: s26, week: 1 };
+  check("round 1 look ahead: not before its team lists, yes after; after-game notes and later weeks always; outlooks never",
+    !nextWeekOpen(c1, "news", at - 60_000) && nextWeekOpen(c1, "news", at + 60_000) && nextWeekOpen(c1, "team_list", at)
+    && nextWeekOpen({ s: s26, week: 2 }, "status", at - 86_400_000) && nextWeekOpen(c1, "post_game", at - 60_000) && !nextWeekOpen(c1, "outlook", at + 60_000));
+  const closed = buildFacts({ ...input, kind: "news", nextWeekOpen: false }) as Record<string, unknown>;
+  check("round 1 look ahead closed: the fact sheet says so and no projection is kept",
+    String(closed.nextWeekOutlook).startsWith("not yet") && notePoints({ ...input, kind: "news", nextWeekOpen: false }).projected === null && !("nextWeekOutlook" in facts));
+}
 
 // prompt and notes
 const sys = coachSystemPrompt(STANDARD_SCORING);

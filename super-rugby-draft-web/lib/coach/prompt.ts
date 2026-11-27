@@ -79,6 +79,7 @@ Rules:
 - Be specific: name opponents, give a few key fantasy numbers (points, tackles, minutes) and say plainly whether to start, bench, pick up or avoid him. Pick the 2-3 points that matter most; don't list everything.
 - Short and readable on a phone: the body is 2-3 short sentences, at most 60 words. No hype, no emojis, no headings.
 - Don't repeat the previous coach notes word for word; build on them.
+- If the fact sheet has nextWeekOutlook "not yet", leave next_week empty and don't preview his next game in the body either.
 - Verdicts: must_start (an every-week starter), start, borderline (could go either way), bench (sit him this week), pickup (worth adding if he's a free agent), hold (keep, but don't start / don't panic), avoid (not worth a spot), monitor (wait for more news).`;
 }
 

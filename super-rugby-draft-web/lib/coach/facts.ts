@@ -54,6 +54,11 @@ export type CoachFactsInput = {
   remaining: FixtureInfo[];
   finalsWeeks: FixtureInfo[];
   teammates: Array<{ name: string; positions: string; status: string }>;
+  /**
+   * false before the season's weekly outlooks start (Ethan, 27 Nov 2026): Round 1's look ahead
+   * waits for the Round 1 team lists (Wednesday 4:30 pm NZ), like every week's team-list notes
+   */
+  nextWeekOpen?: boolean;
   /** his position for the matchup numbers (this week's jersey if known, else his listed position) */
   matchupGroup?: PosGroup | null;
   thisGame?: (CoachGame & { teamScore: number | null; oppScore: number | null; projected: number | null }) | null;
@@ -204,6 +209,7 @@ export function buildFacts(input: CoachFactsInput): Record<string, unknown> {
             : null,
         }
       : null,
+    ...(input.nextWeekOpen === false ? { nextWeekOutlook: "not yet: the weekly outlooks haven't started, so leave next_week empty" } : {}),
     matchupReliability: input.matchupGroup
       ? `For ${POS_GROUP_NAME[input.matchupGroup]}, the matchup numbers are ${MATCHUP_RELIABILITY[input.matchupGroup]}.`
       : null,
@@ -243,5 +249,5 @@ export function notePoints(input: CoachFactsInput): { projected: number | null; 
     const front = isFrontRow({ posAbbrev, secondaryPosAbbrev, thirdPosAbbrev }, input.rules);
     return { projected: input.next?.projection?.pts ?? null, scored: roundPoints(playerPoints(g.counts, front, input.rules)) };
   }
-  return { projected: input.next?.projection?.pts ?? null, scored: null };
+  return { projected: input.nextWeekOpen === false ? null : input.next?.projection?.pts ?? null, scored: null };
 }

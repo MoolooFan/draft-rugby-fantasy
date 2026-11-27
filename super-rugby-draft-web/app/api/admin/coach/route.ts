@@ -5,12 +5,13 @@
 //   settings { enabled?, model? }        switch on / off, pick the model
 //   outlooks                             season outlooks for every player (a batch)
 //   run                                  check now for notes that are due (normally every 5 min)
-//   note_edit { id, headline, body, next_week } / note_hide { id, hidden }
-//   context_add { scope, playerId?, teamCode?, text, writeNow? } / context_toggle { id, active }
+//   note_edit { id, headline, body, next_week } / note_hide { id, hidden } / note_delete { id }
+//   notes_delete_all { season }        every coach note for a season (Ethan, 27 Nov 2026)
+//   context_add { scope, playerId?, teamCode?, text, writeNow? } / context_toggle { id, active } / context_delete { id }
 //   profile { playerId, birthDate, international, restNotes, injuryNotes }
 //   article_read { url }                 read an article (not saved): title, text, who it mentions,
 //                                        or why it couldn't be read (then Ethan pastes the text)
-//   article_add { url, title?, text?, pasted?, playerIds, teamCodes, writeNow? } / article_toggle { id, active }
+//   article_add { url, title?, text?, pasted?, playerIds, teamCodes, writeNow? } / article_toggle { id, active } / article_delete { id }
 import { after, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireSiteAdmin } from "@/lib/admin/server";
@@ -112,6 +113,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    if (b?.action === "note_delete") {
+      const { error } = await supabaseAdmin.from("coach_notes").delete().eq("id", String(b?.id ?? ""));
+      if (error) throw error;
+      return NextResponse.json({ ok: true });
+    }
+
+    if (b?.action === "notes_delete_all") {
+      const forSeason = Number(b?.season);
+      if (!Number.isInteger(forSeason)) return fail("Which season?");
+      const { count, error } = await supabaseAdmin.from("coach_notes").delete({ count: "exact" }).eq("season", forSeason);
+      if (error) throw error;
+      return NextResponse.json({ ok: true, message: `Deleted ${count ?? 0} coach note${count === 1 ? "" : "s"} for ${forSeason}.` });
+    }
+
     if (b?.action === "context_add") {
       const scope = String(b?.scope);
       const text = str(b?.text, 1500);
@@ -193,6 +208,18 @@ export async function POST(req: Request) {
 
     if (b?.action === "context_toggle") {
       const { error } = await supabaseAdmin.from("coach_context").update({ active: b?.active !== false }).eq("id", String(b?.id ?? ""));
+      if (error) throw error;
+      return NextResponse.json({ ok: true });
+    }
+
+    if (b?.action === "context_delete") {
+      const { error } = await supabaseAdmin.from("coach_context").delete().eq("id", String(b?.id ?? ""));
+      if (error) throw error;
+      return NextResponse.json({ ok: true });
+    }
+
+    if (b?.action === "article_delete") {
+      const { error } = await supabaseAdmin.from("coach_articles").delete().eq("id", String(b?.id ?? ""));
       if (error) throw error;
       return NextResponse.json({ ok: true });
     }
