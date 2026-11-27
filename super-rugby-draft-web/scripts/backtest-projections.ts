@@ -11,15 +11,22 @@
 // player after the team lists (correlation 0.531), 11.19 before them, 10.08 midweek.
 // Even knowing every player's true 2026 average in advance would miss by 9.24 (game-day luck).
 //
-// Run (from super-rugby-draft-web): npx tsx scripts/backtest-projections.ts
+// Position matchups (Ethan, 27 Nov 2026): `--matchups` tries the points each opponent gave up to
+// the player's position (lib/coach/matchups.ts) instead of / as well as the opponent effect.
+// 2026 result: no better (best 10.46 / corr 0.552 vs 10.46 / 0.550 now; no opponent at all 10.50).
+// Odd vs even rounds: a team's overall leakiness repeats (0.44), one position on top of that
+// hardly does (0.15); by position OB 0.61, CE 0.45, PR 0.36, HO 0.21, the rest about 0.
+//
+// Run (from super-rugby-draft-web): npx tsx scripts/backtest-projections.ts [--matchups]
 import fs from "node:fs";
 import path from "node:path";
-import { isFrontRow, playerPoints, statCountsFromRaw, STANDARD_SCORING, type StatCounts } from "../lib/scoring";
+import { isFrontRow, playerPoints, statCountsFromRaw, statPoints, STANDARD_SCORING, type StatCounts } from "../lib/scoring";
+import { pointsAllowed, posGroup, type AllowedRow, type Appearance, type PosGroup } from "../lib/coach/matchups";
 import { statusKind } from "../lib/status/kind";
 import type { Lineup } from "../lib/scoring/week";
 import { lineupSpread, teamOutlook, winProbability } from "../lib/projections/live";
 import {
-  DEFAULT_PARAMS, averageRates, dutyKicker, lineoutStealFactor, seasonPrior, expectedRole, kickingOrder, kickingPoints, opponentWeakness,
+  DEFAULT_PARAMS, PLAY_STATS, averageRates, dutyKicker, lineoutStealFactor, seasonPrior, expectedRole, kickingOrder, kickingPoints, opponentWeakness,
   projectPoints, projectPointsExpectedLineup, projectTeamScore, teamStrength,
   type ListRole, type PastGame, type ProjectionParams, type Role, type StatRates, type TeamGame, type TeamStrength,
 } from "../lib/projections/project";
@@ -65,7 +72,7 @@ const listedAs = (st: string): "starting" | "bench" | null => {
 };
 
 // ---- stats per player per round
-const games = new Map<string, Map<number, PastGame & { points: number }>>();
+const games = new Map<string, Map<number, PastGame & { points: number; play: number }>>();
 for (const s of JSON.parse(read("player_round_stats.json")) as Array<{ internal_player_id: string; round: number; raw_json: { stats?: unknown } }>) {
   const id = s.internal_player_id.toLowerCase();
   const pl = players.get(id);
@@ -75,6 +82,7 @@ for (const s of JSON.parse(read("player_round_stats.json")) as Array<{ internal_
   games.get(id)!.set(s.round, {
     round: s.round, counts, listed: pl ? listedAs(pl.status[s.round] ?? "") : null,
     points: playerPoints(counts, pl?.frontRow ?? false, STANDARD_SCORING),
+    play: PLAY_STATS.reduce((a, k) => a + statPoints(k, Number(counts[k]) || 0, pl?.frontRow ?? false, STANDARD_SCORING), 0),
   });
 }
 const pastOf = (id: string, R: number) => [...(games.get(id)?.values() ?? [])].filter((g) => g.round < R).sort((a, b) => a.round - b.round);
@@ -103,6 +111,33 @@ for (const [key, f] of fixtureOf) {
   }
   if (!teamGames.has(team)) teamGames.set(team, []);
   teamGames.get(team)!.push({ round: Number(w), pointsFor: f.pf, pointsAgainst: f.pa, tries, penaltyShots, lineoutSteals });
+}
+
+// ---- play points each team gave up per position (per 80 minutes) before round R
+const MATCHUP_PRIOR = Number(process.argv.find((a) => a.startsWith("--matchup-prior="))?.split("=")[1] ?? 3);
+const allowedCache = new Map<string, Map<string, Map<PosGroup, AllowedRow>>>();
+function allowedBefore(R: number, priorGames = MATCHUP_PRIOR) {
+  const key = `${R}|${priorGames}`;
+  if (allowedCache.has(key)) return allowedCache.get(key)!;
+  const apps: Appearance[] = [];
+  for (const pl of players.values()) {
+    const group = posGroup(pl.posAbbrev, null);
+    if (!group) continue;
+    for (const g of games.get(pl.id)?.values() ?? []) {
+      if (g.round >= R) continue;
+      const fx = fixtureOf.get(`${pl.team}|${g.round}`);
+      if (!fx) continue;
+      apps.push({ opp: fx.opp, game: g.round, group, points: g.play, minutes: Number(g.counts.minutesPlayed) || 0 });
+    }
+  }
+  const out = pointsAllowed(apps, { priorGames });
+  allowedCache.set(key, out);
+  return out;
+}
+function positionFactor(R: number, opp: string, pos: string, priorGames = MATCHUP_PRIOR): number | null {
+  const group = posGroup(pos, null);
+  const row = group ? allowedBefore(R, priorGames).get(opp)?.get(group) : null;
+  return row && row.leagueAverage > 0 ? row.per80 / row.leagueAverage : null;
 }
 
 // ---- what was known before each round
@@ -165,7 +200,7 @@ function listRole(pl: Pl, R: number): ListRole {
 type Stage = "after" | "start" | "mid";
 type Pred = { id: string; round: number; role: Role; actual: number; after: number; start: number; mid: number; namedOrPlayed: boolean; preSpread: number };
 
-function run(params: ProjectionParams = DEFAULT_PARAMS, firstRound = 3) {
+function run(params: ProjectionParams = DEFAULT_PARAMS, firstRound = 3, matchupPrior = MATCHUP_PRIOR) {
   const preds: Pred[] = [];
   const ruledOut = new Map<string, Record<Stage, boolean>>(); // `${id}|${R}`
   for (let R = 1; R <= LAST_LISTED_ROUND; R++) {
@@ -207,6 +242,7 @@ function run(params: ProjectionParams = DEFAULT_PARAMS, firstRound = 3) {
         prior: USE_RANK ? seasonPrior(b.priors.get(pl.posAbbrev) ?? {}, pl.draftRank) : b.priors.get(pl.posAbbrev) ?? {},
         fdr: fx.fdr, home: fx.home, opponentWeakness: opp ? opponentWeakness(opp) : null,
         opponentSteals: opp ? lineoutStealFactor(opp) : null,
+        opponentPositionFactor: params.positionMatchup ? positionFactor(R, fx.opp, pl.posAbbrev, matchupPrior) : null,
       };
       const after = projectPoints({ ...base, role, kicking: kick("after") }, params);
       const history: ListRole[] = [];
@@ -254,6 +290,82 @@ console.log("    start of week (last status carried)  ", stats(all, "start"));
 console.log("    midweek (this week's injury list)    ", stats(all, "mid"));
 for (const t of [{ formWeight: 0 }, { fdrStep: 0 }, { homeEdge: 0 }, { opponentEffect: {} }]) {
   console.log("    variant", JSON.stringify(t).padEnd(22), stats(run({ ...DEFAULT_PARAMS, ...t }).preds.filter((p) => p.namedOrPlayed), "after"));
+}
+// points given up to his position (27 Nov 2026): instead of, or as well as, the points-for /
+// against opponent effect; with --matchups, every weight and prior
+if (process.argv.includes("--matchups")) {
+  console.log("\n  POSITION MATCHUPS (after the lists / start of week, named or played; all = everyone judged)");
+  const show = (label: string, params: ProjectionParams, prior: number) => {
+    const r = run(params, 3, prior).preds;
+    const n = r.filter((p) => p.namedOrPlayed);
+    const after = stats(n, "after"), start = stats(r, "start");
+    console.log(`    ${label.padEnd(44)} after: miss ${after.mae} corr ${after.corr}   start: miss ${start.mae} corr ${start.corr}`);
+  };
+  show("now (points for/against effect)", DEFAULT_PARAMS, 3);
+  show("no opponent at all", { ...DEFAULT_PARAMS, opponentEffect: {} }, 3);
+  for (const prior of [3, 6, 10]) {
+    for (const w of [0.25, 0.5, 0.75, 1]) {
+      show(`position only, weight ${w}, prior ${prior} games`, { ...DEFAULT_PARAMS, opponentEffect: {}, positionMatchup: w }, prior);
+    }
+    for (const w of [0.25, 0.5]) {
+      show(`both, weight ${w}, prior ${prior} games`, { ...DEFAULT_PARAMS, positionMatchup: w }, prior);
+    }
+  }
+  // is it a real pattern? a team's points given up to each position in odd rounds vs even rounds
+  {
+    const half = (odd: boolean) => {
+      const apps: Appearance[] = [];
+      for (const pl of players.values()) {
+        const group = posGroup(pl.posAbbrev, null);
+        if (!group) continue;
+        for (const g of games.get(pl.id)?.values() ?? []) {
+          if ((g.round % 2 === 1) !== odd) continue;
+          const fx = fixtureOf.get(`${pl.team}|${g.round}`);
+          if (fx) apps.push({ opp: fx.opp, game: g.round, group, points: g.play, minutes: Number(g.counts.minutesPlayed) || 0 });
+        }
+      }
+      return pointsAllowed(apps, { priorGames: 0, lastGames: 99 });
+    };
+    const o = half(true), e = half(false);
+    const corr = (xs: number[], ys: number[]) => {
+      const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length;
+      let sxy = 0, sxx = 0, syy = 0;
+      xs.forEach((x, i) => { sxy += (x - mx) * (ys[i] - my); sxx += (x - mx) ** 2; syy += (ys[i] - my) ** 2; });
+      return +(sxy / Math.sqrt(sxx * syy)).toFixed(2);
+    };
+    const groups: PosGroup[] = ["PR", "HO", "LK", "LF", "HB", "FH", "CE", "OB"];
+    const xs: number[] = [], ys: number[] = [];
+    const per: string[] = [];
+    for (const gr of groups) {
+      const gx: number[] = [], gy: number[] = [];
+      for (const [t, m] of o) {
+        const a = m.get(gr), b = e.get(t)?.get(gr);
+        if (!a || !b) continue;
+        gx.push(a.per80 / a.leagueAverage); gy.push(b.per80 / b.leagueAverage);
+      }
+      xs.push(...gx); ys.push(...gy);
+      per.push(`${gr} ${corr(gx, gy)}`);
+    }
+    // the same for "position on top of the team's overall leakiness": factor ÷ the team's average factor
+    const rel = (m: Map<PosGroup, AllowedRow>) => {
+      const avg = groups.reduce((a, g) => a + m.get(g)!.per80 / m.get(g)!.leagueAverage, 0) / groups.length;
+      return new Map(groups.map((g) => [g, m.get(g)!.per80 / m.get(g)!.leagueAverage / avg]));
+    };
+    const rx: number[] = [], ry: number[] = [];
+    for (const [t, m] of o) { const a = rel(m), b = e.get(t) ? rel(e.get(t)!) : null; if (!b) continue; for (const g of groups) { rx.push(a.get(g)!); ry.push(b.get(g)!); } }
+    const teamsO = [...o.keys()], tx = teamsO.map((t) => groups.reduce((a, g) => a + o.get(t)!.get(g)!.per80 / o.get(t)!.get(g)!.leagueAverage, 0)), ty = teamsO.map((t) => groups.reduce((a, g) => a + (e.get(t)?.get(g)?.per80 ?? 0) / (e.get(t)?.get(g)?.leagueAverage ?? 1), 0));
+    console.log(`    odd vs even rounds: points given up per position ${corr(xs, ys)} (1 = the same every time, 0 = chance); by position: ${per.join(", ")}`);
+    console.log(`      a team's overall leakiness (all positions together): ${corr(tx, ty)}; one position on top of that: ${corr(rx, ry)}`);
+  }
+  // by position: is it better for every position, or only some?
+  const base = run(DEFAULT_PARAMS, 3, 3).preds.filter((p) => p.namedOrPlayed);
+  const alt = run({ ...DEFAULT_PARAMS, opponentEffect: {}, positionMatchup: 0.5 }, 3, 6).preds.filter((p) => p.namedOrPlayed);
+  console.log("    by position (now vs position only, weight 0.5, prior 6):");
+  for (const pos of ["PR", "HO", "LK", "LF", "HB", "FH", "CE", "OB"]) {
+    const a = base.filter((p) => players.get(p.id)?.posAbbrev === pos), b = alt.filter((p) => players.get(p.id)?.posAbbrev === pos);
+    console.log(`      ${pos} (${a.length})  now miss ${stats(a, "after").mae}  ->  ${stats(b, "after").mae}`);
+  }
+  process.exit(0);
 }
 
 // ---- team level: the 2026 league's lineups (a week without a saved lineup uses the latest earlier one)

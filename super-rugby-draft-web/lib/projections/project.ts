@@ -33,7 +33,11 @@
 // - Uses the league's own scoring rules (Standard, Alternate or Custom).
 // Tested and left out (2026): travel, short turnarounds, the week after a bye, first game back
 // from injury, blowouts cutting starters' minutes, key teammates missing, opponent discipline
-// (penalty shots), team-specific home advantage.
+// (penalty shots), team-specific home advantage, and (27 Nov 2026) the points the opponent gives
+// up to his position (positionMatchup; backtest --matchups): no better than the opponent effect
+// below (miss 10.46 either way). Only outside backs, centres and props get a repeatable
+// position-specific effect, which OPPONENT_EFFECT already covers; to re-test with 2027's data
+// and jersey numbers.
 import {
   CAPTAIN_MULTIPLIER, STANDARD_SCORING, STATS, minutesPoints, statPoints,
   type EventStatKey, type ScoringRules, type StatCounts,
@@ -96,6 +100,12 @@ export type ProjectionParams = {
   homeEdge: number;
   trustMinutes: Record<EventStatKey, number>;
   opponentEffect: Record<string, number>;
+  /**
+   * how much of the opponent's "points given up to his position" to use (0 = none, 1 = all):
+   * play points x (1 + this x (factor - 1)); see opponentPositionFactor. Off (0): it didn't
+   * help on 2026 (see the top of this file)
+   */
+  positionMatchup: number;
   positionMinutes: Record<string, { start: number; bench: number }>;
 };
 
@@ -105,6 +115,7 @@ export const DEFAULT_PARAMS: ProjectionParams = {
   homeEdge: 0.02,
   trustMinutes: TRUST_MINUTES,
   opponentEffect: OPPONENT_EFFECT,
+  positionMatchup: 0,
   positionMinutes: POSITION_MINUTES,
 };
 
@@ -249,6 +260,11 @@ export type PlayerInput = {
   home?: boolean | null;
   /** how much weaker than average the opponent is, in points per game (+ = weaker); see opponentWeakness */
   opponentWeakness?: number | null;
+  /**
+   * the play points (not minutes or kicking) the opponent gives up per 80 minutes to his position
+   * ÷ the league average (1 = average; lib/coach/matchups.ts pointsAllowed)
+   */
+  opponentPositionFactor?: number | null;
   /** the opponent's lineout steals per game ÷ the league average (1 = average); see lineoutStealFactor */
   opponentSteals?: number | null;
   /** his goal-kicking points over a full game, if he's the team's kicker this week (see kickingPoints) */
@@ -263,6 +279,7 @@ export function projectPoints(input: PlayerInput, p: ProjectionParams = DEFAULT_
 
   let play = Math.max(0, scoringRate80(input.games, input.frontRow, input.prior, rules, p, input)) * (mins / 80);
   if (input.opponentWeakness != null) play *= Math.max(0.5, 1 + (p.opponentEffect[input.pos] ?? 0) * (input.opponentWeakness / 10));
+  if (input.opponentPositionFactor != null && p.positionMatchup) play *= Math.max(0.5, 1 + p.positionMatchup * (input.opponentPositionFactor - 1));
 
   let pts = minutesPoints(Math.round(mins), rules) + play;
   if (input.fdr != null && Number.isFinite(input.fdr)) pts *= 1 + p.fdrStep * (3 - input.fdr);
