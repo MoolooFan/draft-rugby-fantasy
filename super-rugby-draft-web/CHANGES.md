@@ -23,6 +23,7 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `08a6cbd` | Desktop layout: **Transactions** on a computer is wider; the Player Pool (and Watchlist tab) shows **up to 5 columns picked in Filters** from its own numbers (Projected, Match Average, Form, Last Fixture, Games, Points or any stat; default Proj, Avg, Form, Pts, Tries; remembered on the device; click a heading to sort). On the Player Pool tab your **Watchlist sits beside the pool**. Phones unchanged | No |
 | `aa6efd6` | Desktop layout: **Team Selection** on a computer has the pitch and bench on the left and **your whole squad as a table** on the right: where he is in your team (PR, LF, Sub, IR...), his game this week, expected points (captain doubled), latest score, form, points per game and last season's average; tap a row for his card. Phones unchanged | No |
 | `0dcd7da` | Dashboard table: the **shield** holder, the latest round's **crown** (top score) and **wooden spoon** (lowest) next to the team names, as on the League page | No |
 | `83a9678` | Draft Room on a computer: **pick up to 5 stat columns** in Filters ("Columns"): Draft Rank, My Rank, Games, Pts, Pts/G or any stat (stats follow Per game / Total / Per 80). Default Draft Rank, Games, Pts, Pts/G, Tries; Reset brings them back; remembered on the device (the Transactions page will use the same). Click a column heading to sort by it. Phones keep the single number | No |
