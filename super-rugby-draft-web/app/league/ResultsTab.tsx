@@ -1,7 +1,7 @@
 "use client";
 // app/league/ResultsTab.tsx
 // The League page's Results tab: finished rounds' scores, newest first. Moved out of
-// app/league/page.tsx.
+// app/league/page.tsx. On a computer (`columns`) each round is its own box, in columns.
 
 import React from "react";
 
@@ -14,21 +14,28 @@ export function ResultsTab({
   isFantasyWeekComplete,
   rowPlayed,
   scoreFromSheet,
+  columns = false,
+  limit,
 }: {
   fixtures: FixtureWeek[];
   isFantasyWeekComplete: (weekNo: number) => boolean;
   rowPlayed: (r: FixtureRow, weekNo: number) => boolean;
   scoreFromSheet: (weekNo: number, teamId: string | null) => number | null;
+  /** computers: each round in its own box, in columns */
+  columns?: boolean;
+  /** only the newest few rounds */
+  limit?: number;
 }) {
     const past = fixtures
   .filter((w) => isFantasyWeekComplete(w.weekNo))
   .slice()
-  .reverse();
+  .reverse()
+  .slice(0, limit ?? Infinity);
 
     return (
-      <div style={listBox}>
+      <div style={columns ? { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 14, marginTop: 10, alignItems: "start" } : listBox}>
         {past.map((w, idx) => (
-          <div key={w.weekNo} style={{ borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)" }}>
+          <div key={w.weekNo} style={columns ? { ...listBox, marginTop: 0 } : { borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)" }}>
 
   {/* Week heading */}
   <div

@@ -1,7 +1,8 @@
 "use client";
 // app/league/FixturesTab.tsx
 // The League page's Fixtures tab: every round's matchups (finals labels and placeholders, BYEs,
-// the next Shield game). Moved out of app/league/page.tsx.
+// the next Shield game). Moved out of app/league/page.tsx. On a computer (`columns`) each round
+// is its own box, in columns.
 
 import React from "react";
 
@@ -17,22 +18,25 @@ export function FixturesTab({
   regularWeeks,
   isFantasyWeekComplete,
   rowPlayed,
+  columns = false,
 }: {
   league: League | null;
   fixtures: FixtureWeek[];
   regularWeeks: number;
   isFantasyWeekComplete: (weekNo: number) => boolean;
   rowPlayed: (r: FixtureRow, weekNo: number) => boolean;
+  /** computers: each round in its own box, in columns */
+  columns?: boolean;
 }) {
     const future = fixtures.filter((w) => !isFantasyWeekComplete(w.weekNo));
     return (
-      <div style={listBox}>
+      <div style={columns ? { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 14, marginTop: 10, alignItems: "start" } : listBox}>
         {future.map((w: FixtureWeek, idx) => {
   const isPlayoffGroup = w.weekNo > regularWeeks;
 
   return (
 
-          <div key={w.weekNo} style={{ borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)" }}>
+          <div key={w.weekNo} style={columns ? { ...listBox, marginTop: 0 } : { borderTop: idx === 0 ? "none" : "1px solid rgba(0,0,0,0.08)" }}>
             <div
   style={{
     padding: "6px 10px",
