@@ -284,6 +284,7 @@ export function coachInput(
     remaining,
     finalsWeeks,
     teammates,
+    matchupGroup: group,
     thisGame,
     statusChange: extra.statusChange ?? null,
     notes: [...ctx.notes.general, ...(ctx.notes.team.get(t) ?? []), ...(ctx.notes.player.get(playerId) ?? [])],
