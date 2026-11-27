@@ -19,6 +19,12 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 ## Changes
 
+### 27 Nov 2026
+
+| Code | What changed | Database |
+|---|---|---|
+| `1d8e5d5` | Go-live checklist: AI coach key added in Vercel (this push also rebuilds the test site so it picks the key up) | No |
+
 ### 26 Nov 2026
 
 | Code | What changed | Database |
