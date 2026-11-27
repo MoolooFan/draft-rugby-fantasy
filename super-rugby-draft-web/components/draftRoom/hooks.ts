@@ -17,8 +17,8 @@ const DRAFT_SORT_OPTIONS: Array<{ value: string; label: string }> = [
   ...COMPARE_STATS.map((c) => ({ value: c.key, label: c.label })),
 ];
 
-/** The extra numbers on a computer: games, points, points per game, minutes per game. */
-const EXTRA_LABELS = ["Games", "Pts", "Pts/G", "Min/G"];
+/** The extra numbers on a computer: games, points, points per game, tries (Ethan, 27 Nov 2026). */
+const EXTRA_LABELS = ["Games", "Pts", "Pts/G", "Tries"];
 
 /**
  * Search, Filters and the number column for the Player Pool and Watchlist. The number is the
@@ -39,7 +39,7 @@ export function usePoolView({
   strategy: DraftStrategy | null;
   /** the player's latest status (injured, ...) for the Status filter */
   liveById: (id: string) => unknown;
-  /** computers: also games, points, points per game and minutes per game (Ethan, 27 Nov 2026) */
+  /** computers: also games, points, points per game and tries (Ethan, 27 Nov 2026) */
   withExtras?: boolean;
 }) {
   const [search, setSearch] = useState("");
@@ -111,7 +111,7 @@ export function usePoolView({
           values: (p: Player): string[] => {
             const t = totalsById.get(p.id);
             if (!t || !t.games) return EXTRA_LABELS.map(() => "–");
-            return [String(t.games), String(Math.round(t.points)), (t.points / t.games).toFixed(1), String(Math.round(t.minutes / t.games))];
+            return [String(t.games), String(Math.round(t.points)), (t.points / t.games).toFixed(1), String(t.counts.tries ?? 0)];
           },
         }
       : undefined,

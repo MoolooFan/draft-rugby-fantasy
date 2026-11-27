@@ -22,7 +22,9 @@ import { fantasyWeekToRealRound, selectionDeadlineFromFirstKickoff } from "@/lib
 import { PlayerCardModal } from "@/components/PlayerCardModal";
 import { PointsBreakdownModal } from "@/components/PointsBreakdownModal";
 import { usePlayersStore } from "@/lib/players/store";
-import { CAPTAIN_MULTIPLIER, roundPoints } from "@/lib/scoring";
+import { CAPTAIN_MULTIPLIER, roundPoints, statCountsFromRow } from "@/lib/scoring";
+import { useIsDesktop } from "@/lib/ui/useIsDesktop";
+import { statLineText } from "@/components/matchup/helpers";
 import { useRequireSession } from "@/lib/session/useRequireSession";
 import { toMs, pickValue } from "@/lib/league/weekHelpers";
 import { formatProjection, projectionFor, useProjections } from "@/lib/projections/useProjections";
@@ -65,6 +67,8 @@ import {
 
 export default function MatchupPage() {
   useRequireSession();
+  // computers: a wider page with full names and each player's key stats (Ethan, 27 Nov 2026)
+  const isDesktop = useIsDesktop();
   const router = useRouter();
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -336,6 +340,23 @@ const weekMinutesByPlayerId = useMemo(() => {
 
   return m;
 }, [roundRows, displayRealRound]);
+
+// computers: each player's stat line this round
+const weekStatLineByPlayerId = useMemo(() => {
+  const m = new Map<string, string>();
+  if (!isDesktop) return m;
+  for (const row of roundRows ?? []) {
+    if (rowRound(row) !== displayRealRound) continue;
+    const pidRaw = rowPlayerId(row);
+    if (!pidRaw) continue;
+    const line = statLineText(statCountsFromRow(row));
+    if (!line) continue;
+    const exact = exactId(pidRaw), norm = normaliseId(pidRaw);
+    if (exact) m.set(exact, line);
+    if (norm) m.set(norm, line);
+  }
+  return m;
+}, [roundRows, displayRealRound, isDesktop]);
 
 function pointsForPlayer(p: Player | null) {
   const { exact, norm } = getPlayerInternalIds(p);
@@ -1019,6 +1040,7 @@ return (
       fixtureTag: p ? fixtureTagForPlayer(p) : "—",
       pill,
       proj,
+      statLine: p ? weekStatLineByPlayerId.get(getPlayerInternalIds(p).exact ?? "") ?? weekStatLineByPlayerId.get(getPlayerInternalIds(p).norm ?? "") ?? null : null,
       onOpenCard: () => {
         if (p) openPlayerCard(p, teamId === yourLeagueTeamId, side);
       },
@@ -1065,7 +1087,7 @@ return (
         }}
       />
 
-      <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px", paddingBottom: "calc(18px + env(safe-area-inset-bottom))" }}>
+      <div style={{ maxWidth: isDesktop ? 980 : 420, margin: "0 auto", paddingTop: 16, paddingLeft: isDesktop ? 24 : 18, paddingRight: isDesktop ? 24 : 18, paddingBottom: "calc(18px + env(safe-area-inset-bottom))" }}>
         <MatchupHeader
           onOpenMenu={() => setMenuOpen(true)}
           canGo={canGo}
@@ -1102,6 +1124,7 @@ return (
               <LineupRow
                 key={r.slot}
                 label={r.label}
+                wide={isDesktop}
                 left={lineupCell(lp, "left", starterPill(lp, leftEffC, leftC, leftV), starterProj(lp, leftC))}
                 right={lineupCell(rp, "right", starterPill(rp, rightEffC, rightC, rightV), starterProj(rp, rightC))}
               />
@@ -1117,6 +1140,7 @@ return (
               <LineupRow
                 key={r.slot}
                 label={r.label}
+                wide={isDesktop}
                 ir={!!r.ir}
                 left={lineupCell(lp, "left", benchPill(lp, !!r.ir, leftEffC, leftC), r.ir ? null : starterProj(lp, null))}
                 right={lineupCell(rp, "right", benchPill(rp, !!r.ir, rightEffC, rightC), r.ir ? null : starterProj(rp, null))}

@@ -2,7 +2,7 @@
 // components/draftRoom/PoolList.tsx
 // The Draft Room's Player Pool and Watchlist lists: each player with his number (draft rank,
 // My Rank or a stat), the watchlist eye and the Draft button. On a computer the Player Pool also
-// shows last season's games, points, points per game and minutes per game (`extras`). Your draft strategy's targets get a
+// shows last season's games, points, points per game and tries (`extras`). Your draft strategy's targets get a
 // teal edge and an "Early target" tag; the Watchlist has ▲▼ to set the order auto-pick uses.
 import React from "react";
 import type { Player } from "@/lib/draft/types";

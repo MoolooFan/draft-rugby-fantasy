@@ -6,17 +6,25 @@
 import { useSyncExternalStore } from "react";
 
 export const DESKTOP_QUERY = "(min-width: 1024px)";
+/** wide computer screens (room for a third column) */
+export const WIDE_QUERY = "(min-width: 1320px)";
 
-function subscribe(onChange: () => void) {
-  const mq = window.matchMedia(DESKTOP_QUERY);
-  mq.addEventListener("change", onChange);
-  return () => mq.removeEventListener("change", onChange);
+function useMediaQuery(query: string): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const mq = window.matchMedia(query);
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(query).matches,
+    () => false
+  );
 }
 
 export function useIsDesktop(): boolean {
-  return useSyncExternalStore(
-    subscribe,
-    () => window.matchMedia(DESKTOP_QUERY).matches,
-    () => false
-  );
+  return useMediaQuery(DESKTOP_QUERY);
+}
+
+export function useIsWide(): boolean {
+  return useMediaQuery(WIDE_QUERY);
 }
