@@ -23,6 +23,7 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `fa1556f` | Desktop layout: **Dashboard** in columns on a computer (3 on a wide screen, 2 on a smaller one): your matchup, upcoming fixture and this round's games; then the standings and player of the week; then coach news and best available. **Matchup** is wider, with full names and each player's key stats for the round under his fixture (e.g. "64 min · 1 T · 8 Tkl · 18 m"). Before the draft the Dashboard stays narrow. Phones unchanged | No |
 | `c7c14c3` | Desktop Draft Room: the Player Pool's extra numbers are now Games, Pts, Pts/G and **Tries** (instead of minutes per game); the last column still follows the stat picked in Filters | No |
 | `9274c7f` | Desktop Draft Room: each Player Pool line also shows last season's **Games, Pts, Pts/G and Min/G** (before the Draft Rank / chosen stat), with a wider pool column. The pick boxes no longer say "On the clock" before the draft starts. Phones unchanged | No |
 | `056c772` | Desktop Draft Room (Ethan's changes): **every pick in a row of boxes** under the header like ESPN (round / pick, team, player; the pick on the clock highlighted and kept in view; scroll or use the arrows for earlier and upcoming picks). The middle column shows your **Draft Strategy only if you've set one**, otherwise your **Watchlist**. The **menu is back to the pop-out drawer** (☰) on computers too; the always-on sidebar is gone. Also the plan update for part 1 | No |
