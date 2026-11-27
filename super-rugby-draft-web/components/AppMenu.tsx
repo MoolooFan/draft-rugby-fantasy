@@ -1,16 +1,14 @@
 "use client";
 // components/AppMenu.tsx
-// The site menu. On phones it's the drawer each page opens with its ☰ button (AppMenu). On a
-// computer (1024 px and wider) the same menu sits on the left all the time (DesktopSidebar, in
-// app/layout.tsx) and the ☰ buttons are hidden (app/globals.css; Ethan, 27 Nov 2026).
+// The site menu: the drawer each page opens with its ☰ button, on phones and computers alike
+// (Ethan, 27 Nov 2026: a menu always on screen on computers was tried and dropped).
 
-import React, { useSyncExternalStore } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import React from "react";
+import { useRouter } from "next/navigation";
 import type { League } from "@/lib/league/types";
 import { currentSeasonYear } from "@/lib/season";
 import { getActiveUserProfile } from "@/lib/session";
 import { useChatUnread } from "@/lib/chat/store";
-import { useLeagueStore } from "@/lib/league/store";
 import { ChatIcon } from "@/components/ChatIcon";
 
 type ActiveMenu =
@@ -235,41 +233,5 @@ export function AppMenu({
         <MenuContents leagues={leagues} activeLeagueId={activeLeagueId} setActiveLeague={setActiveLeague} activeItem={activeItem} onClose={onClose} />
       </aside>
     </div>
-  );
-}
-
-/** Pages with no menu entry of their own light up the one they belong to. */
-function activeFor(pathname: string): ActiveMenu | null {
-  if (pathname.startsWith("/mock-draft")) return "Draft Room";
-  if (pathname.startsWith("/trade")) return "Transactions";
-  if (pathname.startsWith("/team-of-the-week")) return "League";
-  const hit = (Object.entries(PATHS) as Array<[ActiveMenu, string]>).find(([, p]) => pathname === p || pathname.startsWith(`${p}/`));
-  return hit ? hit[0] : null;
-}
-
-/** Pages that don't show the sidebar (signing in, resetting a password). */
-const NO_SIDEBAR = ["/", "/auth", "/reset-password"];
-
-/**
- * Computers: the menu on the left all the time (hidden below 1024 px by app/globals.css, where
- * the pages' ☰ drawer is used instead).
- */
-export function DesktopSidebar() {
-  const pathname = usePathname() ?? "/";
-  const leagues = useLeagueStore((s) => s.leagues);
-  const activeLeagueId = useLeagueStore((s) => s.activeLeagueId);
-  const setActiveLeague = useLeagueStore((s) => s.setActiveLeague);
-  // the leagues and admin flag are saved in the browser, so the menu fills in once the page has
-  // loaded there (the empty sidebar is drawn straight away, so the page doesn't jump)
-  const inBrowser = useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false
-  );
-  if (NO_SIDEBAR.some((p) => pathname === p || (p !== "/" && pathname.startsWith(`${p}/`)))) return null;
-  return (
-    <aside className="desk-sidebar" aria-label="Menu">
-      {inBrowser ? <MenuContents leagues={leagues} activeLeagueId={activeLeagueId ?? null} setActiveLeague={setActiveLeague} activeItem={activeFor(pathname)} /> : null}
-    </aside>
   );
 }
