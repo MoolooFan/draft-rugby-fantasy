@@ -33,7 +33,8 @@ export async function teamResults(db: SupabaseClient, season: number, realRounds
   }
 
   // 2) the table wins where it has the game
-  let query = db.from("match_results").select("real_round, home_team, away_team, home_score, away_score").eq("season", season);
+  // (final scores only: a live score doesn't decide a win yet)
+  let query = db.from("match_results").select("real_round, home_team, away_team, home_score, away_score").eq("season", season).eq("final", true);
   if (realRounds) query = query.in("real_round", realRounds);
   const { data, error } = await query;
   if (!error) {

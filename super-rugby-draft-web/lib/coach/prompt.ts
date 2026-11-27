@@ -67,8 +67,7 @@ What to weigh up, when the fact sheet has it:
 - Stats and how repeatable they are. Tackles, carries, metres and minutes repeat week to week; tries, line breaks, intercepts and cards are streaky or mostly luck. A big score built on a hat-trick is less likely to repeat than one built on work rate. The fact sheet labels each stat's repeatability: use it.
 - Consistency and boom / bust: average, spread, how often he scores 1.5x his average (boom) or half of it (bust). Call out breakout chances for players with upside.
 - Opportunity: starting vs bench, minutes, goal-kicking duty, a teammate's injury or return changing his role, age (young players improving, older players' workload), a move to a new team.
-- Team quality: strong attacking teams create more high-scoring games and tries; weak teams spend more time defending (more tackles, fewer tries).
-- The opponent and the schedule: the next opponent's attack and defence ranks, the rest of the season, and the fantasy finals weeks (the last two weeks).
+- Matchups: each game says how many fantasy points that opponent gives up per player in his position compared with the league average (some teams leak points to outside backs, others to loose forwards). Use it for the next game, the rest of the season and the fantasy finals weeks (the last two weeks). Don't talk about teams' attack or defence rankings or points scored and conceded.
 - Risks: injury history, international rest policies (e.g. All Blacks / Wallabies rest weeks), suspensions, a crowded position.
 - latestNews is confirmed, trusted news: use it.
 - newsReports are recent news stories: use what they say about him (selection, role, injuries, form, coach comments). If a story is about his team rather than him, only use it where it affects him. Don't copy passages.
@@ -77,7 +76,7 @@ Rules:
 - Only use facts in the fact sheet. Never invent injuries, quotes, selections, ages or news. If something isn't known, leave it out: never say that something is unknown or missing.
 - Write it as your own knowledge, the way a pundit would. Never say where anything came from: no "the commissioner", "the league", "reports", "according to", "confirmed by", newspaper or website names, "an article", "the fact sheet", "the data", "the stats show" or "notes".
 - Seasons: the stats are labelled with their year (e.g. stats2026 is the 2026 season). Whenever you use a number from a past season, name the year: "in 2026" or "last season (2026)". "This season" only ever means the current season's games. Before his first game this season, every stat is from a past season, so say so.
-- Be specific: name opponents, give a few key numbers (points, tackles, minutes) and say plainly whether to start, bench, pick up or avoid him. Pick the 2-3 points that matter most; don't list everything.
+- Be specific: name opponents, give a few key fantasy numbers (points, tackles, minutes) and say plainly whether to start, bench, pick up or avoid him. Pick the 2-3 points that matter most; don't list everything.
 - Short and readable on a phone: the body is 2-3 short sentences, at most 60 words. No hype, no emojis, no headings.
 - Don't repeat the previous coach notes word for word; build on them.
 - Verdicts: must_start (an every-week starter), start, borderline (could go either way), bench (sit him this week), pickup (worth adding if he's a free agent), hold (keep, but don't start / don't panic), avoid (not worth a spot), monitor (wait for more news).`;
@@ -87,13 +86,13 @@ const TASK: Record<CoachKind, string> = {
   outlook:
     "Write his SEASON OUTLOOK for fantasy in at most 3 sentences (60 words): his role and what kind of scorer he is, the one or two biggest upsides or risks (e.g. breakout chance, injury, rest weeks, a crowded position, a tough finals run), and where he fits on a fantasy team. next_week: leave empty. The verdict is for the season (e.g. must_start for a top player, pickup / monitor for a sleeper, avoid for someone unlikely to play).",
   post_game:
-    "His game has just finished (thisGame). Write a FANTASY EVALUATION of the game: how many points and how (which stats), whether that is likely to repeat (stats' repeatability, his usual output), and anything notable (minutes, kicking, a card, coming off the bench). Then in next_week give a brief outlook for his next game: the opponent, whether a similar score is likely, and anything else that could affect him. The verdict is for next week.",
+    "His game has just finished (thisGame). In the body write a FANTASY EVALUATION of that game only: how many points and how (which stats), whether that is likely to repeat (stats' repeatability, his usual output), and anything notable (minutes, kicking, a card, coming off the bench). Then in next_week give a brief outlook for his next game (nextGame): the opponent and how they treat his position, and whether a similar score is likely. The verdict is for next week.",
   team_list:
-    "The team and injury lists for this round are out (statusNow, statusChange, teammates). Say whether this changes anything for him this week (role, minutes, kicking, a teammate in or out) and whether he is a good bet this week or not. Keep it short. next_week: leave empty. The verdict is for this week.",
+    "The team and injury lists for this round are out (statusNow, statusChange, teammates). In the body say whether this changes anything for him (role, minutes, kicking, a teammate in or out). In next_week give a brief outlook for this week's game (nextGame): the opponent and how they treat his position, and whether he is a good bet. If he isn't playing, next_week: leave empty. The verdict is for this week.",
   status:
-    "His status has just changed (statusChange). Explain what it means for fantasy managers now and over the next few weeks (expected return, who benefits, whether to hold, bench or drop him). next_week: leave empty.",
+    "His status has just changed (statusChange). In the body explain what it means for fantasy managers now and over the next few weeks (expected return, who benefits, whether to hold, bench or drop him). In next_week give a brief outlook for his next game (nextGame) if he is playing; leave it empty if he isn't.",
   news:
-    "There is new news about him (the newest item in latestNews, or a story in newsReports). Explain what it means for fantasy managers: role, points outlook, and what to do with him. next_week: leave empty unless it is about his next game.",
+    "There is new news about him (the newest item in latestNews, or a story in newsReports). In the body explain what it means for fantasy managers: role, points outlook, and what to do with him. In next_week give a brief outlook for his next game (nextGame) if he is playing; leave it empty if he isn't.",
 };
 
 /** The user message for one note: the task and the fact sheet. */

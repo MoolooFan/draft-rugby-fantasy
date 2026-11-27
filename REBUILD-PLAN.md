@@ -13,7 +13,7 @@ Status key: ⬜ not started · 🔶 in progress · ✅ done
 2. ⏳ Help page and info buttons (G4): Ethan writes the content first
 3. ⬜ AI coach key: Ethan gets an Anthropic API key and puts it in Vercel (walkthrough); the coach is built (G13) but can't write notes without it
 4. ⬜ Desktop layout (H12): the site is built for phones; make it work well on a computer screen
-5. ⬜ Live match scores during games (D2). Final scores are done (H11)
+5. 🔶 Live match scores during games (D2): built 27 Nov; check the official feed's live status words in Round 1 2027
 
 **Waiting for the 2027 season:** official 2027 player list import (item 13), Round 1 checks of the official fantasy game's in-season wording (late team changes, G2 jersey numbers), launch day (`GO-LIVE.md`), tidy-up after launch.
 
@@ -112,7 +112,7 @@ Agreed answers are recorded here so nothing is lost between sessions. Status: �
 | # | Change | Status | Agreed details |
 |---|---|---|---|
 | D1 | Push notifications | 🔶 | iPhone home-screen app (iOS 16.4+), with a "turn on notifications" button and instructions. Types: trade offer for you; your trade accepted or declined; any trade accepted in your league; lineup deadline reminder 2 hours before; waivers processed (only if you had claims in that run); draft starting soon. Each person can switch types on/off. Built 26 Nov (e6c4ef2): turn on per phone on the Account page, plus a one-time Dashboard card ("Not now" hides it); in iPhone Safari both explain Add to Home Screen first. Agreed 26 Nov: draft alert 30 minutes before (no "on the clock" alert); lineup reminder to everyone playing that week, saying any problem first ("1 starter isn't playing"). Chat (G6) sends too: DMs, league chat, league updates. Push keys are made by the server and kept in the database (nothing to set up in Vercel). lib/notifications (push, events, reminders), public/sw.js, migration 20261126000200. Tested: delivered through Microsoft's push service from Edge; switched-off types not sent; each reminder sent once. **Needs the migration on the online project, then a real iPhone check.** |
-| D2 | Live match scores | ⬜ | Wherever real match scores are shown, they update live during games (from the official site, like the player stats). Final scores are done (H11, 26 Nov); live ones still to do. |
+| D2 | Live match scores | 🔶 | Wherever real match scores are shown, they update live during games (from the official site, like the player stats). Final scores done (H11, 26 Nov); live ones built 27 Nov (saved every 5 minutes while a game is on, marked LIVE, pages refresh every minute; only final scores count for win / draw points). To check in Round 1 2027: the feed's status word for a game being played. The site no longer adds up team scores from player stats where the official score exists. |
 | D3 | AI assistant coach | ⬜ | Later: Ethan will break down what it should use and we'll design it together. |
 
 ### Phase 5 - Ethan's second list (11 Nov 2026)

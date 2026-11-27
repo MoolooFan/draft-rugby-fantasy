@@ -158,6 +158,8 @@ function isFixtureComplete(f: AnyFixture) {
 
   // ✅ your real enum is: scheduled | live | final
   if (s === "final") return true;
+  // a live score (official game, every few minutes while it's on) isn't a result yet
+  if (s === "live") return false;
 
   // Backwards compatibility if any old data uses "complete"
   if (s === "complete" || s === "completed") return true;
@@ -269,6 +271,8 @@ const userTz = useMemo(() => getActiveTimezone(), []);
   const [fixtures, setFixtures] = useState<AnyFixture[]>([]);
 const [loading, setLoading] = useState(true);
 
+const anyLive = fixtures.some((f) => String(f.status ?? "").toLowerCase() === "live");
+
 useEffect(() => {
   let cancelled = false;
 
@@ -277,8 +281,6 @@ useEffect(() => {
       setLoading(true);
       const res = await fetch("/api/fixtures/season", { cache: "no-store" });
       const json = await res.json();
-      console.log("fixtures sample kickoffAt:", json?.fixtures?.[0]?.kickoffAt);
-console.log("fixtures sample keys:", Object.keys(json?.fixtures?.[0] ?? {}));
 
       if (!json?.ok) throw new Error(json?.error || "Failed to load fixtures");
       if (!cancelled) setFixtures((json.fixtures ?? []).map(normalizeFixture));
@@ -296,6 +298,20 @@ console.log("fixtures sample keys:", Object.keys(json?.fixtures?.[0] ?? {}));
     cancelled = true;
   };
 }, []);
+
+// live scores (Ethan, 27 Nov 2026): while a game is on, fetch the scores again every minute
+useEffect(() => {
+  if (!anyLive) return;
+  const t = setInterval(() => {
+    fetch("/api/fixtures/season", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json?.ok) setFixtures((json.fixtures ?? []).map(normalizeFixture));
+      })
+      .catch(() => {});
+  }, 60_000);
+  return () => clearInterval(t);
+}, [anyLive]);
 
   const normalized = useMemo(() => {
   return fixtures
@@ -487,7 +503,8 @@ const mid =
     : "-  v  -";
 
     const kickoffMs = (f as any).kickoffMs as number;
-const sub = mode === "fixtures" ? (kickoffMs ? formatKickoffCompact(kickoffMs, userTz) : "TBC") : "";
+    const live = String(f.status ?? "").toLowerCase() === "live";
+const sub = live ? "" : mode === "fixtures" ? (kickoffMs ? formatKickoffCompact(kickoffMs, userTz) : "TBC") : "";
 
     return (
       <div
@@ -510,6 +527,12 @@ const sub = mode === "fixtures" ? (kickoffMs ? formatKickoffCompact(kickoffMs, u
         {/* middle */}
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 12, fontWeight: 700 }}>{mid}</div>
+          {live ? (
+            <div style={{ marginTop: 2, display: "inline-flex", alignItems: "center", gap: 3, fontSize: 8, fontWeight: 800, color: "#dc2626", letterSpacing: "0.05em" }}>
+              <span aria-hidden style={{ width: 5, height: 5, borderRadius: 999, background: "#dc2626" }} />
+              LIVE
+            </div>
+          ) : null}
           {sub ? (
   <div style={{ marginTop: 2, fontSize: 7, fontWeight: 500, opacity: 0.55 }}>
     {sub}

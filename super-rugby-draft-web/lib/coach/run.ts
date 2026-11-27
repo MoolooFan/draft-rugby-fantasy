@@ -18,6 +18,8 @@ import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { teamCodeFromName } from "@/lib/status/articles";
 import { statCountsFromRaw } from "@/lib/scoring";
 import { weekProjections } from "@/lib/projections/server";
+import { savedMatchScores } from "@/lib/results/matchScores";
+import type { MatchScore } from "@/lib/fixtures/scores";
 
 const MAX_TOKENS = 4000;
 const EFFORT = "medium" as const;
@@ -189,6 +191,7 @@ export async function coachTick(db: SupabaseClient, season: number, nowMs = Date
     return ctxCache.ctx;
   };
 
+  let officialScores: MatchScore[] | null = null;
   // 1. after each game: stats final 13.5 h after kickoff (games in the last 3 days only)
   for (const f of s.fixtures) {
     const ko = kickoffMs(f);
@@ -204,17 +207,18 @@ export async function coachTick(db: SupabaseClient, season: number, nowMs = Date
     const gameProj = await weekProjections(db, season, gameWeek, ctx.rules).catch(() => null);
     const h = fixtureTeam(f.homeTeam), a = fixtureTeam(f.awayTeam);
     const { data: rows } = await db.from("player_round_stats").select("internal_player_id, stats:raw_json->stats").eq("season", season).eq("round", f.week);
-    const score = { [h]: 0, [a]: 0 } as Record<string, number>;
     const playedIds: string[] = [];
     for (const r of rows ?? []) {
       const p = ctx.players.get(String(r.internal_player_id));
       const t = p ? normalizeTeamCode(p.teamCode) : null;
       if (!p || (t !== h && t !== a)) continue;
-      const c = statCountsFromRaw(r.stats);
-      score[t!] += 5 * (c.tries ?? 0) + 2 * (c.conversions ?? 0) + 3 * (c.penaltyGoals ?? 0) + 3 * (c.dropGoals ?? 0);
-      if (Number(c.minutesPlayed) > 0) playedIds.push(p.id);
+      if (Number(statCountsFromRaw(r.stats).minutesPlayed) > 0) playedIds.push(p.id);
     }
     if (!playedIds.length) continue; // stats not in yet: try again next time
+    // the official final score (from the official fantasy game, lib/results/matchScores.ts)
+    officialScores ??= await savedMatchScores(db, season).catch(() => []);
+    const real = officialScores.find((m) => m.final !== false && m.realRound === Number(f.week) && m.homeTeam === h && m.awayTeam === a);
+    const score: Record<string, number | null> = { [h]: real ? real.homeScore : null, [a]: real ? real.awayScore : null };
     const items: BatchItem[] = playedIds.map((id) => {
       const t = normalizeTeamCode(ctx.players.get(id)!.teamCode);
       return { playerId: id, sourceKey: `post_game:${season}:${f.id}:${id}`, week: gameWeek, extra: { thisGameRound: f.week, teamScore: score[t], oppScore: score[t === h ? a : h], projected: gameProj?.players[id]?.pts ?? null } };

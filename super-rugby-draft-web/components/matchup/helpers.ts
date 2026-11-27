@@ -174,6 +174,7 @@ export function isFixtureComplete(f: AnyFixture) {
 
   // your fixtures-2026.json uses "final"
   if (s === "final" || s === "complete") return true;
+  if (s === "live") return false; // a live score isn't a result yet
 
   // still treat it as complete if both scores exist
   if (f.homeScore != null && f.awayScore != null) return true;

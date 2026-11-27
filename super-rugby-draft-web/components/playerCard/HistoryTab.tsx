@@ -128,69 +128,46 @@ const smallLabel: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterS
 const pill = (bg: string, color: string): React.CSSProperties => ({ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "2px 8px", background: bg, color, whiteSpace: "nowrap" });
 const fmt = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
 
-/** One note: what it is and when, the verdict, then the note itself. */
-function CoachNoteView({ n, label }: { n: CoachNote; label: string }) {
+const num = (v: unknown) => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+
+/** A box's top line: what it is, then (right) the points, trend and verdict. */
+function BoxHead({ label, right }: { label: string; right?: React.ReactNode }) {
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-        <span style={smallLabel}>{label}</span>
-        <span style={{ flex: 1 }} />
-        {n.trend === "up" ? <span title="Trending up" style={{ color: "#16a34a", fontWeight: 700 }}>▲</span> : n.trend === "down" ? <span title="Trending down" style={{ color: "#dc2626", fontWeight: 700 }}>▼</span> : null}
-        <VerdictChip verdict={n.verdict} />
-      </div>
-      <div style={{ marginTop: 4, fontSize: 13, fontWeight: 700, lineHeight: 1.3 }}>{n.headline}</div>
-      <div style={{ marginTop: 4, fontSize: 12, fontWeight: 600, lineHeight: 1.45 }}>{n.body}</div>
-      {n.next_week ? (
-        <div style={{ marginTop: 6, fontSize: 12, fontWeight: 600, lineHeight: 1.45 }}>
-          <b>Next week: </b>
-          {n.next_week}
-        </div>
-      ) : null}
-      {n.factors?.length ? (
-        <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
-          {n.factors.map((f) => (
-            <span key={f} style={{ fontSize: 10, fontWeight: 600, borderRadius: 999, padding: "2px 8px", background: "rgba(15,23,42,0.07)" }}>
-              {f}
-            </span>
-          ))}
-        </div>
-      ) : null}
+    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      <span style={smallLabel}>{label}</span>
+      <span style={{ flex: 1 }} />
+      {right}
     </div>
   );
 }
 
-type WeekGroup = { key: string; season: number; week: number | null; notes: CoachNote[] };
+const Trend = ({ trend }: { trend: string | null }) =>
+  trend === "up" ? <span title="Trending up" style={{ color: "#16a34a", fontWeight: 700 }}>▲</span> : trend === "down" ? <span title="Trending down" style={{ color: "#dc2626", fontWeight: 700 }}>▼</span> : null;
 
-/** Updates grouped by week, newest week first (notes come newest first). */
-function byWeek(notes: CoachNote[]): WeekGroup[] {
-  const groups: WeekGroup[] = [];
-  const at = new Map<string, WeekGroup>();
-  for (const n of notes) {
-    const key = `${n.season}|${n.week ?? "-"}`;
-    let g = at.get(key);
-    if (!g) {
-      g = { key, season: n.season, week: n.week, notes: [] };
-      at.set(key, g);
-      groups.push(g);
-    }
-    g.notes.push(n);
-  }
-  return groups;
+function Factors({ factors }: { factors: string[] | null }) {
+  if (!factors?.length) return null;
+  return (
+    <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
+      {factors.map((f) => (
+        <span key={f} style={{ fontSize: 10, fontWeight: 600, borderRadius: 999, padding: "2px 8px", background: "rgba(15,23,42,0.07)" }}>
+          {f}
+        </span>
+      ))}
+    </div>
+  );
 }
 
-/** The week's projection (the newest one written before the game, else the one with the game) and what he scored. */
-function weekPoints(notes: CoachNote[]): { projected: number | null; scored: number | null } {
-  const num = (v: unknown) => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
-  const before = notes.filter((n) => n.kind !== "post_game").map((n) => num(n.projected)).find((v) => v != null);
-  const games = notes.filter((n) => n.kind === "post_game");
-  const after = games.map((n) => num(n.projected)).find((v) => v != null);
-  const scores = games.map((n) => num(n.scored)).filter((v): v is number => v != null);
-  return { projected: before ?? after ?? null, scored: scores.length ? scores.reduce((a, b) => a + b, 0) : null };
-}
+const headlineStyle: React.CSSProperties = { marginTop: 4, fontSize: 13, fontWeight: 700, lineHeight: 1.3 };
+const bodyStyle: React.CSSProperties = { marginTop: 4, fontSize: 12, fontWeight: 600, lineHeight: 1.45 };
 
-// Player card > AI Coach tab (Ethan, 17 + 27 Nov 2026; lib/coach): the newest season outlook in its
-// own box, then a box for each week's updates (newest week first) with his projected points for
-// that week at the time, and what he scored once the game's done.
+/** The week a note's "next week" part is about: the game after an after-the-game note, else the note's own week. */
+const nextWeekOf = (n: CoachNote) => (n.week == null ? null : n.kind === "post_game" ? n.week + 1 : n.week);
+
+// Player card > AI Coach tab (Ethan, 17 + 27 Nov 2026; lib/coach), each in its own box:
+//   1. the newest season outlook
+//   2. Next week: the newest update's look at his next game, with his projected points for it
+//      (the projection only shows here)
+//   3. every update, newest first (after the game with what he scored, team lists, status, news)
 export function CoachTab({ playerId }: { playerId: string }) {
   const [data, setData] = useState<{ key: string; notes: CoachNote[] } | null>(null);
   const [error, setError] = useState<{ key: string; text: string } | null>(null);
@@ -215,33 +192,46 @@ export function CoachTab({ playerId }: { playerId: string }) {
   if (!data.notes.length) return <TabCard><div style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>No scouting completed</div></TabCard>;
 
   const outlook = data.notes.find((n) => n.kind === "outlook") ?? null;
-  const weeks = byWeek(data.notes.filter((n) => n.kind !== "outlook"));
-  // the year goes on a week's box when the notes cover more than one season
+  const updates = data.notes.filter((n) => n.kind !== "outlook");
+  // only the newest update's look ahead (an older one could be out of date)
+  const latest = updates[0] ?? null;
+  const next = latest?.next_week ? latest : null;
+  const nextWeek = next ? nextWeekOf(next) : null;
+  const projected = next ? num(next.projected) : null;
+  // the year goes on the labels when the notes cover more than one season
   const manySeasons = new Set(data.notes.map((n) => n.season)).size > 1;
+  const round = (week: number | null, season: number) => (week ? `${roundLabel(week, season)}${manySeasons ? ` ${season}` : ""}` : "");
+
   return (
     <div style={{ display: "grid", gap: 8 }}>
       {outlook ? (
         <TabCard>
-          <CoachNoteView n={outlook} label={`Season outlook ${outlook.season} · ${when(Date.parse(outlook.created_at))}`} />
+          <BoxHead label={`Season outlook ${outlook.season} · ${when(Date.parse(outlook.created_at))}`} right={<><Trend trend={outlook.trend} /><VerdictChip verdict={outlook.verdict} /></>} />
+          <div style={headlineStyle}>{outlook.headline}</div>
+          <div style={bodyStyle}>{outlook.body}</div>
+          <Factors factors={outlook.factors} />
         </TabCard>
       ) : null}
-      {weeks.map((g) => {
-        const pts = weekPoints(g.notes);
+
+      {next ? (
+        <TabCard>
+          <BoxHead
+            label={`Next week${nextWeek ? ` · ${round(nextWeek, next.season)}` : ""}`}
+            right={<>{projected != null ? <span style={pill("rgba(37,99,235,0.1)", "#1d4ed8")}>Projected {fmt(projected)}</span> : null}<VerdictChip verdict={next.verdict} /></>}
+          />
+          <div style={bodyStyle}>{next.next_week}</div>
+        </TabCard>
+      ) : null}
+
+      {updates.map((n) => {
+        const scored = n.kind === "post_game" ? num(n.scored) : null;
+        const label = [KIND_LABEL[n.kind] ?? n.kind, round(n.week, n.season), when(Date.parse(n.created_at))].filter(Boolean).join(" · ");
         return (
-          <TabCard key={g.key}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", paddingBottom: 8, borderBottom: "1px solid rgba(15,23,42,0.08)" }}>
-              <span style={{ fontSize: 13, fontWeight: 800 }}>{g.week ? roundLabel(g.week, g.season) : "Updates"}{manySeasons ? ` · ${g.season}` : ""}</span>
-              <span style={{ flex: 1 }} />
-              {pts.projected != null ? <span style={pill("rgba(37,99,235,0.1)", "#1d4ed8")}>Projected {fmt(pts.projected)}</span> : null}
-              {pts.scored != null ? <span style={pill("rgba(22,163,74,0.12)", "#15803d")}>Scored {fmt(pts.scored)}</span> : null}
-            </div>
-            <div style={{ display: "grid", gap: 10, marginTop: 8 }}>
-              {g.notes.map((n, i) => (
-                <div key={n.id} style={i ? { paddingTop: 10, borderTop: "1px solid rgba(15,23,42,0.06)" } : undefined}>
-                  <CoachNoteView n={n} label={`${KIND_LABEL[n.kind] ?? n.kind} · ${when(Date.parse(n.created_at))}`} />
-                </div>
-              ))}
-            </div>
+          <TabCard key={n.id}>
+            <BoxHead label={label} right={<>{scored != null ? <span style={pill("rgba(22,163,74,0.12)", "#15803d")}>Scored {fmt(scored)}</span> : null}<Trend trend={n.trend} /></>} />
+            <div style={headlineStyle}>{n.headline}</div>
+            <div style={bodyStyle}>{n.body}</div>
+            <Factors factors={n.factors} />
           </TabCard>
         );
       })}

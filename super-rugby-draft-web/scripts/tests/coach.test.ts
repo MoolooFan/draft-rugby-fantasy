@@ -2,6 +2,7 @@
 import { ageOn, buildFacts, gameLine, hisSpread, keyStatAverages, notePoints, pointsProfile, repeatability, type CoachFactsInput, type CoachGame } from "../../lib/coach/facts";
 import { cleanNote, coachSystemPrompt, coachUserMessage, COACH_NOTE_SCHEMA } from "../../lib/coach/prompt";
 import { STANDARD_SCORING } from "../../lib/scoring";
+import { allowedText, pointsAllowed, posGroup, type Appearance } from "../../lib/coach/matchups";
 
 let failures = 0;
 const check = (name: string, ok: boolean, extra = "") => {
@@ -47,10 +48,9 @@ const input: CoachFactsInput = {
   player: { name: "Test Player", team: "Hurricanes", positions: "LF", posAbbrev: "LF", draftRank: 40, expectedRole: "starter", kickOrder: null, status: "Starting - #7", birthDate: "1999-01-01", international: "All Blacks", restNotes: "2 rest weeks", injuryNotes: null },
   games: games.slice(0, 2),
   lastSeasonGames: [g(1, { minutesPlayed: 60, tackles: 8 })],
-  team: { name: "Hurricanes", strength: { pointsFor: 30, pointsAgainst: 25, triesPerGame: 4.2, penaltyShotsPerGame: 1.5, stealsPerGame: 1.2 }, attackRank: 3, defenceRank: 2, teams: 11 },
-  next: { label: "Round 3", opp: "Crusaders", home: true, oppAttackRank: 1, oppDefenceRank: 4, projection: { pts: 18.5, low: 9, high: 27, role: "starting", kicker: false } },
-  remaining: [{ label: "Round 4", opp: "Reds", home: false, oppAttackRank: 8, oppDefenceRank: 9 }],
-  finalsWeeks: [{ label: "Round 16", opp: "Force", home: true, oppAttackRank: 10, oppDefenceRank: 11 }],
+  next: { label: "Round 3", opp: "Crusaders", home: true, oppAllows: "loose forwards score 34 pts per 80 minutes against them (league average 31.1; the most of 11 teams)", projection: { pts: 18.5, low: 9, high: 27, role: "starting", kicker: false } },
+  remaining: [{ label: "Round 4", opp: "Reds", home: false, oppAllows: null }],
+  finalsWeeks: [{ label: "Round 16", opp: "Force", home: true, oppAllows: null }],
   teammates: [{ name: "Other Flanker", positions: "LF", status: "Knee - 4 weeks" }],
   thisGame: { ...games[1], teamScore: 31, oppScore: 24, projected: 15 },
   notes: ["2027-03-01: plays openside this year"],
@@ -58,7 +58,7 @@ const input: CoachFactsInput = {
 };
 const facts = buildFacts(input) as Record<string, Record<string, unknown>>;
 check("fact sheet: player (age, international, rest), this season, team, next game, finals, teammates, notes",
-  facts.player.age === 28 && facts.player.international === "All Blacks" && !!facts.stats2027.fantasyPoints && String(facts.stats2026.note).includes("2026") && (facts.team.attackRank as string) === "3/11"
+  facts.player.age === 28 && facts.player.international === "All Blacks" && !!facts.stats2027.fantasyPoints && String(facts.stats2026.note).includes("2026") && !("team" in facts) && String((facts.nextGame as Record<string, unknown>).game).includes("loose forwards score")
   && String((facts.nextGame as Record<string, unknown>).game).includes("Crusaders") && (facts.fantasyFinalsWeeks as unknown as string[]).length === 1
   && (facts.teammatesSamePositionWithNews as unknown as string[])[0].includes("Knee") && (facts.latestNews as unknown as string[]).length === 1);
 check("fact sheet: this game with result and how repeatable each stat is",
@@ -67,9 +67,31 @@ check("fact sheet: this game with result and how repeatable each stat is",
 check("fact sheet: never mentions the commissioner (Ethan, 27 Nov 2026)", !JSON.stringify(facts).toLowerCase().includes("commissioner") && !coachSystemPrompt(STANDARD_SCORING).replace(/no "the commissioner"/, "").toLowerCase().includes("commissioner"));
 check("fact sheet: no games yet this season says so", String((buildFacts({ ...input, kind: "outlook", games: [], thisGame: null }) as Record<string, Record<string, unknown>>).stats2027.note).includes("no games yet"));
 const np = notePoints(input);
-check("note points: after a game = projection beforehand + what he scored", np.projected === 15 && np.scored != null && np.scored > 0);
+check("note points: after a game = next game's projection + what he scored", np.projected === 18.5 && np.scored != null && np.scored > 0);
 check("note points: other updates = this week's projection; outlooks none",
   notePoints({ ...input, kind: "team_list" }).projected === 18.5 && notePoints({ ...input, kind: "team_list" }).scored === null && notePoints({ ...input, kind: "outlook" }).projected === null);
+
+// points allowed by position (lib/coach/matchups.ts)
+check("jersey -> position: #7 loose forward, #12 centre, bench #18 uses his listed position",
+  posGroup("LK", "Starting - #7") === "LF" && posGroup("OB", "Starting - #12") === "CE" && posGroup("PR", "Bench - #18") === "PR" && posGroup("HB", null) === "HB" && posGroup("XX", null) === null);
+{
+  const apps: Appearance[] = [];
+  // BLU leak points to outside backs, CHI to loose forwards; 4 games each, 80 minutes per starter
+  for (let gm = 1; gm <= 4; gm++) {
+    apps.push({ opp: "BLU", game: gm, group: "OB", points: 90, minutes: 240 }, { opp: "BLU", game: gm, group: "LF", points: 45, minutes: 240 });
+    apps.push({ opp: "CHI", game: gm, group: "OB", points: 45, minutes: 240 }, { opp: "CHI", game: gm, group: "LF", points: 90, minutes: 240 });
+  }
+  const al = pointsAllowed(apps, { priorGames: 0 });
+  check("points allowed: per 80 minutes, ranked (1 = gives up the most)",
+    al.get("BLU")!.get("OB")!.per80 === 30 && al.get("BLU")!.get("OB")!.rank === 1 && al.get("CHI")!.get("LF")!.rank === 1 && al.get("CHI")!.get("OB")!.rank === 2 && al.get("BLU")!.get("OB")!.leagueAverage === 22.5);
+  const mixed = pointsAllowed(apps, { priorGames: 4 });
+  check("points allowed: mixed with the league average early on", mixed.get("BLU")!.get("OB")!.per80 === 26.3, String(mixed.get("BLU")!.get("OB")!.per80));
+  // a bench hooker's 20 minutes count as a quarter of a game
+  const hk = pointsAllowed([{ opp: "RED", game: 1, group: "HO", points: 40, minutes: 60 }, { opp: "RED", game: 1, group: "HO", points: 10, minutes: 20 }], { priorGames: 0 });
+  check("points allowed: starter + bench hooker = one full game", hk.get("RED")!.get("HO")!.per80 === 50);
+  check("points allowed text", allowedText(al.get("BLU")!.get("OB"), "OB") === "outside backs score 30 pts per 80 minutes against them (league average 22.5; the most of 2 teams)"
+    && allowedText(al.get("BLU")!.get("LF"), "LF")!.includes("the fewest"));
+}
 
 // prompt and notes
 const sys = coachSystemPrompt(STANDARD_SCORING);
