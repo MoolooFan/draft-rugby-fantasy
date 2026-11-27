@@ -14,7 +14,7 @@
 | ✅ | Vercel: new keys + `CRON_SECRET` (all environments), old `SESSION_SECRET` and `FIXTURES_SHEET_CSV_URL` deleted, function region **Sydney (syd1)**, address **sr-draft-fantasy.vercel.app** (old `…-foa5` address redirects) |
 | ✅ | Ethan's account **Stoutman** made site admin (on the test site) |
 | ⬜ | Before launch: remove the demo league from this database (`npx tsx scripts/demo-league.ts --confirm=dbmzgofmjbeeskhwohuv --remove`) and delete the `demo-2026` branch |
-| ⬜ | AI coach: Anthropic account with credit, API key added in Vercel as `ANTHROPIC_API_KEY` (Production and Preview), then switched on in Admin → Coach (lib/coach) |
+| 🔶 | AI coach: Anthropic account with credit ✅, API key added in Vercel as `ANTHROPIC_API_KEY` (Production and Preview) ✅ 27 Nov; next: check Admin → Coach says "key: set" on the test site, switch on, test one note (lib/coach) |
 
 - **Test site:** https://draft-rugby-fantasy-foa5-git-rebuild-2027-mooloofans-projects.vercel.app (only Ethan can open it while signed in to Vercel; it shows the latest `rebuild-2027` code and uses the **new** database).
 - **The live site** (sr-draft-fantasy.vercel.app) still runs the old code on the old database until launch.
