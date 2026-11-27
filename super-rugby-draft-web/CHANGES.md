@@ -23,6 +23,7 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `056c772` | Desktop Draft Room (Ethan's changes): **every pick in a row of boxes** under the header like ESPN (round / pick, team, player; the pick on the clock highlighted and kept in view; scroll or use the arrows for earlier and upcoming picks). The middle column shows your **Draft Strategy only if you've set one**, otherwise your **Watchlist**. The **menu is back to the pop-out drawer** (☰) on computers too; the always-on sidebar is gone. Also the plan update for part 1 | No |
 | `f62902c` | The "Get notifications" card on the Dashboard only shows in the Home Screen app (not on a computer or in a phone's browser); notifications can still be turned on from the Account page anywhere | No |
 | `a0eefc0` | **Desktop layout, part 1** (plan H12): on a computer (screens 1024 px and wider) the menu sits on the left all the time and the ☰ buttons are hidden. **Draft Room** on a computer: the header across the top, then three columns: Player Pool / Watchlist, Draft Strategy (always open, editable during the draft), and a team with the latest picks (the pick order before the draft). Other pages are still the phone column for now. Phones unchanged | No |
 | `a48f514` | Plan (REBUILD-PLAN.md): what's left, as of 27 Nov | No |
