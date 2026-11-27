@@ -23,6 +23,7 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `7abc1c3` | **AI coach**: never says "the commissioner" or where news came from; notes are shorter (2-3 sentences); always says which season a stat is from (e.g. "in 2026"). Player card AI Coach tab: the season outlook in its own box, then a box for each week with his projected points at the time (and what he scored after the game); the "Written by AI" line is gone. Pressing Write Season Outlooks again now writes fresh ones | Yes (coach_notes: projected, scored) |
 | `1d8e5d5` | Go-live checklist: AI coach key added in Vercel (this push also rebuilds the test site so it picks the key up) | No |
 
 ### 26 Nov 2026
