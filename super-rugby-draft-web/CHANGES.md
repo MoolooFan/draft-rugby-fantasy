@@ -23,6 +23,7 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `a48f514` | Plan (REBUILD-PLAN.md): what's left, as of 27 Nov | No |
 | `17daa05` | **Admin → Coach**: Delete on each note, plus Delete All (season) Notes; custom info ("Tell the coach something") and shared articles can now be deleted, not just turned off (each asks first). **AI coach**: before Round 1's team lists are read (Wednesday 4:30 pm NZ) notes don't look ahead to Round 1 (no "Next week" part or projection); after-game notes and later weeks as before | No |
 | `87b717e` | **AI coach**: knows how much the matchup numbers mean for each position (from 2026: a real pattern for outside backs, centres and props, a weak one for hookers, mostly chance for locks, loose forwards, halfbacks and first fives). It mentions a matchup only when it's relevant, and doesn't base advice on the "mostly chance" ones | No |
 | `9d67e48` | Projections: tested using the points each opponent gives up to a player's position (instead of points for / against). On 2026 it was no better (miss 10.46 pts per player either way), so it's switched off; it can be re-tested with 2027's data and jersey numbers (`backtest-projections.ts --matchups`). Projections unchanged | No |
