@@ -22,7 +22,7 @@ export function PickStrip({
 }: {
   results: DraftPickRow[];
   teams: Array<{ id: string; name: string }>;
-  /** the pick number on the clock (1 = first); ignored once the draft is complete */
+  /** the pick number on the clock (1 = first); 0 before the draft starts; ignored once it is complete */
   onClockPick: number;
   yourTeamId: string;
   draftComplete: boolean;

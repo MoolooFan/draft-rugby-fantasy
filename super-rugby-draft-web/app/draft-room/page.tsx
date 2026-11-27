@@ -197,7 +197,7 @@ export default function DraftRoomPage() {
   const strategyPanel = useStrategyPanel();
 
   // -------- Player Pool / Watchlist --------
-  const pool = usePoolView({ players: allPlayers, draftedIds, strategy: draftStrategy, liveById: getLivePlayerById });
+  const pool = usePoolView({ players: allPlayers, draftedIds, strategy: draftStrategy, liveById: getLivePlayerById, withExtras: isDesktop });
   const squadFormat = activeLeague?.squadFormat;
   const playerPoolPlayers = useMemo(() => pool.available.filter((p) => canTeamDraftPlayer(yourTeamId, p, squadFormat)), [pool.available, canTeamDraftPlayer, yourTeamId, squadFormat]);
   // In the order you set (auto-pick takes the first that's still free and fits)
@@ -352,7 +352,7 @@ export default function DraftRoomPage() {
         <DraftPlanStrip strategy={draftStrategy} draftedIds={draftedIds} leagueId={activeLeagueId ?? null} hideMockDraft={phase === "liveDraft"} onEditStrategy={editStrategy} />
       ) : null}
       {filterBar}
-      <PoolList {...listProps} players={playerPoolPlayers} emptyText="No eligible players available for your remaining roster slots." />
+      <PoolList {...listProps} extras={pool.extras} players={playerPoolPlayers} emptyText="No eligible players available for your remaining roster slots." />
     </>
   );
   const watchlistTab = (
@@ -432,7 +432,7 @@ export default function DraftRoomPage() {
           {header}
           {draftResults.length ? (
             <div style={{ marginTop: 12 }}>
-              <PickStrip results={draftResults} teams={teams} onClockPick={currentPick} yourTeamId={yourTeamId} draftComplete={draftComplete} onOpen={openPlayerCard} />
+              <PickStrip results={draftResults} teams={teams} onClockPick={phase === "liveDraft" ? currentPick : 0} yourTeamId={yourTeamId} draftComplete={draftComplete} onOpen={openPlayerCard} />
             </div>
           ) : null}
         </div>
@@ -441,7 +441,7 @@ export default function DraftRoomPage() {
             flex: 1,
             minHeight: 0,
             display: "grid",
-            gridTemplateColumns: "minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 0.85fr)",
+            gridTemplateColumns: "minmax(0, 1.55fr) minmax(0, 1fr) minmax(0, 0.8fr)",
             gap: 18,
             padding: "8px 20px 0",
             maxWidth: 1600,
