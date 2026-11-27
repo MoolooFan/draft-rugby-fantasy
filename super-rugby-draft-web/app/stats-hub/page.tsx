@@ -7,6 +7,7 @@
 // column to sort, a name for the player card; tick two players to compare them
 // (components/PlayerCompare.tsx). Looking only: adding / claiming stays on Transactions.
 
+import { useIsDesktop } from "@/lib/ui/useIsDesktop";
 import React, { useMemo, useState } from "react";
 import { card as themeCard } from "@/lib/ui/theme";
 
@@ -47,6 +48,9 @@ const colLong = (c: Col) => COL_TITLE[c] ?? (c === "points" || c === "proj" || c
 
 export default function StatsHubPage() {
   useRequireSession();
+  // computers (Ethan, 27 Nov 2026): a much wider table and full names
+  const isDesktop = useIsDesktop();
+  const nameW = isDesktop ? 230 : 150;
 
   const [menuOpen, setMenuOpen] = useState(false);
   const leagues = useLeagueStore((s) => s.leagues);
@@ -166,7 +170,7 @@ export default function StatsHubPage() {
         style={{ position: "fixed", inset: 0, zIndex: -1, background: "linear-gradient(to bottom, rgb(15, 23, 42), rgb(13, 148, 136), rgb(16, 185, 129))" }}
       />
 
-      <div style={{ maxWidth: 760, margin: "0 auto", padding: "16px 18px", paddingBottom: "calc(80px + env(safe-area-inset-bottom))" }}>
+      <div style={{ maxWidth: isDesktop ? 1440 : 760, margin: "0 auto", paddingTop: 16, paddingLeft: isDesktop ? 24 : 18, paddingRight: isDesktop ? 24 : 18, paddingBottom: "calc(80px + env(safe-area-inset-bottom))" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button
             onClick={() => setMenuOpen(true)}
@@ -237,7 +241,7 @@ export default function StatsHubPage() {
               <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%" }}>
                 <thead>
                   <tr>
-                    <th style={{ ...th, ...sticky, cursor: "default", width: 150, minWidth: 150, maxWidth: 150 }}>Player {loading ? <span style={{ opacity: 0.5 }}>· loading…</span> : <span style={{ opacity: 0.5 }}>· {list.length}</span>}</th>
+                    <th style={{ ...th, ...sticky, cursor: "default", width: nameW, minWidth: nameW, maxWidth: nameW }}>Player {loading ? <span style={{ opacity: 0.5 }}>· loading…</span> : <span style={{ opacity: 0.5 }}>· {list.length}</span>}</th>
                     {cols.map((c) => (
                       <th key={c} title={colLong(c)} onClick={() => tapCol(c)} style={{ ...th, background: sort.col === c ? "rgba(13,148,136,0.12)" : undefined }}>
                         {colShort(c)}
@@ -253,7 +257,7 @@ export default function StatsHubPage() {
                     return (
                       <tr key={p.id}>
                         {/* the name column is a fixed width: long names are cut off with "…" rather than running into the stats (Ethan, 26 Nov 2026) */}
-                        <td style={{ ...td, ...sticky, width: 150, minWidth: 150, maxWidth: 150, overflow: "hidden", background: on ? "rgb(230,247,245)" : "white" }}>
+                        <td style={{ ...td, ...sticky, width: nameW, minWidth: nameW, maxWidth: nameW, overflow: "hidden", background: on ? "rgb(230,247,245)" : "white" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
                             <input type="checkbox" checked={on} onChange={() => tick(p.id)} aria-label={`Compare ${p.firstName} ${p.lastName}`} />
                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -261,7 +265,7 @@ export default function StatsHubPage() {
                             <button onClick={() => setCard(p)} style={{ border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: "pointer", color: "#0f172a", minWidth: 0, flex: 1 }}>
                               <div style={{ fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
                                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
-                                  {p.firstName.charAt(0)}. {p.lastName}
+                                  {isDesktop ? `${p.firstName} ${p.lastName}` : `${p.firstName.charAt(0)}. ${p.lastName}`}
                                 </span>
                                 <span style={{ flexShrink: 0 }}>
                                   <StatusTag player={p} />

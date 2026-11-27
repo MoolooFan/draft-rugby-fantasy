@@ -1,5 +1,6 @@
 "use client";
 
+import { useIsDesktop } from "@/lib/ui/useIsDesktop";
 import React, { useEffect, useMemo, useState } from "react";
 import { card as themeCard } from "@/lib/ui/theme";
 import { useRequireSession } from "@/lib/session/useRequireSession";
@@ -259,6 +260,8 @@ function teamLogoSrc(teamCodeOrName: string | null | undefined) {
 
 export default function FixturesPage() {
 useRequireSession();
+// computers (Ethan, 27 Nov 2026): each round in its own box, in columns; the FDR table full width
+const isDesktop = useIsDesktop();
 
   // Menu + leagues (for AppMenu)
   const [menuOpen, setMenuOpen] = useState(false);
@@ -564,13 +567,13 @@ const FixtureRow = useStableComponent(FixtureRow__render);
     }
 
     return (
-      <div style={listBox}>
+      <div style={isDesktop ? { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", gap: 14, marginTop: 10, alignItems: "start" } : listBox}>
         {weeks.map((w) => {
           const rows = weekMeta.get(w)?.fixtures ?? [];
           const mode = which === "upcoming" ? ("fixtures" as const) : ("results" as const);
 
           return (
-            <div key={w}>
+            <div key={w} style={isDesktop ? { ...listBox, marginTop: 0 } : undefined}>
               <WeekLabel week={w} />
               {rows.map((f) => (
                 <FixtureRow key={f.id} f={f} mode={mode} />
@@ -762,9 +765,11 @@ const FdrTable = useStableComponent(FdrTable__render);
 
       <div
         style={{
-          maxWidth: 420,
+          maxWidth: isDesktop ? 1280 : 420,
           margin: "0 auto",
-          padding: "16px 18px",
+          paddingTop: 16,
+          paddingLeft: isDesktop ? 24 : 18,
+          paddingRight: isDesktop ? 24 : 18,
           paddingBottom: "calc(18px + env(safe-area-inset-bottom))",
         }}
       >

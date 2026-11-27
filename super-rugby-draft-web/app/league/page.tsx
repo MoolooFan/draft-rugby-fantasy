@@ -1,5 +1,6 @@
 "use client";
 
+import { useIsDesktop } from "@/lib/ui/useIsDesktop";
 import React, { useEffect, useMemo, useState } from "react";
 import { card as themeCard } from "@/lib/ui/theme";
 import { useRequireSession } from "@/lib/session/useRequireSession";
@@ -94,6 +95,8 @@ function calcFantasyPoints(row: any, player?: any): number {
 
 export default function LeaguePage() {
  useRequireSession();
+ // computers (Ethan, 27 Nov 2026): wider; standings beside the latest results; rounds in columns
+ const isDesktop = useIsDesktop();
   // --- prevent "bounce" before zustand persist hydrates ---
   const [leagueHydrated, setLeagueHydrated] = useState(() =>
     // @ts-ignore - persist is added by zustand middleware at runtime
@@ -762,9 +765,11 @@ if (!league) {
 
       <div
         style={{
-          maxWidth: 420,
+          maxWidth: isDesktop ? 1280 : 420,
           margin: "0 auto",
-          padding: "16px 18px",
+          paddingTop: 16,
+          paddingLeft: isDesktop ? 24 : 18,
+          paddingRight: isDesktop ? 24 : 18,
           paddingBottom: "calc(18px + env(safe-area-inset-bottom))",
         }}
       >
@@ -772,6 +777,8 @@ if (!league) {
         <Tabs />
 
         {tab === "Standings" && (
+          <div style={isDesktop ? { display: "grid", gridTemplateColumns: "minmax(0, 1.3fr) minmax(0, 1fr)", gap: 18, alignItems: "start" } : undefined}>
+          <div style={{ minWidth: 0 }}>
           <StandingsTab
             league={league}
             leagueName={leagueName}
@@ -787,15 +794,31 @@ if (!league) {
             restarting={restarting}
             restartMsg={restartMsg}
           />
+          </div>
+          {isDesktop ? (
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.85, margin: "12px 2px 0" }}>Latest results</div>
+              <ResultsTab fixtures={fixtures} isFantasyWeekComplete={isFantasyWeekComplete} rowPlayed={rowPlayed} scoreFromSheet={scoreFromSheet} limit={3} />
+            </div>
+          ) : null}
+          </div>
         )}
         {tab === "Fixtures" && (
-          <FixturesTab league={league} fixtures={fixtures} regularWeeks={regularWeeks} isFantasyWeekComplete={isFantasyWeekComplete} rowPlayed={rowPlayed} />
+          <FixturesTab league={league} fixtures={fixtures} regularWeeks={regularWeeks} isFantasyWeekComplete={isFantasyWeekComplete} rowPlayed={rowPlayed} columns={isDesktop} />
         )}
         {tab === "Results" && (
-          <ResultsTab fixtures={fixtures} isFantasyWeekComplete={isFantasyWeekComplete} rowPlayed={rowPlayed} scoreFromSheet={scoreFromSheet} />
+          <ResultsTab fixtures={fixtures} isFantasyWeekComplete={isFantasyWeekComplete} rowPlayed={rowPlayed} scoreFromSheet={scoreFromSheet} columns={isDesktop} />
         )}
-        {tab === "Power" && league ? <PowerTab leagueId={league.id} teams={(league.teams ?? []) as never} /> : null}
-        {tab === "Shield" && league ? <ShieldTab leagueId={league.id} teams={(league.teams ?? []) as never} /> : null}
+        {tab === "Power" && league ? (
+          <div style={isDesktop ? { maxWidth: 860, margin: "0 auto" } : undefined}>
+            <PowerTab leagueId={league.id} teams={(league.teams ?? []) as never} />
+          </div>
+        ) : null}
+        {tab === "Shield" && league ? (
+          <div style={isDesktop ? { maxWidth: 860, margin: "0 auto" } : undefined}>
+            <ShieldTab leagueId={league.id} teams={(league.teams ?? []) as never} />
+          </div>
+        ) : null}
       </div>
 
       <AppMenu
