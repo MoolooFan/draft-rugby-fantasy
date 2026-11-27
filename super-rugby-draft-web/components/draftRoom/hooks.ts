@@ -10,15 +10,13 @@ import { useStatSeasonRows } from "@/lib/players/useStatSeason";
 import { COMPARE_STATS, seasonTotals, type SeasonTotals } from "@/lib/players/seasonTotals";
 import { canPlayPosition } from "@/lib/players/positions";
 import { myRanks, positionRanks, STRATEGY_POSITIONS, type DraftStrategy, type StrategyPos } from "@/lib/draft/strategy";
+import { DEFAULT_POOL_COLUMNS, poolColumnOptions, poolColumnText, sortKeyForColumn, toggleColumn, usePoolColumnsStore } from "@/lib/players/poolColumns";
 
 /** Draft room pool: what the number column shows (draft rank, or the season's points / a stat). */
 const DRAFT_SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "DRAFT_RANK", label: "Draft Rank" },
   ...COMPARE_STATS.map((c) => ({ value: c.key, label: c.label })),
 ];
-
-/** The extra numbers on a computer: games, points, points per game, tries (Ethan, 27 Nov 2026). */
-const EXTRA_LABELS = ["Games", "Pts", "Pts/G", "Tries"];
 
 /**
  * Search, Filters and the number column for the Player Pool and Watchlist. The number is the
@@ -39,7 +37,7 @@ export function usePoolView({
   strategy: DraftStrategy | null;
   /** the player's latest status (injured, ...) for the Status filter */
   liveById: (id: string) => unknown;
-  /** computers: also games, points, points per game and tries (Ethan, 27 Nov 2026) */
+  /** computers: the stat columns you pick in Filters, up to 5 (lib/players/poolColumns.ts; Ethan, 27 Nov 2026) */
   withExtras?: boolean;
 }) {
   const [search, setSearch] = useState("");
@@ -47,6 +45,8 @@ export function usePoolView({
   const [filters, setFilters] = useState<PoolFilters>(EMPTY_FILTERS);
   const [sortMode, setSortMode] = useState<string>("DRAFT_RANK");
   const [statView] = useStatView();
+  const columnKeys = usePoolColumnsStore((s) => s.columns);
+  const setColumnKeys = usePoolColumnsStore((s) => s.setColumns);
   const { rows: statRows, season: statSeason } = useStatSeasonRows();
 
   const hasMyRanks = !!strategy && (strategy.ranking.length > 0 || Object.values(strategy.positions).some((l) => l?.length));
@@ -105,14 +105,31 @@ export function usePoolView({
     columnLabel: sortOptions.find((o) => o.value === sortMode)?.label ?? "Draft Rank",
     columnNote: rankMode ? "" : `${STAT_VIEW_LABEL[statView]} · ${statSeason}`,
     extras: withExtras
+      ? (() => {
+          const options = poolColumnOptions(hasMyRanks);
+          const cols = columnKeys.map((k) => options.find((o) => o.key === k)).filter((c): c is NonNullable<typeof c> => !!c);
+          return {
+            note: `${STAT_VIEW_LABEL[statView]} · ${statSeason}`,
+            labels: cols.map((c) => c.short),
+            titles: cols.map((c) => c.label),
+            // which column the list is sorted by, and sorting by a column's heading
+            sorted: cols.map((c) => sortKeyForColumn(c.key) === sortMode),
+            onSort: (i: number) => {
+              const k = sortKeyForColumn(cols[i]?.key ?? "");
+              if (k && sortOptions.some((o) => o.value === k)) setSortMode(k);
+            },
+            values: (p: Player): string[] =>
+              cols.map((c) => poolColumnText(c.key, totalsById.get(p.id), statView, { draftRank: p.draftRank, myRank: myRankById.get(p.id) ?? null })),
+          };
+        })()
+      : undefined,
+    // the Columns section in Filters (computers)
+    columns: withExtras
       ? {
-          note: `${statSeason} season`,
-          labels: EXTRA_LABELS,
-          values: (p: Player): string[] => {
-            const t = totalsById.get(p.id);
-            if (!t || !t.games) return EXTRA_LABELS.map(() => "–");
-            return [String(t.games), String(Math.round(t.points)), (t.points / t.games).toFixed(1), String(t.counts.tries ?? 0)];
-          },
+          selected: columnKeys,
+          options: poolColumnOptions(hasMyRanks).map((o) => ({ value: o.key, label: o.label })),
+          toggle: (k: string) => setColumnKeys(toggleColumn(columnKeys, k)),
+          reset: () => setColumnKeys(DEFAULT_POOL_COLUMNS),
         }
       : undefined,
   };

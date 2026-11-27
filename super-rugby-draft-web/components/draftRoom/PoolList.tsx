@@ -1,8 +1,8 @@
 "use client";
 // components/draftRoom/PoolList.tsx
 // The Draft Room's Player Pool and Watchlist lists: each player with his number (draft rank,
-// My Rank or a stat), the watchlist eye and the Draft button. On a computer the Player Pool also
-// shows last season's games, points, points per game and tries (`extras`). Your draft strategy's targets get a
+// My Rank or a stat), the watchlist eye and the Draft button. On a computer the Player Pool shows
+// the stat columns picked in Filters instead (up to 5, `extras`; lib/players/poolColumns.ts). Your draft strategy's targets get a
 // teal edge and an "Early target" tag; the Watchlist has ▲▼ to set the order auto-pick uses.
 import React from "react";
 import type { Player } from "@/lib/draft/types";
@@ -30,12 +30,12 @@ export type PoolListProps = {
   onOpen: (p: Player) => void;
   /** the Watchlist: ▲▼ to move a player up or down */
   onMove?: (id: string, by: -1 | 1) => void;
-  /** computers: more numbers before the main one */
-  extras?: { note: string; labels: string[]; values: (p: Player) => string[] };
+  /** computers: the picked stat columns, in place of the single number */
+  extras?: { note: string; labels: string[]; titles: string[]; sorted: boolean[]; onSort: (i: number) => void; values: (p: Player) => string[] };
 };
 
-const EXTRA_W = 44;
-const rowColumns = (extras?: PoolListProps["extras"]) => `minmax(0, 1fr) ${160 + (extras ? extras.labels.length * (EXTRA_W + 8) : 0)}px`;
+const EXTRA_W = 46;
+const rowColumns = (extras?: PoolListProps["extras"]) => `minmax(0, 1fr) ${extras ? 112 + extras.labels.length * (EXTRA_W + 8) : 160}px`;
 
 export function PoolList(props: PoolListProps) {
   const { players, emptyText, columnNote, columnLabel, draftComplete, onMove, extras } = props;
@@ -45,12 +45,20 @@ export function PoolList(props: PoolListProps) {
       <div style={{ padding: "8px 10px 4px", display: "grid", gridTemplateColumns: rowColumns(extras), gap: 10, alignItems: "center", fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
         <div>{columnNote || extras?.note}</div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          {extras?.labels.map((l) => (
-            <div key={l} style={{ width: EXTRA_W, textAlign: "center", whiteSpace: "nowrap", fontWeight: 600 }}>
-              {l}
-            </div>
-          ))}
-          <div style={{ width: 40, display: "flex", justifyContent: "center", whiteSpace: "nowrap", fontWeight: 600 }}>{columnLabel}</div>
+          {extras ? (
+            extras.labels.map((l, i) => (
+              <button
+                key={l}
+                title={`${extras.titles[i]}${extras.sorted[i] ? " (sorted)" : " (click to sort)"}`}
+                onClick={() => extras.onSort(i)}
+                style={{ width: EXTRA_W, padding: 0, border: "none", background: "transparent", textAlign: "center", whiteSpace: "nowrap", fontSize: 10, fontWeight: extras.sorted[i] ? 800 : 600, color: extras.sorted[i] ? "#0d9488" : "inherit", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis" }}
+              >
+                {l}
+              </button>
+            ))
+          ) : (
+            <div style={{ width: 40, display: "flex", justifyContent: "center", whiteSpace: "nowrap", fontWeight: 600 }}>{columnLabel}</div>
+          )}
           <div style={{ width: 32 }} />
           <div style={{ width: 64 }} />
         </div>
@@ -126,12 +134,15 @@ function PlayerRow({
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 }}>
-        {extras?.values(p).map((v, i) => (
-          <div key={i} style={{ fontSize: 12, fontWeight: 500, width: EXTRA_W, textAlign: "center", color: "#334155" }}>
-            {v}
-          </div>
-        ))}
-        <div style={{ fontSize: 12, fontWeight: 700, width: 40, textAlign: "center" }}>{numberText(p)}</div>
+        {extras ? (
+          extras.values(p).map((v, i) => (
+            <div key={i} style={{ fontSize: 12, fontWeight: extras.sorted[i] ? 700 : 500, width: EXTRA_W, textAlign: "center", color: extras.sorted[i] ? "#0f172a" : "#334155" }}>
+              {v}
+            </div>
+          ))
+        ) : (
+          <div style={{ fontSize: 12, fontWeight: 700, width: 40, textAlign: "center" }}>{numberText(p)}</div>
+        )}
         {/* the draft watchlist is fixed once the draft is over (it moves to the Transactions watchlist) */}
         {draftComplete ? <div style={{ width: 32 }} /> : <WatchButton active={watched(p.id)} onClick={() => onToggleWatch(p.id)} />}
         <DraftButton enabled={canDraft(p)} onClick={() => onDraft(p)} />

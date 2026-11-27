@@ -23,6 +23,8 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `0dcd7da` | Dashboard table: the **shield** holder, the latest round's **crown** (top score) and **wooden spoon** (lowest) next to the team names, as on the League page | No |
+| `83a9678` | Draft Room on a computer: **pick up to 5 stat columns** in Filters ("Columns"): Draft Rank, My Rank, Games, Pts, Pts/G or any stat (stats follow Per game / Total / Per 80). Default Draft Rank, Games, Pts, Pts/G, Tries; Reset brings them back; remembered on the device (the Transactions page will use the same). Click a column heading to sort by it. Phones keep the single number | No |
 | `fa1556f` | Desktop layout: **Dashboard** in columns on a computer (3 on a wide screen, 2 on a smaller one): your matchup, upcoming fixture and this round's games; then the standings and player of the week; then coach news and best available. **Matchup** is wider, with full names and each player's key stats for the round under his fixture (e.g. "64 min · 1 T · 8 Tkl · 18 m"). Before the draft the Dashboard stays narrow. Phones unchanged | No |
 | `c7c14c3` | Desktop Draft Room: the Player Pool's extra numbers are now Games, Pts, Pts/G and **Tries** (instead of minutes per game); the last column still follows the stat picked in Filters | No |
 | `9274c7f` | Desktop Draft Room: each Player Pool line also shows last season's **Games, Pts, Pts/G and Min/G** (before the Draft Rank / chosen stat), with a wider pool column. The pick boxes no longer say "On the clock" before the draft starts. Phones unchanged | No |

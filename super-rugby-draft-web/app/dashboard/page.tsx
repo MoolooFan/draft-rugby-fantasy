@@ -179,6 +179,8 @@ const nameByTeamId = React.useCallback((id: string | null) => {
 
 // Sheet fixtures (league matchups / results)
 const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
+// weekly crown / spoon: the latest finalised round's (as on the League page; Ethan, 27 Nov 2026)
+const [latestAward, setLatestAward] = useState<{ week: number; crown: string[]; spoon: string[] } | null>(null);
 
 useEffect(() => {
   if (!activeLeague?.id) return;
@@ -187,8 +189,10 @@ useEffect(() => {
   fetch(`/api/fixtures/leagueMatches?season=${season}&leagueId=${encodeURIComponent(activeLeague.id)}`)
     .then((r) => r.json())
     .then((j) => {
-      if (j?.ok) setSheetFixtures(j.rows ?? []);
-      else console.error("fixtures fetch failed", j?.error);
+      if (j?.ok) {
+        setSheetFixtures(j.rows ?? []);
+        setLatestAward(j.awards?.latest ?? null);
+      } else console.error("fixtures fetch failed", j?.error);
     })
     .catch((e) => console.error(e));
 }, [activeLeague?.id]);
@@ -1115,7 +1119,12 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
             {preseasonPower ? (
               <PowerCard leagueName={leagueName} rows={preseasonPower.rows ?? []} teams={activeLeague?.teams ?? []} />
             ) : (
-              <StandingsCard leagueName={leagueName} standings={standings} />
+              <StandingsCard
+                leagueName={leagueName}
+                standings={standings}
+                award={latestAward}
+                shield={activeLeague?.shield?.enabled ? { holderTeamId: activeLeague.shield.holderTeamId ?? null, name: activeLeague.shield.name ?? "Shield" } : null}
+              />
             )}
 
               </>
