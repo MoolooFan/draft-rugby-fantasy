@@ -191,7 +191,14 @@ export function coachInput(
   ctx: CoachCtx,
   playerId: string,
   kind: CoachKind,
-  extra: { thisGameRound?: number; teamScore?: number | null; oppScore?: number | null; statusChange?: { from: string | null; to: string | null } } = {},
+  extra: {
+    thisGameRound?: number;
+    teamScore?: number | null;
+    oppScore?: number | null;
+    /** after a game: his projected points for that week, worked out from the games before it */
+    projected?: number | null;
+    statusChange?: { from: string | null; to: string | null };
+  } = {},
   nowMs = Date.now()
 ): CoachFactsInput | null {
   const p = ctx.players.get(playerId);
@@ -224,7 +231,7 @@ export function coachInput(
     const g = games.find((x) => x.round === extra.thisGameRound);
     if (g) {
       const gw = fantasyWeekForRealRound(ctx.s, g.round);
-      thisGame = { ...g, teamScore: extra.teamScore ?? null, oppScore: extra.oppScore ?? null, projected: null };
+      thisGame = { ...g, teamScore: extra.teamScore ?? null, oppScore: extra.oppScore ?? null, projected: extra.projected ?? null };
       if (gw) thisGame.label = weekLabel(ctx.s, gw);
     }
   }

@@ -9,7 +9,7 @@
 // Nothing runs unless the coach is switched on (admin page) and ANTHROPIC_API_KEY is set.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildFacts, type CoachKind } from "@/lib/coach/facts";
+import { buildFacts, notePoints, type CoachKind } from "@/lib/coach/facts";
 import { cleanNote, coachSystemPrompt, coachUserMessage, COACH_NOTE_SCHEMA, type CoachNoteOut } from "@/lib/coach/prompt";
 import { coachInput, loadCoachCtx, loadCoachSettings, loadPreviousNotes, type CoachCtx } from "@/lib/coach/data";
 import { FINALISE_AFTER_LAST_KICKOFF_MS, fantasyWeekForRealRound, getSeason, kickoffMs, SEASONS, totalFantasyWeeks } from "@/lib/season";
@@ -17,6 +17,7 @@ import { currentStatusWeek, statusKind } from "@/lib/status/kind";
 import { normalizeTeamCode } from "@/lib/teams/normalizeTeamCode";
 import { teamCodeFromName } from "@/lib/status/articles";
 import { statCountsFromRaw } from "@/lib/scoring";
+import { weekProjections } from "@/lib/projections/server";
 
 const MAX_TOKENS = 4000;
 const EFFORT = "medium" as const;
@@ -53,7 +54,9 @@ function noteFrom(message: { stop_reason?: string | null; content: Array<{ type:
   }
 }
 
-async function saveNote(db: SupabaseClient, row: { season: number; player_id: string; kind: CoachKind; week: number | null; source_key: string; model: string }, note: CoachNoteOut): Promise<boolean> {
+type NoteRow = { season: number; player_id: string; kind: CoachKind; week: number | null; source_key: string; model: string; projected?: number | null; scored?: number | null };
+
+async function saveNote(db: SupabaseClient, row: NoteRow, note: CoachNoteOut): Promise<boolean> {
   const { error } = await db.from("coach_notes").upsert(
     { ...row, headline: note.headline, body: note.body, next_week: note.next_week, verdict: note.verdict, trend: note.trend, factors: note.factors },
     { onConflict: "source_key", ignoreDuplicates: true }
@@ -78,11 +81,12 @@ export async function writeNoteNow(
   const input = coachInput(ctx, args.playerId, args.kind, { statusChange: args.statusChange });
   if (!input) return { ok: false, reason: "Player not found" };
   const params = noteParams(settings.model, ctx, args.kind, buildFacts(input));
+  const nums = notePoints(input);
   // a declined request is retried on the fallback model the API picks (Claude API only)
   const message = await anthropic().beta.messages.create({ ...params, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" });
   const note = noteFrom(message as never);
   if (!note) return { ok: false, reason: "The coach couldn't write this one" };
-  await saveNote(db, { season: args.season, player_id: args.playerId, kind: args.kind, week, source_key: args.sourceKey, model: settings.model }, note);
+  await saveNote(db, { season: args.season, player_id: args.playerId, kind: args.kind, week, source_key: args.sourceKey, model: settings.model, ...nums }, note);
   return { ok: true };
 }
 
@@ -105,13 +109,13 @@ export async function submitBatch(db: SupabaseClient, ctx: CoachCtx, model: stri
   const todo = items.filter((i) => !done.has(i.sourceKey));
   await loadPreviousNotes(db, ctx, todo.map((i) => i.playerId));
   const requests: Array<{ custom_id: string; params: ReturnType<typeof noteParams> }> = [];
-  const map: Record<string, { player_id: string; source_key: string; week: number | null; kind: CoachKind }> = {};
+  const map: Record<string, { player_id: string; source_key: string; week: number | null; kind: CoachKind; projected: number | null; scored: number | null }> = {};
   todo.forEach((it, n) => {
     const input = coachInput(ctx, it.playerId, kind, it.extra ?? {});
     if (!input) return;
     const id = `n${n}`;
     requests.push({ custom_id: id, params: noteParams(model, ctx, kind, buildFacts(input)) });
-    map[id] = { player_id: it.playerId, source_key: it.sourceKey, week: it.week, kind };
+    map[id] = { player_id: it.playerId, source_key: it.sourceKey, week: it.week, kind, ...notePoints(input) };
   });
   if (!requests.length) {
     await db.from("coach_jobs").insert({ job_key: jobKey, kind, season: ctx.season, week: ctx.week, status: "skipped", requests: 0, finished_at: new Date().toISOString() });
@@ -132,14 +136,14 @@ export async function collectBatches(db: SupabaseClient): Promise<number> {
     try {
       const b = await anthropic().messages.batches.retrieve(job.batch_id);
       if (b.processing_status !== "ended") continue;
-      const items = (job.items ?? {}) as Record<string, { player_id: string; source_key: string; week: number | null; kind: CoachKind }>;
+      const items = (job.items ?? {}) as Record<string, { player_id: string; source_key: string; week: number | null; kind: CoachKind; projected?: number | null; scored?: number | null }>;
       let n = 0;
       for await (const r of await anthropic().messages.batches.results(job.batch_id)) {
         const it = items[r.custom_id];
         if (!it || r.result.type !== "succeeded") continue;
         const note = noteFrom(r.result.message as never);
         if (!note) continue;
-        await saveNote(db, { season: job.season, player_id: it.player_id, kind: it.kind, week: it.week, source_key: it.source_key, model: settings.model }, note);
+        await saveNote(db, { season: job.season, player_id: it.player_id, kind: it.kind, week: it.week, source_key: it.source_key, model: settings.model, projected: it.projected ?? null, scored: it.scored ?? null }, note);
         n++;
       }
       written += n;
@@ -162,8 +166,10 @@ export async function submitOutlooks(db: SupabaseClient, season: number): Promis
   const settings = await loadCoachSettings(db);
   if (!coachHasKey()) throw new Error("No Anthropic API key set");
   const ctx = await loadCoachCtx(db, season, 1);
-  const items: BatchItem[] = [...ctx.players.values()].filter((p) => p.active).map((p) => ({ playerId: p.id, sourceKey: `outlook:${season}:${p.id}`, week: null }));
-  return submitBatch(db, ctx, settings.model, `outlook:${season}:${new Date().toISOString().slice(0, 13)}`, "outlook", items);
+  // a fresh set each time the button is pressed (at most once an hour); the player card shows the newest
+  const stamp = new Date().toISOString().slice(0, 13);
+  const items: BatchItem[] = [...ctx.players.values()].filter((p) => p.active).map((p) => ({ playerId: p.id, sourceKey: `outlook:${season}:${p.id}:${stamp}`, week: null }));
+  return submitBatch(db, ctx, settings.model, `outlook:${season}:${stamp}`, "outlook", items);
 }
 
 export type CoachTickReport = { collected: number; submitted: Array<{ job: string; notes: number }>; skipped?: string };
@@ -194,6 +200,8 @@ export async function coachTick(db: SupabaseClient, season: number, nowMs = Date
     if (!gameWeek) continue;
     const nextWeek = Math.min(gameWeek + 1, totalFantasyWeeks(s));
     const ctx = await ctxFor(nextWeek);
+    // his projection for the game's week, from the games before it (shown with the note)
+    const gameProj = await weekProjections(db, season, gameWeek, ctx.rules).catch(() => null);
     const h = fixtureTeam(f.homeTeam), a = fixtureTeam(f.awayTeam);
     const { data: rows } = await db.from("player_round_stats").select("internal_player_id, stats:raw_json->stats").eq("season", season).eq("round", f.week);
     const score = { [h]: 0, [a]: 0 } as Record<string, number>;
@@ -209,7 +217,7 @@ export async function coachTick(db: SupabaseClient, season: number, nowMs = Date
     if (!playedIds.length) continue; // stats not in yet: try again next time
     const items: BatchItem[] = playedIds.map((id) => {
       const t = normalizeTeamCode(ctx.players.get(id)!.teamCode);
-      return { playerId: id, sourceKey: `post_game:${season}:${f.id}:${id}`, week: gameWeek, extra: { thisGameRound: f.week, teamScore: score[t], oppScore: score[t === h ? a : h] } };
+      return { playerId: id, sourceKey: `post_game:${season}:${f.id}:${id}`, week: gameWeek, extra: { thisGameRound: f.week, teamScore: score[t], oppScore: score[t === h ? a : h], projected: gameProj?.players[id]?.pts ?? null } };
     });
     report.submitted.push({ job: jobKey, notes: await submitBatch(db, ctx, settings.model, jobKey, "post_game", items) });
   }

@@ -184,7 +184,8 @@ export function buildFacts(input: CoachFactsInput): Record<string, unknown> {
       restPolicy: p.restNotes,
       injuryHistory: p.injuryNotes,
     },
-    thisSeason: {
+    [`stats${input.season}`]: {
+      note: input.games.some(played) ? `this season (${input.season}) so far` : `this season (${input.season}): no games yet`,
       fantasyPoints: pointsProfile(pts(input.games)),
       keyStatsPerGame: keyStatAverages(input.games),
       minutesPerGame: input.games.filter(played).length
@@ -193,12 +194,13 @@ export function buildFacts(input: CoachFactsInput): Record<string, unknown> {
       gamesStartedOrBench: input.games.filter(played).map((g) => g.listed ?? "unknown").join(", ") || null,
       lastFiveGames: input.games.slice(-5).map((g) => gameLine(g, front, rules)),
     },
-    lastSeason: input.lastSeasonGames.length
-      ? { fantasyPoints: pointsProfile(pts(input.lastSeasonGames)), keyStatsPerGame: keyStatAverages(input.lastSeasonGames) }
+    [`stats${input.season - 1}`]: input.lastSeasonGames.length
+      ? { note: `last season (${input.season - 1})`, fantasyPoints: pointsProfile(pts(input.lastSeasonGames)), keyStatsPerGame: keyStatAverages(input.lastSeasonGames) }
       : null,
     team: input.team
       ? {
           name: input.team.name,
+          basedOn: "their last 8 games (going back into last season when needed)",
           pointsForPerGame: r1(input.team.strength.pointsFor),
           pointsAgainstPerGame: r1(input.team.strength.pointsAgainst),
           triesPerGame: r1(input.team.strength.triesPerGame),
@@ -217,15 +219,15 @@ export function buildFacts(input: CoachFactsInput): Record<string, unknown> {
     restOfSeason: input.remaining.map((f) => fixtureText(f, teams)),
     fantasyFinalsWeeks: input.finalsWeeks.map((f) => fixtureText(f, teams)),
     teammatesSamePositionWithNews: input.teammates.map((t) => `${t.name} (${t.positions}): ${t.status}`),
-    commissionerNotes: input.notes,
-    articlesSharedByCommissioner: (input.articles ?? []).map((a) => ({ article: `${a.title} (${a.source}, ${a.date})`, relevantText: a.excerpt })),
+    latestNews: input.notes,
+    newsReports: (input.articles ?? []).map((a) => ({ date: a.date, headline: a.title, relevantText: a.excerpt })),
     previousCoachNotes: input.previous.map((n) => `${n.label} (${n.kind}): ${n.headline}`),
   };
   if (input.thisGame) {
     sheet.thisGame = {
       line: gameLine(input.thisGame, front, rules),
       fantasyPoints: roundPoints(playerPoints(input.thisGame.counts, front, rules)),
-      expectedBeforehand: input.thisGame.projected,
+      projectedBeforehandForTheWeek: input.thisGame.projected,
       result: input.thisGame.teamScore != null && input.thisGame.oppScore != null ? `${p.team} ${input.thisGame.teamScore} - ${input.thisGame.oppScore} ${input.thisGame.opp ?? ""}`.trim() : null,
       howRepeatable: Object.fromEntries(
         KEY_STATS.filter((k) => Number(input.thisGame!.counts[k]) > 0).map((k) => [STAT_LABELS[k].long, repeatability(k)])
@@ -234,4 +236,21 @@ export function buildFacts(input: CoachFactsInput): Record<string, unknown> {
   }
   if (input.statusChange) sheet.statusChange = { from: input.statusChange.from || "none", to: input.statusChange.to || "none (available)" };
   return sheet;
+}
+
+/**
+ * The numbers shown with a note on the player card (Ethan, 27 Nov 2026): his projected points for
+ * the note's week at the time it was written, and for an after-the-game note what he scored.
+ * Season outlooks have neither.
+ */
+export function notePoints(input: CoachFactsInput): { projected: number | null; scored: number | null } {
+  if (input.kind === "outlook") return { projected: null, scored: null };
+  if (input.kind === "post_game") {
+    const g = input.thisGame;
+    if (!g) return { projected: null, scored: null };
+    const { posAbbrev, secondaryPosAbbrev, thirdPosAbbrev } = input.player;
+    const front = isFrontRow({ posAbbrev, secondaryPosAbbrev, thirdPosAbbrev }, input.rules);
+    return { projected: g.projected, scored: roundPoints(playerPoints(g.counts, front, input.rules)) };
+  }
+  return { projected: input.next?.projection?.pts ?? null, scored: null };
 }
