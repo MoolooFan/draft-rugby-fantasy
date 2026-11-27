@@ -20,9 +20,12 @@ export function ScoringTab({ setMsg }: { setMsg: (m: string | null) => void }) {
       .then((r) => setSystems(r.systems))
       .catch((e) => setErr(e instanceof Error ? e.message : "Couldn't load scoring"));
   }, []);
-  useEffect(() => {
-    if (systems) setDraft(systems[which]);
-  }, [systems, which]);
+  // the system being edited, again when it's switched or reloaded (set while drawing)
+  const [draftFor, setDraftFor] = useState<{ s: unknown; w: string } | null>(null);
+  if (systems && (draftFor?.s !== systems || draftFor?.w !== which)) {
+    setDraftFor({ s: systems, w: which });
+    setDraft(systems[which]);
+  }
 
   async function save() {
     if (!draft) return;

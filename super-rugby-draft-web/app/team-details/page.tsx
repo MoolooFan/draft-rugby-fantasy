@@ -113,10 +113,11 @@ export default function TeamDetailsPage() {
   };
 
   // ---- team picture (E5) ----
+  const activeLeagueTeams = activeLeague?.teams;
   const myTeam: any = useMemo(() => {
-    const teams = Array.isArray(activeLeague?.teams) ? activeLeague.teams : [];
+    const teams = Array.isArray(activeLeagueTeams) ? activeLeagueTeams : [];
     return yourTeamId ? teams.find((t: any) => String(t.id) === String(yourTeamId)) ?? null : null;
-  }, [activeLeague?.teams, yourTeamId]);
+  }, [activeLeagueTeams, yourTeamId]);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [picBusy, setPicBusy] = useState(false);
   const [picMsg, setPicMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -169,12 +170,13 @@ export default function TeamDetailsPage() {
     }
   }
 
-  // prefill team name from league store
-  useEffect(() => {
-    const teams = Array.isArray(activeLeague?.teams) ? activeLeague.teams : [];
-    const mine = yourTeamId ? teams.find((t: any) => String(t.id) === String(yourTeamId)) : null;
-    if (mine?.name) setTeamName(String(mine.name));
-  }, [activeLeague?.teams, yourTeamId]);
+  // prefill team name from league store (when it arrives or changes; set while drawing)
+  const savedTeamName = myTeam?.name ? String(myTeam.name) : null;
+  const [nameFor, setNameFor] = useState<string | null>(null);
+  if (savedTeamName && savedTeamName !== nameFor) {
+    setNameFor(savedTeamName);
+    setTeamName(savedTeamName);
+  }
 
   // styles (match dashboard vibe)
   const cardStyle: React.CSSProperties = { ...themeCard };

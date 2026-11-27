@@ -1,5 +1,6 @@
 "use client";
 
+import { useNow } from "@/lib/hooks/useNow";
 import { lineupWarnings, warningSummary } from "@/lib/league/lineupWarnings";
 import React, { useEffect, useMemo, useState } from "react";
 import { leagueRefreshMs, usePoll } from "@/lib/hooks/usePoll";
@@ -73,6 +74,9 @@ import {
   type PositionInfo,
 } from "@/components/dashboard/helpers";
 
+/** an empty watchlist that stays the same object between draws */
+const EMPTY_ID_SET: Set<string> = new Set();
+
 export default function DashboardPage() {
   const router = useRouter();
   // computers: the cards in 2 or 3 columns (Ethan, 27 Nov 2026)
@@ -88,14 +92,8 @@ export default function DashboardPage() {
   // timezone for consistent deadline display
 const userTz = useMemo(() => getActiveTimezone(), []);
 
-// live "now" (set after mount to avoid hydration mismatch)
-const [nowMs, setNowMs] = useState(0);
-
-useEffect(() => {
-  setNowMs(Date.now());
-  const t = window.setInterval(() => setNowMs(Date.now()), 30_000);
-  return () => window.clearInterval(t);
-}, []);
+// live "now" (0 on the server and first pass, so they match; lib/hooks/useNow.ts)
+const nowMs = useNow(30_000);
 
 // ✅ Route protection
 useEffect(() => {
@@ -164,18 +162,19 @@ const userId = useMemo(() => getActiveUsername(), []);
 // Draft teams for name lookup (same as Matchup)
 const draftTeams = useDraftStore((s) => s.teams ?? EMPTY_ARR);
 
+const activeLeagueTeams = activeLeague?.teams;
 const nameByTeamId = React.useCallback((id: string | null) => {
   if (!id) return "BYE";
 
   const dt = Array.isArray(draftTeams) ? draftTeams : [];
-  const lt = Array.isArray(activeLeague?.teams) ? activeLeague.teams : [];
+  const lt = Array.isArray(activeLeagueTeams) ? activeLeagueTeams : [];
 
   return (
     dt.find((t: any) => t.id === id)?.name ??
     lt.find((t: any) => t.id === id)?.name ??
     "TBC"
   );
-}, [draftTeams, activeLeague?.teams]);
+}, [draftTeams, activeLeagueTeams]);
 
 // Sheet fixtures (league matchups / results)
 const [sheetFixtures, setSheetFixtures] = useState<SheetFixtureRow[]>([]);
@@ -206,14 +205,13 @@ const statRows = usePlayersStore((s) => s.statRows);
 const allPlayers = usePlayersStore((s: any) => s.players ?? s.allPlayers ?? EMPTY_ARR);
 
 // --- Watchlist (Supabase via /api/watchlist; same as Transactions) ---
-const [watchlistSet, setWatchlistSet] = useState<Set<string>>(new Set());
-const [pendingTradeCount, setPendingTradeCount] = useState<number>(0);
+const [watchlistLoaded, setWatchlistSet] = useState<Set<string>>(() => new Set());
+const [pendingTradesLoaded, setPendingTradeCount] = useState<number>(0);
+// with no league (or no team yet) these are empty / 0 (worked out here, not reset in an effect)
+const watchlistSet = activeLeagueId ? watchlistLoaded : EMPTY_ID_SET;
 
 useEffect(() => {
-  if (!activeLeagueId) {
-    setWatchlistSet(new Set());
-    return;
-  }
+  if (!activeLeagueId) return;
 
   let cancelled = false;
 
@@ -318,11 +316,10 @@ const yourLeagueTeamId = useMemo(() => {
   return teams[0]?.id ?? null;
 }, [activeLeague, userId]);
 
+const pendingTradeCount = activeLeagueId && yourLeagueTeamId ? pendingTradesLoaded : 0;
+
 useEffect(() => {
-  if (!activeLeagueId || !yourLeagueTeamId) {
-    setPendingTradeCount(0);
-    return;
-  }
+  if (!activeLeagueId || !yourLeagueTeamId) return;
 
   let cancelled = false;
 
@@ -972,9 +969,9 @@ const myLineupCheck = useMemo(() => {
   const preseasonPower = power && power.leagueId === activeLeagueId && power.table.simulated && !power.table.started ? power.table : null;
 
 const standings: StandingRow[] = useMemo(() => {
-  if (!activeLeague?.teams?.length) return [];
-  return buildStandings(activeLeague.teams, sheetFixtures);
-}, [activeLeague?.teams, sheetFixtures]);
+  if (!activeLeagueTeams?.length) return [];
+  return buildStandings(activeLeagueTeams, sheetFixtures);
+}, [activeLeagueTeams, sheetFixtures]);
 
 const bestAvailablePlayers: Player[] = useMemo(() => bestAvailable(allPlayers, rosteredIds, statRows), [allPlayers, rosteredIds, statRows]);
 

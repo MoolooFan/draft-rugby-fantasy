@@ -1,5 +1,6 @@
 "use client";
 
+import { useIsClient } from "@/lib/hooks/useIsClient";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { currentSeasonYear } from "@/lib/season";
@@ -44,14 +45,30 @@ export default function Page() {
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-useEffect(() => {
-  const saved = localStorage.getItem("sr_remember_me") === "1";
-  setRememberMe(saved);
-}, []);
+  // once the page is in the browser (read while drawing, not in an effect; React 19 rules):
+  // "Remember me" as saved on this device, and an expired / used email link (?link=expired)
+  const isClient = useIsClient();
+  const [browserRead, setBrowserRead] = useState(false);
+  if (isClient && !browserRead) {
+    setBrowserRead(true);
+    try {
+      setRememberMe(localStorage.getItem("sr_remember_me") === "1");
+    } catch {
+      /* no storage */
+    }
+    if (new URLSearchParams(window.location.search).get("link") === "expired") {
+      setErrorMsg("That email link has expired or was already used. Please try again.");
+    }
+  }
 
 useEffect(() => {
-  localStorage.setItem("sr_remember_me", rememberMe ? "1" : "0");
-}, [rememberMe]);
+  if (!browserRead) return; // not before the saved choice has been read
+  try {
+    localStorage.setItem("sr_remember_me", rememberMe ? "1" : "0");
+  } catch {
+    /* no storage */
+  }
+}, [rememberMe, browserRead]);
 
   // fields
   const [email, setEmail] = useState("");
@@ -85,12 +102,6 @@ useEffect(() => {
   };
 }, [router]);
 
-  // Arrived from an email link that had expired or was already used
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("link") === "expired") {
-      setErrorMsg("That email link has expired or was already used. Please try again.");
-    }
-  }, []);
 
 
   const primaryButtonLabel = useMemo(() => {

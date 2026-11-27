@@ -7,6 +7,7 @@
 // back / ahead), then three columns: the Player Pool, your Draft Strategy (always open and
 // editable during the draft; your Watchlist instead if you haven't set a strategy), and a team.
 
+import { useIsClient } from "@/lib/hooks/useIsClient";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { leagueRefreshMs, usePoll } from "@/lib/hooks/usePoll";
@@ -133,8 +134,7 @@ export default function DraftRoomPage() {
   }, [ensurePicksLength, teams.length]);
 
   // hydration guard
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useIsClient();
   const ready = mounted && draftStoreHydrated;
 
   const rawUser = getActiveUser();
@@ -252,14 +252,10 @@ export default function DraftRoomPage() {
   const firstPickTeamName = draftOrderTeams[0]?.name ?? activeLeague?.teams?.[0]?.name ?? "TBC";
 
   // -------- Teams tab --------
-  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
-  useEffect(() => {
-    if (!teams.length) return;
-    // your own team until you pick another (Ethan, 25 Nov 2026)
-    if (!selectedTeamId || !teams.some((t) => t.id === selectedTeamId)) {
-      setSelectedTeamId(teams.some((t) => t.id === yourTeamId) ? yourTeamId : teams[0].id);
-    }
-  }, [teams, selectedTeamId, yourTeamId]);
+  const [pickedTeamId, setSelectedTeamId] = useState<string>("");
+  // your own team until you pick another (Ethan, 25 Nov 2026)
+  const selectedTeamId =
+    pickedTeamId && teams.some((t) => t.id === pickedTeamId) ? pickedTeamId : teams.some((t) => t.id === yourTeamId) ? yourTeamId : (teams[0]?.id ?? "");
   const selectedRoster = rosters[selectedTeamId] ?? null;
   // The team's players: from the picks (the saved roster after the draft is only a list of ids,
   // which showed an empty team; found 25 Nov 2026), else whatever the roster has.

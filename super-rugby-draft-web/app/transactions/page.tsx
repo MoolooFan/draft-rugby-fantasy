@@ -1,7 +1,7 @@
 "use client";
 
 import { rosterSize, STANDARD_SQUAD } from "@/lib/league/squad";
-import React, { Suspense, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { AppMenu } from "@/components/AppMenu";
@@ -583,12 +583,13 @@ closeConfirm();
   // C2: Team / Position / Status (several of each allowed) and Players (Available, All or fantasy teams)
   const [poolFilters, setPoolFilters] = useState<PoolFilters>(EMPTY_FILTERS);
   const [ownerFilters, setOwnerFilters] = useState<string[]>(["available"]);
-useEffect(() => {
-  // When entering Watchlist, default to All Players (only if still on the default "available")
-  if (tab === "Watchlist" && ownerFilters.length === 1 && ownerFilters[0] === "available") {
-    setOwnerFilters(["all"]);
-  }
-}, [tab, ownerFilters]);
+// When entering Watchlist, default to All Players (only if still on the default "available");
+// decided when the tab changes, while drawing
+const [ownersTabFor, setOwnersTabFor] = useState<TabKey | null>(null);
+if (ownersTabFor !== tab) {
+  setOwnersTabFor(tab);
+  if (tab === "Watchlist" && ownerFilters.length === 1 && ownerFilters[0] === "available") setOwnerFilters(["all"]);
+}
 
 const [infoMode, setInfoMode] = useState<InfoMode>("TOTAL_PTS");
 const [statView] = useStatView(); // C1: per game (default) / total / per 80 (set in Filters)
@@ -1217,19 +1218,21 @@ function hydratePlayer(p: Player): Player & { status?: any; weeklyStatus?: any }
 // Coming from the dashboard's "+" (?addPlayerId=...): start adding that player straight away
 // (the drop / claim pop-up), as if his "+" had been tapped here. Then tidy the address.
 const addFromLink = searchParams?.get("addPlayerId") ?? null;
-const [addLinkDone, setAddLinkDone] = useState<string | null>(null);
+const addLinkDone = useRef<string | null>(null);
 useEffect(() => {
-  if (!addFromLink || addLinkDone === addFromLink) return;
+  if (!addFromLink || addLinkDone.current === addFromLink) return;
   if (!activeLeague?.id || !yourDraftTeamId || !allPlayers.length) return; // wait for the page's data
   const target = allPlayers.find((x) => x.id === addFromLink);
-  setAddLinkDone(addFromLink);
+  addLinkDone.current = addFromLink; // once per link
   router.replace("/transactions");
   if (!target) return;
   const owner = ownerByPlayerId.get(target.id) ?? null;
   if (owner || lockedUnownedSet.has(target.id)) return; // already taken, or locked until his game
+  // opening the add pop-up is what the link is for, once the page's data has loaded
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   guardedAdd(target.id, () => openDropModal(target));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [addFromLink, addLinkDone, activeLeague?.id, yourDraftTeamId, allPlayers, ownerByPlayerId, lockedUnownedSet]);
+}, [addFromLink, activeLeague?.id, yourDraftTeamId, allPlayers, ownerByPlayerId, lockedUnownedSet]);
 
   // Player modal actions: keep blank placeholder buttons at bottom (for now)
   // Player modal actions
