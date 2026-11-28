@@ -88,7 +88,7 @@ export type DrawPhase = "idle" | "count" | "race" | "done";
  * numbers and the countdown, at screen resolution). T = seconds since the runners went
  * (negative during the countdown).
  */
-export function lotteryDrawer(px: HTMLCanvasElement, ov: HTMLCanvasElement, font: string) {
+export function lotteryDrawer(px: HTMLCanvasElement, ov: HTMLCanvasElement, font: string, nameFont = "Arial, sans-serif") {
   const g = px.getContext("2d")!;
   const o = ov.getContext("2d")!;
   const fld = field();
@@ -108,7 +108,8 @@ export function lotteryDrawer(px: HTMLCanvasElement, ov: HTMLCanvasElement, font
       }
   };
 
-  return function draw(now: number, T: number, phase: DrawPhase, sim: SimResult, colours: string[]) {
+  /** labels: each runner's team name, written down the pitch under them until the runners go; yourLane in gold */
+  return function draw(now: number, T: number, phase: DrawPhase, sim: SimResult, colours: string[], labels: string[] = [], yourLane = -1) {
     g.drawImage(fld, 0, 0);
     const { rs, rank } = sim;
     type Item = { post?: false; i: number; x: number; y: number; gy: number; rows: string[]; fin: boolean; p: Pal; d: number } | { post: true; gy: number };
@@ -181,6 +182,31 @@ export function lotteryDrawer(px: HTMLCanvasElement, ov: HTMLCanvasElement, font
       o.strokeText(txt, q.x * sc, ty);
       o.fillStyle = rank[q.i] === 0 ? "#ffd23f" : "#fff";
       o.fillText(txt, q.x * sc, ty);
+    }
+    if (T <= 0 && labels.length) {
+      const n = rs.length,
+        laneW = ((PITCH.C1 - PITCH.C0) / n) * sc,
+        ns = Math.round(Math.max(7 * dpr, Math.min(laneW * 0.62, 13 * dpr))),
+        maxLen = (H / 2 - 24 - (TL + 8)) * sc; // stops above the 3, 2, 1 in the middle
+      o.font = `600 ${ns}px ${nameFont}`;
+      o.textAlign = "left";
+      o.textBaseline = "middle";
+      o.lineWidth = Math.max(2, ns * 0.32);
+      rs.forEach((r, i) => {
+        let txt = labels[i] ?? "";
+        if (o.measureText(txt).width > maxLen) {
+          while (txt.length > 1 && o.measureText(txt + "…").width > maxLen) txt = txt.slice(0, -1);
+          txt = txt.trimEnd() + "…";
+        }
+        o.save();
+        o.translate(r.c0 * sc, (TL + 8) * sc);
+        o.rotate(Math.PI / 2); // reads downwards
+        o.strokeStyle = "rgba(0,0,0,.75)";
+        o.strokeText(txt, 0, 0);
+        o.fillStyle = i === yourLane ? "#ffd23f" : "#fff";
+        o.fillText(txt, 0, 0);
+        o.restore();
+      });
     }
     let big = "";
     if (phase === "count") big = String(Math.max(1, Math.ceil(-T)));

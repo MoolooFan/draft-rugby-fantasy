@@ -61,9 +61,12 @@ export function LotteryStage({
   const stageRef = useRef<HTMLDivElement>(null);
   const pxRef = useRef<HTMLCanvasElement>(null);
   const ovRef = useRef<HTMLCanvasElement>(null);
-  const live = useRef({ sim, run, offsetMs, replayFrom, colours, revealed, isLatest, reduceMotion });
+  // each runner's team, written under them on the line before the start (Ethan, 28 Nov 2026)
+  const labels = useMemo(() => lanes.map((id) => nameOf.get(id) ?? "Team"), [lanes, nameOf]);
+  const yourLane = lanes.indexOf(yourTeamId);
+  const live = useRef({ sim, run, offsetMs, replayFrom, colours, revealed, isLatest, reduceMotion, labels, yourLane });
   useEffect(() => {
-    live.current = { sim, run, offsetMs, replayFrom, colours, revealed, isLatest, reduceMotion };
+    live.current = { sim, run, offsetMs, replayFrom, colours, revealed, isLatest, reduceMotion, labels, yourLane };
   });
 
   useEffect(() => {
@@ -71,7 +74,9 @@ export function LotteryStage({
       ov = ovRef.current,
       stage = stageRef.current;
     if (!px || !ov || !stage) return;
-    const draw = lotteryDrawer(px, ov, pixel.style.fontFamily);
+    // the site's Barlow font for the team names (its real name is set by next/font on the page)
+    const barlow = getComputedStyle(document.body).getPropertyValue("--font-barlow").trim() || getComputedStyle(document.body).fontFamily;
+    const draw = lotteryDrawer(px, ov, pixel.style.fontFamily, `${barlow}, Arial, sans-serif`);
     const ro = new ResizeObserver(() => {
       const d = window.devicePixelRatio || 1;
       ov.width = Math.round(ov.clientWidth * d);
@@ -82,7 +87,7 @@ export function LotteryStage({
     let shown = { k: -1, phase: "" as string, chip: "" };
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
-      const { sim, run, offsetMs, replayFrom, colours, revealed, isLatest, reduceMotion } = live.current;
+      const { sim, run, offsetMs, replayFrom, colours, revealed, isLatest, reduceMotion, labels, yourLane } = live.current;
       const serverNow = Date.now() + offsetMs;
       let T: number;
       let phase: DrawPhase;
@@ -95,7 +100,7 @@ export function LotteryStage({
         if (reduceMotion && replayFrom == null) T = 1e6; // straight to the result
         phase = T < 0 ? "count" : T < sim.end + 1.2 ? "race" : "done";
       }
-      draw(now, T, phase, sim, colours);
+      draw(now, T, phase, sim, colours, labels, yourLane);
       const k = revealed && T > 0 ? sim.rs.reduce((a, r) => a + (r.fin <= T ? 1 : 0), 0) : 0;
       const n = sim.rs.length;
       const chip =
@@ -121,7 +126,6 @@ export function LotteryStage({
   }, []);
 
   const laneOf = (teamId: string) => lanes.indexOf(teamId);
-  const running = view.phase === "count" || view.phase === "race";
   const btn: React.CSSProperties = { minHeight: 40, padding: "0 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.6)", background: "transparent", color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer" };
 
   return (
@@ -129,7 +133,7 @@ export function LotteryStage({
       role="dialog"
       aria-modal="true"
       aria-label="Draft lottery"
-      style={{ position: "fixed", inset: 0, zIndex: 10000, background: "#08140c", overflowY: "auto", color: "white" }}
+      style={{ position: "fixed", inset: 0, zIndex: 10000, background: "linear-gradient(to bottom, rgb(15, 23, 42), rgb(13, 148, 136), rgb(16, 185, 129))", overflowY: "auto", color: "white" }}
     >
       <div style={{ maxWidth: 940, margin: "0 auto", padding: "calc(14px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom))" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -144,7 +148,6 @@ export function LotteryStage({
             Close
           </button>
         </div>
-        <div style={{ fontSize: 13, opacity: 0.8, marginTop: 6 }}>Every team gets a runner. First to ground the ball takes pick 1, and so on down the order.</div>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 18, marginTop: 14, alignItems: "flex-start" }}>
           <div style={{ flex: "0 1 auto", width: "min(100%, calc(min(72svh, 680px) * 0.5625))", margin: "0 auto" }}>
@@ -168,11 +171,6 @@ export function LotteryStage({
               </div>
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12, justifyContent: "center" }}>
-              {revealed && running ? (
-                <button style={btn} onClick={() => setReplayFrom(performance.now() - (sim.end + COUNTDOWN_S + 1.5) * 1000)}>
-                  Skip to result
-                </button>
-              ) : null}
               {revealed && view.phase === "done" ? (
                 <button style={{ ...btn, background: ACCENT, borderColor: ACCENT }} onClick={() => setReplayFrom(performance.now())}>
                   Watch replay
@@ -183,11 +181,11 @@ export function LotteryStage({
 
           <div style={{ ...card, flex: "1 1 300px", minWidth: 0 }}>
             <div style={{ fontSize: 16, fontWeight: 700 }}>Draft order</div>
-            <div style={{ fontSize: 12, color: muted, marginTop: 2 }}>
-              {!revealed
-                ? `Runs ${new Date(run.scheduledAt).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. Stay on this page to watch it live.`
-                : `Ran ${new Date(run.ranAt as number).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}.`}
-            </div>
+            {!revealed ? (
+              <div style={{ fontSize: 12, color: muted, marginTop: 2 }}>
+                {`Runs ${new Date(run.scheduledAt).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. Stay on this page to watch it live.`}
+              </div>
+            ) : null}
             <ol style={{ listStyle: "none", margin: "10px 0 0", padding: 0 }}>
               {(revealed ? order : lanes).map((teamId, p) => {
                 const on = revealed && p < view.k;
@@ -211,11 +209,6 @@ export function LotteryStage({
                 );
               })}
             </ol>
-            {revealed && view.phase === "done" ? (
-              <div style={{ fontSize: 12, color: muted, marginTop: 10, lineHeight: 1.4 }}>
-                {isLatest ? "This set the draft order (round 1; it snakes after that)." : "A later run replaced this order."}
-              </div>
-            ) : null}
           </div>
         </div>
       </div>
