@@ -54,6 +54,8 @@ export function StatStrip({ p, rounds, allRoundRows }: { p: PlayerCardPlayer; ro
 }
 
 export function ActionBar({ actions, hideActions }: { actions: PlayerCardAction[]; hideActions: boolean }) {
+  // four buttons sit side by side, a little smaller (Ethan, 28 Nov 2026: Team Selection's card)
+  const four = actions.length >= 4;
   return (
 <div
   style={{
@@ -61,11 +63,11 @@ export function ActionBar({ actions, hideActions }: { actions: PlayerCardAction[
     background: "#059669",
     borderTop: "1px solid rgba(255,255,255,0.18)",
     display: "grid",
-    gridTemplateColumns: `repeat(${Math.min(actions.length, 3)}, 1fr)`,
-    gap: 10,
+    gridTemplateColumns: `repeat(${Math.min(actions.length, 4)}, minmax(0, 1fr))`,
+    gap: four ? 6 : 10,
   }}
 >
-    {(!hideActions ? actions : []).map((a) => ( /* more than 3 wrap onto a second row */
+    {(!hideActions ? actions : []).map((a) => ( /* more than 4 wrap onto a second row */
 
     <button
       key={a.label}
@@ -84,10 +86,12 @@ export function ActionBar({ actions, hideActions }: { actions: PlayerCardAction[
         border: "2px solid rgba(255,255,255,0.9)",
         color: "white",
         fontWeight: 500,
-        fontSize: 14,
+        fontSize: four ? 12 : 14,
+        lineHeight: 1.1,
+        padding: four ? "0 4px" : "0 8px",
         cursor: "pointer",
         width: "100%",
-        whiteSpace: "nowrap",
+        whiteSpace: four ? "normal" : "nowrap",
       }}
     >
       {a.label}

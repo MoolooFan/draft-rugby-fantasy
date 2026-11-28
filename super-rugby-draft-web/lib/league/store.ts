@@ -44,7 +44,7 @@ createLeague: (params: {
   shieldRewards?: ShieldRewards;
   shieldStart?: ShieldStart;
   squadFormat?: SquadFormat;
-}) => Promise<{ ok: true } | { ok: false; error: string }>;
+}) => Promise<{ ok: true; leagueId: string } | { ok: false; error: string }>;
 
 joinLeagueByCode: (params: {
   code: string;
@@ -206,7 +206,7 @@ refreshLeague: async (leagueId) => {
 
 await syncMyTeamToSupabase(league);
 
-return { ok: true };
+return { ok: true, leagueId: league.id };
   } catch (e) {
     return { ok: false, error: "Failed to create league." };
   }

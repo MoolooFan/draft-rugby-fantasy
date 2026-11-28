@@ -33,18 +33,13 @@ export function ShieldRewardsFields({ value, onChange, disabled }: { value: Shie
   );
   return (
     <div style={{ display: "grid", gap: 6 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.8 }}>Rewards for holding it (locked once the draft starts)</div>
+      <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.8 }}>Rewards for holding it</div>
       <label style={row}>
         <input type="checkbox" disabled={disabled} checked={value.firstWaiverPick} onChange={(e) => set("firstWaiverPick", e.target.checked)} />
-        First waiver pick each week (first round of claims only; then the usual order)
+        First waiver pick each week
       </label>
       {points("defencePoints", "ladder points for each defence")}
       {points("winPoints", "ladder points for taking it off the holder")}
-      <label style={row}>
-        <input type="checkbox" disabled={disabled} checked={value.tieBreak} onChange={(e) => set("tieBreak", e.target.checked)} />
-        Tie-breaker: level on ladder points, the holder ranks higher
-      </label>
-      <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.75 }}>The holder keeps these while the Shield is switched off and during the finals.</div>
     </div>
   );
 }

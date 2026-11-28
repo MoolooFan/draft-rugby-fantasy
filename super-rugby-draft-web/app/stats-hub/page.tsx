@@ -184,9 +184,6 @@ export default function StatsHubPage() {
 
         <div style={{ marginTop: 14, ...themeCard }}>
           <div style={{ textAlign: "center", fontWeight: 700, fontSize: 22 }}>Stats Hub</div>
-          <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
-            Every player&apos;s stats. Tap a column to sort, a name for the player card, or tick two players to compare.
-          </div>
 
           <PoolFilterBar
             search={search}

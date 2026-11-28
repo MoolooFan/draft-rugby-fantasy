@@ -30,6 +30,7 @@ import { SeasonRecapModal } from "@/components/SeasonRecapModal";
 import { statusKind } from "@/lib/status/kind";
 import { useProjections } from "@/lib/projections/useProjections";
 import { teamOutlook, winProbability } from "@/lib/projections/live";
+import { LeagueScoresCard, type LeagueScoreRow } from "@/components/dashboard/LeagueScoresCard";
 import type { Lineup as ScoringLineup } from "@/lib/scoring/week";
 import type { PowerTable } from "@/lib/league/powerServer";
 import { WeekGamesCard } from "@/components/WeekGamesCard";
@@ -939,6 +940,50 @@ const upcomingOutlook = useMemo(() => {
   return { left: a.expected, right: b.expected, leftWin: Math.round(winProbability(a, b) * 100) };
 }, [upcomingProj, upcomingSel, upcomingMatch, upcomingWeekNo, activeLeague?.squadFormat]);
 
+// Every matchup in the league (computers, next to the table; Ethan, 28 Nov 2026): this round's
+// scores until the waiver deadline, then the upcoming round with projections.
+const leagueScores = useMemo<{ title: string; upcoming: boolean; rows: LeagueScoreRow[] } | null>(() => {
+  if (!isWaivers) {
+    if (seasonOver) return null;
+    const rows = sheetFixtures.filter((r) => Number(r.weekFantasy) === upcomingWeekNo).filter((r) => isSheetMatchRow(r));
+    if (!rows.length) return null;
+    const haveProj = !!upcomingProj && upcomingProj.week === upcomingWeekNo && !!upcomingSel && upcomingSel.week === upcomingWeekNo;
+    const proj = (teamId: string | null) => {
+      if (!haveProj || !teamId) return null;
+      const row = upcomingSel!.rows.find((x) => x.team_id === teamId);
+      if (!row?.lineup) return null;
+      return teamOutlook({
+        lineup: row.lineup as ScoringLineup,
+        captainId: row.captain_id,
+        viceId: row.vice_id,
+        nowMs: 0,
+        format: activeLeague?.squadFormat,
+        state: (id) => {
+          const pr = upcomingProj!.players[id] ?? upcomingProj!.players[id.toLowerCase()];
+          return pr ? { projected: pr.pts, spread: pr.spread, actual: null, minutes: 0, kickoffMs: pr.kickoffMs, ruledOut: pr.role === "out" } : null;
+        },
+      }).expected;
+    };
+    return {
+      title: roundLabel(upcomingWeekNo),
+      upcoming: true,
+      rows: rows.map((r) => ({ homeId: r.homeTeamId ?? null, awayId: r.awayTeamId ?? null, home: proj(r.homeTeamId ?? null), away: proj(r.awayTeamId ?? null) })),
+    };
+  }
+  if (displayWeek <= 0 || !matchupsThisWeek.length) return null;
+  const score = (teamId: string | null) => {
+    if (!teamId) return null;
+    const sel = selectionLineupForTeam(teamId);
+    return totalForSlots(sel.lineup, effectiveCaptainId(sel.lineup, sel.captainId, sel.viceId), startersOf(activeLeague?.squadFormat));
+  };
+  return {
+    title: `${roundLabel(displayWeek)} scores`,
+    upcoming: false,
+    rows: matchupsThisWeek.map((m) => ({ homeId: m.homeTeamId, awayId: m.awayTeamId, home: score(m.homeTeamId), away: score(m.awayTeamId) })),
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [isWaivers, seasonOver, sheetFixtures, upcomingWeekNo, upcomingProj, upcomingSel, displayWeek, matchupsThisWeek, selectionByTeamId, rosterByTeamId, weekPointsByPlayerId, activeLeague?.squadFormat]);
+
 // Lineup check for your next lineup (Ethan, 19 Nov 2026): starters who won't play or might not
 // (lib/league/lineupWarnings.ts); the details are on Team Selection
 const myLineupCheck = useMemo(() => {
@@ -1081,6 +1126,7 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
           const cards = {
             matchup: (
             <MatchupCard
+              hideTitle={isDesktop}
               leagueName={leagueName}
               weekLabel={weekLabel}
               left={{ score: userScore, team: leftName, record: userRecord, teamId: leftTeamId }}
@@ -1123,6 +1169,10 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
                 shield={activeLeague?.shield?.enabled ? { holderTeamId: activeLeague.shield.holderTeamId ?? null, name: activeLeague.shield.name ?? "Shield" } : null}
               />
             )}
+            {/* computers: every matchup this round, with the table (Ethan, 28 Nov 2026) */}
+            {isDesktop && leagueScores ? (
+              <LeagueScoresCard title={leagueScores.title} upcoming={leagueScores.upcoming} rows={leagueScores.rows} nameOf={nameByTeamId} yourTeamId={yourLeagueTeamId ?? null} />
+            ) : null}
 
               </>
             ),
@@ -1166,6 +1216,12 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
           // second, coach news and best available in the third (or under the second)
           if (isDesktop) {
             return (
+              <>
+              {/* the league's name across the top, the boxes underneath (Ethan, 28 Nov 2026) */}
+              <div style={{ ...cardStyle, marginTop: 14, display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 28, fontWeight: 700, minWidth: 0 }}>{leagueName}</div>
+                <div style={{ fontSize: 18, fontWeight: 600, color: "#64748b" }}>{weekLabel}</div>
+              </div>
               <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: isWide ? "repeat(3, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))", gap: 14, alignItems: "start" }}>
                 <div style={stack}>
                   {cards.matchup}
@@ -1185,6 +1241,7 @@ function goToTradeProposal(partnerTeamId: string, requestPlayerId: string) {
                   </div>
                 ) : null}
               </div>
+              </>
             );
           }
           return (

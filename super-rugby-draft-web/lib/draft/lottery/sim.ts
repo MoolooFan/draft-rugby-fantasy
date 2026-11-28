@@ -144,5 +144,10 @@ export const LANE_COLOURS = [
 ] as const;
 export const laneColour = (i: number) => LANE_COLOURS[i % LANE_COLOURS.length];
 
+/** The lottery has to be done at least this long before the draft starts. */
+export const LOTTERY_BEFORE_DRAFT_MS = 5 * 60_000;
+/** ...and set at least this far ahead, so people can come and watch. */
+export const LOTTERY_MIN_NOTICE_MS = 60_000;
+
 /** Most teams a lottery takes (the pitch's width). */
 export const MAX_LOTTERY_TEAMS = 20;

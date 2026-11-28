@@ -3,7 +3,8 @@
 // The Matchup page's scoreboard: both teams (picture, Shield holder, record and streak, SHIELD
 // DEFENCE / CHALLENGE), the scores with their projections, FINAL / LIVE / UPCOMING and the win
 // probability bar. Tap a team for its profile (components/TeamProfileModal.tsx). Moved out of
-// app/matchup/page.tsx.
+// app/matchup/page.tsx. On a computer (`wide`) the scores sit in the same row, between the two
+// teams (Ethan, 28 Nov 2026: there's room there; not on a phone).
 import React from "react";
 import { ShieldIcon } from "@/components/AwardIcons";
 import { TeamAvatar } from "@/components/TeamAvatar";
@@ -82,6 +83,7 @@ export function Scoreboard({
   shieldName,
   statusLabel,
   leftWinPct,
+  wide = false,
 }: {
   left: ScoreboardSide;
   right: ScoreboardSide;
@@ -90,9 +92,27 @@ export function Scoreboard({
   /** FINAL / LIVE / UPCOMING (null: none) */
   statusLabel: string | null;
   leftWinPct: number | null;
+  /** computers: teams and scores in one row */
+  wide?: boolean;
 }) {
+  const middle = (
+    <div style={{ textAlign: "center" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.7 }}>vs</div>
+      {statusLabel ? <div style={{ marginTop: 2, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, opacity: 0.6 }}>{statusLabel}</div> : null}
+    </div>
+  );
   return (
     <div style={{ marginTop: 10, ...listBox, padding: 10 }}>
+      {wide ? (
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto auto auto minmax(0,1fr)", alignItems: "center", gap: 10 }}>
+          <TeamSide side={left} align="left" mounted={mounted} shieldName={shieldName} />
+          <Total side={left} align="left" />
+          {middle}
+          <Total side={right} align="right" />
+          <TeamSide side={right} align="right" mounted={mounted} shieldName={shieldName} />
+        </div>
+      ) : (
+      <>
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10 }}>
         <TeamSide side={left} align="left" mounted={mounted} shieldName={shieldName} />
         <div style={{ fontSize: 18, fontWeight: 700, opacity: 0.85 }}></div>
@@ -101,26 +121,23 @@ export function Scoreboard({
 
       <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center" }}>
         <Total side={left} align="left" />
-
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.7 }}>vs</div>
-          {statusLabel ? <div style={{ marginTop: 2, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, opacity: 0.6 }}>{statusLabel}</div> : null}
-        </div>
-
+        {middle}
         <Total side={right} align="right" />
       </div>
+      </>
+      )}
 
       {/* Win probability (from the projections; moves as real points come in) */}
       {leftWinPct != null ? (
         <div style={{ marginTop: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, fontWeight: 700 }}>
-            <span>{leftWinPct}%</span>
+            <span style={{ color: "#15803d" }}>{leftWinPct}%</span>
             <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.6 }}>Win Probability</span>
-            <span>{100 - leftWinPct}%</span>
+            <span style={{ color: "#1d4ed8" }}>{100 - leftWinPct}%</span>
           </div>
           <div style={{ marginTop: 4, height: 6, borderRadius: 999, overflow: "hidden", display: "flex", background: "rgba(15,23,42,0.12)" }}>
             <div style={{ width: `${leftWinPct}%`, background: "#16a34a", transition: "width 0.4s" }} />
-            <div style={{ flex: 1, background: "rgba(15,23,42,0.35)" }} />
+            <div style={{ flex: 1, background: "#2563eb" }} />
           </div>
         </div>
       ) : null}
