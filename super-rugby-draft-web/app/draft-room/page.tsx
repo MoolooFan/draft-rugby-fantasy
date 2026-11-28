@@ -6,6 +6,8 @@
 // On a computer (Ethan, 27 Nov 2026): every pick in a row of boxes under the header (scroll
 // back / ahead), then three columns: the Player Pool, your Draft Strategy (always open and
 // editable during the draft; your Watchlist instead if you haven't set a strategy), and a team.
+// Before the draft: the Draft Lottery card (Ethan, 28 Nov 2026), and the lottery itself full
+// screen, opening on its own for everyone here shortly before it runs.
 
 import { useIsClient } from "@/lib/hooks/useIsClient";
 import { useEffect, useMemo, useState } from "react";
@@ -35,6 +37,10 @@ import { DraftConfirmModal, DraftOrderModal } from "@/components/draftRoom/Modal
 import { PickStrip } from "@/components/draftRoom/PickStrip";
 import { usePoolView, useStrategyPanel } from "@/components/draftRoom/hooks";
 import { useIsDesktop } from "@/lib/ui/useIsDesktop";
+import { useNow } from "@/lib/hooks/useNow";
+import { LOTTERY_LIVE_MS, useLottery } from "@/lib/draft/lottery/useLottery";
+import { LotteryCard, lastRun, lotteryOrderNote } from "@/components/draftRoom/LotteryCard";
+import { LotteryStage } from "@/components/draftRoom/LotteryStage";
 
 const TABS = ["Player Pool", "Watchlist", "Teams", "Draft Results"] as const;
 type DraftTab = (typeof TABS)[number];
@@ -251,6 +257,28 @@ export default function DraftRoomPage() {
   }, [teams.length, ownerForPickSnake, activeLeague?.teams]);
   const firstPickTeamName = draftOrderTeams[0]?.name ?? activeLeague?.teams?.[0]?.name ?? "TBC";
 
+  // -------- the draft lottery (lib/draft/lottery) --------
+  const lottery = useLottery(activeLeagueId ?? null);
+  const lotteryData = lottery.data;
+  const clockNow = useNow(1000);
+  const serverNow = clockNow ? clockNow + (lotteryData?.offsetMs ?? 0) : 0;
+  const [stage, setStage] = useState<{ runId: string; replay: boolean } | null>(null);
+  // a run starting in the next 30 seconds, or on now: opens by itself, once (set while drawing)
+  const liveRun =
+    serverNow && lotteryData
+      ? (lotteryData.runs.find((r) => (r.ranAt ? serverNow - r.ranAt < LOTTERY_LIVE_MS : r.scheduledAt - serverNow < 30_000)) ?? null)
+      : null;
+  const [autoOpenedFor, setAutoOpenedFor] = useState<string | null>(null);
+  if (liveRun && autoOpenedFor !== liveRun.id) {
+    setAutoOpenedFor(liveRun.id);
+    setStage({ runId: liveRun.id, replay: false });
+  }
+  const stageRun = stage ? (lotteryData?.runs.find((r) => r.id === stage.runId) ?? null) : null;
+  const lastLottery = lastRun(lotteryData);
+  const lotteryNote = lastLottery
+    ? `Set by the draft lottery (run ${lastLottery.runNumber}${lastLottery.runNumber > 1 ? ", a rerun" : ""}).${lotteryOrderNote(lotteryData) ? " " + lotteryOrderNote(lotteryData) : ""}`
+    : null;
+
   // -------- Teams tab --------
   const [pickedTeamId, setSelectedTeamId] = useState<string>("");
   // your own team until you pick another (Ethan, 25 Nov 2026)
@@ -378,8 +406,35 @@ export default function DraftRoomPage() {
     />
   );
 
+  const lotteryCard =
+    phase === "preDraft" && lotteryData ? (
+      <LotteryCard
+        data={lotteryData}
+        nowMs={serverNow}
+        draftAt={typeof activeLeague?.draftAt === "number" && Number.isFinite(activeLeague.draftAt) ? activeLeague.draftAt : null}
+        onWatch={(run, replay) => setStage({ runId: run.id, replay })}
+        act={lottery.act}
+      />
+    ) : null;
+
   const modals = (
     <>
+      {stageRun && lotteryData ? (
+        <LotteryStage
+          key={`${stageRun.id}|${stage?.replay ? 1 : 0}`}
+          run={stageRun}
+          teams={lotteryData.teams}
+          offsetMs={lotteryData.offsetMs}
+          isLatest={!stageRun.ranAt || lastLottery?.id === stageRun.id}
+          replay={!!stage?.replay}
+          yourTeamId={yourTeamId}
+          onClose={() => {
+            setStage(null);
+            // the new order (first pick) straight away
+            if (activeLeagueId) void refreshFromServer(activeLeagueId);
+          }}
+        />
+      ) : null}
       {modal?.type === "draftConfirm" && (
         <DraftConfirmModal
           player={modal.player}
@@ -391,7 +446,23 @@ export default function DraftRoomPage() {
         />
       )}
 
-      {modal?.type === "draftOrder" && <DraftOrderModal teams={draftOrderTeams} yourTeamId={yourTeamId} preDraft={phase === "preDraft"} onClose={() => setModal(null)} />}
+      {modal?.type === "draftOrder" && (
+        <DraftOrderModal
+          teams={draftOrderTeams}
+          yourTeamId={yourTeamId}
+          preDraft={phase === "preDraft"}
+          lotteryNote={lotteryNote}
+          onWatchLottery={
+            lastLottery
+              ? () => {
+                  setModal(null);
+                  setStage({ runId: lastLottery.id, replay: true });
+                }
+              : undefined
+          }
+          onClose={() => setModal(null)}
+        />
+      )}
 
       {modal?.type === "playerCard" && (
         <PlayerCardModal
@@ -427,6 +498,7 @@ export default function DraftRoomPage() {
         {background}
         <div style={{ padding: "16px 20px 0", maxWidth: 1600, width: "100%", margin: "0 auto" }}>
           {header}
+          {lotteryCard}
           {draftResults.length ? (
             <div style={{ marginTop: 12 }}>
               <PickStrip results={draftResults} teams={teams} onClockPick={phase === "liveDraft" ? currentPick : 0} yourTeamId={yourTeamId} draftComplete={draftComplete} onOpen={openPlayerCard} />
@@ -479,6 +551,7 @@ export default function DraftRoomPage() {
 
       <div style={{ maxWidth: 420, margin: "0 auto", padding: "16px 18px", paddingBottom: "calc(18px + env(safe-area-inset-bottom))" }}>
         {header}
+        {lotteryCard}
         {tabBar(TABS, activeTab)}
         {activeTab === "Player Pool" && poolTab}
         {activeTab === "Watchlist" && watchlistTab}

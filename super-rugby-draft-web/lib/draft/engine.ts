@@ -2,7 +2,8 @@
 // The draft, run on the server (it used to run in each person's browser, so a pick could be
 // missed if nobody had the page open, and browsers could disagree).
 // - Order: snake. Shuffled each time a team joins; the commissioner can rearrange it until
-//   the draft starts.
+//   the draft starts. Or the draft lottery sets it, at a time the commissioner picks
+//   (lib/draft/lottery; Ethan, 28 Nov 2026).
 // - The draft starts at the league's draft time. 90 seconds a pick; when time runs out the
 //   server picks from the team's draft watchlist (in order), then by their draft strategy
 //   (lib/draft/strategy.ts; with none, the best draft rank) — never breaking the roster's position
@@ -19,6 +20,7 @@ import { rosterSize, squadFormatOf, type SquadFormat } from "@/lib/league/squad"
 import { lockLeagueScoring } from "@/lib/scoring/leagueRules";
 import { strategyChoice } from "@/lib/draft/strategy";
 import { strategyForTeam } from "@/lib/draft/strategyServer";
+import { runDueLottery } from "@/lib/draft/lottery/server";
 
 type Db = SupabaseClient;
 
@@ -32,6 +34,8 @@ export type DraftState = {
   completed_at: string | null;
   missed_in_row: Record<string, number>;
   order_edited: boolean;
+  /** who set the order last: "lottery", "commissioner", or null (shuffled as teams joined) */
+  order_source?: string | null;
 };
 
 /** Before the draft: any phase that isn't live or complete (older rows say "scheduled"). */
@@ -86,7 +90,7 @@ export async function setDraftOrder(db: Db, leagueId: string, order: string[]) {
   if (!isPreDraft(state)) throw new DraftError("The draft has started, so the order can't change", 409);
   const teams = await teamIds(db, leagueId);
   if (order.length !== teams.length || !teams.every((t) => order.includes(t))) throw new DraftError("The order must include every team once");
-  await q(db.from("draft_state").update({ draft_order_team_ids: order, order_edited: true, updated_at: new Date().toISOString() }).eq("league_id", leagueId));
+  await q(db.from("draft_state").update({ draft_order_team_ids: order, order_edited: true, order_source: "commissioner", updated_at: new Date().toISOString() }).eq("league_id", leagueId));
 }
 
 type Ctx = {
@@ -233,8 +237,12 @@ export async function advanceDraft(db: Db, leagueId: string, nowMs: number): Pro
 
   if (ctx.state.phase !== "live") {
     const league = await q<{ draft_at: string | null }>(db.from("leagues").select("draft_at").eq("id", leagueId).single());
-    if (!league.draft_at || new Date(league.draft_at).getTime() > nowMs || ctx.order.length < 2) return { autoPicks: 0 };
-    const startMs = new Date(league.draft_at).getTime();
+    const draftDue = !!league.draft_at && new Date(league.draft_at).getTime() <= nowMs;
+    // the draft lottery at its time (lib/draft/lottery/server.ts); if the draft is starting
+    // first (its time moved earlier), the lottery runs now and the draft uses its order
+    if (await runDueLottery(db, leagueId, nowMs, { now: draftDue })) ctx = await loadContext(db, leagueId);
+    if (!draftDue || ctx.order.length < 2) return { autoPicks: 0 };
+    const startMs = new Date(league.draft_at as string).getTime();
     await q(
       db.from("draft_state").update({
         phase: "live",

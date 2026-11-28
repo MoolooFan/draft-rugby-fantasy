@@ -8,7 +8,8 @@
 //   finished (saving who started in player_round_roles first).
 // - Final scores of finished games from the official fantasy game (lib/results/matchScores.ts).
 // - Locks lineups at each deadline and finalises each round when it's due (lib/results/engine).
-// - Keeps live drafts moving (auto-picks) even with nobody in the draft room.
+// - Keeps live drafts moving (auto-picks) even with nobody in the draft room, and runs any draft
+//   lottery that's due (lib/draft/lottery) so the order is set even if nobody's watching.
 // - Phone notifications on a timer: draft starting soon, lineup reminders (lib/notifications/reminders.ts).
 // - Nightly backup of the database at about 3am NZ time (lib/backup/run.ts).
 // Outside game weekends it does almost nothing, so it's cheap to call often.
@@ -22,6 +23,7 @@ import { currentSeasonYear, getSeason, realRoundsAwaitingTeamLists } from "@/lib
 import { applyFantasyFeed, applyQuestionable, clearFinishedGameStatuses, importRoundStatus, type ImportReport } from "@/lib/status/import";
 import { runDueWaivers } from "@/lib/waivers/process";
 import { advanceDraft } from "@/lib/draft/engine";
+import { dueLotteryLeagues, runDueLottery } from "@/lib/draft/lottery/server";
 import { coachTick } from "@/lib/coach/run";
 import { backupIfDue } from "@/lib/backup/run";
 
@@ -78,7 +80,7 @@ async function tick() {
 
   // Drafts: start any that are due and make overdue auto-picks (so a draft keeps going even
   // if nobody has the draft room open).
-  const drafts: Array<{ leagueId: string; autoPicks?: number; error?: string }> = [];
+  const drafts: Array<{ leagueId: string; autoPicks?: number; lottery?: number; error?: string }> = [];
   const { data: dueDrafts } = await supabaseAdmin
     .from("leagues")
     .select("id")
@@ -90,6 +92,16 @@ async function tick() {
       if (r.autoPicks) drafts.push({ leagueId: l.id, autoPicks: r.autoPicks });
     } catch (e) {
       drafts.push({ leagueId: l.id, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  // Draft lotteries whose time has come, with nobody in the Draft Room to run them.
+  for (const leagueId of await dueLotteryLeagues(supabaseAdmin, now).catch(() => [] as string[])) {
+    try {
+      const r = await runDueLottery(supabaseAdmin, leagueId, now);
+      if (r) drafts.push({ leagueId, lottery: r.run_number });
+    } catch (e) {
+      drafts.push({ leagueId, error: e instanceof Error ? e.message : String(e) });
     }
   }
 
