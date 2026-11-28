@@ -10,7 +10,8 @@
 // - The commissioner can still arrange the order by hand afterwards (marked as such).
 import { randomInt } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { lotteryOrder, MAX_LOTTERY_TEAMS } from "./sim";
+import { LOTTERY_BEFORE_DRAFT_MS, LOTTERY_MIN_NOTICE_MS, lotteryOrder, MAX_LOTTERY_TEAMS } from "./sim";
+export { LOTTERY_BEFORE_DRAFT_MS, LOTTERY_MIN_NOTICE_MS };
 
 type Db = SupabaseClient;
 
@@ -27,10 +28,6 @@ export type LotteryRow = {
   result_team_ids: string[] | null;
 };
 
-/** The lottery has to be done at least this long before the draft starts. */
-export const LOTTERY_BEFORE_DRAFT_MS = 5 * 60_000;
-/** ...and set at least this far ahead, so people can come and watch. */
-export const LOTTERY_MIN_NOTICE_MS = 60_000;
 
 export class LotteryError extends Error {
   constructor(message: string, public status = 400) {

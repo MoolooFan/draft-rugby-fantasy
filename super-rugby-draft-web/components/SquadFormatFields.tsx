@@ -134,10 +134,6 @@ export function SquadFormatFields({
         </div>
       ) : null}
 
-      <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.8 }}>
-        Leagues can have up to {MAX_LEAGUE_TEAMS} teams.
-        {pool.length ? ` ${teamCount ? `With ${teams} teams` : `With ${MAX_LEAGUE_TEAMS} teams`}, ${drafted} of the ${pool.length} players in the pool get drafted.` : ""}
-      </div>
       {tight ? (
         <div style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b" }}>
           That&apos;s most of the player pool: free agents will be thin. Smaller squads suit bigger leagues.

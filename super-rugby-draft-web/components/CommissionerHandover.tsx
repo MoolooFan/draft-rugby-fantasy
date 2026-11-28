@@ -21,9 +21,6 @@ export function CommissionerHandover({ leagueId, teams, myUsername, onDone }: { 
 
   return (
     <div style={{ display: "grid", gap: 8 }}>
-      <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.75, lineHeight: 1.4 }}>
-        Hand the commissioner job to another member, e.g. if you&apos;re stopping playing. They get League Settings, the draft order, reversing moves and restarting the league next season. You keep your team.
-      </div>
       <div style={{ display: "flex", gap: 8 }}>
         <select
           aria-label="New commissioner"

@@ -84,10 +84,10 @@ export function UpcomingFixtureCard({
                 <div style={{ textAlign: "center", fontSize: 11, fontWeight: 500, color: muted }}>Win Probability</div>
                 <div style={{ marginTop: 4, display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600 }}>
                   <span style={{ color: "#15803d" }}>{upcomingOutlook.leftWin}%</span>
-                  <div style={{ height: 7, borderRadius: 999, overflow: "hidden", display: "flex", background: "#e2e8f0" }}>
+                  <div style={{ height: 7, borderRadius: 999, overflow: "hidden", display: "flex", background: "#2563eb" }}>
                     <div style={{ width: `${upcomingOutlook.leftWin}%`, background: "#16a34a" }} />
                   </div>
-                  <span style={{ color: muted }}>{100 - upcomingOutlook.leftWin}%</span>
+                  <span style={{ color: "#1d4ed8" }}>{100 - upcomingOutlook.leftWin}%</span>
                 </div>
               </div>
             ) : null}

@@ -1266,7 +1266,8 @@ const modalActions = useMemo(
   activeLeague?.id,
   selectionWeek,
 ]);
-  // computers (Ethan, 27 Nov 2026): up to 5 picked columns, and the Watchlist beside the pool
+  // computers (Ethan, 27 Nov 2026): up to 5 picked columns; your team beside the Player Pool and
+  // the Watchlist (Ethan, 28 Nov 2026: it used to be the Watchlist beside the pool)
   const isDesktop = useIsDesktop();
   const txColumns = useTxColumnsStore((st) => st.columns);
   const setTxColumns = useTxColumnsStore((st) => st.setColumns);
@@ -1309,6 +1310,22 @@ const modalActions = useMemo(
     />
   );
 
+  // your squad, by position (computers, beside the Player Pool / Watchlist)
+  const POS_ORDER = ["PR", "HO", "LK", "LF", "HB", "FH", "CE", "OB"];
+  const yourTeamSorted = [...yourRosterPlayers].sort((a, b) => {
+    const pa = POS_ORDER.indexOf(String(a.posAbbrev ?? "")), pb = POS_ORDER.indexOf(String(b.posAbbrev ?? ""));
+    return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb);
+  });
+  const yourTeamColumn = isDesktop ? (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.85, margin: "24px 2px 0" }}>
+        Your Team ({yourRosterPlayers.length})
+      </div>
+      <PlayerListBox viewLabel={statViewLabelFor(infoMode)} metricHeading={metricLabel(infoMode)} players={yourTeamSorted} emptyText="No players in your team yet." renderRow={(p) => renderPlayerRow(p)} />
+    </div>
+  ) : null;
+  const sideBySide: React.CSSProperties | undefined = isDesktop ? { display: "grid", gridTemplateColumns: "minmax(0, 1.7fr) minmax(0, 1fr)", gap: 18, alignItems: "start" } : undefined;
+
   return (
     <main style={{ minHeight: "100svh", width: "100%", position: "relative", color: "white" }}>
       {/* Background */}
@@ -1341,7 +1358,7 @@ const modalActions = useMemo(
         <TxTabs tab={tab} onTab={setTab} pendingOffersCount={pendingOffersCount} />
 
         {tab === "Player Pool" && (
-          <div style={isDesktop ? { display: "grid", gridTemplateColumns: "minmax(0, 1.7fr) minmax(0, 1fr)", gap: 18, alignItems: "start" } : undefined}>
+          <div style={sideBySide}>
           <div style={{ minWidth: 0 }}>
             <PoolFilterBar
   search={search}
@@ -1360,17 +1377,13 @@ const modalActions = useMemo(
 
             <PlayerListBox viewLabel={statViewLabelFor(infoMode)} metricHeading={metricLabel(infoMode)} players={playerPoolPlayers} emptyText="No available players found." renderRow={(p) => renderPlayerRow(p, true)} columns={listColumns} />
           </div>
-          {isDesktop ? (
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.85, margin: "24px 2px 0" }}>Watchlist</div>
-              <PlayerListBox viewLabel={statViewLabelFor(infoMode)} metricHeading={metricLabel(infoMode)} players={watchlistPlayers} emptyText="No players in your watchlist yet. Tap the star next to a player to add him." renderRow={(p) => renderPlayerRow(p)} />
-            </div>
-          ) : null}
+          {yourTeamColumn}
           </div>
         )}
 
         {tab === "Watchlist" && (
-          <>
+          <div style={sideBySide}>
+          <div style={{ minWidth: 0 }}>
             <PoolFilterBar
   search={search}
   setSearch={setSearch}
@@ -1387,7 +1400,9 @@ const modalActions = useMemo(
 />
 
             <PlayerListBox viewLabel={statViewLabelFor(infoMode)} metricHeading={metricLabel(infoMode)} players={watchlistPlayers} emptyText="No players in your watchlist yet." renderRow={(p) => renderPlayerRow(p, true)} columns={listColumns} />
-          </>
+          </div>
+          {yourTeamColumn}
+          </div>
         )}
 
         {tab === "Pending Claims" && (

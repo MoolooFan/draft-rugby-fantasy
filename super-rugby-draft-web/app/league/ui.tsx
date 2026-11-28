@@ -57,6 +57,48 @@ export function Field({ label, children }: { label: string; children: React.Reac
   );
 }
 
+/** A headed box grouping a few settings (Create League; Ethan, 28 Nov 2026). */
+export function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section style={{ border: "1px solid #e5e9ef", borderRadius: 12, padding: 12, display: "grid", gap: 10, background: "#f8fafc" }}>
+      <div style={{ fontSize: 13, fontWeight: 700 }}>{title}</div>
+      {children}
+    </section>
+  );
+}
+
+/** Tabs across the top of a pop-up (League Settings; Ethan, 28 Nov 2026). */
+export function PopupTabs<T extends string>({ tabs, value, onChange }: { tabs: readonly T[]; value: T; onChange: (t: T) => void }) {
+  return (
+    <div role="tablist" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+      {tabs.map((t) => {
+        const on = t === value;
+        return (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={on}
+            onClick={() => onChange(t)}
+            style={{
+              height: 30,
+              padding: "0 12px",
+              borderRadius: 999,
+              border: on ? "none" : "1px solid #e5e9ef",
+              background: on ? "#0f172a" : "#ffffff",
+              color: on ? "#ffffff" : "#0f172a",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {t}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function inputStyle(disabled = false): React.CSSProperties {
 return {
   width: "100%",

@@ -3,11 +3,11 @@
 // Team Selection on a computer (Ethan, 27 Nov 2026): your whole squad as a table beside the
 // pitch, so you can compare everyone at once: where he is in your team, his game this week,
 // status, expected points, latest score, form, points per game and last season's average.
-// Tap a player for his card.
+// Tap a player for his card. Under each name: his Super Rugby team and positions (Ethan, 28 Nov 2026).
 import React from "react";
 import { StatusTag } from "@/components/StatusTag";
 import { positionsLabel } from "@/lib/players/positions";
-import { jerseySrcForTeamCode } from "@/components/dashboard/helpers";
+import { fullTeamNameFromCode, jerseySrcForTeamCode } from "@/components/dashboard/helpers";
 
 export type SquadRow = {
   player: { id: string; firstName?: string; lastName?: string; teamCode: string; posAbbrev?: string; secondaryPosAbbrev?: string | null; thirdPosAbbrev?: string | null };
@@ -37,7 +37,6 @@ export function SquadTable({ rows, lastSeasonYear, onOpen }: { rows: SquadRow[];
     <div style={{ borderRadius: 14, background: "rgba(255,255,255,0.96)", color: "#0f172a", overflow: "hidden", boxShadow: "0 10px 24px rgba(0,0,0,0.12)" }}>
       <div style={{ padding: "12px 14px 6px", display: "flex", alignItems: "baseline", gap: 8 }}>
         <div style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>Your squad</div>
-        <div style={{ fontSize: 11, color: "#64748b" }}>Tap a player for his card</div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 6, padding: "6px 14px", borderBottom: "1px solid #e5e9ef", alignItems: "end" }}>
         <div style={{ ...head, textAlign: "left" }}>Player</div>
@@ -73,7 +72,9 @@ export function SquadTable({ rows, lastSeasonYear, onOpen }: { rows: SquadRow[];
                   {r.captain ? <Badge text="C" /> : r.vice ? <Badge text="VC" ring /> : null}
                   <StatusTag player={p as never} />
                 </div>
-                <div style={{ fontSize: 10, color: "#64748b" }}>{positionsLabel(p)}</div>
+                <div style={{ fontSize: 10, color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {fullTeamNameFromCode(p.teamCode)} — {positionsLabel(p)}
+                </div>
               </div>
             </div>
             <div title={r.where} style={{ ...cell, fontWeight: r.starter ? 700 : 500, color: r.where === "IR" ? "#dc2626" : r.starter ? "#0f172a" : "#64748b" }}>

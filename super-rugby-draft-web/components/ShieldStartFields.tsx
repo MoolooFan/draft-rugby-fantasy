@@ -81,17 +81,13 @@ export function ShieldStartFields({
           ))}
         </select>
       ) : null}
-      <div style={note}>
-        {value.method === "top_score"
-          ? "The highest score in the league's first round wins it."
-          : value.method === "random"
-            ? drawn
-              ? `Drawn: ${drawn} starts the season with it.`
-              : "Drawn at random once the draft finishes (posted in the league chat). The team holds it from round 1, so its first home game is its first defence."
-            : "This team holds it from round 1, so its first home game is its first defence."}
-        {carriedOver ? " This season's holder carried it over from last season, so this isn't used." : ""}
-        {locked ? " Can't change now the first round has kicked off." : ""}
-      </div>
+      {(value.method === "random" && drawn) || carriedOver || locked ? (
+        <div style={note}>
+          {value.method === "random" && drawn ? `Drawn: ${drawn} starts the season with it.` : ""}
+          {carriedOver ? " Carried over from last season." : ""}
+          {locked ? " Locked now the first round has kicked off." : ""}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -87,9 +87,6 @@ export function LeagueStakesSection({ leagueId }: { leagueId: string }) {
     <div style={{ display: "grid", gap: 8 }}>
       {stakes.isCommissioner ? (
         <>
-          <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.8 }}>
-            Optional. Everyone else has to tap &quot;I agree&quot;, and again whenever you change them.
-          </div>
           <textarea
             aria-label="Rewards"
             placeholder="Rewards, e.g. the champion takes the $20 pot"

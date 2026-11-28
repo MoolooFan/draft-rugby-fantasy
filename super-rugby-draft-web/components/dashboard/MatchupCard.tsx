@@ -52,6 +52,7 @@ function ScoreBlock({
 }
 
 export function MatchupCard({
+  hideTitle = false,
   leagueName,
   weekLabel,
   left,
@@ -61,6 +62,8 @@ export function MatchupCard({
   shieldName,
   pendingTradeCount,
 }: {
+  /** computers: the league name and round are in the header across the top instead */
+  hideTitle?: boolean;
   leagueName: string;
   weekLabel: string;
   left: ScoreSide;
@@ -74,18 +77,22 @@ export function MatchupCard({
   const router = useRouter();
   return (
         <div style={cardStyle}>
-          <div style={{ textAlign: "center", fontWeight: 700, fontSize: 24 }}>
-            {leagueName}
-          </div>
-          <div style={{ textAlign: "center", marginTop: 4, fontSize: 18, fontWeight: 600 }}>
-            {weekLabel}
-          </div>
+          {hideTitle ? null : (
+            <>
+              <div style={{ textAlign: "center", fontWeight: 700, fontSize: 24 }}>
+                {leagueName}
+              </div>
+              <div style={{ textAlign: "center", marginTop: 4, fontSize: 18, fontWeight: 600 }}>
+                {weekLabel}
+              </div>
+            </>
+          )}
 
           <div
             style={{
-              marginTop: 10,
-              borderTop: "1px solid #e5e9ef",
-              paddingTop: 10,
+              marginTop: hideTitle ? 0 : 10,
+              borderTop: hideTitle ? "none" : "1px solid #e5e9ef",
+              paddingTop: hideTitle ? 0 : 10,
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
               gap: 10,

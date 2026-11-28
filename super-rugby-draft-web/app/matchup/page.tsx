@@ -1103,6 +1103,7 @@ return (
         />
 
         <Scoreboard
+          wide={isDesktop}
           left={scoreSide(leftTeamId, leftName, leftRecord, leftStreak, leftScore, leftOutlook)}
           right={scoreSide(rightTeamId, rightName, rightRecord, rightStreak, rightScore, rightOutlook)}
           mounted={mounted}

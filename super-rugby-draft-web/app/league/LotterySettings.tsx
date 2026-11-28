@@ -74,9 +74,7 @@ export function LotterySettings({ leagueId, isCommissioner, draftAt }: { leagueI
             <b>{runLabel(last)}</b> set the order.
           </>
         ) : (
-          <span style={{ color: muted }}>
-            Pick a time and the league can watch the draft order being decided in the Draft Room: every team gets a runner, and the first to score picks first.
-          </span>
+          <span style={{ color: muted }}>Not set.</span>
         )}
       </div>
       <LotteryRuns data={data} />
@@ -115,13 +113,7 @@ export function LotterySettings({ leagueId, isCommissioner, draftAt }: { leagueI
               )
             ) : null}
           </div>
-          <div style={{ fontSize: 11, color: muted, marginTop: 6, lineHeight: 1.45 }}>
-            Saved straight away (no need to press Save). {draftAt ? "At least 5 minutes before the draft. " : ""}
-            {last
-              ? "A rerun runs at its time like the first, and the league sees every run."
-              : "The result isn't decided until that time, so nobody (you included) can see it early."}{" "}
-            Teams that join after the lottery go on the end of the order. You can still arrange the order by hand below (the league sees a note).
-          </div>
+          <div style={{ fontSize: 11, color: muted, marginTop: 6 }}>Saved straight away.</div>
           {error ? <div style={{ fontSize: 12, fontWeight: 600, color: "#b91c1c", marginTop: 6 }}>{error}</div> : null}
           {saved ? <div style={{ fontSize: 12, fontWeight: 600, color: teal, marginTop: 6 }}>{saved}</div> : null}
         </>

@@ -138,9 +138,6 @@ export function ShieldTab({ leagueId, teams }: { leagueId: string; teams: TeamLi
               </div>
             )}
           </div>
-          <div style={{ ...row, ...muted, fontWeight: 600 }}>
-            Only on the line in the holder&apos;s home games: beat them away to take it. A draw and they keep it.
-          </div>
         </div>
       ) : null}
 

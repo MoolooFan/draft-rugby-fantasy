@@ -206,6 +206,8 @@ export default function DraftRoomPage() {
 
   // -------- Player Pool / Watchlist --------
   const pool = usePoolView({ players: allPlayers, draftedIds, strategy: draftStrategy, liveById: getLivePlayerById, withExtras: isDesktop });
+  // computers: the Watchlist column has its own Search and Filters (Ethan, 28 Nov 2026)
+  const wlView = usePoolView({ players: allPlayers, draftedIds, strategy: draftStrategy, liveById: getLivePlayerById });
   const squadFormat = activeLeague?.squadFormat;
   const playerPoolPlayers = useMemo(() => pool.available.filter((p) => canTeamDraftPlayer(yourTeamId, p, squadFormat)), [pool.available, canTeamDraftPlayer, yourTeamId, squadFormat]);
   // In the order you set (auto-pick takes the first that's still free and fits)
@@ -213,6 +215,10 @@ export default function DraftRoomPage() {
     const byId = new Map(pool.available.map((p) => [p.id, p]));
     return watchlistOrder.map((id) => byId.get(id)).filter((p): p is Player => !!p);
   }, [pool.available, watchlistOrder]);
+  const watchlistColumnPlayers = useMemo(() => {
+    const byId = new Map(wlView.available.map((p) => [p.id, p]));
+    return watchlistOrder.map((id) => byId.get(id)).filter((p): p is Player => !!p);
+  }, [wlView.available, watchlistOrder]);
 
   const [activeTab, setActiveTab] = useState<DraftTab>("Player Pool");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -527,7 +533,7 @@ export default function DraftRoomPage() {
           }}
         >
           <section aria-label="Players" style={column}>
-            {hasStrategy ? tabBar(["Player Pool", "Watchlist"], poolSide) : null}
+            {hasStrategy ? tabBar(["Player Pool", "Watchlist"], poolSide) : <div style={{ ...columnTitle, marginTop: 14 }}>Player Pool</div>}
             {poolSide === "Watchlist" ? watchlistTab : poolTab}
           </section>
           {hasStrategy ? (
@@ -537,7 +543,25 @@ export default function DraftRoomPage() {
           ) : (
             <section aria-label="Watchlist" style={column}>
               <div style={{ ...columnTitle, marginTop: 14 }}>Watchlist</div>
-              <PoolList {...listProps} players={watchlistPlayers} emptyText="No players in your watchlist yet. Tap the eye next to a player to add him." onMove={moveWatchlist} />
+              <PoolFilterBar
+                search={wlView.search}
+                setSearch={wlView.setSearch}
+                filters={wlView.filters}
+                setFilters={wlView.setFilters}
+                sort={wlView.sortMode}
+                setSort={wlView.setSortMode}
+                sortOptions={wlView.sortOptions}
+                statOptions
+              />
+              <PoolList
+                {...listProps}
+                columnNote={wlView.columnNote}
+                columnLabel={wlView.columnLabel}
+                numberText={wlView.numberText}
+                players={watchlistColumnPlayers}
+                emptyText={watchlistOrder.length ? "No watchlist players match." : "No players in your watchlist yet. Tap the eye next to a player to add him."}
+                onMove={moveWatchlist}
+              />
             </section>
           )}
           <section aria-label="Teams" style={column}>
