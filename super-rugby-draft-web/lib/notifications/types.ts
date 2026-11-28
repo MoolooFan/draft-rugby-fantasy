@@ -9,7 +9,7 @@ export const NOTIFICATION_TYPES = [
   { key: "league_trade", label: "League trades", hint: "Any trade accepted in your league" },
   { key: "lineup_reminder", label: "Lineup reminder", hint: "2 hours before the team selection deadline" },
   { key: "waivers", label: "Waiver results", hint: "When waivers run and you had claims in" },
-  { key: "draft_soon", label: "Draft starting", hint: "Your league's draft is about to start" },
+  { key: "draft_soon", label: "Draft starting", hint: "Your league's draft, or its draft order lottery, is about to start" },
   { key: "chat_dm", label: "Direct messages", hint: "Someone messages you (incl. trade offers in chat)" },
   { key: "chat_league", label: "League chat", hint: "Someone posts in your league chat" },
   { key: "chat_auto", label: "League updates in chat", hint: "Weekly recap, trades, waiver and free agent reports, the shield" },

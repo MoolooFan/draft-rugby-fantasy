@@ -59,15 +59,16 @@ export function DraftOrderModal({
   yourTeamId,
   preDraft,
   lotteryNote,
-  onWatchLottery,
+  lotteryRuns,
   onClose,
 }: {
   teams: Array<{ id: string; name: string; ownerName: string | null }>;
   yourTeamId: string;
   preDraft: boolean;
-  /** set by the draft lottery: which run, and whether it's been changed since */
+  /** set by the draft lottery: which run */
   lotteryNote?: string | null;
-  onWatchLottery?: () => void;
+  /** every lottery run (with Watch) and any change since (components/draftRoom/LotteryRuns) */
+  lotteryRuns?: React.ReactNode;
   onClose: () => void;
 }) {
   return (
@@ -85,12 +86,8 @@ export function DraftOrderModal({
         </div>
         {lotteryNote ? (
           <div style={{ fontSize: 12, fontWeight: 600, marginTop: 8, lineHeight: 1.4 }}>
-            {lotteryNote}{" "}
-            {onWatchLottery ? (
-              <button onClick={onWatchLottery} style={{ border: "none", background: "transparent", padding: 0, font: "inherit", color: "#0d9488", textDecoration: "underline", cursor: "pointer" }}>
-                Watch the lottery
-              </button>
-            ) : null}
+            {lotteryNote}
+            {lotteryRuns}
           </div>
         ) : null}
         <div style={{ marginTop: 10, display: "grid" }}>

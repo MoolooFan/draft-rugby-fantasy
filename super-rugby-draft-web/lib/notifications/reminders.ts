@@ -1,6 +1,9 @@
 // lib/notifications/reminders.ts (server only)
 // The timed push notifications, checked by the 5-minute job (app/api/cron/tick):
 //   - Draft starting: 30 minutes before a league's draft (Ethan, 26 Nov 2026), to everyone in it.
+//   - Draft order lottery: about 5 minutes before it runs (Ethan, 28 Nov 2026), to everyone in the
+//     league; it opens the lottery in the Draft Room. The job runs every 5 minutes, so it arrives
+//     1 to 6 minutes before.
 //   - Lineup reminder: 2 hours before each week's team selection deadline, to every team playing
 //     that week, with any problem in the lineup ("1 starter isn't playing"; Ethan, 26 Nov 2026).
 // Each is sent once (push_sent), however often the job runs.
@@ -15,6 +18,42 @@ import { squadFormatOf } from "@/lib/league/squad";
 const MIN = 60_000;
 export const DRAFT_REMINDER_MS = 30 * MIN;
 export const LINEUP_REMINDER_MS = 120 * MIN;
+export const LOTTERY_REMINDER_MS = 6 * MIN;
+
+/** "Lottery League: draft order lottery soon" / "The draft order lottery starts in 4 minutes..." */
+export function lotteryReminderText(leagueName: string, minsLeft: number, rerun: boolean): { title: string; body: string } {
+  return {
+    title: `${leagueName}: draft order lottery${rerun ? " rerun" : ""} soon`,
+    body: `The draft order lottery starts in ${minsLeft === 1 ? "a minute" : `${minsLeft} minutes`}. Open the Draft Room to watch it live.`,
+  };
+}
+
+/** Draft order lotteries running in the next few minutes. */
+async function lotteryReminders(db: SupabaseClient, nowMs: number): Promise<number> {
+  const { data, error } = await db
+    .from("draft_lotteries")
+    .select("id, league_id, run_number, scheduled_at")
+    .is("ran_at", null)
+    .gt("scheduled_at", new Date(nowMs).toISOString())
+    .lte("scheduled_at", new Date(nowMs + LOTTERY_REMINDER_MS).toISOString());
+  if (error) throw error;
+  let sent = 0;
+  for (const r of data ?? []) {
+    const at = Date.parse(String(r.scheduled_at));
+    const { data: league } = await db.from("leagues").select("name").eq("id", r.league_id).maybeSingle();
+    const mins = Math.max(1, Math.round((at - nowMs) / MIN));
+    // keyed on the time too, so a lottery moved to another time reminds again
+    const did = await sendOnce(db, `lottery-soon:${r.id}:${at}`, async () =>
+      sendPush(db, await leagueUsers(db, r.league_id), "draft_soon", {
+        ...lotteryReminderText(String(league?.name ?? "Your league"), mins, Number(r.run_number) > 1),
+        url: "/draft-room#lottery",
+        tag: `lottery:${r.league_id}`,
+      })
+    );
+    if (did) sent++;
+  }
+  return sent;
+}
 
 /** Drafts starting within 30 minutes. */
 async function draftReminders(db: SupabaseClient, nowMs: number): Promise<number> {
@@ -115,8 +154,9 @@ async function lineupReminders(db: SupabaseClient, seasonYear: number, nowMs: nu
 
 /** Everything due now; never throws. */
 export async function sendDueReminders(db: SupabaseClient, seasonYear: number, nowMs: number) {
-  const out: { draft: number | string; lineup: number | string } = { draft: 0, lineup: 0 };
+  const out: { draft: number | string; lottery: number | string; lineup: number | string } = { draft: 0, lottery: 0, lineup: 0 };
   out.draft = await draftReminders(db, nowMs).catch((e) => `failed: ${e instanceof Error ? e.message : String(e)}`);
+  out.lottery = await lotteryReminders(db, nowMs).catch((e) => `failed: ${e instanceof Error ? e.message : String(e)}`);
   out.lineup = await lineupReminders(db, seasonYear, nowMs).catch((e) => `failed: ${e instanceof Error ? e.message : String(e)}`);
   return out;
 }
