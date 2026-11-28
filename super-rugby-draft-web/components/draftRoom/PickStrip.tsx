@@ -2,7 +2,8 @@
 // components/draftRoom/PickStrip.tsx
 // Every pick of the draft as a row of boxes (Ethan, 27 Nov 2026; like ESPN's draft room), on a
 // computer: earlier picks to the left, upcoming ones to the right. It keeps the pick on the clock
-// in view as the draft goes on; scroll (or the arrows) to look back or ahead.
+// in view as the draft goes on; scroll (or the arrows) to look back or ahead. A thin bar marks the
+// start of each round (Ethan, 28 Nov 2026).
 import React, { useEffect, useRef } from "react";
 import type { Player } from "@/lib/draft/types";
 import { positionsLabel } from "@/lib/players/positions";
@@ -37,7 +38,10 @@ export function PickStrip({
   useEffect(() => {
     const el = ref.current;
     if (!el || !focus) return;
-    el.scrollTo({ left: Math.max(0, (focus - 3) * (BOX_W + GAP)), behavior: "smooth" });
+    // (by the box itself: the round bars make the boxes' positions uneven)
+    const box = el.querySelector<HTMLElement>(`[data-pick="${focus}"]`);
+    const left = box ? box.offsetLeft - el.offsetLeft - 2 * (BOX_W + GAP) : (focus - 3) * (BOX_W + GAP);
+    el.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
   }, [focus]);
 
   const scrollBy = (dir: number) => ref.current?.scrollBy({ left: dir * (BOX_W + GAP) * 4, behavior: "smooth" });
@@ -66,8 +70,12 @@ export function PickStrip({
           const yours = !!r.ownerTeamId && r.ownerTeamId === yourTeamId;
           const p = r.player;
           return (
+            <React.Fragment key={r.pickNumber}>
+            {inRound === 1 && r.pickNumber > 1 ? (
+              <div role="separator" aria-label={`Round ${round}`} title={`Round ${round}`} style={{ flex: "0 0 3px", borderRadius: 2, background: "rgba(255,255,255,0.75)" }} />
+            ) : null}
             <button
-              key={r.pickNumber}
+              data-pick={r.pickNumber}
               onClick={p ? () => onOpen(p) : undefined}
               disabled={!p}
               style={{
@@ -110,6 +118,7 @@ export function PickStrip({
                 <div style={{ fontSize: 11, fontWeight: 700, color: onClock ? "#b45309" : "#94a3b8", marginTop: 4 }}>{onClock ? "On the clock" : "Upcoming"}</div>
               )}
             </button>
+            </React.Fragment>
           );
         })}
       </div>

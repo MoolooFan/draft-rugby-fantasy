@@ -11,8 +11,8 @@ export async function GET(req: Request) {
     const leagueId = String(q.get("leagueId") ?? "").trim();
     const week = Number(q.get("week"));
     if (!leagueId || !Number.isInteger(week) || week < 1) return NextResponse.json({ ok: false, error: "Missing leagueId or week" }, { status: 400 });
-    await requireLeagueTeam(leagueId);
-    const recap = await loadRoundRecap(supabaseAdmin, leagueId, week);
+    const { teamId } = await requireLeagueTeam(leagueId);
+    const recap = await loadRoundRecap(supabaseAdmin, leagueId, week, teamId);
     if (!recap) return NextResponse.json({ ok: false, error: "That round hasn't been finalised yet" }, { status: 404 });
     return NextResponse.json({ ok: true, recap }, { headers: { "Cache-Control": "private, max-age=60" } });
   } catch (e) {

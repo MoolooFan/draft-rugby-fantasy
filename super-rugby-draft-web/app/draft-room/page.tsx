@@ -6,9 +6,9 @@
 // On a computer (Ethan, 27 Nov 2026): every pick in a row of boxes under the header (scroll
 // back / ahead), then three columns: the Player Pool, your Draft Strategy (always open and
 // editable during the draft; your Watchlist instead if you haven't set a strategy), and a team.
-// Before the draft: "Draft Order Lottery at X. Watch the lottery" in the header while one is
+// Before the draft: "Draft Order Lottery at X." with an Enter button in the header while one is
 // waiting (it's set in League Settings), and the lottery itself full screen, opening on its own
-// for everyone here shortly before it runs (Ethan, 28 Nov 2026). /draft-room#lottery opens it.
+// for everyone here 2 minutes before it runs (Ethan, 28 Nov 2026). /draft-room#lottery opens it.
 
 import { useIsClient } from "@/lib/hooks/useIsClient";
 import { useEffect, useMemo, useState } from "react";
@@ -45,6 +45,8 @@ import { LotteryRuns } from "@/components/draftRoom/LotteryRuns";
 import { LotteryStage } from "@/components/draftRoom/LotteryStage";
 
 const TABS = ["Player Pool", "Watchlist", "Teams", "Draft Results"] as const;
+/** the lottery opens by itself for everyone in the Draft Room this long before it runs */
+const LOTTERY_AUTO_OPEN_MS = 2 * 60_000;
 type DraftTab = (typeof TABS)[number];
 type DraftPhase = "preDraft" | "liveDraft" | "complete";
 type Modal = null | { type: "draftConfirm"; player: Player } | { type: "playerCard"; player: Player } | { type: "draftOrder" };
@@ -93,6 +95,7 @@ export default function DraftRoomPage() {
   const moveWatchlist = useDraftStore((s) => s.moveWatchlist);
   const totalPicks = useDraftStore((s) => s.totalPicks());
   const ownerForPickSnake = useDraftStore((s) => s.ownerForPickSnake);
+  const pickTeamIds = useDraftStore((s) => s.pickTeamIds);
   const pickIndex = useDraftStore((s) => s.pickIndex);
   const picks = useDraftStore((s) => s.picks);
   const latestPickText = useDraftStore((s) => s.latestPickText);
@@ -236,7 +239,10 @@ export default function DraftRoomPage() {
   // (Auto-picks happen on the server when the clock runs out.)
   const draftResults: DraftPickRow[] = useMemo(() => {
     return Array.from({ length: totalPicks }).map((_, idx) => {
-      const owner = ownerForPickSnake(idx + 1);
+      // a pick already made: the team that made it (a league with no saved order showed "—"; Ethan,
+      // 28 Nov 2026); one still to come: the snake order
+      const madeBy = pickTeamIds?.[idx];
+      const owner = (madeBy ? teams.find((t) => t.id === madeBy) : null) ?? ownerForPickSnake(idx + 1);
       const ownerInitials =
         owner?.userInitials ||
         owner?.initials ||
@@ -249,8 +255,7 @@ export default function DraftRoomPage() {
           .toUpperCase();
       return { pickNumber: idx + 1, player: picks[idx] ?? null, ownerInitials, ownerTeamId: owner?.id };
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [totalPicks, picks, ownerForPickSnake, teams]);
+  }, [totalPicks, picks, pickTeamIds, ownerForPickSnake, teams]);
 
   // the draft order (round 1), for "First Pick" and its pop-up (Ethan, 25 Nov 2026)
   const draftOrderTeams = useMemo(() => {
@@ -271,10 +276,11 @@ export default function DraftRoomPage() {
   const clockNow = useNow(1000);
   const serverNow = clockNow ? clockNow + (lotteryData?.offsetMs ?? 0) : 0;
   const [stage, setStage] = useState<{ runId: string; replay: boolean } | null>(null);
-  // a run starting in the next 30 seconds, or on now: opens by itself, once (set while drawing)
+  // a run starting in the next 2 minutes, or on now: opens by itself, once (set while drawing).
+  // Earlier than that, the header's Enter button opens it (Ethan, 28 Nov 2026).
   const liveRun =
     serverNow && lotteryData
-      ? (lotteryData.runs.find((r) => (r.ranAt ? serverNow - r.ranAt < LOTTERY_LIVE_MS : r.scheduledAt - serverNow < 30_000)) ?? null)
+      ? (lotteryData.runs.find((r) => (r.ranAt ? serverNow - r.ranAt < LOTTERY_LIVE_MS : r.scheduledAt - serverNow < LOTTERY_AUTO_OPEN_MS)) ?? null)
       : null;
   const [autoOpenedFor, setAutoOpenedFor] = useState<string | null>(null);
   if (liveRun && autoOpenedFor !== liveRun.id) {
@@ -542,7 +548,19 @@ export default function DraftRoomPage() {
             </section>
           ) : (
             <section aria-label="Watchlist" style={column}>
-              <div style={{ ...columnTitle, marginTop: 14 }}>Watchlist</div>
+              {/* no strategy yet: a clear way to set one up from here (Ethan, 28 Nov 2026: he
+                  couldn't find it; once set, the strategy takes this column) */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14 }}>
+                <div style={{ ...columnTitle, margin: "4px 2px 0", flex: 1 }}>Watchlist</div>
+                {!draftComplete && activeLeague ? (
+                  <button
+                    onClick={strategyPanel.show}
+                    style={{ height: 30, padding: "0 14px", borderRadius: 999, border: "none", background: "white", color: "#0d9488", fontSize: 12, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 12px rgba(15,23,42,0.12)" }}
+                  >
+                    Set Up Draft Strategy
+                  </button>
+                ) : null}
+              </div>
               <PoolFilterBar
                 search={wlView.search}
                 setSearch={wlView.setSearch}

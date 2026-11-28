@@ -13,6 +13,7 @@ export function PlayerListBox({
   emptyText,
   renderRow,
   columns,
+  groupOf,
 }: {
   /** e.g. "Per game · 2026" */
   viewLabel: string;
@@ -23,6 +24,8 @@ export function PlayerListBox({
   renderRow: (p: Player) => React.ReactNode;
   /** computers: the picked columns' headings (click one to sort by it) */
   columns?: { labels: string[]; titles: string[]; sorted: boolean[]; onSort: (i: number) => void };
+  /** a heading above each group (e.g. the position), shown where it changes; players come in group order */
+  groupOf?: (p: Player) => string;
 }) {
   return (
             <div style={listBox}>
@@ -52,7 +55,18 @@ export function PlayerListBox({
               {players.length === 0 ? (
                 <div style={{ padding: 14, fontSize: 12, fontWeight: 500, opacity: 0.7 }}>{emptyText}</div>
               ) : (
-                players.map((p) => renderRow(p))
+                players.map((p, i) => {
+                  const g = groupOf?.(p);
+                  const head = g && (i === 0 || groupOf?.(players[i - 1]) !== g);
+                  return (
+                    <React.Fragment key={p.id}>
+                      {head ? (
+                        <div style={{ padding: "7px 10px 4px", fontSize: 11, fontWeight: 700, opacity: 0.55, borderTop: i ? "1px solid rgba(0,0,0,0.06)" : "none" }}>{g}</div>
+                      ) : null}
+                      {renderRow(p)}
+                    </React.Fragment>
+                  );
+                })
               )}
             </div>
   );

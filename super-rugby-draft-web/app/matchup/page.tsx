@@ -1200,7 +1200,7 @@ onClick: selectedIsWatched ? removeSelectedFromWatchlist : addSelectedToWatchlis
     jerseySrc={jerseySrcForPlayer(selectedPlayer, "angle") ?? undefined}
     teamCode={selectedPlayer?.teamCode ?? null}
     weekLabel={roundLabel(displayWeek)}
-    fixtureLabel={selectedFixtureLabel ? `v ${selectedFixtureLabel}` : "—"}
+    fixtureLabel={selectedFixtureLabel || "—"}
     rows={selectedRows}
     totalPoints={
       selectedPlayer

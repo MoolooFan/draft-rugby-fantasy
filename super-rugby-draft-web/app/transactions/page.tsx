@@ -1316,12 +1316,14 @@ const modalActions = useMemo(
     const pa = POS_ORDER.indexOf(String(a.posAbbrev ?? "")), pb = POS_ORDER.indexOf(String(b.posAbbrev ?? ""));
     return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb);
   });
+  // grouped by position, with a heading for each (Ethan, 28 Nov 2026)
+  const POS_GROUP: Record<string, string> = { PR: "Props", HO: "Hookers", LK: "Locks", LF: "Loose Forwards", HB: "Halfbacks", FH: "Flyhalves", CE: "Centres", OB: "Outside Backs" };
   const yourTeamColumn = isDesktop ? (
     <div style={{ minWidth: 0 }}>
       <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.85, margin: "24px 2px 0" }}>
         Your Team ({yourRosterPlayers.length})
       </div>
-      <PlayerListBox viewLabel={statViewLabelFor(infoMode)} metricHeading={metricLabel(infoMode)} players={yourTeamSorted} emptyText="No players in your team yet." renderRow={(p) => renderPlayerRow(p)} />
+      <PlayerListBox viewLabel={statViewLabelFor(infoMode)} metricHeading={metricLabel(infoMode)} players={yourTeamSorted} emptyText="No players in your team yet." renderRow={(p) => renderPlayerRow(p)} groupOf={(p) => POS_GROUP[String(p.posAbbrev ?? "")] ?? "Other"} />
     </div>
   ) : null;
   const sideBySide: React.CSSProperties | undefined = isDesktop ? { display: "grid", gridTemplateColumns: "minmax(0, 1.7fr) minmax(0, 1fr)", gap: 18, alignItems: "start" } : undefined;

@@ -7,6 +7,7 @@ import { currentSeasonYear } from "@/lib/season";
 import ScoringRulesSync from "@/components/ScoringRulesSync";
 import LeagueSync from "@/components/LeagueSync";
 import ChatNotifier from "@/components/ChatNotifier";
+import ChatDrawer from "@/components/chat/ChatDrawer";
 import { PlayerCompareHost } from "@/components/PlayerCompare";
 import { TeamProfileHost } from "@/components/TeamProfileModal";
 import { LeagueStakesPrompt } from "@/components/LeagueStakes";
@@ -122,6 +123,7 @@ export default async function RootLayout({
         <SessionProvider profile={sessionProfile}>
           <LeagueSync username={sessionProfile?.username ?? null} />
           {sessionProfile ? <ChatNotifier /> : null}
+          {sessionProfile ? <ChatDrawer /> : null}
           <ScoringRulesSync>
             {children}
             {/* compare two players, from any page (player card Compare button, Stats Hub) */}

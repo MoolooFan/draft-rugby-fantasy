@@ -8,7 +8,8 @@ import { useRouter } from "next/navigation";
 import type { League } from "@/lib/league/types";
 import { currentSeasonYear } from "@/lib/season";
 import { getActiveUserProfile } from "@/lib/session";
-import { useChatUnread } from "@/lib/chat/store";
+import { useChatDrawer, useChatUnread } from "@/lib/chat/store";
+import { useIsDesktop } from "@/lib/ui/useIsDesktop";
 import { ChatIcon } from "@/components/ChatIcon";
 
 type ActiveMenu =
@@ -59,6 +60,8 @@ function MenuContents({
 }) {
   const router = useRouter();
   const unread = useChatUnread((s) => s.unread);
+  const openChat = useChatDrawer((s) => s.openChat);
+  const isDesktop = useIsDesktop();
 
   function go(item: ActiveMenu) {
     onClose?.();
@@ -87,7 +90,9 @@ function MenuContents({
           <button
             onClick={() => {
               onClose?.();
-              router.push("/chat");
+              // a computer: the panel from the right (Ethan, 28 Nov 2026); phones: the Messages page
+              if (isDesktop) openChat();
+              else router.push("/chat");
             }}
             aria-label={unread ? `Messages, ${unread} unread` : "Messages"}
             style={{

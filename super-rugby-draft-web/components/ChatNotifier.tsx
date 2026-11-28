@@ -7,7 +7,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useLeagueStore } from "@/lib/league/store";
-import { useChatUnread } from "@/lib/chat/store";
+import { useChatDrawer, useChatUnread } from "@/lib/chat/store";
+import { useIsDesktop } from "@/lib/ui/useIsDesktop";
 import { ChatIcon } from "@/components/ChatIcon";
 
 type Newest = { id: string; channel: string; sender_team_id: string | null; kind: string; body: string | null; created_at: string } | null;
@@ -19,6 +20,9 @@ export default function ChatNotifier() {
   const setUnread = useChatUnread((s) => s.setUnread);
   const pathname = usePathname();
   const router = useRouter();
+  const openChat = useChatDrawer((s) => s.openChat);
+  const drawerOpen = useChatDrawer((s) => s.open);
+  const isDesktop = useIsDesktop();
   const [banner, setBanner] = useState<{ id: string; channel: string; title: string; text: string } | null>(null);
   const lastShown = useRef<string | null>(null);
 
@@ -69,12 +73,13 @@ export default function ChatNotifier() {
     };
   }, [leagueId, setUnread]);
 
-  if (!banner || pathname?.startsWith("/chat")) return null;
+  if (!banner || pathname?.startsWith("/chat") || (isDesktop && drawerOpen)) return null;
   return (
     <button
       onClick={() => {
         setBanner(null);
-        router.push(`/chat?c=${encodeURIComponent(banner.channel)}`);
+        if (isDesktop) openChat(banner.channel);
+        else router.push(`/chat?c=${encodeURIComponent(banner.channel)}`);
       }}
       style={{
         position: "fixed",

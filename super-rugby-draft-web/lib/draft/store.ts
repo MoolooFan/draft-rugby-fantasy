@@ -48,6 +48,8 @@ type DraftState = {
   // Draft runtime
   pickIndex: number; // 1-based
   picks: Array<Player | null>;
+  /** the team that made each pick (from the server; leagues with no saved order still know whose pick it was) */
+  pickTeamIds: Array<string | null>;
   latestPickText: string;
 
     // Draft transactions (pick log)
@@ -275,11 +277,15 @@ export const useDraftStore = create<DraftState>()(
 
       // picks and rosters, from the server's picks
       const picks: Array<Player | null> = Array.from({ length: total }, () => null);
+      const pickTeamIds: Array<string | null> = Array.from({ length: total }, () => null);
       const byTeam = new Map<string, Player[]>();
       for (const r of rows) {
         const n = Number(r.pick_number);
         const player = prev.playersById?.[String(r.player_id)] ?? ({ id: String(r.player_id) } as Player);
-        if (n >= 1 && n <= total) picks[n - 1] = player;
+        if (n >= 1 && n <= total) {
+          picks[n - 1] = player;
+          pickTeamIds[n - 1] = r.team_id ? String(r.team_id) : null;
+        }
         byTeam.set(String(r.team_id), [...(byTeam.get(String(r.team_id)) ?? []), player]);
       }
       // After the draft, the saved rosters (with trades, waivers...) are the real ones: keep them.
@@ -308,6 +314,7 @@ export const useDraftStore = create<DraftState>()(
         ...prev,
         teams,
         isDraftOrderSet: order.length > 0,
+        pickTeamIds,
         phase: st?.phase === "live" || st?.phase === "complete" ? "liveDraft" : "preDraft",
         draftComplete: st?.phase === "complete",
         pickIndex: Number(st?.pick_index ?? 1),
@@ -342,6 +349,7 @@ setHasHydrated: (v) => set({ hasHydrated: v }),
 
       pickIndex: 1,
       picks: [],
+      pickTeamIds: [],
       latestPickText: "No picks yet.",
 
       watchlist: {},
