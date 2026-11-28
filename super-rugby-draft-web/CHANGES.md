@@ -23,6 +23,7 @@ If step 3 says **CONFLICT**, a later change touched the same lines. Type `git re
 
 | Code | What changed | Database |
 |---|---|---|
+| `00f0530` | Draft lottery screen (Ethan's changes): **team names under each runner** on the line before the start (yours in gold); the **site's background**; removed the "Every team gets a runner" line, Skip to result, "Ran ..." and the "This set the draft order" note | No |
 | `1a0b43e` | **Draft lottery**: the commissioner sets a time in the Draft Room's new Draft Lottery card; at that time the server runs a pixel rugby race (every team gets a runner, first to score picks first) and saves the draft order, and everyone in the Draft Room watches it live (it opens by itself 30 seconds before). The result isn't decided until that time. Reruns need a new time too and every run stays listed ("Run 2 (rerun)"); if the order is changed by hand afterwards the league sees a note. Replays any time. Ethan's mock is kept in prototypes/draft-lottery.html | **Yes**: new table `draft_lotteries`, new column `draft_state.order_source` |
 
 ### 27 Nov 2026
