@@ -71,6 +71,8 @@ export default function StatsHubPage() {
   const [group, setGroup] = useState<string>("all");
   const [sort, setSort] = useState<{ col: Col; dir: 1 | -1 }>({ col: "points", dir: -1 });
   const [view] = useStatView();
+  // Per 80: only players with 80+ minutes over the chosen rounds, unless you untick it (Ethan, 28 Nov 2026)
+  const [min80, setMin80] = useState(true);
   const [shown, setShown] = useState(PAGE);
   const [ticked, setTicked] = useState<string[]>([]);
   const [card, setCard] = useState<PlayerFromSheet | null>(null);
@@ -106,6 +108,7 @@ export default function StatsHubPage() {
     const out = players.filter((p) => {
       if (q && !`${p.firstName} ${p.lastName}`.toLowerCase().includes(q)) return false;
       if (!matchesPoolFilters(p, filters)) return false;
+      if (view === "per80" && min80 && (aggs.get(p.id)?.minutes ?? 0) < 80) return false;
       if (league && owners && !ownerFilter.includes("all")) {
         const t = owners.owner.get(p.id);
         const ok = ownerFilter.some((o) => (o === "available" ? !t : o === `team:${t}`));
@@ -122,7 +125,7 @@ export default function StatsHubPage() {
       return (vb - va) * -sort.dir || String(a.lastName).localeCompare(String(b.lastName));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [players, search, filters, ownerFilter, owners, league, sort, aggs, view, proj]);
+  }, [players, search, filters, ownerFilter, owners, league, sort, aggs, view, proj, min80]);
 
   const tapCol = (c: Col) => {
     setShown(PAGE);
@@ -223,6 +226,12 @@ export default function StatsHubPage() {
               {rounds.map((r) => <option key={r} value={`round${r}`}>{weekLabel(seasonCfg, r)}</option>)}
             </select>
             <StatViewToggle dark />
+            {view === "per80" ? (
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                <input type="checkbox" checked={min80} onChange={(e) => { setMin80(e.target.checked); setShown(PAGE); }} />
+                Minimum 80 minutes played
+              </label>
+            ) : null}
           </div>
 
           <div style={{ marginTop: 8, display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>

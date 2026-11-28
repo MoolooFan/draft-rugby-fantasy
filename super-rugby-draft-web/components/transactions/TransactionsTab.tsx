@@ -3,7 +3,7 @@
 // The Transactions page's "Transactions" tab: pending trades (received / proposed), league trades,
 // waiver claims and free agent transfers for a round. Split out of app/transactions/page.tsx
 // (21 Nov 2026); the page passes in the data it already has.
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { roundLabel } from "@/lib/season";
 import type { League } from "@/lib/league/types";
 import { getInitials, listBox, shortName, type AnyFixture, type Player } from "@/components/transactions/helpers";
@@ -13,6 +13,7 @@ import { getWeekDeadlineMs } from "@/lib/league/weekHelpers";
 import { TeamAvatar } from "@/components/TeamAvatar";
 import type { ReverseKind } from "@/components/transactions/ReverseControl";
 import { CommissionerPanel } from "@/components/transactions/CommissionerPanel";
+import { WaiverOrderModal } from "@/components/transactions/WaiverOrderModal";
 
 export type TransactionsTabProps = {
   activeLeague: League | null;
@@ -63,6 +64,8 @@ export function TransactionsTab({
     };
     const leagueId = activeLeague?.id ?? "";
     const yourId = yourDraftTeamId;
+    // the full waiver order pop-up (Ethan, 28 Nov 2026)
+    const [orderOpen, setOrderOpen] = useState(false);
 
 const yourWaiverRank = waiverOrderIndexByTeamId.get(String(yourId));
 const yourWaiverRankText = typeof yourWaiverRank === "number" ? `#${yourWaiverRank + 1}` : "—";
@@ -632,9 +635,30 @@ const InitialBadge = useStableComponent(InitialBadge__render);
           <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 700 }}>Waiver Claims</div>
           <div style={{ padding: "0 10px 10px", fontSize: 10, fontWeight: 700, opacity: 0.7 }}>
   Your waiver priority: {waiverOrderLoaded ? yourWaiverRankText : "Loading…"}
+  {waiverOrderLoaded ? (
+    <>
+      {" · "}
+      <button
+        onClick={() => setOrderOpen(true)}
+        style={{ border: "none", background: "transparent", padding: 0, font: "inherit", fontWeight: 700, color: "#0d9488", textDecoration: "underline", cursor: "pointer" }}
+      >
+        See the full order
+      </button>
+    </>
+  ) : null}
   {waiverOrderLoaded && waiverFlipped ? <div style={{ marginTop: 2 }}>Finals: the order is flipped, so the top seed picks first.</div> : null}
   {waiverOrderLoaded && shieldPickText ? <div style={{ marginTop: 2 }}>{shieldPickText}</div> : null}
 </div>
+{orderOpen ? (
+  <WaiverOrderModal
+    rows={waiverOrderRows}
+    teams={(activeLeague?.teams ?? []).map((t) => ({ id: t.id, name: t.name }))}
+    yourTeamId={yourId ? String(yourId) : null}
+    shieldTeamId={waiverShieldTeamId}
+    flipped={!!waiverFlipped}
+    onClose={() => setOrderOpen(false)}
+  />
+) : null}
 
           {waiverClaimsFeed.length === 0 ? (
             <div style={{ padding: "10px 10px", fontSize: 12, fontWeight: 600, opacity: 0.7 }}>None.</div>

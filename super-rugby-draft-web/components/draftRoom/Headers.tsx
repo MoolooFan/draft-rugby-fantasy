@@ -26,7 +26,7 @@ export function PreDraftHeader({
   firstPickName: string;
   /** opens the Draft Order pop-up (none when there's no order yet) */
   onShowOrder?: () => void;
-  /** a draft order lottery waiting to run: shown instead of First Pick (Ethan, 28 Nov 2026) */
+  /** a draft order lottery waiting to run: shown instead of First Pick, with an Enter button (Ethan, 28 Nov 2026) */
   lottery?: { text: string; onWatch: () => void } | null;
   onMenu: () => void;
 }) {
@@ -54,13 +54,13 @@ export function PreDraftHeader({
         )}
       </div>
       {lottery ? (
-        <div style={{ marginTop: 10, fontSize: 13, fontWeight: 700, opacity: 0.95 }}>
-          {lottery.text}{" "}
+        <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 13, fontWeight: 700, opacity: 0.95 }}>
+          <span>{lottery.text}</span>
           <button
             onClick={lottery.onWatch}
-            style={{ border: "none", background: "transparent", padding: 0, font: "inherit", fontWeight: 600, color: "#0d9488", textDecoration: "underline", cursor: "pointer" }}
+            style={{ height: 30, padding: "0 16px", borderRadius: 999, border: "none", background: "#22C55E", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
           >
-            Watch the lottery
+            Enter
           </button>
         </div>
       ) : (

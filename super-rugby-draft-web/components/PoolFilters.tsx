@@ -118,6 +118,8 @@ export function PoolFilterBar({
   columns?: { selected: string[]; options: Array<{ value: string; label: string }>; toggle: (v: string) => void; reset: () => void };
 }) {
   const [open, setOpen] = useState(false);
+  // the Columns list folds away (Ethan, 28 Nov 2026: it took up a lot of the pop-up)
+  const [columnsOpen, setColumnsOpen] = useState(false);
   const [statView, setStatView] = useStatView();
   const { season, setSeason, seasons } = useStatSeason();
   const resetSeason = useStatSeasonStore((s) => s.setSeason);
@@ -226,27 +228,38 @@ export function PoolFilterBar({
                 )
               : null}
             {columns ? (
-              <div style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.6 }}>
-                  Columns ({columns.selected.length} of 5 picked)
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {columns.options.map((o) => {
-                    const at = columns.selected.indexOf(o.value);
-                    const full = at < 0 && columns.selected.length >= 5;
-                    return (
-                      <Chip
-                        key={o.value}
-                        on={at >= 0}
-                        label={at >= 0 ? `${at + 1}. ${o.label}` : o.label}
-                        onClick={() => {
-                          if (!full) columns.toggle(o.value);
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-                <div style={{ fontSize: 11, color: "#64748b" }}>Tap to add or take away (up to 5, shown in the order picked). Click a column&apos;s heading in the list to sort by it.</div>
+              <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.6 }}>Columns</div>
+                <button
+                  onClick={() => setColumnsOpen((v) => !v)}
+                  aria-expanded={columnsOpen}
+                  style={{ height: 36, borderRadius: 10, border: "1px solid rgba(15,23,42,0.2)", padding: "0 10px", fontSize: 13, fontWeight: 600, color: "#0f172a", background: "white", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", textAlign: "left", width: "100%", minWidth: 0 }}
+                >
+                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {columns.selected.length
+                      ? columns.selected.map((v) => columns.options.find((o) => o.value === v)?.label ?? v).join(", ")
+                      : "None picked"}
+                  </span>
+                  <span style={{ fontSize: 11, color: "#64748b", whiteSpace: "nowrap" }}>{columns.selected.length} of 5 {columnsOpen ? "▴" : "▾"}</span>
+                </button>
+                {columnsOpen ? (
+                  <div style={{ border: "1px solid rgba(15,23,42,0.12)", borderRadius: 10, padding: "4px 0", maxHeight: 240, overflowY: "auto" }}>
+                    {columns.options.map((o) => {
+                      const at = columns.selected.indexOf(o.value);
+                      const full = at < 0 && columns.selected.length >= 5;
+                      return (
+                        <label
+                          key={o.value}
+                          style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", fontSize: 13, fontWeight: 600, color: full ? "#94a3b8" : "#0f172a", cursor: full ? "default" : "pointer" }}
+                        >
+                          <input type="checkbox" checked={at >= 0} disabled={full} onChange={() => columns.toggle(o.value)} />
+                          <span style={{ flex: 1 }}>{o.label}</span>
+                          {at >= 0 ? <span style={{ fontSize: 11, color: "#64748b" }}>{at + 1}</span> : null}
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </div>
             ) : null}
             {statOptions && seasons.length > 1

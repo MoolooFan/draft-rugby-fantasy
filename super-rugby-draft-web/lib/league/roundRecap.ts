@@ -6,6 +6,7 @@
 //  - player of the week: the round's top scorer (all players, this league's scoring), and who had him
 //  - the best and worst pickups for the round: players added that week (free agents and waiver
 //    claims) who played in it, by the points they scored, with the player they replaced
+//  - your best player: the top scorer in your XV that round (Ethan, 28 Nov 2026)
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSeason, realRoundsForWeek, SEASONS, weekLabel } from "@/lib/season";
 import { isFrontRow, playerPoints, RESULT_STATS, roundPoints, STATS, statCountsFromRaw, type StatCounts } from "@/lib/scoring";
@@ -33,9 +34,11 @@ export type RoundRecap = {
   playersOfWeek: Array<{ id: string; name: string; teamCode: string | null; points: number; fantasyTeam: RecapTeam | null }>;
   bestPickup: RecapPickup | null;
   worstPickup: RecapPickup | null;
+  /** the asking team's top scorer in its XV that round (null: none, or no team asked) */
+  yourBest: { id: string; name: string; teamCode: string | null; points: number } | null;
 };
 
-export async function loadRoundRecap(db: SupabaseClient, leagueId: string, week: number): Promise<RoundRecap | null> {
+export async function loadRoundRecap(db: SupabaseClient, leagueId: string, week: number, yourTeamId?: string | null): Promise<RoundRecap | null> {
   const [{ data: league }, { data: teams }] = await Promise.all([
     db.from("leagues").select("season").eq("id", leagueId).maybeSingle(),
     db.from("teams").select("id, name").eq("league_id", leagueId),
@@ -173,5 +176,24 @@ export async function loadRoundRecap(db: SupabaseClient, leagueId: string, week:
     console.error("[roundRecap] shield:", err);
   }
 
-  return { week, roundName: weekLabel(seasonCfg, week), games, shield, playersOfWeek, bestPickup, worstPickup };
+  // --- your best player: the players who scored for your team (the round's stored results), else
+  // the starters in the lineup you saved for it
+  let yourBest: RoundRecap["yourBest"] = null;
+  if (yourTeamId) {
+    const stored = (results ?? []).find((r) => r.team_id === yourTeamId)?.player_points as Record<string, number> | null | undefined;
+    let ids = Object.keys(stored ?? {});
+    if (!ids.length) {
+      const sel = (picks ?? []).find((x) => x.team_id === yourTeamId);
+      ids = Object.entries((sel?.lineup ?? {}) as Record<string, { id?: string } | null>)
+        .filter(([slot, pl]) => !/^bench\d+$/.test(slot) && pl?.id)
+        .map(([, pl]) => String(pl!.id));
+    }
+    const best = ids
+      .filter((id) => counts.has(id))
+      .map((id) => ({ id, points: pointsOf(id) }))
+      .sort((a, b) => b.points - a.points)[0];
+    if (best) yourBest = { id: best.id, name: nameOf(best.id), teamCode: codeOf(best.id), points: best.points };
+  }
+
+  return { week, roundName: weekLabel(seasonCfg, week), games, shield, playersOfWeek, bestPickup, worstPickup, yourBest };
 }

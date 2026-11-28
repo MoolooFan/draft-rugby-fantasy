@@ -528,7 +528,7 @@ export function rosterDataToLineup(data: any): Lineup | null {
   };
 }
 
-// ---- Fixture tag for a player row: "CRU (A)", or BYE (code-based, fixes MOA/MOP) ----
+// ---- Fixture tag for a player row: "v CRU (A)", or BYE (code-based, fixes MOA/MOP) ----
 export function fixtureTagFor(
   p: Player | null,
   fixtures: Array<AnyFixture & { kickoffMs: number }>,
@@ -557,7 +557,8 @@ export function fixtureTagFor(
   const oppCode = isHome ? awayCode : homeCode;
 
   if (!oppCode) return "BYE";
-  return `${oppCode} (${isHome ? "H" : "A"})`;
+  // "v" before the opponent (Ethan, 28 Nov 2026)
+  return `v ${oppCode} (${isHome ? "H" : "A"})`;
 }
 
 // ---- Shared styles ----

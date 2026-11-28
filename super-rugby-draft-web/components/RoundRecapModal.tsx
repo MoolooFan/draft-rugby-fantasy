@@ -1,8 +1,8 @@
 "use client";
 // components/RoundRecapModal.tsx
 // The round recap pop-up, opened from the "Round N recap" message in the league chat (Ethan,
-// 19 Nov 2026): results, the Shield, player of the week, and the best and worst pickups (each
-// player with his jersey, 20 Nov 2026).
+// 19 Nov 2026): results, the Shield, player of the week, your best player (28 Nov 2026), and the
+// best and worst pickups (each player with his jersey, 20 Nov 2026).
 // Data: /api/leagues/round-recap (lib/league/roundRecap.ts).
 import React, { useEffect, useState } from "react";
 import { ShieldIcon } from "@/components/AwardIcons";
@@ -140,6 +140,23 @@ export function RoundRecapModal({ leagueId, week, onClose }: { leagueId: string;
                     <div style={{ ...num, fontSize: 22, fontWeight: 600, color: teal }}>{fmt(p.points)}</div>
                   </div>
                 ))}
+              </div>
+            ) : null}
+
+            {/* Your best player (Ethan, 28 Nov 2026) */}
+            {r.yourBest ? (
+              <div style={section}>
+                <div style={title}>Your best player</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    {r.yourBest.teamCode ? <JerseyTile teamCode={r.yourBest.teamCode} size={36} /> : null}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700 }}>{r.yourBest.name}</div>
+                      {r.yourBest.teamCode ? <div style={{ fontSize: 11, color: muted }}>{r.yourBest.teamCode}</div> : null}
+                    </div>
+                  </div>
+                  <div style={{ ...num, fontSize: 22, fontWeight: 600, color: teal }}>{fmt(r.yourBest.points)}</div>
+                </div>
               </div>
             ) : null}
 

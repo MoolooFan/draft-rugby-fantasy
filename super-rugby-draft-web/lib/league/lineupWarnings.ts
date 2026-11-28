@@ -53,11 +53,16 @@ export function lineupWarnings(
 /** One line for the dashboard: "2 starters aren't playing and 1 spot is empty". */
 export function warningSummary(w: { warnings: LineupWarning[]; emptySpots: number }): string | null {
   const out = w.warnings.filter((x) => x.level === "out").length;
-  const doubt = w.warnings.length - out;
+  // named on the bench says "benched", only questionable players are "doubtful" (Ethan, 28 Nov 2026)
+  const benched = w.warnings.filter((x) => x.reason === "bench").length;
+  const doubt = w.warnings.length - out - benched;
   const parts: string[] = [];
   if (out) parts.push(`${out} starter${out === 1 ? " isn't" : "s aren't"} playing`);
   if (w.emptySpots) parts.push(`${w.emptySpots} starting spot${w.emptySpots === 1 ? " is" : "s are"} empty`);
-  if (doubt) parts.push(`${doubt} ${doubt === 1 ? "is" : "are"} doubtful`);
+  // "2 starters are benched" when it leads the line, "… and 2 are benched" after another part
+  const some = (n: number) => (parts.length ? `${n} ${n === 1 ? "is" : "are"}` : `${n} starter${n === 1 ? " is" : "s are"}`);
+  if (benched) parts.push(`${some(benched)} benched`);
+  if (doubt) parts.push(`${some(doubt)} doubtful`);
   if (!parts.length) return null;
   const s = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0];
   return s.charAt(0).toUpperCase() + s.slice(1);

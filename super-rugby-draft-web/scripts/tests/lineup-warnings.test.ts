@@ -29,7 +29,8 @@ check("bye, injured and not named starters are flagged as out", reasons.p0 === "
 check("named on the bench / questionable are doubtful", reasons.p3 === "bench" && reasons.p4 === "questionable" && w.warnings.filter((x) => x.level === "doubt").length === 2);
 check("fine starters and bench players aren't flagged", !reasons.p5 && !reasons.benchOut);
 check("empty starting spots are counted", w.emptySpots === 1);
-check("summary line", warningSummary(w) === "3 starters aren't playing, 1 starting spot is empty and 2 are doubtful", String(warningSummary(w)));
+check("summary line", warningSummary(w) === "3 starters aren't playing, 1 starting spot is empty, 1 is benched and 1 is doubtful", String(warningSummary(w)));
+check("two benched", warningSummary({ warnings: [{ playerId: "a", reason: "bench", level: "doubt" }, { playerId: "b", reason: "bench", level: "doubt" }], emptySpots: 0 }) === "2 starters are benched");
 check("nothing to say: no summary", warningSummary({ warnings: [], emptySpots: 0 }) === null);
 check("one player", warningSummary({ warnings: [{ playerId: "x", reason: "bye", level: "out" }], emptySpots: 0 }) === "1 starter isn't playing");
 
