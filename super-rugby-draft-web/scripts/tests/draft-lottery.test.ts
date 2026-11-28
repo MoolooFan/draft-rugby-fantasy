@@ -3,14 +3,17 @@
 //    and it's fair: over 2,000 races every team takes pick 1 within 2% of an equal share.
 // 2. On the server, in a throwaway league in the LOCAL test database (deleted after): setting,
 //    moving and cancelling a time, running at the time (once, even if asked twice), a rerun,
-//    a change by hand afterwards, and the draft starting before a lottery that's still waiting.
+//    a change by hand afterwards, a team joining afterwards (goes on the end), and the draft
+//    starting before a lottery that's still waiting. Plus the 5-minute notification's wording.
 // Run (from super-rugby-draft-web, Docker + `npx supabase start` running):
 //   NODE_OPTIONS=--experimental-websocket npx tsx scripts/tests/draft-lottery.test.ts
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
 import { lotteryOrder, simulate } from "../../lib/draft/lottery/sim";
 import { cancelLottery, getLotteries, runDueLottery, scheduleLottery } from "../../lib/draft/lottery/server";
-import { advanceDraft, getDraftState, setDraftOrder } from "../../lib/draft/engine";
+import { advanceDraft, getDraftState, refreshDraftOrder, setDraftOrder } from "../../lib/draft/engine";
+import { lotteryOrderNote } from "../../lib/draft/lottery/view";
+import { lotteryReminderText, LOTTERY_REMINDER_MS, sendDueReminders } from "../../lib/notifications/reminders";
 
 loadEnvConfig(process.cwd(), true);
 
@@ -19,6 +22,13 @@ const check = (name: string, ok: boolean, extra = "") => {
   if (!ok) failures++;
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${extra ? "  — " + extra : ""}`);
 };
+
+function noticeChecks() {
+  const t = lotteryReminderText("Epstein Try League", 4, false);
+  check("notification: about 5 minutes before (sent 1 to 6 minutes before by the 5-minute job)", LOTTERY_REMINDER_MS === 6 * 60_000);
+  check("notification: wording", t.title === "Epstein Try League: draft order lottery soon" && t.body === "The draft order lottery starts in 4 minutes. Open the Draft Room to watch it live.", t.body);
+  check("notification: a rerun says so", lotteryReminderText("L", 1, true).title === "L: draft order lottery rerun soon" && lotteryReminderText("L", 1, true).body.includes("in a minute"));
+}
 
 function raceChecks() {
   // orders and times from Ethan's mock, run on the same seeds
@@ -115,9 +125,37 @@ async function dbChecks() {
     st = await getDraftState(db, L);
     check("rerun: sets the order again", st.order_source === "lottery" && st.draft_order_team_ids?.join() === runs[1].result_team_ids?.join());
 
+    // a team joining after the lottery goes on the end (Ethan, 28 Nov 2026), as the join page does
+    await db.from("teams").insert({ id: "lt_g", league_id: L, user_id: "lt_g", owner_username: "lt_g", name: "Late Comers" });
+    await refreshDraftOrder(db, L, { reshuffle: true });
+    st = await getDraftState(db, L);
+    check("late joiner: on the end, everyone else keeps their place", st.draft_order_team_ids?.join() === [...runs[1].result_team_ids!, "lt_g"].join() && st.order_source === "lottery");
+    const view = {
+      isCommissioner: true,
+      phase: "preDraft",
+      order: st.draft_order_team_ids ?? [],
+      orderSource: st.order_source ?? null,
+      teams: [...TEAMS, "lt_g"].map((id, i) => ({ id, name: id === "lt_g" ? "Late Comers" : `Team ${i + 1}` })),
+      runs: runs.map((r) => ({ id: r.id, runNumber: r.run_number, scheduledAt: 0, ranAt: r.ran_at ? 1 : null, seed: r.seed, teamIds: r.team_ids, resultTeamIds: r.result_team_ids })),
+      offsetMs: 0,
+    };
+    check("late joiner: the league sees why", lotteryOrderNote(view) === "Late Comers joined after the lottery, so they're at the end of the order.", String(lotteryOrderNote(view)));
+    check("by hand: the league sees it was the commissioner", lotteryOrderNote({ ...view, orderSource: "commissioner" }) === "The commissioner changed the order by hand after the lottery.");
+    check("no note while it's the lottery's order", lotteryOrderNote({ ...view, order: runs[1].result_team_ids! }) === null);
+
     // the draft time moved before a waiting lottery: it runs as the draft starts
     const at3 = at2 + 10 * 60_000;
     await scheduleLottery(db, L, "ethanaccount", at3, at2 + 60_000);
+    // the 5-minute job: nothing 10 minutes before, the notification 4 minutes before, and only once
+    const waitingId = (await getLotteries(db, L)).find((r) => !r.ran_at)!.id;
+    const key = `lottery-soon:${waitingId}:${at3}`;
+    const sentKey = async () => !!(await db.from("push_sent").select("key").eq("key", key).maybeSingle()).data;
+    await sendDueReminders(db, 2027, at3 - 10 * 60_000);
+    const early = await sentKey();
+    const r1 = await sendDueReminders(db, 2027, at3 - 4 * 60_000);
+    const r2 = await sendDueReminders(db, 2027, at3 - 60_000);
+    check("notification: sent about 5 minutes before, once", !early && (await sentKey()) && r1.lottery === 1 && r2.lottery === 0, JSON.stringify([r1.lottery, r2.lottery]));
+    await db.from("push_sent").delete().eq("key", key);
     await db.from("leagues").update({ draft_at: new Date(at2 + 2 * 60_000).toISOString() }).eq("id", L);
     await advanceDraft(db, L, at2 + 3 * 60_000);
     runs = await getLotteries(db, L);
@@ -131,6 +169,7 @@ async function dbChecks() {
 
 async function main() {
   raceChecks();
+  noticeChecks();
   if (process.argv.includes("--race-only")) return;
   await dbChecks();
 }

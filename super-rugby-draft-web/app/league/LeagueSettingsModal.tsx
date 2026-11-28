@@ -17,6 +17,7 @@ import type { League, PlayoffFormat } from "@/lib/league/types";
 import { ScoringEditor } from "@/components/ScoringEditor";
 import { completeRules, STANDARD_SCORING, type ScoringRules } from "@/lib/scoring";
 
+import { LotterySettings } from "./LotterySettings";
 import { LeagueStoreActions, toDatetimeLocal, ModalOverlay, Field, inputStyle, selectStyle, parseDatetimeLocal, saveButton } from "./ui";
 
 export function LeagueSettingsModal({
@@ -258,6 +259,13 @@ setDraftOrderIds((prev) => {
   style={inputStyle(readOnly)}
 />
 </Field>
+
+{/* the draft order lottery, before the draft (Ethan, 28 Nov 2026; saved straight away) */}
+{!draftStarted ? (
+  <Field label="Draft Order Lottery">
+    <LotterySettings leagueId={league.id} isCommissioner={isCreator} draftAt={typeof league.draftAt === "number" ? league.draftAt : null} />
+  </Field>
+) : null}
 
         <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700, opacity: 0.9 }}>
           Draft Order
