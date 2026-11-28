@@ -58,11 +58,16 @@ export function DraftOrderModal({
   teams,
   yourTeamId,
   preDraft,
+  lotteryNote,
+  onWatchLottery,
   onClose,
 }: {
   teams: Array<{ id: string; name: string; ownerName: string | null }>;
   yourTeamId: string;
   preDraft: boolean;
+  /** set by the draft lottery: which run, and whether it's been changed since */
+  lotteryNote?: string | null;
+  onWatchLottery?: () => void;
   onClose: () => void;
 }) {
   return (
@@ -76,8 +81,18 @@ export function DraftOrderModal({
         </div>
         <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.7, marginTop: 4, lineHeight: 1.4 }}>
           Round 1. The order snakes: the last team picks first in round 2, and so on.
-          {preDraft ? " It's shuffled again when a team joins, until the commissioner sets it." : ""}
+          {preDraft && !lotteryNote ? " It's shuffled again when a team joins, until the commissioner sets it." : ""}
         </div>
+        {lotteryNote ? (
+          <div style={{ fontSize: 12, fontWeight: 600, marginTop: 8, lineHeight: 1.4 }}>
+            {lotteryNote}{" "}
+            {onWatchLottery ? (
+              <button onClick={onWatchLottery} style={{ border: "none", background: "transparent", padding: 0, font: "inherit", color: "#0d9488", textDecoration: "underline", cursor: "pointer" }}>
+                Watch the lottery
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         <div style={{ marginTop: 10, display: "grid" }}>
           {teams.map((t, i) => (
             <div key={t.id} style={{ display: "grid", gridTemplateColumns: "28px 1fr", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid rgba(0,0,0,0.08)" }}>
